@@ -13,13 +13,13 @@ INITIAL GIT STATUS = clean tracked tree; protected untracked `Goals/` package pr
 WINDOWS = Windows 11 Home China, build `26200`, x64
 WINGET = available (`winget.exe` shim; package install succeeded)
 WSL BEFORE = NOT INSTALLED; `wsl --status` reported the install prompt and no distribution
-WSL AFTER = Windows optional feature installed and reboot completed; Microsoft WSL application package still absent
-LINUX DISTRIBUTION = none registered
+WSL AFTER = Microsoft WSL `2.7.12` installed and reports default version 2
+LINUX DISTRIBUTION = Ubuntu 22.04 package installed; distribution registration did not complete before Docker qualification
 DOCKER BEFORE = NOT FOUND
 DOCKER INSTALL ACTION = official `winget install --id Docker.DockerDesktop --exact --silent`; installer hash verified
 DOCKER VERSION = CLI `29.7.2` installed; daemon not qualified
 DOCKER COMPOSE = plugin `v5.4.0` available
-DOCKER BACKEND = Docker Desktop 4.88.1 Linux/WSL backend; startup blocked because the WSL application package is not installed
+DOCKER BACKEND = Docker Desktop 4.88.1 Linux/WSL backend; startup blocked by inaccessible Docker runtime socket
 DOCKER HELLO-WORLD = NOT VERIFIED; daemon unavailable before reboot
 REBOOT REQUIRED = NO for the completed feature transaction; WSL package installation still requires administrator privileges
 
@@ -55,12 +55,14 @@ JUDGE = NOT IMPLEMENTED
 SANDBOX = NOT IMPLEMENTED
 PLUGIN RUNTIME = NOT IMPLEMENTED
 
-ENVIRONMENT BASELINE UPDATED = YES; Docker/WSL installation and reboot boundary recorded
+IMPLEMENTATION COMMITS = `3959bba` local infrastructure foundation; `26ef44a` Windows runtime-smoke process-tree cleanup
+SOURCE TESTS = PASS; format, lint, typecheck, 11 Vitest tests, architecture gate, build, and Windows API runtime smoke
+ENVIRONMENT BASELINE UPDATED = YES; Docker/WSL installation and runtime blocker recorded
 CONTRIBUTING UPDATED = NO; no new commands are truthful before runtime qualification
 PERMANENT GOAL REPORT = YES
 PROJECT STATUS UPDATED = YES
 SECRET REVIEW = PASS; no project secrets introduced
 GIT DIFF CHECK = PASS
 
-COMMIT = pending metadata correction
+COMMIT = `26ef44a` (latest implementation commit before this report metadata correction)
 FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
