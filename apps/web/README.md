@@ -1,3 +1,3 @@
 # Web Application Skeleton
 
-Metadata and public-contract boundary skeleton only. No React application or UI exists yet.
+Minimal React/Vite platform shell showing API health/readiness. No OJ business UI exists yet.

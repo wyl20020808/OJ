@@ -1,0 +1,4 @@
+:root { font-family: system-ui, sans-serif; color: #17202a; background: #f4f6f8; }
+body { margin: 0; }
+.shell { max-width: 56rem; margin: 0 auto; padding: 4rem 1.5rem; }
+header { border-bottom: 1px solid #ccd3da; margin-bottom: 2rem; }

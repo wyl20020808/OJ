@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "allowJs": false,
     "resolveJsonModule": true,
+    "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
       "@ojplatform/contracts": ["packages/contracts/src/index.ts"],

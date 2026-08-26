@@ -1,3 +1,3 @@
 # API Application Skeleton
 
-Metadata and module-boundary skeleton only. No Fastify server, routes, database, or business feature exists yet.
+Minimal Fastify platform service exposing health/readiness and OpenAPI only. No database, authentication, or business feature exists yet.
