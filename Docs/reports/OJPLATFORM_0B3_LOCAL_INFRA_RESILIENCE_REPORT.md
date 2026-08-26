@@ -21,26 +21,45 @@ DOCKER VERSION = CLI `29.7.2` installed; daemon not qualified
 DOCKER COMPOSE = plugin `v5.4.0` available
 DOCKER BACKEND = Docker Desktop 4.88.1 Linux/WSL backend; startup blocked by inaccessible Docker runtime socket
 DOCKER HELLO-WORLD = NOT VERIFIED; daemon unavailable before reboot
-REBOOT REQUIRED = NO for the completed feature transaction; WSL package installation still requires administrator privileges
+REBOOT REQUIRED = YES for Docker runtime recovery; see the retained 0B.3R recovery history below
+
+## Recovery History — PHASE 0B.3R
+
+Recovery package: `OJPLATFORM-0B3R-DOCKER-RECOVERY-RESUME`.
+
+The Docker/WSL preservation preflight found no registered WSL distributions, no daemon-visible containers/images/volumes (the daemon was unavailable), and no Docker Desktop VHDX or WSL data disk. Docker Desktop's own logs independently confirmed that neither `docker-desktop` nor `docker-desktop-data` was registered and no WSL2 data disk existed. Existing user Docker data was therefore classified as `NONE`.
+
+Diagnosis: Windows 11 Home China build `26200` has virtualization support and WSL `2.7.12` (kernel `6.1.18.3`), but Docker Desktop `4.88.1` aborts before initializing the WSL engine. Its exact error is inability to remove the zero-length reparse point `C:\Users\WYL20\AppData\Local\Docker\run\sailor-ingest.sock`; `fsutil`, ACL inspection, and exact-file deletion all returned `The file cannot be accessed by the system` after Docker processes were stopped. The companion runtime entries `dockerEthernetVfkit` and `dockerInference` were not touched.
+
+Recovery ladder evidence:
+
+1. R1 supported Docker Desktop start/restart: FAILED; same socket error.
+2. R2 WSL backend shutdown/restart: FAILED; `wsl --shutdown` completed and Docker still failed at the same socket.
+3. R3 WSL update/repair: PASS for WSL tooling; `wsl --update` completed and version remained `2.7.12`, but it did not repair the socket.
+4. R4 Docker update/data-preserving reinstall: checked for updates (none); Docker installer reported the installed `4.88.1` was current.
+5. R5 targeted ephemeral cleanup: FAILED safely; only the exact socket was attempted with Docker stopped, and Windows refused it. No broad Docker cleanup occurred.
+6. R6: user confirmed Factory Reset after the no-data assessment. The official error dialog could not complete the reset. A Docker-only official `winget uninstall` followed by official `winget install` completed, did not unregister unrelated WSL distributions, and did not remove the inaccessible socket. Docker still fails with the same error.
+
+No Docker containers, images, volumes, meaningful WSL data, unrelated user files, global Git settings, or project files were removed. The remaining required action is a Windows restart, which is not authorized by this Goal execution and is required to release or repair the kernel-level reparse-point state. After restart, start Docker Desktop and rerun the 0B.3R Docker qualification gate before any project runtime claim.
 
 ## Qualification Status
 
-Infrastructure implementation is PARTIAL. Project-owned Compose, local-only environment example, PostgreSQL/Drizzle, Redis, and S3-compatible adapters, a system-metadata migration, typed API configuration, and bounded `/ready` dependency checks are present and source-tested. Real container/runtime qualification remains BLOCKED_BY_ENVIRONMENT: Microsoft WSL `2.7.12` and Ubuntu 22.04 package installation completed, but Docker Desktop is unable to access its own `C:\Users\WYL20\AppData\Local\Docker\run\sailor-ingest.sock` runtime socket. The socket is a zero-length Docker reparse point; after stopping Goal-owned Docker processes, Windows returned `The file cannot be accessed by the system` when attempting the exact-socket removal. No broad cleanup was attempted.
+Infrastructure implementation is PARTIAL. Project-owned Compose, local-only environment example, PostgreSQL/Drizzle, Redis, and S3-compatible adapters, a system-metadata migration, typed API configuration, and bounded `/ready` dependency checks are present and source-tested. Real container/runtime qualification is now BLOCKED_BY_REBOOT: Docker Desktop remains unable to access its own `C:\Users\WYL20\AppData\Local\Docker\run\sailor-ingest.sock` runtime socket after WSL recovery and official Docker-only uninstall/reinstall. The socket is a zero-length reparse point; after stopping Goal-owned Docker processes, Windows returned `The file cannot be accessed by the system` when attempting the exact-socket removal.
 
-HOST INSTALLATION = PARTIAL / BLOCKED_BY_ENVIRONMENT (Docker Desktop stale/locked runtime socket)
+HOST INSTALLATION = PARTIAL / BLOCKED_BY_REBOOT (Docker Desktop stale/inaccessible runtime socket survives official reinstall)
 CB-001 (`pnpm install --frozen-lockfile`) = NOT RUN in this Goal; prior 0B.2 evidence remains PASS
-CB-002 Docker engine reachable = BLOCKED_BY_ENVIRONMENT
+CB-002 Docker engine reachable = BLOCKED_BY_REBOOT
 CB-003..CB-026 = BLOCKED_BY_REBOOT / NOT EXECUTED
 FI-001..FI-018 = BLOCKED_BY_REBOOT / NOT EXECUTED
 
 ## Safety and Recovery
 
-No unrelated containers, volumes, distributions, files, or global Git settings were modified. The elevated WSL installation process was stopped after DISM completed its feature transaction; no reboot was initiated by this session.
+No unrelated containers, volumes, distributions, files, or global Git settings were modified. Docker Desktop was officially uninstalled and reinstalled after the user approved the last-resort reset and the no-data preservation assessment. No reboot was initiated by this session.
 
 RESUME STEPS =
-1. Close Docker Desktop completely and resolve its `sailor-ingest.sock` startup failure using Docker Desktop's official troubleshooting flow; do not delete unrelated Docker data or reset Docker Desktop.
+1. Restart Windows to clear the inaccessible Docker runtime reparse point; do not delete unrelated user or WSL data.
 2. Verify `docker version`, `docker info`, `docker compose version`, and `docker run --rm hello-world`.
-3. Continue PHASE 0B.3 from this report: execute every real integration, failure-injection, browser, CI, and clean-bootstrap matrix row before final status.
+3. Continue PHASE 0B.3R from this report: execute every real integration, failure-injection, browser, CI, and clean-bootstrap matrix row before final status.
 
 ## Scope Truth
 
@@ -66,5 +85,5 @@ PROJECT STATUS UPDATED = YES
 SECRET REVIEW = PASS; no project secrets introduced
 GIT DIFF CHECK = PASS
 
-COMMIT = `f81b9f4` (latest implementation commit before this report metadata correction)
-FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
+COMMIT = PENDING 0B.3R recovery evidence commit
+FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`

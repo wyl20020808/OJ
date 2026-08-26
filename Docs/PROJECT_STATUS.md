@@ -2,8 +2,8 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: Phase 0B.3 Local Infrastructure & Platform Resilience
-Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
+Current Stage: Phase 0B.3R Docker Runtime Recovery & 0B.3 Resume Qualification
+Current Status: PARTIAL / BLOCKED_BY_REBOOT
 
 ## Completed Goals
 
@@ -14,7 +14,8 @@ Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
 - PHASE 0A Security Foundation — Security Design Baseline: PASS
 - PHASE 0B.1 — Repository & TypeScript Engineering Foundation: PASS
 - PHASE 0B.2 — Application Platform & CI Foundation: PASS
-- PHASE 0B.3 — Local Infrastructure & Platform Resilience: PARTIAL / BLOCKED_BY_ENVIRONMENT
+- PHASE 0B.3 — Local Infrastructure & Platform Resilience: PARTIAL / BLOCKED_BY_REBOOT
+- PHASE 0B.3R — Docker Runtime Recovery & Resume Qualification: PARTIAL / BLOCKED_BY_REBOOT
 
 ## Current Project State
 
@@ -22,7 +23,7 @@ Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
 - Repository HEAD includes a metadata-only report correction after that content commit.
 - Business implementation: NOT STARTED
 - Framework/toolchain initialization: NOT STARTED
-- Local PostgreSQL/Redis/MinIO infrastructure: PARTIAL; Compose/adapters/readiness code exists, but Docker runtime verification is BLOCKED_BY_ENVIRONMENT
+- Local PostgreSQL/Redis/MinIO infrastructure: PARTIAL; Compose/adapters/readiness code exists, but Docker runtime verification is BLOCKED_BY_REBOOT
 - Judge, Sandbox, Plugin Runtime, and service infrastructure: NOT STARTED
 - Runtime security controls: NOT IMPLEMENTED
 - Runtime attack tests: NOT EXECUTED
@@ -31,11 +32,12 @@ Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
 - Real Web/API platform skeleton: AVAILABLE
 - CI foundation: AVAILABLE (local workflow validation; remote run not observed)
 - 0B.3 implementation: Compose/adapters/migration/readiness/integration and CI foundations are committed; real container qualification remains blocked
-- Known blockers: Docker Desktop cannot access its project-unrelated internal `sailor-ingest.sock` runtime socket; Docker daemon has not qualified
+- 0B.3R recovery: Docker/WSL data was assessed as absent; restart, WSL repair, exact socket cleanup, and Docker-only official uninstall/reinstall did not clear the inaccessible `sailor-ingest.sock` reparse point
+- Known blocker: Windows restart is required before Docker Desktop can be requalified. Docker daemon has not qualified, so real integration, fault injection, clean bootstrap, browser E2E, and final regression remain unexecuted
 - Known risks: Sandbox escape, Judge credential compromise, hidden-testdata leakage, authorization defects, plugin compromise, storage exposure, queue/result spoofing, DoS, supply chain, secret leakage, unsafe imports, and audit gaps remain OPEN in the risk register
 
 ## Next Planned Goal
 
-Resume PHASE 0B.3 after elevated WSL package installation: verify WSL/Docker, then complete Compose, real dependency integration, failure injection, browser degradation E2E, CI hardening, and final regression.
+Restart Windows, verify Docker Desktop reaches `docker info` and `docker run --rm hello-world`, then resume PHASE 0B.3R to complete Compose, real dependency integration, failure injection, clean bootstrap, browser degradation/recovery E2E, CI-local validation, and final regression.
 
-Last Updated: 2026-08-26
+Last Updated: 2026-08-27
