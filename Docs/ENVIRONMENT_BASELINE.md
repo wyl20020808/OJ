@@ -1,6 +1,6 @@
 # Environment Baseline
 
-This policy controls future toolchain selection without pretending that a toolchain already exists. OJPlatform currently has no initialized application frameworks or service runtime.
+This policy controls toolchain selection. The repository/tooling foundation is now initialized; application frameworks and service runtime are still absent.
 
 ## Platform Policy
 
@@ -8,6 +8,16 @@ This policy controls future toolchain selection without pretending that a toolch
 - Linux compatibility is required for production-oriented Judge and Sandbox work.
 - Local development and CI must converge on compatible, recorded versions.
 - Architecture-significant toolchain replacement requires deliberate review and, where appropriate, an ADR.
+
+## Verified Foundation (2026-08-26)
+
+- Node.js: VERIFIED `v24.19.0` on the development host; project policy is `>=24.19.0 <25`.
+- pnpm: VERIFIED `11.19.0`; pinned by the root `packageManager` field.
+- npm: VERIFIED during preflight; no npm lockfile is used.
+- Git: VERIFIED `2.51.0.windows.2`.
+- Go: NOT INSTALLED; not required for this TypeScript foundation.
+- Docker / Docker Compose: NOT INSTALLED; not required for this Goal.
+- WSL / Linux sandbox primitives: NOT VERIFIED; deferred to Judge/Sandbox work.
 
 ## Version and Dependency Policy
 
@@ -31,4 +41,4 @@ The following will be selected and recorded during the repository/toolchain foun
 - Docker and Docker Compose compatibility baseline.
 - The files and automation that enforce version parity between local development and CI.
 
-No version number in this document is a final selection, and this policy does not authorize dependency installation or service initialization.
+Node and pnpm selections above are now selected for the repository foundation. Go, container, Linux, and CI decisions remain unresolved. This document does not authorize service implementation.

@@ -1,0 +1,32 @@
+{
+  "name": "ojplatform",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24.19.0 <25"
+  },
+  "scripts": {
+    "format": "prettier --write package.json pnpm-workspace.yaml tsconfig.json tsconfig.build.json eslint.config.mjs vitest.config.ts .prettierrc.json \"{apps,packages,tests}/**/*.{ts,tsx,js,mjs,json,yaml,yml}\"",
+    "format:check": "prettier --check package.json pnpm-workspace.yaml tsconfig.json tsconfig.build.json eslint.config.mjs vitest.config.ts .prettierrc.json \"{apps,packages,tests}/**/*.{ts,tsx,js,mjs,json,yaml,yml}\"",
+    "lint": "eslint \"{apps,packages,tests}/**/*.{ts,tsx}\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:architecture": "node tests/architecture/check.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:architecture && pnpm build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vitest": "^4.0.15",
+    "@ojplatform/contracts": "workspace:*",
+    "@ojplatform/core": "workspace:*",
+    "@ojplatform/judge-protocol": "workspace:*",
+    "@ojplatform/plugin-sdk": "workspace:*",
+    "@ojplatform/test-utils": "workspace:*"
+  }
+}

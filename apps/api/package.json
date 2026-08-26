@@ -1,0 +1,10 @@
+{
+  "name": "@ojplatform/api",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ojplatform/contracts": "workspace:*",
+    "@ojplatform/core": "workspace:*",
+    "@ojplatform/judge-protocol": "workspace:*"
+  }
+}

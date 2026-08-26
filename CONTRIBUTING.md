@@ -30,3 +30,17 @@ New dependencies need a clear need, license and security consideration, and conf
 ## Testing
 
 Follow [Definition of Done](Docs/DEFINITION_OF_DONE.md). Validation depth is risk-based, and reports must distinguish implementation from testing and runtime qualification.
+
+## Verified Foundation Commands
+
+The current local foundation supports:
+
+```text
+pnpm install
+pnpm check
+pnpm test
+pnpm test:architecture
+pnpm build
+```
+
+These commands validate the TypeScript workspace only. No future service startup commands are defined yet.

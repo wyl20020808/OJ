@@ -1,0 +1,8 @@
+{
+  "name": "@ojplatform/web",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ojplatform/contracts": "workspace:*"
+  }
+}
