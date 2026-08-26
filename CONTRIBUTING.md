@@ -6,6 +6,8 @@ OJPlatform is in its governance and engineering-foundation stage. Do not invent 
 
 Read [AGENTS.md](AGENTS.md), the [Architecture Baseline](Docs/OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md), [Development Standards](Docs/DEVELOPMENT_STANDARDS.md), [Definition of Done](Docs/DEFINITION_OF_DONE.md), and any relevant scoped `AGENTS.md`, Goal, or ADR.
 
+Medium and large Goals also require a durable report under `Docs/reports/` and an update to [PROJECT_STATUS.md](Docs/PROJECT_STATUS.md).
+
 ## Workflow
 
 1. Inspect `git status` and read the current Goal.
