@@ -11,7 +11,7 @@ PASS.
 ## Starting HEAD / Environment
 
 Starting HEAD: `cffcf6cd95e4d48cdae10993e1c370fc1598991b`.
-Node: `v24.19.0`; pnpm: `11.19.0`; npm: available; Git: `2.51.0.windows.2`; Go: NOT FOUND; Docker: NOT FOUND; Docker Compose: NOT FOUND; WSL/Linux: NOT VERIFIED.
+Node: system `v22.20.0` (`C:\Program Files\nodejs\node.exe`); pnpm command sessions report fallback runtime `v24.19.0`; tested policy `>=22.20.0 <25`. pnpm: `11.19.0`; npm: `10.9.3`; Git: `2.51.0.windows.2`; Go: NOT FOUND; Docker: NOT FOUND; Docker Compose: NOT FOUND; WSL/Linux: NOT VERIFIED.
 
 ## Workspace
 

@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@11.19.0",
   "engines": {
-    "node": ">=24.19.0 <25"
+    "node": ">=22.20.0 <25"
   },
   "scripts": {
     "format": "prettier --write package.json pnpm-workspace.yaml tsconfig.json tsconfig.build.json eslint.config.mjs vitest.config.ts .prettierrc.json \"{apps,packages,tests}/**/*.{ts,tsx,js,mjs,json,yaml,yml}\"",

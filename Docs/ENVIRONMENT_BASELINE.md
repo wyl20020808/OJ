@@ -11,7 +11,7 @@ This policy controls toolchain selection. The repository/tooling foundation is n
 
 ## Verified Foundation (2026-08-26)
 
-- Node.js: VERIFIED `v24.19.0` on the development host; project policy is `>=24.19.0 <25`.
+- Node.js: VERIFIED `v22.20.0` from `C:\Program Files\nodejs\node.exe`; pnpm command sessions also report fallback runtime `v24.19.0`. Project policy is the tested compatibility range `>=22.20.0 <25` until runtime selection is unified.
 - pnpm: VERIFIED `11.19.0`; pinned by the root `packageManager` field.
 - npm: VERIFIED during preflight; no npm lockfile is used.
 - Git: VERIFIED `2.51.0.windows.2`.
