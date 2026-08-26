@@ -15,7 +15,7 @@ Current Status: PASS
 
 ## Current Project State
 
-- Current HEAD: `2a17427b890205831c25f09da12cdb71c8133234`
+- Current HEAD: `d3937b7126c5b96a9c68251cc5e74fe33e974729`
 - Business implementation: NOT STARTED
 - Framework/toolchain initialization: NOT STARTED
 - Judge, Sandbox, Plugin Runtime, and service infrastructure: NOT STARTED

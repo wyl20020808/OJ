@@ -65,7 +65,7 @@ All package instructions and required project/security documents were read. New 
 
 ## Git / Commit
 
-The permanent report and project status are included in the Wave 2 security foundation work. Final commit hash is recorded after the scoped commit; no user-provided Goal ZIP is committed.
+The permanent report and project status are included in the Wave 2 security foundation work. Goal content commit: `d3937b7126c5b96a9c68251cc5e74fe33e974729` (`docs: establish OJ security architecture foundation`). A subsequent metadata-only correction may update this report/status; no user-provided Goal ZIP is committed.
 
 ## Follow-ups
 
