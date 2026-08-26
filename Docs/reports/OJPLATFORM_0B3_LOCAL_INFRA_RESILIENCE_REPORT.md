@@ -63,5 +63,6 @@ PROJECT STATUS UPDATED = YES
 SECRET REVIEW = PASS; no project secrets introduced
 GIT DIFF CHECK = PASS
 
-COMMIT = pending; this report and status are committed before reboot boundary
+COMMIT = `c2b7a46` (`docs: record 0b3 reboot qualification boundary`)
+FINAL HEAD = `c2b7a46`
 FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`
