@@ -14,7 +14,6 @@ import {
   createDatabase,
 } from '../../packages/database/src/index.js';
 import {
-  checkStorage,
   createStorage,
   ensureBucket,
 } from '../../packages/storage/src/index.js';
