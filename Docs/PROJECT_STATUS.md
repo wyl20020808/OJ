@@ -11,18 +11,22 @@ Current Status: PASS
 - PHASE 0A.2 — Root AGENTS.md Development Constitution: PASS
 - PHASE 0A Governance Wave 1 — Governance Foundation: PASS
 - PHASE 0A Governance Wave 2 — Reporting & Architecture Control: PASS
+- PHASE 0A Security Foundation — Security Design Baseline: PASS
 
 ## Current Project State
 
-- Current HEAD: `c179416d9a2d4ebca1e9bb3083b4d103757a0508`
+- Current HEAD: `2a17427b890205831c25f09da12cdb71c8133234`
 - Business implementation: NOT STARTED
 - Framework/toolchain initialization: NOT STARTED
 - Judge, Sandbox, Plugin Runtime, and service infrastructure: NOT STARTED
-- Known blockers: None for the completed governance scope
-- Known risks: Security qualification and production toolchain decisions remain future work
+- Runtime security controls: NOT IMPLEMENTED
+- Runtime attack tests: NOT EXECUTED
+- Production security qualification: NOT QUALIFIED
+- Known blockers: None for the completed security-design scope
+- Known risks: Sandbox escape, Judge credential compromise, hidden-testdata leakage, authorization defects, plugin compromise, storage exposure, queue/result spoofing, DoS, supply chain, secret leakage, unsafe imports, and audit gaps remain OPEN in the risk register
 
 ## Next Planned Goal
 
-Repository/toolchain foundation, with explicit version decisions and no premature business implementation.
+Repository/toolchain foundation, with explicit version decisions and no premature business implementation; then Judge/Sandbox engineering under the security gates.
 
 Last Updated: 2026-08-26

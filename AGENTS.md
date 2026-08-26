@@ -38,6 +38,7 @@ Primary references:
 - [Security](SECURITY.md)
 - Future references: `Docs/DEVELOPMENT_STANDARDS.md`, `Docs/DEFINITION_OF_DONE.md`, `Docs/architecture/DEPENDENCY_RULES.md`, `Docs/security/THREAT_MODEL.md`, and `Docs/adr/` (later phases; not yet complete).
 - Medium/large Goals MUST leave `Docs/reports/<GOAL_ID>_REPORT.md` and update `Docs/PROJECT_STATUS.md`; normally commit both with the Goal.
+- High-risk work MUST read the relevant `Docs/security/` requirements, threat model, trust boundaries, and review checklist before implementation.
 
 ## Architecture Hard Rules
 
