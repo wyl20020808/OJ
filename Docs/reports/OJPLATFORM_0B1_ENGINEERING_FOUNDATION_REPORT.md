@@ -10,7 +10,7 @@ PASS.
 
 ## Starting HEAD / Environment
 
-Starting HEAD: `cffcf6cd95e4d48cdae10993e1c370fc1598991b`.  
+Starting HEAD: `cffcf6cd95e4d48cdae10993e1c370fc1598991b`.
 Node: `v24.19.0`; pnpm: `11.19.0`; npm: available; Git: `2.51.0.windows.2`; Go: NOT FOUND; Docker: NOT FOUND; Docker Compose: NOT FOUND; WSL/Linux: NOT VERIFIED.
 
 ## Workspace
@@ -71,4 +71,4 @@ Go, Docker, WSL/Linux, and Sandbox primitives are not qualified. Architecture ch
 
 ## Git / Commit
 
-The permanent report and project status are included in this Goal. Final commit hash is recorded after the scoped commit; the user-provided `Goals/` ZIP remains untracked and protected.
+The permanent report and project status are included in this Goal. Engineering foundation content commit: `1fd27f035fc584afedc2b6dbb212266fa0d9e238` (`build: establish TypeScript monorepo engineering foundation`). A later metadata-only correction may follow; the user-provided `Goals/` ZIP remains untracked and protected.
