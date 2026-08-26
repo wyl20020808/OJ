@@ -16,8 +16,10 @@ This policy controls toolchain selection. The repository/tooling foundation is n
 - npm: VERIFIED during preflight; no npm lockfile is used.
 - Git: VERIFIED `2.51.0.windows.2`.
 - Go: NOT INSTALLED; not required for this TypeScript foundation.
-- Docker / Docker Compose: NOT INSTALLED; not required for this Goal.
-- WSL / Linux sandbox primitives: NOT VERIFIED; deferred to Judge/Sandbox work.
+- Docker Desktop: INSTALLED via official `winget` package `Docker.DockerDesktop` version `4.88.1`; daemon NOT VERIFIED because WSL2 installation is pending reboot.
+- Docker CLI: VERIFIED `29.7.2`; Docker Compose plugin VERIFIED `v5.4.0`; `docker version/info` and `hello-world` remain blocked until the daemon starts.
+- WSL: Windows Subsystem for Linux feature installation initiated through elevated official `wsl --install --no-distribution`; DISM records `Reboot required=yes`; no Linux distribution is currently registered.
+- WSL / Linux sandbox primitives: NOT VERIFIED; reboot required before Docker backend qualification.
 
 ## Version and Dependency Policy
 
@@ -26,7 +28,7 @@ This policy controls toolchain selection. The repository/tooling foundation is n
 - Go will be pinned when selected.
 - PostgreSQL, Redis, and MinIO container images must use explicit versions, never a floating `latest` tag.
 - Dependency lockfiles are committed once package management is initialized.
-- Docker and Docker Compose versions should be recorded when environment initialization occurs.
+- Docker and Docker Compose versions are recorded above; backend and container qualification remain pending reboot.
 
 `.env.example` may contain variable names and safe default placeholders only. Secrets remain outside source control.
 
