@@ -20,7 +20,10 @@
       "@ojplatform/judge-protocol": ["packages/judge-protocol/src/index.ts"],
       "@ojplatform/plugin-sdk": ["packages/plugin-sdk/src/index.ts"],
       "@ojplatform/test-utils": ["packages/test-utils/src/index.ts"],
-      "@ojplatform/api": ["apps/api/src/index.ts"]
+      "@ojplatform/api": ["apps/api/src/index.ts"],
+      "@ojplatform/database": ["packages/database/src/index.ts"],
+      "@ojplatform/cache": ["packages/cache/src/index.ts"],
+      "@ojplatform/storage": ["packages/storage/src/index.ts"]
     }
   },
   "include": [

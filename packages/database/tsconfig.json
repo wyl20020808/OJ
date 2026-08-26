@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "outDir": "../../dist/packages/database" },
+  "include": ["src/**/*.ts"]
+}

@@ -22,7 +22,7 @@ Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
 - Repository HEAD includes a metadata-only report correction after that content commit.
 - Business implementation: NOT STARTED
 - Framework/toolchain initialization: NOT STARTED
-- Local PostgreSQL/Redis/MinIO infrastructure: BLOCKED_BY_ENVIRONMENT; Docker Desktop installed but official WSL application package requires administrator privileges
+- Local PostgreSQL/Redis/MinIO infrastructure: PARTIAL; Compose/adapters/readiness code exists, but Docker runtime verification is BLOCKED_BY_ENVIRONMENT
 - Judge, Sandbox, Plugin Runtime, and service infrastructure: NOT STARTED
 - Runtime security controls: NOT IMPLEMENTED
 - Runtime attack tests: NOT EXECUTED
@@ -30,7 +30,7 @@ Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
 - TypeScript quality gates: PASS (format, lint, typecheck, tests, architecture, build)
 - Real Web/API platform skeleton: AVAILABLE
 - CI foundation: AVAILABLE (local workflow validation; remote run not observed)
-- Known blockers: install `Microsoft.WSL` 2.7.12 from an elevated PowerShell, then qualify Docker daemon
+- Known blockers: Docker Desktop cannot access its project-unrelated internal `sailor-ingest.sock` runtime socket; Docker daemon has not qualified
 - Known risks: Sandbox escape, Judge credential compromise, hidden-testdata leakage, authorization defects, plugin compromise, storage exposure, queue/result spoofing, DoS, supply chain, secret leakage, unsafe imports, and audit gaps remain OPEN in the risk register
 
 ## Next Planned Goal
