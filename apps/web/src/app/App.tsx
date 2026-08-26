@@ -5,10 +5,10 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from 'react';
-import { fetchHealth } from '../services/platform.js';
+import { fetchReadiness } from '../services/platform.js';
 import './app.css';
 
-type Status = 'loading' | 'ready' | 'error';
+type Status = 'loading' | 'ready' | 'degraded' | 'error';
 
 export class ErrorBoundary extends Component<
   { children: ReactNode },
@@ -42,8 +42,10 @@ export class ErrorBoundary extends Component<
 export function App() {
   const [status, setStatus] = useState<Status>('loading');
   useEffect(() => {
-    void fetchHealth(import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3010')
-      .then(() => setStatus('ready'))
+    void fetchReadiness(import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3010')
+      .then((result) =>
+        setStatus(result.status === 'ok' ? 'ready' : 'degraded'),
+      )
       .catch(() => setStatus('error'));
   }, []);
 
@@ -53,8 +55,11 @@ export function App() {
         <h1>OJPlatform</h1>
       </header>
       <section aria-live="polite" aria-label="Platform status">
-        {status === 'loading' && <p role="status">Checking platform health…</p>}
+        {status === 'loading' && (
+          <p role="status">Checking platform readiness…</p>
+        )}
         {status === 'ready' && <p role="status">Platform is ready.</p>}
+        {status === 'degraded' && <p role="alert">Platform is not ready.</p>}
         {status === 'error' && (
           <p role="alert">Platform health is unavailable.</p>
         )}

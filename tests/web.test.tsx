@@ -14,13 +14,14 @@ describe('Web platform shell', () => {
   it('renders loading then healthy state', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue({ ok: true, json: async () => ({ status: 'ok' }) }),
+      vi.fn().mockResolvedValue({
+        status: 200,
+        json: async () => ({ status: 'ok', dependencies: {} }),
+      }),
     );
     render(<App />);
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Checking platform health',
+      'Checking platform readiness',
     );
     expect(await screen.findByText('Platform is ready.')).toBeInTheDocument();
   });
@@ -28,6 +29,20 @@ describe('Web platform shell', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     render(<App />);
     expect(await screen.findByRole('alert')).toHaveTextContent('unavailable');
+  });
+  it('renders a controlled degraded readiness state', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 503,
+        json: async () => ({
+          status: 'not_ready',
+          dependencies: { redis: 'unavailable' },
+        }),
+      }),
+    );
+    render(<App />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('not ready');
   });
   it('renders controlled not-found UI', () => {
     render(<NotFound />);
