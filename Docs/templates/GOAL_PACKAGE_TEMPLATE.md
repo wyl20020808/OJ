@@ -1,7 +1,7 @@
 # Goal Package Template
 
-Goal ID:  
-Purpose:  
+Goal ID:
+Purpose:
 Expected duration class: SMALL / MEDIUM / HIGH-RISK
 
 ## Preconditions

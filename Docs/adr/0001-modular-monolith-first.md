@@ -1,6 +1,6 @@
 # 0001 — Modular Monolith First
 
-Status: ACCEPTED  
+Status: ACCEPTED
 Date: 2026-08-26
 
 ## Context

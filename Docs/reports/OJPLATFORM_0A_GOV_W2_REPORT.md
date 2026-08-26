@@ -32,9 +32,9 @@ ADR records capture current baseline decisions only; no dependency tooling, CI, 
 
 ## Git / Commit
 
-Starting HEAD: `8ad9af50aff6f72ec269ab7679dce3ffc0c1d797`.  
-`0fdc78444b7206451bee8102ef30549e836fbd6f` exists and is an ancestor of the final commit.  
-Final commit: to be recorded after verification.
+Starting HEAD: `8ad9af50aff6f72ec269ab7679dce3ffc0c1d797`.
+`0fdc78444b7206451bee8102ef30549e836fbd6f` exists and is an ancestor of the final commit.
+Final commit: `c179416d9a2d4ebca1e9bb3083b4d103757a0508`.
 
 ## Follow-ups
 

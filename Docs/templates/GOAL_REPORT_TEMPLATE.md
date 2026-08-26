@@ -1,9 +1,9 @@
 # Goal Report
 
-Goal ID:  
-Status: PASS / PARTIAL / FAIL / BLOCKED  
-Starting HEAD:  
-Final commit:  
+Goal ID:
+Status: PASS / PARTIAL / FAIL / BLOCKED
+Starting HEAD:
+Final commit:
 
 ## Scope
 

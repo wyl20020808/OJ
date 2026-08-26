@@ -1,6 +1,6 @@
 # 0004 — Plugin SDK Dependency Direction
 
-Status: ACCEPTED  
+Status: ACCEPTED
 Date: 2026-08-26
 
 ## Context

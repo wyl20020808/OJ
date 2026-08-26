@@ -1,6 +1,6 @@
 # NNNN — Title
 
-Status: PROPOSED  
+Status: PROPOSED
 Date: YYYY-MM-DD
 
 ## Context

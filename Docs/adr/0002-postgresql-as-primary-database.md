@@ -1,6 +1,6 @@
 # 0002 — PostgreSQL as Primary Application Database
 
-Status: ACCEPTED  
+Status: ACCEPTED
 Date: 2026-08-26
 
 ## Context
