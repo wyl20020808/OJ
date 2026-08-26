@@ -54,7 +54,7 @@ No Architecture Baseline boundary was weakened and no secrets were introduced. P
 
 The implementation adds the Web/API source, tests, runtime scripts, Playwright configuration/E2E, CI workflow, package metadata/lockfile updates, and this report; it updates `CONTRIBUTING.md`, `Docs/ENVIRONMENT_BASELINE.md`, and `Docs/PROJECT_STATUS.md`. User-provided `Goals/` ZIP files remain untracked and protected.
 
-Primary implementation commit: to be recorded after final review.
+Primary implementation commit: `c906dcc` (`feat: establish executable web api platform and ci foundation`).
 
 ## Known Limitations / Follow-ups
 
