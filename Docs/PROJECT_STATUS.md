@@ -3,7 +3,7 @@
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: Phase 0B.3 Local Infrastructure & Platform Resilience
-Current Status: PARTIAL / BLOCKED_BY_REBOOT
+Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
 
 ## Completed Goals
 
@@ -14,7 +14,7 @@ Current Status: PARTIAL / BLOCKED_BY_REBOOT
 - PHASE 0A Security Foundation — Security Design Baseline: PASS
 - PHASE 0B.1 — Repository & TypeScript Engineering Foundation: PASS
 - PHASE 0B.2 — Application Platform & CI Foundation: PASS
-- PHASE 0B.3 — Local Infrastructure & Platform Resilience: PARTIAL / BLOCKED_BY_REBOOT
+- PHASE 0B.3 — Local Infrastructure & Platform Resilience: PARTIAL / BLOCKED_BY_ENVIRONMENT
 
 ## Current Project State
 
@@ -22,7 +22,7 @@ Current Status: PARTIAL / BLOCKED_BY_REBOOT
 - Repository HEAD includes a metadata-only report correction after that content commit.
 - Business implementation: NOT STARTED
 - Framework/toolchain initialization: NOT STARTED
-- Local PostgreSQL/Redis/MinIO infrastructure: BLOCKED_BY_REBOOT; Docker Desktop installed but WSL2 backend not yet qualified
+- Local PostgreSQL/Redis/MinIO infrastructure: BLOCKED_BY_ENVIRONMENT; Docker Desktop installed but official WSL application package requires administrator privileges
 - Judge, Sandbox, Plugin Runtime, and service infrastructure: NOT STARTED
 - Runtime security controls: NOT IMPLEMENTED
 - Runtime attack tests: NOT EXECUTED
@@ -30,11 +30,11 @@ Current Status: PARTIAL / BLOCKED_BY_REBOOT
 - TypeScript quality gates: PASS (format, lint, typecheck, tests, architecture, build)
 - Real Web/API platform skeleton: AVAILABLE
 - CI foundation: AVAILABLE (local workflow validation; remote run not observed)
-- Known blockers: WSL feature installation requires a Windows reboot before Docker daemon qualification can continue
+- Known blockers: install `Microsoft.WSL` 2.7.12 from an elevated PowerShell, then qualify Docker daemon
 - Known risks: Sandbox escape, Judge credential compromise, hidden-testdata leakage, authorization defects, plugin compromise, storage exposure, queue/result spoofing, DoS, supply chain, secret leakage, unsafe imports, and audit gaps remain OPEN in the risk register
 
 ## Next Planned Goal
 
-Resume PHASE 0B.3 after reboot: verify WSL/Docker, then complete Compose, real dependency integration, failure injection, browser degradation E2E, CI hardening, and final regression.
+Resume PHASE 0B.3 after elevated WSL package installation: verify WSL/Docker, then complete Compose, real dependency integration, failure injection, browser degradation E2E, CI hardening, and final regression.
 
 Last Updated: 2026-08-26
