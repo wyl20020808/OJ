@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 
 const port = 3020;
 const base = `http://127.0.0.1:${port}`;
@@ -34,7 +34,11 @@ const stop = (child) =>
       clearTimeout(timer);
       resolve();
     });
-    child.kill('SIGTERM');
+    if (process.platform === 'win32') {
+      execFileSync('taskkill', ['/pid', String(child.pid), '/T', '/F']);
+    } else {
+      child.kill('SIGTERM');
+    }
   });
 const verify = async () => {
   const health = await waitFor(`${base}/health`);
