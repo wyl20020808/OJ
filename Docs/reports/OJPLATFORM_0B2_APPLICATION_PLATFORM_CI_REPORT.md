@@ -1,61 +1,155 @@
-# OJPlatform PHASE 0B.2 Application Platform & CI Report
+# OJPLATFORM PHASE 0B.2 APPLICATION PLATFORM & CI REPORT
 
-## Goal / Scope
+GOAL ID = `OJPLATFORM-0B2-APPLICATION-PLATFORM-CI`
+PROJECT ROOT = `D:\OJPlatform`
+STARTING HEAD = `73889e40d856a89c9daa68b50b696c98c8b9e475`
+PREVIOUS GOAL FINAL COMMIT = `1fd27f035fc584afedc2b6dbb212266fa0d9e238`
+PREVIOUS GOAL FINAL COMMIT IS ANCESTOR = YES
+INITIAL GIT STATUS = clean tracked tree; protected untracked `Goals/` package present
 
-Create and qualify the first executable React/Vite Web and Fastify API platform with local CI-equivalent gates, runtime lifecycle checks, browser smoke coverage, and no OJ business features.
+## Runtime and Toolchain
 
-## Status
-
-PASS.
-
-## Lineage and Node Runtime
-
-Starting HEAD: `73889e40d856a89c9daa68b50b696c98c8b9e475`. Previous 0B.1 content commit `1fd27f035fc584afedc2b6dbb212266fa0d9e238` is in the current ancestry. Canonical development/CI policy is Node `>=22.20.0 <25`; system Node is `v22.20.0`, while pnpm sessions use a compatible fallback Node `v24.19.0`. pnpm is pinned to `11.19.0`; CI config uses Node `22.20.0` and pnpm `11.19.0`.
+NODE RUNTIME RECONCILIATION = local shell `v22.20.0`; pnpm sessions observed compatible fallback `v24.19.0`
+CANONICAL NODE = `22.20.0` for development/CI qualification
+SUPPORTED NODE RANGE = `>=22.20.0 <25`
+PNPM = `11.19.0`
+CI NODE = `22.20.0`
+LOCAL NODE OBSERVATIONS = both runtimes are dependency-compatible; no global configuration changed
 
 ## Web Foundation
 
-React `19.2.8`, Vite `8.2.2`, and `@vitejs/plugin-react` `6.1.0` provide a real buildable shell. `/` renders title and API health loading/ready/error states; unknown client paths render controlled not-found UI. API calls are behind `src/services/platform.ts`; a real top-level React error boundary catches render failures. Web tests: 4 passing component/state/error-boundary tests; production build and preview succeeded.
+WEB FOUNDATION = PASS; real React/Vite/TypeScript app under `apps/web`
+REACT = `19.2.8`
+VITE = `8.2.2`
+WEB ROUTING = PASS; `/` plus controlled client not-found behavior
+WEB ERROR BOUNDARY = PASS; tested top-level React class error boundary
+WEB API CLIENT BOUNDARY = PASS; health calls isolated in `src/services/platform.ts`
+WEB TESTS = PASS; 4 component/state/error-boundary tests
 
 ## API Foundation
 
-Fastify `5.12.1` with CORS `11.3.0`, TypeBox schemas, and Swagger `9.8.1` provides `/health`, `/ready`, `/openapi.json`, bounded request IDs, structured logging, stable `{ code, message, requestId }` errors, typed PORT validation, and SIGINT/SIGTERM graceful shutdown. `/ready` reports only currently existing dependencies; no database/Redis/MinIO is pretended.
+API FOUNDATION = PASS; real Fastify/TypeScript service under `apps/api`
+FASTIFY = `5.12.1`
+HEALTH = PASS; `GET /health` returns stable 200 liveness contract
+READINESS = PASS; `GET /ready` reports only currently existing dependencies
+REQUEST ID = PASS; bounded/generated IDs returned as `x-request-id` and logged
+ERROR CONTRACT = PASS; stable `{ code, message, requestId }` responses
+STRUCTURED LOGGING = PASS; Fastify structured request lifecycle logs
+CONFIG VALIDATION = PASS; typed PORT validation with clear startup failure
+GRACEFUL SHUTDOWN = PASS; SIGINT/SIGTERM close Fastify and release listener
 
-API tests cover health/readiness, request IDs and oversized/malformed input replacement, controlled 404, internal-error redaction, OpenAPI paths, and clean close. API package build passed.
+## OpenAPI
 
-## Runtime Qualification
+OPENAPI = PASS; development/test JSON exposure at `/openapi.json`
+OPENAPI /health = PASS
+OPENAPI /ready = PASS
 
-- API real start/health/ready/404/request ID: PASS.
-- API graceful shutdown, port release, same-port restart, second shutdown/no orphan: PASS in two automated rounds via `pnpm runtime:smoke`.
-- Web production build and Vite preview root serving: PASS; browser preview used by E2E.
-- Browser E2E with installed system Chrome: PASS; shell visible, healthy API state visible, not-found route controlled, no page errors.
-- OpenAPI `/health` and `/ready`: PASS in generated document and `/openapi.json` endpoint.
+## Runtime Qualification Matrix
+
+| ID | Scenario | Result |
+|---|---|---|
+| RT-001 | API starts on controlled port | PASS |
+| RT-002 | `/health` returns 200 stable contract | PASS |
+| RT-003 | `/ready` returns 200 current-dependency contract | PASS |
+| RT-004 | Unknown API route controlled 404 | PASS |
+| RT-005 | Usable response request ID | PASS |
+| RT-006 | Malformed/oversized request ID bounded safely | PASS |
+| RT-007 | Invalid configuration rejected | FAIL_AS_EXPECTED |
+| RT-008 | Internal error has no stack/path leak | PASS |
+| RT-009 | Graceful shutdown exits | PASS |
+| RT-010 | Port released after shutdown | PASS |
+| RT-011 | Same-port API restart | PASS |
+| RT-012 | Second shutdown leaves no orphan | PASS |
+| RT-013 | Web production build | PASS |
+| RT-014 | Web preview serves root HTML | PASS |
+| RT-015 | Web loading state | PASS |
+| RT-016 | Web healthy API state | PASS |
+| RT-017 | Web API error state | PASS |
+| RT-018 | Web controlled not-found | PASS |
+| RT-019 | Web error boundary | PASS |
+| RT-020 | Browser opens Web | PASS |
+| RT-021 | Browser observes healthy state | PASS |
+| RT-022 | Browser not-found flow | PASS |
+| RT-023 | Happy-path browser console | PASS; no unexpected app errors |
+| RT-024 | Web -> API internal import rejected | FAIL_AS_EXPECTED |
+| RT-025 | OpenAPI contains `/health` | PASS |
+| RT-026 | OpenAPI contains `/ready` | PASS |
+| RT-027 | Frozen-lockfile install | PASS |
+| RT-028 | Local `ci:check` | PASS |
+| RT-029 | Architecture regression gate | PASS |
+| RT-030 | Final workspace has no owned orphan process | PASS |
+
+API REAL START = PASS; `runtime:smoke` used a real listening process in two rounds
+HEALTH REAL HTTP = PASS
+READINESS REAL HTTP = PASS
+404 REAL HTTP = PASS
+REQUEST ID REAL HTTP = PASS
+INVALID CONFIG = FAIL_AS_EXPECTED; `PORT=not-a-port` exits non-zero
+INTERNAL ERROR LEAK TEST = PASS; controlled 500 has request ID and no stack/path
+GRACEFUL SHUTDOWN = PASS
+PORT RELEASE = PASS
+SAME-PORT RESTART = PASS
+ORPHAN PROCESS CHECK = PASS
+WEB RUNTIME = PASS; production build and Vite preview root serving
+BROWSER E2E = PASS; installed system Chrome used because Playwright download was network-blocked
+BROWSER HAPPY PATH = PASS
+BROWSER NOT FOUND = PASS
+BROWSER CONSOLE = PASS
 
 ## Negative Qualification
 
-- Invalid `PORT=not-a-port`: `FAIL_AS_EXPECTED`, startup exited non-zero with explicit validation error.
-- Web -> API internal architecture violation: `FAIL_AS_EXPECTED`, architecture gate rejects the dedicated fixture (alongside plugin -> Core internal case).
-- Internal error leak: PASS; HTTP 500 stable contract includes request ID and no stack/path text.
+INVALID CONFIG = FAIL_AS_EXPECTED
+WEB -> API INTERNAL IMPORT = FAIL_AS_EXPECTED; architecture checker rejects dedicated violation fixture
+CLIENT ERROR LEAK = PASS; stable 5xx contract redacts stack and host paths
 
-## CI and Reproducibility
+## CI and Regression
 
-`.github/workflows/ci.yml` checks out, configures canonical Node/pnpm, installs with `--frozen-lockfile`, and runs `pnpm ci:check`. Workflow formatting/config references were locally validated; `REMOTE CI OBSERVED = NO`. `pnpm install --frozen-lockfile`, `pnpm ci:check`, and the full regression sequence all passed twice; Vitest reported 9/9 tests; no unexpected lockfile/source mutation or owned orphan processes remain.
+GITHUB ACTIONS = PASS; `.github/workflows/ci.yml` uses canonical Node/pnpm and real scripts
+FROZEN LOCKFILE POLICY = PASS; workflow and local install use `pnpm install --frozen-lockfile`
+LOCAL ci:check = PASS
+REMOTE CI OBSERVED = NO
 
-## Scope and Security
+FULL REGRESSION = PASS
+`pnpm install --frozen-lockfile` = PASS
+`pnpm format:check` = PASS
+`pnpm lint` = PASS
+`pnpm typecheck` = PASS
+`pnpm test` = PASS; 9/9 tests
+`pnpm test:architecture` = PASS
+`pnpm build` = PASS
+`pnpm ci:check` = PASS
+`pnpm runtime:smoke` = PASS; two automated rounds
+`pnpm test:e2e` = PASS
 
-```text
+LOCKFILE UNEXPECTEDLY CHANGED = NO
+SOURCE UNEXPECTEDLY CHANGED = NO
+GENERATED JUNK REMAINING = NO; no owned runtime processes or temporary fixtures
+
 BUSINESS FEATURES IMPLEMENTED = NO
-DATABASE / REDIS / MINIO IMPLEMENTED = NO
-JUDGE / SANDBOX / PLUGIN RUNTIME IMPLEMENTED = NO
-```
+DATABASE IMPLEMENTED = NO
+REDIS IMPLEMENTED = NO
+MINIO IMPLEMENTED = NO
+JUDGE IMPLEMENTED = NO
+SANDBOX IMPLEMENTED = NO
+PLUGIN RUNTIME IMPLEMENTED = NO
 
-No Architecture Baseline boundary was weakened and no secrets were introduced. Playwright is configured to use an existing local Chrome executable; CI browser execution is intentionally not included yet.
+ENVIRONMENT BASELINE UPDATED = YES
+CONTRIBUTING UPDATED = YES
 
-## Files and Git
+FILES CREATED = API/Web source, tests, runtime scripts, Playwright config/E2E, CI workflow, package metadata, this report
+FILES MODIFIED = `Docs/ENVIRONMENT_BASELINE.md`, `CONTRIBUTING.md`, `Docs/PROJECT_STATUS.md`, workspace configs/lockfile
 
-The implementation adds the Web/API source, tests, runtime scripts, Playwright configuration/E2E, CI workflow, package metadata/lockfile updates, and this report; it updates `CONTRIBUTING.md`, `Docs/ENVIRONMENT_BASELINE.md`, and `Docs/PROJECT_STATUS.md`. User-provided `Goals/` ZIP files remain untracked and protected.
+SECRET REVIEW = PASS; no secret/key/credential patterns found in tracked project files
+GIT DIFF CHECK = PASS
+FINAL GIT STATUS = clean except protected untracked `Goals/`
 
-Primary implementation commit: `c906dcc` (`feat: establish executable web api platform and ci foundation`).
+PERMANENT GOAL REPORT = YES
+PROJECT STATUS UPDATED = YES
 
-## Known Limitations / Follow-ups
+COMMIT = `feat: establish executable web api platform and ci foundation`; metadata correction also committed narrowly
+COMMIT HASH = `4b972e21a47f4791be38224a1c9a3b5161e6bf25` (primary implementation `c906dccf73859088ab58fa7cf502a46b464c4db3`)
 
-No remote GitHub Actions run was observed. CI browser E2E remains a follow-up; future Goals should add service-specific tests and preserve the security gates before introducing business domains.
+KNOWN LIMITATIONS = Remote GitHub run not observed; browser E2E is not yet part of CI because CI browser setup is deferred
+FOLLOW-UPS = Add CI browser job and later introduce business domains only under subsequent Goals and existing security gates
+
+PHASE 0B.2 FINAL STATUS = PASS
