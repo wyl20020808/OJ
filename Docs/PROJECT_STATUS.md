@@ -30,6 +30,7 @@ Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
 - TypeScript quality gates: PASS (format, lint, typecheck, tests, architecture, build)
 - Real Web/API platform skeleton: AVAILABLE
 - CI foundation: AVAILABLE (local workflow validation; remote run not observed)
+- 0B.3 implementation: Compose/adapters/migration/readiness/integration and CI foundations are committed; real container qualification remains blocked
 - Known blockers: Docker Desktop cannot access its project-unrelated internal `sailor-ingest.sock` runtime socket; Docker daemon has not qualified
 - Known risks: Sandbox escape, Judge credential compromise, hidden-testdata leakage, authorization defects, plugin compromise, storage exposure, queue/result spoofing, DoS, supply chain, secret leakage, unsafe imports, and audit gaps remain OPEN in the risk register
 

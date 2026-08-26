@@ -55,8 +55,10 @@ JUDGE = NOT IMPLEMENTED
 SANDBOX = NOT IMPLEMENTED
 PLUGIN RUNTIME = NOT IMPLEMENTED
 
-IMPLEMENTATION COMMITS = `3959bba` local infrastructure foundation; `26ef44a` Windows runtime-smoke process-tree cleanup
-SOURCE TESTS = PASS; format, lint, typecheck, 11 Vitest tests, architecture gate, build, and Windows API runtime smoke
+IMPLEMENTATION COMMITS = `3959bba` local infrastructure foundation; `26ef44a` Windows runtime-smoke process-tree cleanup; `f02a6c2` real infrastructure integration coverage; `f81b9f4` Web readiness/degraded status
+SOURCE TESTS = PASS; format, lint, typecheck, 12 Vitest tests, architecture gate, build, and Windows API runtime smoke
+CI HARDENING = IMPLEMENTED, NOT REMOTE VERIFIED; workflow provisions Compose integration and Playwright Chromium after local quality gates
+REAL INTEGRATION / FAILURE INJECTION / CLEAN BOOTSTRAP / BROWSER DEGRADATION E2E = NOT RUN; Docker daemon remains unavailable
 ENVIRONMENT BASELINE UPDATED = YES; Docker/WSL installation and runtime blocker recorded
 CONTRIBUTING UPDATED = NO; no new commands are truthful before runtime qualification
 PERMANENT GOAL REPORT = YES
@@ -64,5 +66,5 @@ PROJECT STATUS UPDATED = YES
 SECRET REVIEW = PASS; no project secrets introduced
 GIT DIFF CHECK = PASS
 
-COMMIT = `26ef44a` (latest implementation commit before this report metadata correction)
+COMMIT = `f81b9f4` (latest implementation commit before this report metadata correction)
 FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
