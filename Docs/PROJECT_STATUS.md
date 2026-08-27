@@ -39,6 +39,7 @@ Current Status: PARTIAL / BLOCKED_BY_REBOOT
 - Reboot-boundary recheck: only `wsl --version` completed; `wsl --status`, distro listing, Ubuntu `uname`, and an Ubuntu shell probe each exceeded 30 seconds. Docker Engine installation and all Docker/runtime work remain stopped.
 - PHASE 0B.3R3 WSL recovery: official diagnostics script was downloaded but cannot run without elevated PowerShell; `WslService`, `vmcompute`, and `hns` are running, yet WSL status/list/Ubuntu probes still exceed 30 seconds. No Docker operation was performed; WSL gate remains blocked pending elevated diagnostics and recovery/reboot.
 - 0B.3R3 follow-up: host last boot time is unchanged (`2026-08-26 22:49:27`); the second bounded probe set again timed out for WSL status/list, Ubuntu commands, and shutdown. Docker remains untouched.
+- 0B.3R3 third recheck: the same WSL control-plane timeouts repeated for a third consecutive goal turn; `wsl --version` alone returns. Docker and Docker Engine work remain stopped pending an actual Windows reboot and elevated WSL diagnostics.
 - Known risks: Sandbox escape, Judge credential compromise, hidden-testdata leakage, authorization defects, plugin compromise, storage exposure, queue/result spoofing, DoS, supply chain, secret leakage, unsafe imports, and audit gaps remain OPEN in the risk register
 
 ## Next Planned Goal

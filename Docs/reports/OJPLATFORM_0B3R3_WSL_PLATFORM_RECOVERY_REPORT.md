@@ -34,6 +34,8 @@ REBOOT REQUIRED = Likely; WSL control plane remains hung. No reboot initiated by
 
 FOLLOW-UP RECHECK (2026-08-27) = Host last boot time remained `2026-08-26 22:49:27`; no reboot occurred between attempts. `wsl --version` returned normally, while `wsl --status`, `wsl --list --verbose`, `wsl -d Ubuntu-24.04 -- uname -a`, `wsl -d Ubuntu-24.04 -- echo WSL_OK`, and `wsl --shutdown` again exceeded the bounded 30-second limit. WslService/vmcompute/hns remained Running. This is a repeated WSL control-plane timeout, not evidence of recovery.
 
+THIRD BOUNDED RECHECK (2026-08-27) = Host boot time remained `2026-08-26 22:49:27`. `wsl --version` completed, but `wsl --status`, `wsl --list --verbose`, `wsl -d Ubuntu-24.04 -- echo WSL_OK`, and `wsl -d Ubuntu-24.04 -- uname -a` again exceeded 30 seconds. The identical control-plane blocker has now repeated across three consecutive goal turns; Docker remains untouched.
+
 FINAL WSL GATE CYCLE 1 = FAIL/BLOCKED: only `wsl --version` returned; status/list/Ubuntu probes exceeded 30s.
 FINAL WSL GATE CYCLE 2 = NOT RUN; cycle 1 did not pass.
 INTERACTIVE SHELL = FAIL/BLOCKED (>30s)
@@ -52,4 +54,4 @@ FINAL GIT STATUS = PENDING
 KNOWN LIMITATIONS = Official WSL log collection and feature/service repair require an elevated PowerShell session. WSL command-plane timeouts persist after Docker Desktop removal. No Docker Engine installation, startup, image pull, or 0B.3 runtime qualification was attempted.
 FOLLOW-UPS = Run this Goal from an elevated PowerShell after Windows/WSL recovery or reboot; execute official log collection while reproducing bounded hangs, then rerun both complete WSL acceptance cycles. Only after two stable PASS cycles may 0B.3R2 Docker Engine work resume.
 
-PHASE 0B.3R3 FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`
+PHASE 0B.3R3 FINAL STATUS = `BLOCKED`
