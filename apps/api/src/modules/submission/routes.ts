@@ -166,6 +166,14 @@ async function listRoute(
         'FORBIDDEN',
         'Submission list is forbidden',
       );
+    if (e instanceof Error && e.message === 'VALIDATION_ERROR')
+      return error(
+        reply,
+        request,
+        400,
+        'VALIDATION_ERROR',
+        'Invalid pagination',
+      );
     throw e;
   }
 }

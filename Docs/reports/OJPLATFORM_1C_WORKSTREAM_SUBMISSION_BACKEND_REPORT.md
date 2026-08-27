@@ -6,4 +6,4 @@ Implemented the Submission-owned intake foundation: opaque immutable source snap
 
 The module never executes, compiles, evaluates, imports, or shells out on source/testdata, and does not represent verdicts. No Auth internals, Problem internals, central API composition, migration runner, root manifests, `PROJECT_STATUS.md`, Contest, Judge, Sandbox, or Web files were changed.
 
-Evidence: `pnpm lint` PASS; `pnpm typecheck` PASS; `pnpm test -- --run` PASS (8 files, 29 tests); architecture dependency gate PASS; `pnpm build` PASS; `git diff --check` PASS. PostgreSQL runtime qualification and Lead-owned route/migration registration remain integration work.
+Evidence: `pnpm lint` PASS; `pnpm typecheck` PASS; `pnpm test -- --run` PASS (8 files, 30 tests); architecture dependency gate PASS; `pnpm build` PASS; `git diff --check` PASS. PostgreSQL runtime qualification and Lead-owned route/migration registration remain integration work.

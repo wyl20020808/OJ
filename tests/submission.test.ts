@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import {
   InMemorySubmissionRepository,
+  PostgresSubmissionRepository,
   SubmissionService,
   registerSubmissionModule,
   type SubmissionAuthorizationPolicy,
@@ -123,5 +124,41 @@ describe('submission intake', () => {
     });
     expect(JSON.stringify(response.json())).not.toContain(input.source);
     await app.close();
+  });
+
+  it('persists intake fields through the repository without an execution path', async () => {
+    const calls: Array<{ text: string; values?: unknown[] }> = [];
+    const pool = {
+      query: async (text: string, values?: unknown[]) => {
+        calls.push({ text, ...(values ? { values } : {}) });
+        return {
+          rows: [
+            {
+              id: 's1',
+              owner_user_id: 'u1',
+              problem_id: 'p1',
+              problem_revision_id: 'r1',
+              testdata_version_ref: 'td-v1',
+              language_id: 'typescript',
+              source: input.source,
+              status: 'PENDING',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ],
+        };
+      },
+    };
+    const repository = new PostgresSubmissionRepository(pool);
+    const saved = await repository.create({ ...input, ownerUserId: 'u1' });
+    expect(saved).toMatchObject({
+      problemRevisionId: 'r1',
+      testdataVersionRef: 'td-v1',
+      status: 'PENDING',
+    });
+    expect(calls[0]?.text).toContain('INSERT INTO submissions');
+    expect(calls.map((call) => call.text).join('\n')).not.toMatch(
+      /exec|compile|eval|spawn|shell/i,
+    );
   });
 });

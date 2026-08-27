@@ -43,6 +43,8 @@ export class SubmissionService {
     context?: AuthContext,
   ) {
     if (!context) throw new Error('UNAUTHENTICATED');
+    if (query.cursor && !/^[A-Za-z0-9_-]+$/.test(query.cursor))
+      throw new Error('VALIDATION_ERROR');
     if (!(await this.policy.listOwnSubmissions(context)))
       throw new Error('FORBIDDEN');
     return this.repository.list({ ...query, ownerUserId: context.userId });
