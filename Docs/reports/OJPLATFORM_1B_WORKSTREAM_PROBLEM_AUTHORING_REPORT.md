@@ -6,4 +6,4 @@ Implemented the Problem-owned authoring foundation: public-policy ownership chec
 
 No Contest, Submission, Judge, Sandbox, Auth internals, Web, central API composition, migration runner, root manifests, or `PROJECT_STATUS.md` were changed.
 
-Evidence: `pnpm lint` PASS; `pnpm typecheck` PASS; `pnpm test -- --run` PASS (6 files, 17 tests); architecture dependency gate PASS; `pnpm build` PASS. PostgreSQL runtime qualification requires the Phase integration environment.
+Evidence: `pnpm lint` PASS; `pnpm typecheck` PASS; `pnpm test -- --run` PASS (6 files, 19 tests); architecture dependency gate PASS; `pnpm build` PASS. PostgreSQL runtime qualification requires the Phase integration environment.

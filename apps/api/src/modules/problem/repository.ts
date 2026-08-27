@@ -102,13 +102,11 @@ export class InMemoryProblemRepository implements ProblemRepository {
       visibility: input.visibility ?? 'private',
       updatedAt: now(),
     };
-    this.rows.set(row.id, updated);
     const list = this.history.get(row.id) ?? [];
     const rev = this.toRevision(updated, createdBy, list.length + 1);
     list.push(rev);
     this.history.set(row.id, list);
-    updated.currentRevisionId = rev.revisionId;
-    return updated;
+    return { ...updated, currentRevisionId: rev.revisionId };
   }
   private toRevision(
     row: Problem,
@@ -151,7 +149,36 @@ export class PostgresProblemRepository implements ProblemRepository {
         input.authorId,
       ],
     );
-    return mapRow(result.rows[0]!);
+    const problem = mapRow(result.rows[0]!);
+    const revisionId = randomUUID();
+    await this.pool.query(
+      'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,status,testdata_version,author_id,created_by) VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)',
+      [
+        revisionId,
+        problem.id,
+        problem.slug,
+        problem.title,
+        problem.statement,
+        problem.inputDescription,
+        problem.outputDescription,
+        JSON.stringify(problem.examples),
+        problem.constraints,
+        problem.notes,
+        problem.timeLimitMs,
+        problem.memoryLimitBytes,
+        problem.visibility,
+        problem.status,
+        problem.testdataVersion,
+        problem.authorId,
+        problem.authorId ?? 'system',
+      ],
+    );
+    await this.pool.query(
+      'UPDATE problems SET current_revision_id=$1 WHERE id=$2',
+      [revisionId, problem.id],
+    );
+    problem.currentRevisionId = revisionId;
+    return problem;
   }
   async get(key: string) {
     const result = await this.pool.query(
@@ -249,11 +276,13 @@ export class PostgresProblemRepository implements ProblemRepository {
         createdBy,
       ],
     );
-    return this.update(key, {
-      ...input,
+    return {
+      ...next,
       status: 'draft',
       visibility: 'private',
-    });
+      currentRevisionId: revisionId,
+      updatedAt: new Date().toISOString(),
+    } as Problem;
   }
 }
 function mapRow(row: Record<string, unknown>): Problem {
@@ -277,6 +306,9 @@ function mapRow(row: Record<string, unknown>): Problem {
     authorId: row.author_id as string | null,
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at)).toISOString(),
+    ...(row.current_revision_id
+      ? { currentRevisionId: String(row.current_revision_id) }
+      : {}),
   };
 }
 function mapRevision(row: Record<string, unknown>): ProblemRevision {
