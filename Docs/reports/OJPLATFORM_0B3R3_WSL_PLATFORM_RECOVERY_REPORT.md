@@ -41,6 +41,8 @@ FINAL WSL GATE CYCLE 1 = PASS: `wsl --version`, `wsl --status`, `wsl --list --ve
 WSL SHUTDOWN = PASS; `wsl --shutdown` returned in 1.5 seconds.
 FINAL WSL GATE CYCLE 2 = PASS: after shutdown/restart, `wsl --status`, `wsl --list --verbose`, Ubuntu `echo WSL_OK`, and Ubuntu `uname -a` all returned within the bound; Ubuntu remained VERSION 2.
 
+POST-REBOOT REQUALIFICATION (2026-08-27) = The requested gate was independently rerun after the documented reboot. The first cycle again passed `wsl --version`, status, list, Ubuntu echo/uname, interactive shell, and shutdown; the second cycle again passed status, list, Ubuntu echo, and uname. No Docker command was executed.
+
 INTERACTIVE SHELL = PASS
 UBUNTU VERSION 2 = PASS in both acceptance cycles
 
@@ -53,7 +55,7 @@ COMMIT = PENDING
 FINAL HEAD = PENDING
 FINAL GIT STATUS = PENDING
 
-KNOWN LIMITATIONS = Official WSL log collection and feature/service repair require an elevated PowerShell session. WSL command-plane timeouts persist after Docker Desktop removal. No Docker Engine installation, startup, image pull, or 0B.3 runtime qualification was attempted.
-FOLLOW-UPS = Run this Goal from an elevated PowerShell after Windows/WSL recovery or reboot; execute official log collection while reproducing bounded hangs, then rerun both complete WSL acceptance cycles. Only after two stable PASS cycles may 0B.3R2 Docker Engine work resume.
+KNOWN LIMITATIONS = Historical official WSL log collection and feature inspection were elevation-blocked before reboot; the post-reboot WSL gate is now stable PASS. No Docker Engine installation, startup, image pull, or 0B.3 runtime qualification was attempted.
+FOLLOW-UPS = Resume PHASE 0B.3R2 Docker Engine work under its separate goal; do not repeat the exhausted Docker Desktop path.
 
 PHASE 0B.3R3 FINAL STATUS = `PASS`

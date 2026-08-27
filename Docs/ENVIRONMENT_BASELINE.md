@@ -18,7 +18,7 @@ This policy controls toolchain selection. The repository/tooling foundation is n
 - Go: NOT INSTALLED; not required for this TypeScript foundation.
 - Docker Desktop: officially uninstalled during PHASE 0B.3R2 fallback; WSL Docker Engine is the intended backend.
 - Docker CLI: VERIFIED `29.7.2`; Docker Compose plugin VERIFIED `v5.4.0`; `docker version/info` and `hello-world` remain blocked until the daemon starts.
-- WSL: WSL `2.7.12` is installed; after the 2026-08-27 Windows reboot, Ubuntu `24.04` passed two bounded WSL acceptance cycles in WSL2 mode, including shell launch and timely shutdown. Docker Engine remains uninstalled and requires the separate 0B.3R2 resume.
+- WSL: WSL `2.7.12` is installed; after the 2026-08-27 Windows reboot, Ubuntu `24.04` passed two bounded WSL acceptance cycles in WSL2 mode, including shell launch and timely shutdown. An independent rerun also passed. Docker Engine remains uninstalled and requires the separate 0B.3R2 resume.
 - WSL / Linux sandbox primitives: WSL control-plane qualification PASS; Linux sandbox primitives remain NOT VERIFIED.
 
 ## Version and Dependency Policy
