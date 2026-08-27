@@ -29,6 +29,19 @@ export type AuthRepository = {
     tokenHash: string,
   ): Promise<{ id: string; userId: string; expiresAt: Date } | null>;
   revokeSession(id: string): Promise<void>;
+  updateUserStatus(id: string, status: User['status']): Promise<User | null>;
+  listSessions(userId: string): Promise<SessionMetadata[]>;
+  revokeAllSessions(userId: string): Promise<void>;
+  findSessionOwner(id: string): Promise<string | null>;
+};
+
+export type SessionMetadata = {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastSeenAt?: string;
+  deviceLabel?: string;
 };
 
 export const publicUser = (user: User): AuthenticatedUser => ({

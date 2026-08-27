@@ -57,6 +57,46 @@ export function createPostgresAuthRepository(pool: {
         [id],
       );
     },
+    async updateUserStatus(id, status) {
+      const r = await pool.query(
+        'UPDATE users SET status=$2, updated_at=now() WHERE id=$1 RETURNING id,username,email,display_name,status,created_at,updated_at',
+        [id, status],
+      );
+      if (!r.rows[0]) return null;
+      if (status !== 'active')
+        await pool.query(
+          'UPDATE auth_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL',
+          [id],
+        );
+      return map(r.rows[0]);
+    },
+    async listSessions(userId) {
+      const r = await pool.query(
+        'SELECT id,created_at,expires_at,revoked_at FROM auth_sessions WHERE user_id=$1 ORDER BY created_at DESC',
+        [userId],
+      );
+      return r.rows.map((row) => ({
+        id: String(row.id),
+        createdAt: new Date(String(row.created_at)).toISOString(),
+        expiresAt: new Date(String(row.expires_at)).toISOString(),
+        revokedAt: row.revoked_at
+          ? new Date(String(row.revoked_at)).toISOString()
+          : null,
+      }));
+    },
+    async revokeAllSessions(userId) {
+      await pool.query(
+        'UPDATE auth_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL',
+        [userId],
+      );
+    },
+    async findSessionOwner(id) {
+      const r = await pool.query(
+        'SELECT user_id FROM auth_sessions WHERE id=$1',
+        [id],
+      );
+      return r.rows[0] ? String(r.rows[0].user_id) : null;
+    },
   };
 }
 const map = (r: Row) => ({
@@ -64,7 +104,7 @@ const map = (r: Row) => ({
   username: String(r.username),
   email: String(r.email),
   displayName: String(r.display_name),
-  status: r.status as 'active' | 'disabled',
+  status: r.status as 'active' | 'disabled' | 'deactivated',
   createdAt: new Date(String(r.created_at)).toISOString(),
   updatedAt: new Date(String(r.updated_at)).toISOString(),
 });
