@@ -32,6 +32,8 @@ WSL UPDATE/REPAIR = NOT RUN; installed WSL package is current `2.7.12.0`, and co
 WINDOWS FEATURE REPAIR = NOT RUN; elevation unavailable and feature corruption not established.
 REBOOT REQUIRED = Likely; WSL control plane remains hung. No reboot initiated by this session.
 
+FOLLOW-UP RECHECK (2026-08-27) = Host last boot time remained `2026-08-26 22:49:27`; no reboot occurred between attempts. `wsl --version` returned normally, while `wsl --status`, `wsl --list --verbose`, `wsl -d Ubuntu-24.04 -- uname -a`, `wsl -d Ubuntu-24.04 -- echo WSL_OK`, and `wsl --shutdown` again exceeded the bounded 30-second limit. WslService/vmcompute/hns remained Running. This is a repeated WSL control-plane timeout, not evidence of recovery.
+
 FINAL WSL GATE CYCLE 1 = FAIL/BLOCKED: only `wsl --version` returned; status/list/Ubuntu probes exceeded 30s.
 FINAL WSL GATE CYCLE 2 = NOT RUN; cycle 1 did not pass.
 INTERACTIVE SHELL = FAIL/BLOCKED (>30s)
