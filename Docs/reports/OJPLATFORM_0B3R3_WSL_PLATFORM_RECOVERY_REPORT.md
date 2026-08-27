@@ -45,6 +45,8 @@ POST-REBOOT REQUALIFICATION (2026-08-27) = The requested gate was independently 
 
 LATEST GATE RECHECK (2026-08-27) = `LastBootUpTime=2026-08-27 13:25:20` remained later than the recorded baseline. A fresh first cycle passed all requested probes, interactive Ubuntu shell, and timely `wsl --shutdown`; a fresh second cycle passed status, list, Ubuntu echo, and uname. Docker remained untouched.
 
+LATEST GATE RECHECK 2 (2026-08-27) = With the same post-reboot boot time confirmed, another complete first cycle and second cycle passed all requested WSL/Ubuntu probes. Interactive shell returned `INTERACTIVE_OK`; `wsl --shutdown` returned promptly. Docker remained untouched.
+
 INTERACTIVE SHELL = PASS
 UBUNTU VERSION 2 = PASS in both acceptance cycles
 
