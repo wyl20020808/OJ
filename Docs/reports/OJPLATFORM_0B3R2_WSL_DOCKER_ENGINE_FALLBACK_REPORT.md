@@ -57,6 +57,8 @@ REBOOT-BOUNDARY RECHECK (2026-08-27) = `wsl --version` returned WSL `2.7.12` and
 
 0B.3R3 HANDOFF (2026-08-27) = WSL diagnostics confirmed the same control-plane timeout. Docker remains untouched. See `OJPLATFORM_0B3R3_WSL_PLATFORM_RECOVERY_REPORT.md` for elevated-diagnostics and reboot boundary requirements.
 
+0B.3R3 GATE RESULT (2026-08-27) = Windows reboot completed and two consecutive WSL acceptance cycles passed. Ubuntu 24.04 is VERSION 2; non-interactive probes, interactive shell, and timely `wsl --shutdown` passed. Docker Engine installation may now resume under the separate 0B.3R2 goal.
+
 PHASE 0B.3R2 FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`
 PHASE 0B.3R FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
 PHASE 0B.3 FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`

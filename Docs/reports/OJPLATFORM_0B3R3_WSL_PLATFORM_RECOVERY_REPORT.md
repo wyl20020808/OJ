@@ -36,14 +36,16 @@ FOLLOW-UP RECHECK (2026-08-27) = Host last boot time remained `2026-08-26 22:49:
 
 THIRD BOUNDED RECHECK (2026-08-27) = Host boot time remained `2026-08-26 22:49:27`. `wsl --version` completed, but `wsl --status`, `wsl --list --verbose`, `wsl -d Ubuntu-24.04 -- echo WSL_OK`, and `wsl -d Ubuntu-24.04 -- uname -a` again exceeded 30 seconds. The identical control-plane blocker has now repeated across three consecutive goal turns; Docker remains untouched.
 
-FINAL WSL GATE CYCLE 1 = FAIL/BLOCKED: only `wsl --version` returned; status/list/Ubuntu probes exceeded 30s.
-FINAL WSL GATE CYCLE 2 = NOT RUN; cycle 1 did not pass.
-INTERACTIVE SHELL = FAIL/BLOCKED (>30s)
-WSL SHUTDOWN = FAIL/BLOCKED (>30s in prior boundary test)
-UBUNTU VERSION 2 = Registration was previously observed, but current list command is unavailable; NOT REQUALIFIED.
+POST-REBOOT ACCEPTANCE (2026-08-27) = New Windows boot confirmed with `LastBootUpTime=2026-08-27 13:25:20`.
+FINAL WSL GATE CYCLE 1 = PASS: `wsl --version`, `wsl --status`, `wsl --list --verbose`, Ubuntu `echo WSL_OK`, and Ubuntu `uname -a` all returned within the 30-second bound. Ubuntu-24.04 was listed as VERSION 2. Interactive `bash -i` shell reached a prompt and returned `INTERACTIVE_OK`.
+WSL SHUTDOWN = PASS; `wsl --shutdown` returned in 1.5 seconds.
+FINAL WSL GATE CYCLE 2 = PASS: after shutdown/restart, `wsl --status`, `wsl --list --verbose`, Ubuntu `echo WSL_OK`, and Ubuntu `uname -a` all returned within the bound; Ubuntu remained VERSION 2.
+
+INTERACTIVE SHELL = PASS
+UBUNTU VERSION 2 = PASS in both acceptance cycles
 
 DOCKER TOUCHED = NO
-0B.3R2 RESUME ALLOWED = NO
+0B.3R2 RESUME ALLOWED = YES (WSL gate complete; Docker work intentionally deferred to the next resume step)
 
 REPORT = THIS FILE
 PROJECT_STATUS = UPDATED
@@ -54,4 +56,4 @@ FINAL GIT STATUS = PENDING
 KNOWN LIMITATIONS = Official WSL log collection and feature/service repair require an elevated PowerShell session. WSL command-plane timeouts persist after Docker Desktop removal. No Docker Engine installation, startup, image pull, or 0B.3 runtime qualification was attempted.
 FOLLOW-UPS = Run this Goal from an elevated PowerShell after Windows/WSL recovery or reboot; execute official log collection while reproducing bounded hangs, then rerun both complete WSL acceptance cycles. Only after two stable PASS cycles may 0B.3R2 Docker Engine work resume.
 
-PHASE 0B.3R3 FINAL STATUS = `BLOCKED`
+PHASE 0B.3R3 FINAL STATUS = `PASS`
