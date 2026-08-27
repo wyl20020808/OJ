@@ -1,6 +1,6 @@
 # Contributing to OJPlatform
 
-OJPlatform is in its governance and engineering-foundation stage. Do not invent commands for services that do not yet exist.
+OJPlatform is in its governance and engineering-foundation stage. Do not invent commands for services that do not yet exist. Infrastructure commands requiring a live container daemon remain environment-blocked until the WSL Docker Engine fallback is qualified.
 
 ## Before Making Changes
 

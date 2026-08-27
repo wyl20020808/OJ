@@ -16,10 +16,10 @@ This policy controls toolchain selection. The repository/tooling foundation is n
 - npm: VERIFIED during preflight; no npm lockfile is used.
 - Git: VERIFIED `2.51.0.windows.2`.
 - Go: NOT INSTALLED; not required for this TypeScript foundation.
-- Docker Desktop: INSTALLED via official `winget` package `Docker.DockerDesktop` version `4.88.1`; daemon NOT VERIFIED because WSL2 installation is pending reboot.
+- Docker Desktop: officially uninstalled during PHASE 0B.3R2 fallback; WSL Docker Engine is the intended backend.
 - Docker CLI: VERIFIED `29.7.2`; Docker Compose plugin VERIFIED `v5.4.0`; `docker version/info` and `hello-world` remain blocked until the daemon starts.
-- WSL: Windows Subsystem for Linux feature installation initiated through elevated official `wsl --install --no-distribution`; DISM records `Reboot required=yes`; no Linux distribution is currently registered.
-- WSL / Linux sandbox primitives: NOT VERIFIED; reboot required before Docker backend qualification.
+- WSL: WSL `2.7.12` is installed and Ubuntu `24.04` registration was observed in WSL2 mode, but post-uninstall WSL commands timed out and shell initialization is not qualified. Docker Engine installation is blocked pending WSL recovery/reboot.
+- WSL / Linux sandbox primitives: NOT VERIFIED; WSL runtime recovery/reboot required before Docker Engine qualification.
 
 ## Version and Dependency Policy
 

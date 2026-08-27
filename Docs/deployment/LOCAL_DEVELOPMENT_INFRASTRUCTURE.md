@@ -2,7 +2,7 @@
 
 This guide is for the project-owned development stack only. It is not a production deployment guide.
 
-Prerequisites are Docker Desktop with a working Linux/WSL backend and Node/pnpm from the environment baseline.
+The intended local container backend is WSL2 Ubuntu with the official Docker Engine and Compose plugin. Docker Desktop is not the canonical backend after PHASE 0B.3R2. This backend switch is not yet runtime-qualified; current setup is blocked by WSL recovery. Node/pnpm remain required from the environment baseline.
 
 ```text
 pnpm install --frozen-lockfile

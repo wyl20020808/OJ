@@ -2,8 +2,8 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: Phase 0B.3R Docker Runtime Recovery & 0B.3 Resume Qualification
-Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
+Current Stage: Phase 0B.3R2 WSL Docker Engine Fallback & 0B.3 Resume Qualification
+Current Status: PARTIAL / BLOCKED_BY_REBOOT
 
 ## Completed Goals
 
@@ -35,10 +35,11 @@ Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
 - 0B.3R recovery: after Windows restart, quarantining the exact Docker runtime directory allowed brief daemon recovery and WSL data-disk setup; registry pulls then failed because Docker Desktop lacked the verified host proxy, and a later restart reproduced runtime socket failure
 - Known blocker: Docker Desktop needs dedicated proxy configuration using `127.0.0.1:10809`, and daemon stability must be requalified before real integration, fault injection, clean bootstrap, browser E2E, and final regression
 - Post-interruption recheck: Desktop still crashes during `sailor-ingest.sock` initialization; `dockerDesktopLinuxEngine` is absent. `httpproxy.log` confirms host/Linux proxy disabled and registry direct connection. Official proxy configuration cannot be reached while Settings is unavailable, so 0B.3/0B.3R remain blocked.
+- PHASE 0B.3R2 fallback: Docker Desktop was officially uninstalled after data-preservation recheck. Ubuntu 24.04 was observed registered under WSL2, but the WSL command plane timed out after removal; official Docker Engine installation and all runtime qualification are blocked pending WSL recovery/reboot.
 - Known risks: Sandbox escape, Judge credential compromise, hidden-testdata leakage, authorization defects, plugin compromise, storage exposure, queue/result spoofing, DoS, supply chain, secret leakage, unsafe imports, and audit gaps remain OPEN in the risk register
 
 ## Next Planned Goal
 
-Configure Docker Desktop's dedicated proxy, verify stable `docker info` and `docker run --rm hello-world`, then resume PHASE 0B.3R to complete Compose, real dependency integration, failure injection, clean bootstrap, browser degradation/recovery E2E, CI-local validation, and final regression.
+After WSL recovery/reboot, install and qualify official Docker Engine inside Ubuntu 24.04, then resume PHASE 0B.3R2 to complete Compose, real dependency integration, failure injection, clean bootstrap, browser degradation/recovery E2E, CI-local validation, and final regression.
 
 Last Updated: 2026-08-27

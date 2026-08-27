@@ -68,5 +68,7 @@ POST-INTERRUPTION QUALIFICATION (2026-08-27) = Docker Desktop `4.88.1` again pre
 
 POST-INTERRUPTION STATUS = `BLOCKED_BY_ENVIRONMENT`; Desktop proxy configuration and stable daemon qualification remain outstanding. No 0B.3 runtime matrix was rerun or claimed.
 
+0B.3R2 HANDOFF (2026-08-27) = The exhausted Docker Desktop path was closed with an official uninstall after data-preservation verification. Ubuntu 24.04 was registered under WSL2, but WSL became unresponsive during fallback setup; continuation is recorded in `OJPLATFORM_0B3R2_WSL_DOCKER_ENGINE_FALLBACK_REPORT.md` with status `PARTIAL / BLOCKED_BY_REBOOT`.
+
 PHASE 0B.3R FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
 PHASE 0B.3 FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`

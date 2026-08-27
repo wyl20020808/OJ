@@ -48,6 +48,8 @@ Current post-reboot update: a later clean runtime-directory quarantine allowed D
 
 Post-interruption recheck (2026-08-27): Docker Desktop again crashed at `sailor-ingest.sock` initialization. `docker version`, `docker info`, `docker pull hello-world`, and `docker run --rm hello-world` could not reach the daemon pipe. `httpproxy.log` continues to show both host and Linux proxy disabled and registry direct-connection attempts. The verified HTTP CONNECT proxy is listening at `127.0.0.1:10809`, but the official Settings UI is unavailable and the Docker Desktop CLI has no proxy configuration command. Runtime qualification therefore remains blocked.
 
+PHASE 0B.3R2 handoff (2026-08-27): Docker Desktop was officially uninstalled after the documented no-data preservation check. Ubuntu 24.04 appeared as a WSL2 distro, but WSL commands timed out after removal; official Docker Engine fallback and all blocked runtime matrices remain pending reboot/recovery.
+
 ## Qualification Status
 
 Infrastructure implementation is PARTIAL. Project-owned Compose, local-only environment example, PostgreSQL/Drizzle, Redis, and S3-compatible adapters, a system-metadata migration, typed API configuration, and bounded `/ready` dependency checks are present and source-tested. Real container/runtime qualification remains BLOCKED_BY_ENVIRONMENT: Docker daemon recovery is intermittent and Docker Desktop's container registry access requires dedicated proxy configuration. No runtime feature result is claimed.
