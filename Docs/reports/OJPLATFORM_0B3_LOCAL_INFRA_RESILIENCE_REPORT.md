@@ -52,6 +52,8 @@ PHASE 0B.3R2 handoff (2026-08-27): Docker Desktop was officially uninstalled aft
 
 ## Qualification Status
 
+WSL Docker Engine fallback qualification (2026-08-27): official Docker CE/Compose, daemon-backed pulls, Compose health checks, migrations, and real PostgreSQL/Redis/MinIO integration passed. Windows scripts bridge through `wsl.exe` without Docker TCP. Windows API/browser access to WSL-published PostgreSQL/Redis ports remains unavailable/intermittent; `/ready` returns 503 and browser E2E is not PASS. Blocker: `BLOCKED_BY_WINDOWS_WSL_PORT_FORWARDING`.
+
 Infrastructure implementation is PARTIAL. Project-owned Compose, local-only environment example, PostgreSQL/Drizzle, Redis, and S3-compatible adapters, a system-metadata migration, typed API configuration, and bounded `/ready` dependency checks are present and source-tested. Real container/runtime qualification remains BLOCKED_BY_ENVIRONMENT: Docker daemon recovery is intermittent and Docker Desktop's container registry access requires dedicated proxy configuration. No runtime feature result is claimed.
 
 HOST INSTALLATION = PARTIAL / BLOCKED_BY_ENVIRONMENT (daemon briefly recovered; Docker Desktop runtime socket recurs and registry access requires proxy configuration)

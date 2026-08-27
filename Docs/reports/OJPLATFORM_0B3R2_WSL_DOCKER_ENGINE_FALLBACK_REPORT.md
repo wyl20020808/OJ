@@ -61,4 +61,12 @@ REBOOT-BOUNDARY RECHECK (2026-08-27) = `wsl --version` returned WSL `2.7.12` and
 
 PHASE 0B.3R2 FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`
 PHASE 0B.3R FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
-PHASE 0B.3 FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
+ENGINE QUALIFICATION (2026-08-27) = PASS. Official Docker CE `29.7.2` and Compose plugin `v5.5.0` are installed in Ubuntu 24.04 systemd. Daemon, hello-world, and all three pinned image pulls passed with systemd proxy `http://127.0.0.1:10809`.
+WINDOWS->WSL BRIDGE = IMPLEMENTED via `wsl.exe -d Ubuntu-24.04 -- docker ...`; Compose config/lifecycle and Linux named volumes pass.
+REAL INTEGRATION = PASS for PostgreSQL, Redis, MinIO object lifecycle, migration, and Linux-side readiness.
+REGRESSION = PASS for frozen install, format, lint, typecheck, unit tests, architecture, build, and `ci:check`; runtime smoke PASS.
+BROWSER E2E = BLOCKED_BY_WINDOWS_WSL_PORT_FORWARDING; Windows API cannot consistently reach WSL-published PostgreSQL/Redis ports and `/ready` correctly returns 503.
+FI-001..FI-018 = NOT FULLY EXECUTED; CB-001..CB-026 = PARTIAL pending boundary and browser rows.
+PHASE 0B.3R2 FINAL STATUS = `PARTIAL / BLOCKED_BY_WINDOWS_WSL_PORT_FORWARDING`
+PHASE 0B.3R FINAL STATUS = `PARTIAL / BACKEND FALLBACK QUALIFIED; BROWSER BOUNDARY BLOCKED`
+PHASE 0B.3 FINAL STATUS = `PARTIAL / BLOCKED_BY_WINDOWS_WSL_PORT_FORWARDING`

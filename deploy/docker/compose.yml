@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ojplatform
       POSTGRES_PASSWORD: ojplatform_dev
     ports:
-      - '127.0.0.1:55432:5432'
+      - '55432:5432'
     volumes:
       - ojplatform-postgres-data:/var/lib/postgresql/data
     networks: [ojplatform-local]
@@ -21,7 +21,7 @@ services:
   redis:
     image: redis:7.4.1-alpine
     ports:
-      - '127.0.0.1:56379:6379'
+      - '56379:6379'
     volumes:
       - ojplatform-redis-data:/data
     networks: [ojplatform-local]
@@ -38,8 +38,8 @@ services:
       MINIO_ROOT_USER: ojplatform
       MINIO_ROOT_PASSWORD: ojplatform_dev_secret
     ports:
-      - '127.0.0.1:59000:9000'
-      - '127.0.0.1:59001:9001'
+      - '59000:9000'
+      - '59001:9001'
     volumes:
       - ojplatform-minio-data:/data
     networks: [ojplatform-local]

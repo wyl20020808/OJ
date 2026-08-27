@@ -4,7 +4,6 @@ const child = spawn('pnpm', ['--filter', '@ojplatform/api', 'dev'], {
   stdio: 'inherit',
   env: {
     ...process.env,
-    OJPLATFORM_INFRA: 'false',
     PORT: '3010',
     HOST: '127.0.0.1',
   },

@@ -1,6 +1,6 @@
 # Contributing to OJPlatform
 
-OJPlatform is in its governance and engineering-foundation stage. Do not invent commands for services that do not yet exist. Infrastructure commands requiring a live container daemon remain environment-blocked until the WSL Docker Engine fallback is qualified.
+OJPlatform is in its governance and engineering-foundation stage. Do not invent commands for services that do not yet exist. Local infrastructure uses official Docker Engine in WSL2 through the repository's narrow `wsl.exe` bridge. Windows-to-WSL browser/API qualification remains environment-dependent and must be reported honestly.
 
 ## Before Making Changes
 
