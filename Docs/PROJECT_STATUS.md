@@ -5,6 +5,8 @@ Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: PHASE 1B AUTHORING & ACCESS CONTROL FOUNDATION COMPLETE
 Current Status: PHASE 1B PASS
 
+Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
+
 ## Completed Goals
 
 - PHASE 0A.1 — Project Bootstrap & Architecture Baseline: PASS
