@@ -104,6 +104,13 @@ input {
   padding: 0.7rem;
   font: inherit;
 }
+select {
+  border: 1px solid #aebbc6;
+  border-radius: 4px;
+  padding: 0.7rem;
+  font: inherit;
+  background: #fff;
+}
 textarea {
   border: 1px solid #aebbc6;
   border-radius: 4px;
@@ -152,6 +159,13 @@ legend {
   border-top: 1px solid #dce3e9;
   margin-top: 2rem;
   padding-top: 1rem;
+}
+.submit-cta {
+  margin: 1rem 0;
+}
+.source {
+  min-height: 16rem;
+  overflow: auto;
 }
 .status {
   display: inline-block;

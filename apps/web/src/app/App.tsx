@@ -12,7 +12,9 @@ import {
   createApiClient,
   type ApiClient,
   type AuthenticatedUser,
+  type Language,
   type Problem,
+  type Submission,
 } from '../services/api.js';
 import './app.css';
 
@@ -23,6 +25,9 @@ type Route = {
     | 'register'
     | 'problems'
     | 'problem'
+    | 'submit'
+    | 'submissions'
+    | 'submission'
     | 'author'
     | 'author-new'
     | 'author-edit'
@@ -39,8 +44,14 @@ function route(path = window.location.pathname): Route {
   if (path === '/author/problems/new') return { name: 'author-new' };
   if (path.startsWith('/author/problems/') && path.endsWith('/edit'))
     return { name: 'author-edit', id: decodeURIComponent(path.slice(17, -5)) };
+  if (path.startsWith('/problems/') && path.endsWith('/submit'))
+    return { name: 'submit', id: decodeURIComponent(path.slice(10, -6)) };
   if (path.startsWith('/problems/'))
     return { name: 'problem', id: decodeURIComponent(path.slice(10)) };
+  if (path === '/submissions' || path === '/submissions/')
+    return { name: 'submissions' };
+  if (path.startsWith('/submissions/'))
+    return { name: 'submission', id: decodeURIComponent(path.slice(13)) };
   return { name: 'not-found' };
 }
 function navigate(path: string) {
@@ -783,6 +794,11 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
     <article className="detail">
       <Link to="/problems">← Back to problems</Link>
       <h1>{problem.title}</h1>
+      <div className="submit-cta">
+        <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
+          <button type="button">Submit solution</button>
+        </Link>
+      </div>
       <div className="limits">
         <span>Time {problem.timeLimitMs} ms</span>
         <span>
@@ -801,6 +817,315 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
         </Section>
       )}
       {problem.notes && <Section title="Notes">{problem.notes}</Section>}
+    </article>
+  );
+}
+
+function SubmissionForm({
+  api,
+  problemId,
+  user,
+}: {
+  api: ApiClient;
+  problemId: string;
+  user: AuthenticatedUser | null;
+}) {
+  const [languages, setLanguages] = useState<Language[]>([]);
+  const [languageId, setLanguageId] = useState('');
+  const [source, setSource] = useState('');
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const [state, setState] = useState<
+    'loading' | 'ready' | 'saving' | 'success' | 'error'
+  >('loading');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!user) {
+      setState('ready');
+      return;
+    }
+    void Promise.all([api.languages(), api.problem(problemId)])
+      .then(([ls, p]) => {
+        setLanguages(ls);
+        setLanguageId(ls[0]?.id ?? '');
+        setProblem(p);
+        setState('ready');
+      })
+      .catch((e) => {
+        setError(
+          e instanceof ApiError ? e.message : 'Unable to load submission form.',
+        );
+        setState('error');
+      });
+  }, [api, problemId, user]);
+  if (!user)
+    return (
+      <State
+        title="Sign in required"
+        text="Sign in before submitting a solution."
+        action={<Link to="/login">Sign in</Link>}
+      />
+    );
+  if (state === 'loading')
+    return (
+      <State
+        title="Loading submission form"
+        text="Preparing the language catalog..."
+      />
+    );
+  if (state === 'error')
+    return <State title="Submission unavailable" text={error} />;
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!languageId) {
+      setError('Choose a language.');
+      return;
+    }
+    if (!source.trim()) {
+      setError('Source code is required.');
+      return;
+    }
+    const selected = languages.find((l) => l.id === languageId);
+    if (
+      selected &&
+      new TextEncoder().encode(source).byteLength > selected.maxSourceBytes
+    ) {
+      setError(`Source exceeds the ${selected.maxSourceBytes}-byte limit.`);
+      return;
+    }
+    setState('saving');
+    try {
+      const result = await api.createSubmission({
+        problemId,
+        problemRevisionId:
+          (problem as (Problem & { revisionId?: string }) | null)?.revisionId ??
+          problemId,
+        testdataVersionRef: problem?.testdataVersion ?? null,
+        languageId,
+        source,
+      });
+      setState('success');
+      setError(
+        `Submission ${result.id} was recorded for intake and is ${result.status}.`,
+      );
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Unable to submit source.');
+      setState('ready');
+    }
+  };
+  if (state === 'success')
+    return (
+      <State
+        title="Submission received"
+        text={error}
+        action={<Link to="/submissions">View submission history</Link>}
+      />
+    );
+  return (
+    <section className="editor">
+      <Link to={`/problems/${encodeURIComponent(problemId)}`}>
+        ← Back to problem
+      </Link>
+      <p className="eyebrow">SUBMISSION INTAKE</p>
+      <h1>Submit solution</h1>
+      <form onSubmit={submit} noValidate>
+        <label>
+          Language
+          <select
+            value={languageId}
+            onChange={(e) => setLanguageId(e.target.value)}
+            required
+          >
+            <option value="">Choose a language</option>
+            {languages.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name} ({l.extension})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Source code
+          <textarea
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            rows={18}
+            spellCheck={false}
+            required
+          />
+        </label>
+        <p className="muted">
+          Source is stored as text for intake only. No execution result is
+          available at this stage.
+        </p>
+        {error && <FormMessage error={error} />}
+        <button disabled={state === 'saving'}>
+          {state === 'saving' ? 'Submitting...' : 'Submit source'}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function SubmissionHistory({
+  api,
+  user,
+}: {
+  api: ApiClient;
+  user: AuthenticatedUser | null;
+}) {
+  const [items, setItems] = useState<Submission[] | null>(null);
+  const [next, setNext] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [cursor, setCursor] = useState<string | undefined>();
+  const load = () => {
+    setItems(null);
+    setError('');
+    void api
+      .submissions(cursor)
+      .then((d) => {
+        setItems(d.items);
+        setNext(d.nextCursor);
+      })
+      .catch((e) =>
+        setError(
+          e instanceof ApiError ? e.message : 'Unable to load submissions.',
+        ),
+      );
+  };
+  useEffect(load, [api, cursor]);
+  if (!user)
+    return (
+      <State
+        title="Sign in required"
+        text="Sign in to view your submission history."
+        action={<Link to="/login">Sign in</Link>}
+      />
+    );
+  if (error)
+    return (
+      <State
+        title="Submission history unavailable"
+        text={error}
+        action={<button onClick={load}>Retry</button>}
+      />
+    );
+  if (!items)
+    return (
+      <State
+        title="Loading submissions"
+        text="Fetching your intake history..."
+      />
+    );
+  return (
+    <section>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">SUBMISSIONS</p>
+          <h1>My submissions</h1>
+        </div>
+      </div>
+      {items.length === 0 ? (
+        <State
+          title="No submissions yet"
+          text="Your submitted sources will appear here."
+        />
+      ) : (
+        <div className="problem-list">
+          {items.map((s) => (
+            <article key={s.id}>
+              <div>
+                <h2>
+                  <Link to={`/submissions/${s.id}`}>{s.id}</Link>
+                </h2>
+                <p>
+                  {s.languageId} · {s.status} ·{' '}
+                  {new Date(s.createdAt).toLocaleString()}
+                </p>
+              </div>
+              <Link to={`/submissions/${s.id}`}>Details</Link>
+            </article>
+          ))}
+        </div>
+      )}
+      <div className="pagination">
+        <button disabled={!cursor} onClick={() => setCursor(undefined)}>
+          First page
+        </button>
+        <button disabled={!next} onClick={() => setCursor(next ?? undefined)}>
+          Next page
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function SubmissionDetail({
+  api,
+  id,
+  user,
+}: {
+  api: ApiClient;
+  id: string;
+  user: AuthenticatedUser | null;
+}) {
+  const [submission, setSubmission] = useState<Submission | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    void api
+      .submission(id)
+      .then(setSubmission)
+      .catch((e) => setError(e instanceof ApiError ? e : null));
+  }, [api, id, user]);
+  if (!user)
+    return (
+      <State
+        title="Sign in required"
+        text="Sign in to view this submission."
+        action={<Link to="/login">Sign in</Link>}
+      />
+    );
+  if (error)
+    return (
+      <State
+        title={
+          error.code === 'NOT_FOUND'
+            ? 'Submission not found'
+            : error.code === 'FORBIDDEN'
+              ? 'Submission forbidden'
+              : 'Submission unavailable'
+        }
+        text={error.message}
+      />
+    );
+  if (!submission)
+    return (
+      <State
+        title="Loading submission"
+        text="Fetching submission metadata..."
+      />
+    );
+  return (
+    <article className="detail">
+      <Link to="/submissions">← Back to submissions</Link>
+      <p className="eyebrow">SUBMISSION</p>
+      <h1>{submission.id}</h1>
+      <div className="limits">
+        <span>Status {submission.status}</span>
+        <span>Language {submission.languageId}</span>
+        <span>Intake {new Date(submission.createdAt).toLocaleString()}</span>
+      </div>
+      <Section title="Problem">
+        {submission.problemId} · revision {submission.problemRevisionId}
+      </Section>
+      <Section title="Source">
+        <pre className="source">{submission.source}</pre>
+      </Section>
+      <p className="muted">
+        This page reports intake metadata only. Execution and verdicts are not
+        available.
+      </p>
     </article>
   );
 }
@@ -834,6 +1159,20 @@ export function App() {
       <AuthForm mode={current.name} api={api} onUser={setUser} />
     ) : current.name === 'problems' ? (
       <ProblemList api={api} />
+    ) : current.name === 'submit' ? (
+      <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
+    ) : current.name === 'submissions' ? (
+      <SubmissionHistory api={api} user={user} />
+    ) : current.name === 'submission' ? (
+      user && current.id ? (
+        <SubmissionDetail api={api} id={current.id} user={user} />
+      ) : (
+        <State
+          title="Sign in required"
+          text="Sign in to view this submission."
+          action={<Link to="/login">Sign in</Link>}
+        />
+      )
     ) : current.name === 'author' ? (
       user ? (
         <AuthorDashboard api={api} />
@@ -880,6 +1219,7 @@ export function App() {
           {user ? (
             <>
               <Link to="/author">Authoring</Link>
+              <Link to="/submissions">Submissions</Link>
               <button
                 className="link-button"
                 onClick={() => {
