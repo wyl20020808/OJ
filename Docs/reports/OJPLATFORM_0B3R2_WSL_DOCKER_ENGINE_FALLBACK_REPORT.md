@@ -55,6 +55,8 @@ FOLLOW-UPS = After reboot, re-read this report, qualify Ubuntu/systemd/network/p
 
 REBOOT-BOUNDARY RECHECK (2026-08-27) = `wsl --version` returned WSL `2.7.12` and kernel `6.1.18.3`. `wsl --status`, `wsl --list --verbose`, `wsl -d Ubuntu-24.04 -- uname -a`, and `wsl -d Ubuntu-24.04 -- bash -lc "printf 'SHELL_OK'"` did not return within 30 seconds. WSL platform qualification is therefore FAILED/BLOCKED; Docker Engine was not started or installed, and no 0B.3 runtime matrix command was run.
 
+0B.3R3 HANDOFF (2026-08-27) = WSL diagnostics confirmed the same control-plane timeout. Docker remains untouched. See `OJPLATFORM_0B3R3_WSL_PLATFORM_RECOVERY_REPORT.md` for elevated-diagnostics and reboot boundary requirements.
+
 PHASE 0B.3R2 FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`
 PHASE 0B.3R FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
 PHASE 0B.3 FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
