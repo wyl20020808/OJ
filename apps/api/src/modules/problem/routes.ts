@@ -15,7 +15,9 @@ import { ProblemService } from './service.js';
 export type ProblemModuleContext = {
   repository?: ProblemRepository;
   authorizationPolicy: AuthorizationPolicy;
-  getAuthContext?: (request: FastifyRequest) => AuthContext | undefined;
+  getAuthContext?: (
+    request: FastifyRequest,
+  ) => AuthContext | undefined | Promise<AuthContext | undefined>;
 };
 const error = (
   reply: FastifyReply,
@@ -39,7 +41,8 @@ export async function registerProblemModule(
     context.repository ?? new InMemoryProblemRepository(),
     context.authorizationPolicy,
   );
-  const auth = (request: FastifyRequest) => context.getAuthContext?.(request);
+  const auth = async (request: FastifyRequest) =>
+    context.getAuthContext ? await context.getAuthContext(request) : undefined;
   app.get('/api/problems', async (request, reply) => {
     const q = request.query as Record<string, unknown>;
     const limit = Number(q.limit ?? 20);
@@ -58,7 +61,7 @@ export async function registerProblemModule(
         'VALIDATION_ERROR',
         'Invalid pagination',
       );
-    const contextValue = auth(request);
+    const contextValue = await auth(request);
     const result = await service.list(
       contextValue
         ? { limit, offset, context: contextValue }
@@ -74,7 +77,7 @@ export async function registerProblemModule(
       return reply.send(
         await service.detail(
           (request.params as { idOrSlug: string }).idOrSlug,
-          auth(request),
+          await auth(request),
         ),
       );
     } catch (e) {
@@ -87,7 +90,7 @@ export async function registerProblemModule(
     try {
       return reply
         .status(201)
-        .send(await service.create(request.body, auth(request)));
+        .send(await service.create(request.body, await auth(request)));
     } catch (e) {
       if (e instanceof ProblemValidationError)
         return error(
@@ -114,7 +117,9 @@ export async function registerProblemModule(
   app.patch('/api/problems/:idOrSlug', async (request, reply) => {
     const key = (request.params as { idOrSlug: string }).idOrSlug;
     try {
-      return reply.send(await service.update(key, request.body, auth(request)));
+      return reply.send(
+        await service.update(key, request.body, await auth(request)),
+      );
     } catch (e) {
       if (e instanceof ProblemNotFoundError)
         return error(reply, request, 404, 'NOT_FOUND', 'Problem not found');
@@ -150,7 +155,7 @@ export async function registerProblemModule(
             visibility?: 'private' | 'public';
             status?: 'draft' | 'published' | 'archived';
           },
-          auth(request),
+          await auth(request),
         ),
       );
     } catch (e) {

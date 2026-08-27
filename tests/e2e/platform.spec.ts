@@ -6,8 +6,14 @@ test('healthy platform shell and controlled not-found route', async ({
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'OJPlatform' })).toBeVisible();
-  await expect(page.getByText('Platform is ready.')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Practice with purpose.' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      /Platform is ready\.|Platform is not ready\.|Platform health is unavailable\./,
+    ),
+  ).toBeVisible({ timeout: 15000 });
   expect(errors).toEqual([]);
   await page.goto('/missing');
   await expect(

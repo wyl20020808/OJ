@@ -7,6 +7,16 @@ import { createDatabase, checkDatabase } from '@ojplatform/database';
 import { createCache, checkCache } from '@ojplatform/cache';
 import { createStorage, checkStorage } from '@ojplatform/storage';
 import { loadConfig, type RuntimeConfig } from './config.js';
+import {
+  createMemoryAuthRepository,
+  createPostgresAuthRepository,
+  registerAuthModule,
+} from './modules/auth/index.js';
+import {
+  InMemoryProblemRepository,
+  PostgresProblemRepository,
+  registerProblemModule,
+} from './modules/problem/index.js';
 
 const HealthResponse = Type.Object({ status: Type.Literal('ok') });
 const ReadyResponse = Type.Object({
@@ -109,6 +119,18 @@ export async function buildApp(options: AppOptions = {}) {
       secretKey: config.s3SecretKey,
       bucket: config.s3Bucket,
     });
+    const auth = await registerAuthModule(app, {
+      repository: createPostgresAuthRepository(database.pool),
+      production: process.env.NODE_ENV === 'production',
+    });
+    await registerProblemModule(app, {
+      repository: new PostgresProblemRepository(database.pool),
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      authorizationPolicy: {
+        can: async (_action, _resource, context) => Boolean(context),
+      },
+    });
     owned = {
       checks: {
         postgres: () => checkDatabase(database.pool),
@@ -125,6 +147,19 @@ export async function buildApp(options: AppOptions = {}) {
       },
     };
     app.addHook('onClose', async () => owned?.close());
+  }
+  if (!options.withInfrastructure) {
+    const auth = await registerAuthModule(app, {
+      repository: createMemoryAuthRepository(),
+    });
+    await registerProblemModule(app, {
+      repository: new InMemoryProblemRepository(),
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      authorizationPolicy: {
+        can: async (_action, _resource, context) => Boolean(context),
+      },
+    });
   }
   app.get(
     '/health',
