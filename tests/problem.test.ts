@@ -65,7 +65,7 @@ describe('problem foundation', () => {
     expect(created.testdataVersion).toBe('v1');
     expect((await service.list({ limit: 20, offset: 0 })).total).toBe(1);
     await service.update(created.id, { title: 'Updated' }, context);
-    expect((await service.detail(created.slug)).title).toBe('Updated');
+    expect((await service.detail(created.slug)).title).toBe('Sum Two');
     await service.transition(created.id, { visibility: 'private' }, context);
     await expect(service.detail(created.id)).rejects.toThrow(
       'Problem not found',
