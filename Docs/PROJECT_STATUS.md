@@ -3,7 +3,7 @@
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: Phase 0B.3R2 WSL Docker Engine Fallback & 0B.3 Resume Qualification
-Current Status: PARTIAL / BLOCKED_BY_WINDOWS_WSL_PORT_FORWARDING (Docker Engine fallback qualified)
+Current Status: PARTIAL / FAILURE_INJECTION_MATRIX_INCOMPLETE (Docker Engine fallback qualified)
 
 ## Completed Goals
 
@@ -23,7 +23,7 @@ Current Status: PARTIAL / BLOCKED_BY_WINDOWS_WSL_PORT_FORWARDING (Docker Engine 
 - Repository HEAD includes a metadata-only report correction after that content commit.
 - Business implementation: NOT STARTED
 - Framework/toolchain initialization: NOT STARTED
-- Local PostgreSQL/Redis/MinIO infrastructure: Docker Engine/Compose and Linux-side integration qualified; Windows API/browser boundary remains blocked by WSL port forwarding
+- Local PostgreSQL/Redis/MinIO infrastructure: Docker Engine/Compose, Windows localhost API/browser boundary, and recovery behavior qualified with WSL instance kept alive
 - Judge, Sandbox, Plugin Runtime, and service infrastructure: NOT STARTED
 - Runtime security controls: NOT IMPLEMENTED
 - Runtime attack tests: NOT EXECUTED
@@ -36,7 +36,7 @@ Current Status: PARTIAL / BLOCKED_BY_WINDOWS_WSL_PORT_FORWARDING (Docker Engine 
 - Known blocker: Docker Desktop needs dedicated proxy configuration using `127.0.0.1:10809`, and daemon stability must be requalified before real integration, fault injection, clean bootstrap, browser E2E, and final regression
 - Post-interruption recheck: Desktop still crashes during `sailor-ingest.sock` initialization; `dockerDesktopLinuxEngine` is absent. `httpproxy.log` confirms host/Linux proxy disabled and registry direct connection. Official proxy configuration cannot be reached while Settings is unavailable, so 0B.3/0B.3R remain blocked.
 - PHASE 0B.3R2 fallback: Docker Desktop was officially uninstalled after data-preservation recheck. Ubuntu 24.04 WSL2 official Docker Engine is now installed and daemon/image/integration qualification passes; Windows-to-WSL port forwarding blocks browser and full matrix completion.
-- Boundary recheck: containers recreated healthy and WSL-side integration passed, but Windows curl/Node remained unable to reach published ports; netsh portproxy requires administrator elevation.
+- Boundary recheck: a non-privileged WSL keepalive process makes Windows localhost forwarding stable; direct VM-IP probes remain unavailable, with no portproxy or firewall changes.
 - Reboot-boundary recheck: only `wsl --version` completed; `wsl --status`, distro listing, Ubuntu `uname`, and an Ubuntu shell probe each exceeded 30 seconds. Docker Engine installation and all Docker/runtime work remain stopped.
 - PHASE 0B.3R3 WSL recovery: official diagnostics script was downloaded but cannot run without elevated PowerShell; `WslService`, `vmcompute`, and `hns` are running, yet WSL status/list/Ubuntu probes still exceed 30 seconds. No Docker operation was performed; WSL gate remains blocked pending elevated diagnostics and recovery/reboot.
 - 0B.3R3 follow-up: host last boot time is unchanged (`2026-08-26 22:49:27`); the second bounded probe set again timed out for WSL status/list, Ubuntu commands, and shutdown. Docker remains untouched.

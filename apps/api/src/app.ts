@@ -113,7 +113,7 @@ export async function buildApp(options: AppOptions = {}) {
       checks: {
         postgres: () => checkDatabase(database.pool),
         redis: async () => {
-          if (cache.status === 'wait') await cache.connect();
+          if (cache.status !== 'ready') await cache.connect();
           return checkCache(cache);
         },
         storage: () => checkStorage(storage),

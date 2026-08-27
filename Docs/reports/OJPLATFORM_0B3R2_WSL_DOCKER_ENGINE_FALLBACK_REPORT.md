@@ -65,10 +65,13 @@ ENGINE QUALIFICATION (2026-08-27) = PASS. Official Docker CE `29.7.2` and Compos
 WINDOWS->WSL BRIDGE = IMPLEMENTED via `wsl.exe -d Ubuntu-24.04 -- docker ...`; Compose config/lifecycle and Linux named volumes pass.
 REAL INTEGRATION = PASS for PostgreSQL, Redis, MinIO object lifecycle, migration, and Linux-side readiness.
 REGRESSION = PASS for frozen install, format, lint, typecheck, unit tests, architecture, build, and `ci:check`; runtime smoke PASS.
-BROWSER E2E = BLOCKED_BY_WINDOWS_WSL_PORT_FORWARDING; Windows API cannot consistently reach WSL-published PostgreSQL/Redis ports and `/ready` correctly returns 503.
-FI-001..FI-018 = NOT FULLY EXECUTED; CB-001..CB-026 = PARTIAL pending boundary and browser rows.
-PHASE 0B.3R2 FINAL STATUS = `PARTIAL / BLOCKED_BY_WINDOWS_WSL_PORT_FORWARDING`
-PHASE 0B.3R FINAL STATUS = `PARTIAL / BACKEND FALLBACK QUALIFIED; BROWSER BOUNDARY BLOCKED`
-PHASE 0B.3 FINAL STATUS = `PARTIAL / BLOCKED_BY_WINDOWS_WSL_PORT_FORWARDING`
+BROWSER E2E (stable WSL instance) = PASS; Playwright healthy shell and not-found route passed.
+READINESS FAILURE/RECOVERY = PASS; PostgreSQL, Redis, and MinIO stop/recover returned 503 then 200.
+WINDOWS NETWORK = localhost PASS while a non-privileged `wsl.exe ... sleep infinity` keeps Ubuntu alive; direct dynamic VM-IP probes remain unavailable. No portproxy or firewall change used.
+FI-001..FI-003 = PASS; FI-004..FI-018 = NOT FULLY EXECUTED.
+CB-001..CB-024 = PASS/EXERCISED; CB-025..CB-026 = pending final audit.
+PHASE 0B.3R2 FINAL STATUS = `PARTIAL / FI-004..FI-018 PENDING`
+PHASE 0B.3R FINAL STATUS = `PARTIAL / BACKEND FALLBACK QUALIFIED`
+PHASE 0B.3 FINAL STATUS = `PARTIAL / FAILURE-INJECTION MATRIX INCOMPLETE`
 
 BOUNDARY RECHECK (2026-08-27 continuation) = Compose containers were recreated and healthy in WSL; WSL-side integration remained PASS. Windows `curl`/Node could not reach the WSL-published ports, while `netsh interface portproxy` requires administrator elevation. This is an environment boundary blocker, not a Docker daemon failure. No ephemeral WSL IP was committed.
