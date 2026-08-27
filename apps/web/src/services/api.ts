@@ -33,6 +33,27 @@ export type Problem = {
 };
 export type Page = { limit: number; offset: number; total: number };
 export type ProblemList = { items: Problem[]; page: Page };
+export type Language = {
+  id: string;
+  name: string;
+  extension: string;
+  maxSourceBytes: number;
+};
+export type SubmissionStatus = 'PENDING' | 'QUEUED';
+export type Submission = {
+  id: string;
+  ownerUserId: string;
+  problemId: string;
+  problemRevisionId: string;
+  testdataVersionRef: string | null;
+  languageId: string;
+  source: string;
+  sourceBytes: number;
+  status: SubmissionStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+export type SubmissionList = { items: Submission[]; nextCursor: string | null };
 export type ProblemInput = Omit<
   Problem,
   'id' | 'createdAt' | 'updatedAt' | 'authorId' | 'testdataVersion'
@@ -157,6 +178,40 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         baseUrl,
         `/api/problems/${encodeURIComponent(idOrSlug)}/transition`,
         { method: 'POST', body: JSON.stringify(transition) },
+        fetcher,
+      ),
+    languages: () =>
+      request<Language[]>(
+        baseUrl,
+        '/api/submissions/languages',
+        undefined,
+        fetcher,
+      ),
+    createSubmission: (input: {
+      problemId: string;
+      problemRevisionId: string;
+      testdataVersionRef: string | null;
+      languageId: string;
+      source: string;
+    }) =>
+      request<Submission>(
+        baseUrl,
+        '/api/submissions',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    submissions: (cursor?: string, limit = 20) =>
+      request<SubmissionList>(
+        baseUrl,
+        `/api/submissions?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        undefined,
+        fetcher,
+      ),
+    submission: (id: string) =>
+      request<Submission>(
+        baseUrl,
+        `/api/submissions/${encodeURIComponent(id)}`,
+        undefined,
         fetcher,
       ),
     readiness: () =>

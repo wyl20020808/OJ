@@ -187,4 +187,156 @@ describe('Web platform shell', () => {
       ),
     );
   });
+  it('submits source through intake contract without presenting a verdict', async () => {
+    const fetcher = vi
+      .fn()
+      .mockImplementation(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          if (url.endsWith('/api/auth/me'))
+            return {
+              status: 200,
+              json: async () => ({
+                id: 'u1',
+                username: 'u',
+                email: 'u@example.com',
+                displayName: 'User',
+                status: 'active',
+              }),
+            };
+          if (url.endsWith('/ready'))
+            return {
+              status: 200,
+              json: async () => ({ status: 'ok', dependencies: {} }),
+            };
+          if (url.endsWith('/api/submissions/languages'))
+            return {
+              status: 200,
+              json: async () => [
+                {
+                  id: 'python',
+                  name: 'Python 3',
+                  extension: '.py',
+                  maxSourceBytes: 10000,
+                },
+              ],
+            };
+          if (url.endsWith('/api/problems/demo'))
+            return {
+              status: 200,
+              json: async () => ({
+                id: 'p1',
+                slug: 'demo',
+                title: 'Demo',
+                statement: 'Solve',
+                inputDescription: 'in',
+                outputDescription: 'out',
+                constraints: 'n',
+                examples: [],
+                timeLimitMs: 1000,
+                memoryLimitBytes: 1024,
+                visibility: 'public',
+                status: 'published',
+                testdataVersion: 'td1',
+                authorId: 'u2',
+                createdAt: '',
+                updatedAt: '',
+                revisionId: 'rev1',
+              }),
+            };
+          if (url.endsWith('/api/submissions') && init?.method === 'POST')
+            return {
+              status: 201,
+              json: async () => ({
+                id: 'sub1',
+                ownerUserId: 'u1',
+                problemId: 'p1',
+                problemRevisionId: 'rev1',
+                testdataVersionRef: 'td1',
+                languageId: 'python',
+                source: 'print(1)',
+                sourceBytes: 8,
+                status: 'PENDING',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }),
+            };
+          return {
+            status: 200,
+            json: async () => ({ items: [], nextCursor: null }),
+          };
+        },
+      );
+    vi.stubGlobal('fetch', fetcher);
+    window.history.pushState({}, '', '/problems/demo/submit');
+    render(<App />);
+    expect(
+      await screen.findByRole('heading', { name: 'Submit solution' }),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Source code'), {
+      target: { value: 'print(1)' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit source' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Submission received' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/PENDING/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/ACCEPTED|WRONG ANSWER|RUNTIME ERROR/i),
+    ).not.toBeInTheDocument();
+  });
+  it('renders submission history and safely displays source as text', async () => {
+    const submission = {
+      id: 'sub-x',
+      ownerUserId: 'u1',
+      problemId: 'p1',
+      problemRevisionId: 'rev1',
+      testdataVersionRef: null,
+      languageId: 'javascript',
+      source: '<script>alert(1)</script>',
+      sourceBytes: 25,
+      status: 'QUEUED',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/api/auth/me'))
+          return {
+            status: 200,
+            json: async () => ({
+              id: 'u1',
+              username: 'u',
+              email: 'u@example.com',
+              displayName: 'User',
+              status: 'active',
+            }),
+          };
+        if (url.endsWith('/ready'))
+          return {
+            status: 200,
+            json: async () => ({ status: 'ok', dependencies: {} }),
+          };
+        if (url.endsWith('/api/submissions/sub-x'))
+          return { status: 200, json: async () => submission };
+        return {
+          status: 200,
+          json: async () => ({ items: [submission], nextCursor: null }),
+        };
+      }),
+    );
+    window.history.pushState({}, '', '/submissions');
+    render(<App />);
+    expect(
+      await screen.findByRole('heading', { name: 'My submissions' }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', { name: 'sub-x' }));
+    expect(
+      await screen.findByRole('heading', { name: 'sub-x' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocument();
+    expect(document.querySelector('script')).toBeNull();
+  });
 });
