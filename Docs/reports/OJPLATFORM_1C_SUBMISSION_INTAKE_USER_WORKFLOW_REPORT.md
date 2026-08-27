@@ -14,3 +14,6 @@ FULL REGRESSION = PASS; format, lint, typecheck, unit, integration, architecture
 WEB BASELINE = `a962ac5`; later UI Polish commits through `8afb8a6` were not merged into this Phase 1C integration.
 KNOWN LIMITATIONS = no execution, judging, verdicts, sandbox, rate limiting, or production deployment; these remain future scope.
 
+INTEGRATION COMMIT = `339ffac`
+PHASE CLOSURE COMMIT = `d8e1584`
+FINAL HEAD = recorded after closure metadata commit
