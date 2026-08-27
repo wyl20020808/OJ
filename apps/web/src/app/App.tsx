@@ -17,7 +17,16 @@ import {
 import './app.css';
 
 type Route = {
-  name: 'home' | 'login' | 'register' | 'problems' | 'problem' | 'not-found';
+  name:
+    | 'home'
+    | 'login'
+    | 'register'
+    | 'problems'
+    | 'problem'
+    | 'author'
+    | 'author-new'
+    | 'author-edit'
+    | 'not-found';
   id?: string;
 };
 function route(path = window.location.pathname): Route {
@@ -26,6 +35,10 @@ function route(path = window.location.pathname): Route {
   if (path === '/register') return { name: 'register' };
   if (path === '/problems' || path === '/problems/')
     return { name: 'problems' };
+  if (path === '/author' || path === '/author/') return { name: 'author' };
+  if (path === '/author/problems/new') return { name: 'author-new' };
+  if (path.startsWith('/author/problems/') && path.endsWith('/edit'))
+    return { name: 'author-edit', id: decodeURIComponent(path.slice(17, -5)) };
   if (path.startsWith('/problems/'))
     return { name: 'problem', id: decodeURIComponent(path.slice(10)) };
   return { name: 'not-found' };
@@ -321,6 +334,394 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
     </section>
   );
 }
+
+type Draft = {
+  slug: string;
+  title: string;
+  statement: string;
+  inputDescription: string;
+  outputDescription: string;
+  constraints: string;
+  notes: string;
+  examples: { input: string; output: string; note?: string }[];
+  timeLimitMs: number;
+  memoryLimitBytes: number;
+  visibility: Problem['visibility'];
+  status: Problem['status'];
+  updatedAt?: string;
+};
+const emptyDraft: Draft = {
+  slug: '',
+  title: '',
+  statement: '',
+  inputDescription: '',
+  outputDescription: '',
+  constraints: '',
+  notes: '',
+  examples: [{ input: '', output: '', note: '' }],
+  timeLimitMs: 1000,
+  memoryLimitBytes: 256 * 1024 * 1024,
+  visibility: 'private' as const,
+  status: 'draft' as const,
+};
+
+function AuthorDashboard({ api }: { api: ApiClient }) {
+  const [data, setData] = useState<{
+    items: Problem[];
+    page: { total: number; offset: number; limit: number };
+  } | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const load = () => {
+    setError(null);
+    void api
+      .problems(0, 100)
+      .then(setData)
+      .catch((e) =>
+        setError(
+          e instanceof ApiError
+            ? e
+            : new ApiError(
+                {
+                  code: 'NETWORK_ERROR',
+                  message: 'Unable to load drafts.',
+                  requestId: 'unknown',
+                },
+                0,
+              ),
+        ),
+      );
+  };
+  useEffect(load, [api]);
+  if (error)
+    return (
+      <State
+        title={
+          error.code === 'FORBIDDEN'
+            ? 'Authoring forbidden'
+            : 'Authoring unavailable'
+        }
+        text={error.message}
+        action={<button onClick={load}>Retry</button>}
+      />
+    );
+  if (!data)
+    return (
+      <State
+        title="Loading authoring workspace"
+        text="Fetching your problem drafts..."
+      />
+    );
+  return (
+    <section>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">AUTHORING</p>
+          <h1>My problems</h1>
+        </div>
+        <Link to="/author/problems/new">
+          <button type="button">New problem</button>
+        </Link>
+      </div>
+      {data.items.length === 0 ? (
+        <State
+          title="No drafts yet"
+          text="Create your first problem draft to begin authoring."
+          action={<Link to="/author/problems/new">Create a draft</Link>}
+        />
+      ) : (
+        <div className="problem-list">
+          {data.items.map((p) => (
+            <article key={p.id}>
+              <div>
+                <h2>{p.title}</h2>
+                <p>
+                  <span className={`status status-${p.status}`}>
+                    {p.status}
+                  </span>{' '}
+                  · {p.visibility}
+                </p>
+              </div>
+              <Link to={`/author/problems/${p.slug || p.id}/edit`}>Edit</Link>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
+  const [form, setForm] = useState<Draft>(emptyDraft);
+  const [loading, setLoading] = useState(Boolean(id));
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState<ApiError | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    void api
+      .problem(id)
+      .then((p) =>
+        setForm({
+          ...p,
+          notes: p.notes ?? '',
+          examples: p.examples.length ? p.examples : emptyDraft.examples,
+        }),
+      )
+      .catch((e) => setError(e instanceof ApiError ? e : null))
+      .finally(() => setLoading(false));
+  }, [api, id]);
+  const update = (key: keyof typeof emptyDraft, value: unknown) =>
+    setForm((f) => ({ ...f, [key]: value }));
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setMessage('');
+    setError(null);
+    if (
+      !form.slug ||
+      !form.title ||
+      !form.statement ||
+      !form.inputDescription ||
+      !form.outputDescription ||
+      !form.constraints
+    ) {
+      setMessage('Complete all required fields before saving.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = id
+        ? await api.updateProblem(id, form)
+        : await api.createProblem(form);
+      setMessage('Draft saved.');
+      if (!id) navigate(`/author/problems/${result.slug || result.id}/edit`);
+    } catch (e) {
+      setError(
+        e instanceof ApiError
+          ? e
+          : new ApiError(
+              {
+                code: 'NETWORK_ERROR',
+                message: 'Unable to save draft.',
+                requestId: 'unknown',
+              },
+              0,
+            ),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+  const transition = async (status: Problem['status']) => {
+    if (!id) return;
+    setSaving(true);
+    try {
+      await api.transitionProblem(id, { status });
+      setForm((f) => ({ ...f, status }));
+      setMessage(`Problem ${status}.`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e : null);
+    } finally {
+      setSaving(false);
+    }
+  };
+  if (loading)
+    return (
+      <State title="Loading draft" text="Fetching the current revision..." />
+    );
+  if (error && !form.title)
+    return (
+      <State
+        title={
+          error.code === 'FORBIDDEN'
+            ? 'Authoring forbidden'
+            : error.code === 'NOT_FOUND'
+              ? 'Draft not found'
+              : 'Draft unavailable'
+        }
+        text={error.message}
+      />
+    );
+  return (
+    <section className="editor">
+      <Link to="/author">← Back to my problems</Link>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">{id ? 'EDIT DRAFT' : 'NEW DRAFT'}</p>
+          <h1>{id ? 'Edit problem' : 'Create problem'}</h1>
+        </div>
+        {id && (
+          <span className={`status status-${form.status}`}>{form.status}</span>
+        )}
+      </div>
+      <form onSubmit={submit} noValidate>
+        <div className="form-grid">
+          <Field
+            label="Title"
+            value={form.title}
+            onChange={(e) => update('title', e.target.value)}
+            required
+          />
+          <Field
+            label="Slug"
+            value={form.slug}
+            onChange={(e) => update('slug', e.target.value)}
+            required
+          />
+        </div>
+        <label>
+          Statement
+          <textarea
+            value={form.statement}
+            onChange={(e) => update('statement', e.target.value)}
+            rows={6}
+            required
+          />
+        </label>
+        <div className="form-grid">
+          <label>
+            Input description
+            <textarea
+              value={form.inputDescription}
+              onChange={(e) => update('inputDescription', e.target.value)}
+              rows={4}
+              required
+            />
+          </label>
+          <label>
+            Output description
+            <textarea
+              value={form.outputDescription}
+              onChange={(e) => update('outputDescription', e.target.value)}
+              rows={4}
+              required
+            />
+          </label>
+        </div>
+        <label>
+          Constraints
+          <textarea
+            value={form.constraints}
+            onChange={(e) => update('constraints', e.target.value)}
+            rows={4}
+            required
+          />
+        </label>
+        <label>
+          Notes
+          <textarea
+            value={form.notes}
+            onChange={(e) => update('notes', e.target.value)}
+            rows={3}
+          />
+        </label>
+        <div className="form-grid">
+          <Field
+            label="Time limit (ms)"
+            type="number"
+            min={1}
+            value={form.timeLimitMs}
+            onChange={(e) => update('timeLimitMs', Number(e.target.value))}
+            required
+          />
+          <Field
+            label="Memory limit (bytes)"
+            type="number"
+            min={1}
+            value={form.memoryLimitBytes}
+            onChange={(e) => update('memoryLimitBytes', Number(e.target.value))}
+            required
+          />
+        </div>
+        <fieldset>
+          <legend>Example</legend>
+          <div className="form-grid">
+            <label>
+              Input
+              <textarea
+                value={form.examples[0]?.input ?? ''}
+                onChange={(e) =>
+                  update('examples', [
+                    {
+                      ...form.examples[0],
+                      input: e.target.value,
+                      output: form.examples[0]?.output ?? '',
+                    },
+                  ])
+                }
+                rows={3}
+              />
+            </label>
+            <label>
+              Output
+              <textarea
+                value={form.examples[0]?.output ?? ''}
+                onChange={(e) =>
+                  update('examples', [
+                    {
+                      ...form.examples[0],
+                      output: e.target.value,
+                      input: form.examples[0]?.input ?? '',
+                    },
+                  ])
+                }
+                rows={3}
+              />
+            </label>
+          </div>
+        </fieldset>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={form.visibility === 'public'}
+            onChange={(e) =>
+              update('visibility', e.target.checked ? 'public' : 'private')
+            }
+          />{' '}
+          Public visibility
+        </label>
+        {(message || error) && (
+          <FormMessage error={message || error?.message || ''} />
+        )}
+        <div className="actions">
+          <button disabled={saving}>
+            {saving ? 'Saving...' : 'Save draft'}
+          </button>
+          {id && form.status === 'draft' && (
+            <button
+              type="button"
+              onClick={() => void transition('published')}
+              disabled={saving}
+            >
+              Publish
+            </button>
+          )}
+          {id && form.status === 'published' && (
+            <button
+              type="button"
+              onClick={() => void transition('archived')}
+              disabled={saving}
+            >
+              Archive
+            </button>
+          )}
+        </div>
+      </form>
+      {id && (
+        <aside className="history">
+          <h2>Revision history</h2>
+          <p className="muted">
+            Current revision is tracked by the server. Published revisions
+            remain immutable.
+          </p>
+          <p>
+            Last updated{' '}
+            {new Date(form.updatedAt ?? Date.now()).toLocaleString()}
+          </p>
+        </aside>
+      )}
+    </section>
+  );
+}
 function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -409,6 +810,36 @@ export function App() {
       <AuthForm mode={current.name} api={api} onUser={setUser} />
     ) : current.name === 'problems' ? (
       <ProblemList api={api} />
+    ) : current.name === 'author' ? (
+      user ? (
+        <AuthorDashboard api={api} />
+      ) : (
+        <State
+          title="Sign in required"
+          text="Sign in to manage your problem drafts."
+          action={<Link to="/login">Sign in</Link>}
+        />
+      )
+    ) : current.name === 'author-new' ? (
+      user ? (
+        <AuthorForm api={api} />
+      ) : (
+        <State
+          title="Sign in required"
+          text="Sign in to create a problem draft."
+          action={<Link to="/login">Sign in</Link>}
+        />
+      )
+    ) : current.name === 'author-edit' ? (
+      user && current.id ? (
+        <AuthorForm api={api} id={current.id} />
+      ) : (
+        <State
+          title="Sign in required"
+          text="Sign in to edit problem drafts."
+          action={<Link to="/login">Sign in</Link>}
+        />
+      )
     ) : current.name === 'problem' ? (
       <ProblemDetail api={api} id={current.id ?? ''} />
     ) : (
@@ -423,17 +854,20 @@ export function App() {
         <nav>
           <Link to="/problems">Problems</Link>
           {user ? (
-            <button
-              className="link-button"
-              onClick={() => {
-                void api.logout().finally(() => {
-                  setUser(null);
-                  navigate('/');
-                });
-              }}
-            >
-              Sign out
-            </button>
+            <>
+              <Link to="/author">Authoring</Link>
+              <button
+                className="link-button"
+                onClick={() => {
+                  void api.logout().finally(() => {
+                    setUser(null);
+                    navigate('/');
+                  });
+                }}
+              >
+                Sign out
+              </button>
+            </>
           ) : (
             <>
               <Link to="/login">Sign in</Link>

@@ -33,6 +33,12 @@ export type Problem = {
 };
 export type Page = { limit: number; offset: number; total: number };
 export type ProblemList = { items: Problem[]; page: Page };
+export type ProblemInput = Omit<
+  Problem,
+  'id' | 'createdAt' | 'updatedAt' | 'authorId' | 'testdataVersion'
+> & {
+  testdataVersion?: string | null;
+};
 export class ApiError extends Error {
   readonly code: string;
   readonly requestId: string;
@@ -124,6 +130,33 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         baseUrl,
         `/api/problems/${encodeURIComponent(idOrSlug)}`,
         undefined,
+        fetcher,
+      ),
+    createProblem: (input: ProblemInput) =>
+      request<Problem>(
+        baseUrl,
+        '/api/problems',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    updateProblem: (idOrSlug: string, input: Partial<ProblemInput>) =>
+      request<Problem>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(idOrSlug)}`,
+        { method: 'PATCH', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    transitionProblem: (
+      idOrSlug: string,
+      transition: {
+        status?: Problem['status'];
+        visibility?: Problem['visibility'];
+      },
+    ) =>
+      request<Problem>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(idOrSlug)}/transition`,
+        { method: 'POST', body: JSON.stringify(transition) },
         fetcher,
       ),
     readiness: () =>

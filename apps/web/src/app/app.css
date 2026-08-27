@@ -104,6 +104,75 @@ input {
   padding: 0.7rem;
   font: inherit;
 }
+textarea {
+  border: 1px solid #aebbc6;
+  border-radius: 4px;
+  padding: 0.7rem;
+  font: inherit;
+  resize: vertical;
+  width: 100%;
+}
+fieldset {
+  border: 1px solid #dce3e9;
+  padding: 1rem;
+  border-radius: 4px;
+}
+legend {
+  font-weight: 700;
+  padding: 0 0.35rem;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.checkbox {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+.checkbox input {
+  width: auto;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+.actions button[type='button'] {
+  background: #fff;
+  color: #146c94;
+}
+.editor {
+  max-width: 60rem;
+}
+.history {
+  border-top: 1px solid #dce3e9;
+  margin-top: 2rem;
+  padding-top: 1rem;
+}
+.status {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.status-draft {
+  background: #fff4cc;
+  color: #795500;
+}
+.status-published {
+  background: #d9f5e5;
+  color: #11633b;
+}
+.status-archived {
+  background: #e8edf1;
+  color: #52606d;
+}
 button {
   border: 1px solid #146c94;
   border-radius: 4px;
@@ -228,5 +297,8 @@ footer {
   .limits {
     flex-direction: column;
     gap: 0.2rem;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
   }
 }
