@@ -5,6 +5,7 @@ import {
   ProblemValidationError,
   type AuthContext,
   type AuthorizationPolicy,
+  type AuditHook,
 } from './model.js';
 import {
   InMemoryProblemRepository,
@@ -15,6 +16,7 @@ import { ProblemService } from './service.js';
 export type ProblemModuleContext = {
   repository?: ProblemRepository;
   authorizationPolicy: AuthorizationPolicy;
+  auditHook?: AuditHook;
   getAuthContext?: (
     request: FastifyRequest,
   ) => AuthContext | undefined | Promise<AuthContext | undefined>;
@@ -40,6 +42,7 @@ export async function registerProblemModule(
   const service = new ProblemService(
     context.repository ?? new InMemoryProblemRepository(),
     context.authorizationPolicy,
+    context.auditHook,
   );
   const auth = async (request: FastifyRequest) =>
     context.getAuthContext ? await context.getAuthContext(request) : undefined;
@@ -103,6 +106,14 @@ export async function registerProblemModule(
         );
       if (e instanceof ProblemConflictError)
         return error(reply, request, 409, 'CONFLICT', e.message);
+      if (e instanceof Error && e.message === 'VALIDATION_ERROR')
+        return error(
+          reply,
+          request,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid problem state',
+        );
       if (e instanceof Error && e.message === 'FORBIDDEN')
         return error(
           reply,
@@ -176,6 +187,36 @@ export async function registerProblemModule(
           400,
           'VALIDATION_ERROR',
           'Invalid transition',
+        );
+      if (e instanceof Error && e.message === 'INVALID_TRANSITION')
+        return error(
+          reply,
+          request,
+          400,
+          'VALIDATION_ERROR',
+          'Invalid transition',
+        );
+      throw e;
+    }
+  });
+  app.get('/api/problems/:idOrSlug/revisions', async (request, reply) => {
+    try {
+      return reply.send(
+        await service.history(
+          (request.params as { idOrSlug: string }).idOrSlug,
+          await auth(request),
+        ),
+      );
+    } catch (e) {
+      if (e instanceof ProblemNotFoundError)
+        return error(reply, request, 404, 'NOT_FOUND', 'Problem not found');
+      if (e instanceof Error && e.message === 'FORBIDDEN')
+        return error(
+          reply,
+          request,
+          403,
+          'FORBIDDEN',
+          'Problem history is forbidden',
         );
       throw e;
     }

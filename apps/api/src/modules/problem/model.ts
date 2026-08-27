@@ -21,6 +21,13 @@ export type Problem = {
   authorId: string | null;
   createdAt: string;
   updatedAt: string;
+  currentRevisionId?: string;
+};
+export type ProblemRevision = Omit<Problem, 'currentRevisionId'> & {
+  revisionId: string;
+  revisionNumber: number;
+  createdBy: string;
+  createdAt: string;
 };
 
 export type ProblemCreateInput = Omit<
@@ -41,7 +48,19 @@ export type AuthorizationPolicy = {
     action: string,
     resource: string,
     context: AuthContext | undefined,
+    target?: { id: string; type: string },
   ): Promise<boolean> | boolean;
+};
+export type AuditHook = {
+  record(input: {
+    actorUserId: string;
+    action: string;
+    resource: string;
+    resourceId?: string;
+    outcome: 'success' | 'denied';
+    requestId?: string;
+    occurredAt: string;
+  }): Promise<void> | void;
 };
 
 export class ProblemValidationError extends Error {

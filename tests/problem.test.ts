@@ -25,6 +25,38 @@ const input = {
 const allow: AuthorizationPolicy = { can: () => true };
 
 describe('problem foundation', () => {
+  it('preserves published snapshots when editing and orders revisions', async () => {
+    const repo = new InMemoryProblemRepository();
+    const service = new ProblemService(repo, allow);
+    const context = { userId: 'u1' };
+    const created = await service.create(input, context);
+    await service.update(created.id, { title: 'Draft title' }, context);
+    const revisions = await repo.revisions(created.id);
+    expect(revisions.map((revision) => revision.revisionNumber)).toEqual([
+      1, 2,
+    ]);
+    expect(revisions[0]?.title).toBe('Sum Two');
+    expect((await repo.get(created.id))?.title).toBe('Sum Two');
+    await expect(
+      service.transition(created.id, { status: 'draft' }, context),
+    ).rejects.toThrow('INVALID_TRANSITION');
+  });
+
+  it('enforces ownership through the public policy boundary', async () => {
+    const repo = new InMemoryProblemRepository();
+    const service = new ProblemService(repo, allow);
+    const created = await service.create(
+      { ...input, status: 'draft', visibility: 'private' },
+      { userId: 'owner' },
+    );
+    await expect(
+      service.update(created.id, { title: 'Nope' }, { userId: 'other' }),
+    ).rejects.toThrow('FORBIDDEN');
+    await expect(
+      service.history(created.id, { userId: 'other' }),
+    ).rejects.toThrow('FORBIDDEN');
+  });
+
   it('creates, lists, updates, transitions and hides drafts', async () => {
     const repo = new InMemoryProblemRepository();
     const service = new ProblemService(repo, allow);

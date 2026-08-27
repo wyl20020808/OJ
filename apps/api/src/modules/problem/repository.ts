@@ -9,6 +9,7 @@ import {
   type ProblemCreateInput,
   type ProblemUpdateInput,
 } from './model.js';
+import type { ProblemRevision } from './model.js';
 
 export type ProblemListQuery = {
   limit: number;
@@ -21,11 +22,18 @@ export interface ProblemRepository {
   get(idOrSlug: string): Promise<Problem | undefined>;
   list(query: ProblemListQuery): Promise<{ items: Problem[]; total: number }>;
   update(idOrSlug: string, input: ProblemUpdateInput): Promise<Problem>;
+  revisions(idOrSlug: string): Promise<ProblemRevision[]>;
+  createRevision(
+    idOrSlug: string,
+    input: ProblemUpdateInput,
+    createdBy: string,
+  ): Promise<Problem>;
 }
 
 const now = () => new Date().toISOString();
 export class InMemoryProblemRepository implements ProblemRepository {
   private readonly rows = new Map<string, Problem>();
+  private readonly history = new Map<string, ProblemRevision[]>();
   async create(input: ProblemCreateInput): Promise<Problem> {
     const id = input.id ?? randomUUID();
     if (
@@ -40,6 +48,9 @@ export class InMemoryProblemRepository implements ProblemRepository {
       updatedAt: timestamp,
     } as Problem;
     this.rows.set(id, row);
+    const revision = this.toRevision(row, input.authorId ?? 'system', 1);
+    this.history.set(id, [revision]);
+    row.currentRevisionId = revision.revisionId;
     return row;
   }
   async get(key: string) {
@@ -73,6 +84,45 @@ export class InMemoryProblemRepository implements ProblemRepository {
     this.rows.set(row.id, updated);
     return updated;
   }
+  async revisions(key: string) {
+    const row = await this.get(key);
+    return row ? [...(this.history.get(row.id) ?? [])] : [];
+  }
+  async createRevision(
+    key: string,
+    input: ProblemUpdateInput,
+    createdBy: string,
+  ) {
+    const row = await this.get(key);
+    if (!row) throw new Error('NOT_FOUND');
+    const updated = {
+      ...row,
+      ...input,
+      status: 'draft' as const,
+      visibility: input.visibility ?? 'private',
+      updatedAt: now(),
+    };
+    const list = this.history.get(row.id) ?? [];
+    const rev = this.toRevision(updated, createdBy, list.length + 1);
+    list.push(rev);
+    this.history.set(row.id, list);
+    return { ...updated, currentRevisionId: rev.revisionId };
+  }
+  private toRevision(
+    row: Problem,
+    createdBy: string,
+    n: number,
+  ): ProblemRevision {
+    const snapshot = { ...row };
+    delete snapshot.currentRevisionId;
+    return {
+      ...snapshot,
+      revisionId: randomUUID(),
+      revisionNumber: n,
+      createdBy,
+      createdAt: now(),
+    };
+  }
 }
 
 export class PostgresProblemRepository implements ProblemRepository {
@@ -99,7 +149,36 @@ export class PostgresProblemRepository implements ProblemRepository {
         input.authorId,
       ],
     );
-    return mapRow(result.rows[0]!);
+    const problem = mapRow(result.rows[0]!);
+    const revisionId = randomUUID();
+    await this.pool.query(
+      'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,status,testdata_version,author_id,created_by) VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)',
+      [
+        revisionId,
+        problem.id,
+        problem.slug,
+        problem.title,
+        problem.statement,
+        problem.inputDescription,
+        problem.outputDescription,
+        JSON.stringify(problem.examples),
+        problem.constraints,
+        problem.notes,
+        problem.timeLimitMs,
+        problem.memoryLimitBytes,
+        problem.visibility,
+        problem.status,
+        problem.testdataVersion,
+        problem.authorId,
+        problem.authorId ?? 'system',
+      ],
+    );
+    await this.pool.query(
+      'UPDATE problems SET current_revision_id=$1 WHERE id=$2',
+      [revisionId, problem.id],
+    );
+    problem.currentRevisionId = revisionId;
+    return problem;
   }
   async get(key: string) {
     const result = await this.pool.query(
@@ -155,6 +234,56 @@ export class PostgresProblemRepository implements ProblemRepository {
     );
     return mapRow(result.rows[0]!);
   }
+  async revisions(key: string) {
+    const row = await this.get(key);
+    if (!row) return [];
+    const r = await this.pool.query(
+      'SELECT * FROM problem_revisions WHERE problem_id=$1 ORDER BY revision_number ASC',
+      [row.id],
+    );
+    return r.rows.map(mapRevision);
+  }
+  async createRevision(
+    key: string,
+    input: ProblemUpdateInput,
+    createdBy: string,
+  ) {
+    const row = await this.get(key);
+    if (!row) throw new Error('NOT_FOUND');
+    const next = { ...row, ...input };
+    const revs = await this.revisions(key);
+    const revisionId = randomUUID();
+    await this.pool.query(
+      'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)',
+      [
+        revisionId,
+        row.id,
+        revs.length + 1,
+        next.slug,
+        next.title,
+        next.statement,
+        next.inputDescription,
+        next.outputDescription,
+        JSON.stringify(next.examples),
+        next.constraints,
+        next.notes,
+        next.timeLimitMs,
+        next.memoryLimitBytes,
+        next.visibility ?? 'private',
+        'draft',
+        next.testdataVersion,
+        next.authorId,
+        createdBy,
+      ],
+    );
+    return {
+      ...next,
+      status: 'draft',
+      visibility: 'private',
+      currentRevisionId: revisionId,
+      updatedAt: new Date().toISOString(),
+    } as Problem;
+  }
 }
 function mapRow(row: Record<string, unknown>): Problem {
   return {
@@ -177,5 +306,18 @@ function mapRow(row: Record<string, unknown>): Problem {
     authorId: row.author_id as string | null,
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at)).toISOString(),
+    ...(row.current_revision_id
+      ? { currentRevisionId: String(row.current_revision_id) }
+      : {}),
+  };
+}
+function mapRevision(row: Record<string, unknown>): ProblemRevision {
+  const p = mapRow(row);
+  return {
+    ...p,
+    revisionId: String(row.id),
+    revisionNumber: Number(row.revision_number),
+    createdBy: String(row.created_by),
+    createdAt: new Date(String(row.created_at)).toISOString(),
   };
 }
