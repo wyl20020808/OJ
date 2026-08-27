@@ -2,7 +2,7 @@
 
 PHASE = PHASE 1C PARALLEL BOOTSTRAP
 STARTING HEAD = `ddc98d67903e92f8c1b73084153283a33a43c199`
-BOOTSTRAP COMMIT = recorded at closure
+BOOTSTRAP COMMIT = `5ad0edf3b84c7f02815fbd9a675807fdf7fbdcf9`
 
 PHASE 1B BASELINE = PASS
 PERMANENT WORKER MODEL = PASS
@@ -12,12 +12,16 @@ WORKTREE AUDIT = all three slots clean; Phase 1B branches merged into master wit
 SHARED CONTRACT = `Docs/architecture/PHASE_1C_SHARED_CONTRACT.md`
 OWNERSHIP MATRIX = `Docs/architecture/PHASE_1C_PARALLEL_OWNERSHIP.md`
 MIGRATION ALLOCATION = `0005_submission_intake.sql` / `.down.sql`, Problem-owned; registry Lead-owned.
-BRANCH ROTATION = pending
+BRANCH ROTATION = PASS; all three permanent slots fast-forwarded from the common approved baseline to the Bootstrap commit.
 AUTH BRANCH = `codex/phase1c-submission-authz`
 PROBLEM BRANCH = `codex/phase1c-submission-backend`
 WEB BRANCH = `codex/phase1c-submission-web`
 
-REGRESSION = pending
-WORKERS READY = pending
-NON-GOALS = execution, Judge, Sandbox, untrusted code execution, verdicts, Contest, production deployment.
+AUTH STARTING HEAD = `5ad0edf3b84c7f02815fbd9a675807fdf7fbdcf9`
+PROBLEM STARTING HEAD = `5ad0edf3b84c7f02815fbd9a675807fdf7fbdcf9`
+WEB STARTING HEAD = `5ad0edf3b84c7f02815fbd9a675807fdf7fbdcf9`
 
+REGRESSION = PASS (`format:check`, `lint`, `typecheck`, `test` 25/25, `test:architecture`, `build`, `git diff --check`)
+WORKER SLOT STATUS = all three clean; no untracked files; no unmerged commits.
+WORKERS READY = YES
+NON-GOALS = execution, Judge, Sandbox, untrusted code execution, verdicts, Contest, production deployment.
