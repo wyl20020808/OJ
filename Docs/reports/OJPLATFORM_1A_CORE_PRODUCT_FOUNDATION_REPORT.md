@@ -19,17 +19,17 @@ MIGRATIONS = PASS; Lead runner executes `0000`, `0001_auth_foundation`, `0002_pr
 AUTH REAL INTEGRATION = PASS; registration, persistence, duplicate, login, wrong password, `/me`, logout/revocation, durable sessions, and safe public responses exercised against PostgreSQL.
 PROBLEM REAL INTEGRATION = PASS; composed create/list/detail path exercised against PostgreSQL, with public authorization policy and version-reference persistence.
 API COMPOSITION = PASS; Auth and Problem registered centrally with shared request IDs/errors and readiness.
-WEB/API INTEGRATION = PARTIAL; typed client uses real public routes and Vite proxy; basic runtime smoke passed.
+WEB/API INTEGRATION = PASS; typed client uses same-origin Vite proxy and real Auth/Problem routes; full browser journey passed twice.
 
 SECURITY = PASS for current scope; scrypt with random salt, hashed session lookup, HttpOnly/SameSite cookie, no credential leakage. Argon2 remains deferred hardening.
 ARCHITECTURE = PASS; no forbidden Web/API or Plugin/Core imports, no Judge/Sandbox/submission execution.
-BROWSER E2E = PARTIAL; Playwright baseline shell/not-found test passes against real API/Web/infrastructure. Dedicated registration/login/me/problem/logout journey remains to be added.
-FULL REGRESSION = PARTIAL; format, lint, typecheck, unit, architecture, build, integration, migration and baseline E2E pass; complete browser journey is outstanding.
+BROWSER E2E = PASS; dedicated real-runtime registration/login/me/problem list/detail/logout/unauthenticated journey passed twice with no unexpected 5xx, page errors, or non-expected console errors.
+FULL REGRESSION = PASS; format, lint, typecheck, unit, architecture, build, integration, migration, API runtime, and Browser E2E pass.
 
 PARALLEL MODEL ASSESSMENT = PASS_WITH_LIMITATIONS
 OWNERSHIP VIOLATIONS = Auth none; Problem none; Web none.
-KNOWN LIMITATIONS = No rate limiting, recovery, email verification, RBAC, or full browser workflow qualification. Worktrees retained.
+KNOWN LIMITATIONS = No rate limiting, recovery, email verification, or RBAC; worktrees retained. This is not production security qualification.
 DEFERRED = Argon2 migration and all Submission/Judge/Sandbox/Contest work.
 
-PHASE 1A FINAL STATUS = PARTIAL / dedicated browser workflow qualification outstanding
-NEXT PHASE RECOMMENDATION = Add focused real-runtime browser journey coverage before declaring Phase 1A PASS.
+PHASE 1A FINAL STATUS = PASS
+NEXT PHASE RECOMMENDATION = Proceed only under an explicitly approved next Goal; retain the browser journey as a mandatory parallel-wave gate.
