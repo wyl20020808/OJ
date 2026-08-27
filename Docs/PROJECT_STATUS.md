@@ -3,7 +3,7 @@
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: Phase 0B.3R2 WSL Docker Engine Fallback & 0B.3 Resume Qualification
-Current Status: PARTIAL / FAILURE_INJECTION_MATRIX_INCOMPLETE (Docker Engine fallback qualified)
+Current Status: PHASE 0B.3 PASS (WSL Docker Engine fallback)
 
 ## Completed Goals
 
@@ -36,7 +36,8 @@ Current Status: PARTIAL / FAILURE_INJECTION_MATRIX_INCOMPLETE (Docker Engine fal
 - Known blocker: Docker Desktop needs dedicated proxy configuration using `127.0.0.1:10809`, and daemon stability must be requalified before real integration, fault injection, clean bootstrap, browser E2E, and final regression
 - Post-interruption recheck: Desktop still crashes during `sailor-ingest.sock` initialization; `dockerDesktopLinuxEngine` is absent. `httpproxy.log` confirms host/Linux proxy disabled and registry direct connection. Official proxy configuration cannot be reached while Settings is unavailable, so 0B.3/0B.3R remain blocked.
 - PHASE 0B.3R2 fallback: Docker Desktop was officially uninstalled after data-preservation recheck. Ubuntu 24.04 WSL2 official Docker Engine is now installed and daemon/image/integration qualification passes; Windows-to-WSL port forwarding blocks browser and full matrix completion.
-- Boundary recheck: a non-privileged WSL keepalive process makes Windows localhost forwarding stable; direct VM-IP probes remain unavailable, with no portproxy or firewall changes.
+- Boundary qualification: a non-privileged WSL keepalive process makes Windows localhost forwarding stable; direct VM-IP probes remain unavailable, with no portproxy or firewall changes.
+- PHASE 0B.3R2 final qualification: FI-004..FI-018, CB-025/026, browser E2E, and full regression all PASS/FAIL_AS_EXPECTED as specified. 0B.3R2 = PASS; 0B.3R = PASS WITH BACKEND FALLBACK; 0B.3 = PASS.
 - Reboot-boundary recheck: only `wsl --version` completed; `wsl --status`, distro listing, Ubuntu `uname`, and an Ubuntu shell probe each exceeded 30 seconds. Docker Engine installation and all Docker/runtime work remain stopped.
 - PHASE 0B.3R3 WSL recovery: official diagnostics script was downloaded but cannot run without elevated PowerShell; `WslService`, `vmcompute`, and `hns` are running, yet WSL status/list/Ubuntu probes still exceed 30 seconds. No Docker operation was performed; WSL gate remains blocked pending elevated diagnostics and recovery/reboot.
 - 0B.3R3 follow-up: host last boot time is unchanged (`2026-08-26 22:49:27`); the second bounded probe set again timed out for WSL status/list, Ubuntu commands, and shutdown. Docker remains untouched.
@@ -50,6 +51,6 @@ Current Status: PARTIAL / FAILURE_INJECTION_MATRIX_INCOMPLETE (Docker Engine fal
 
 ## Next Planned Goal
 
-Resolve and qualify the Windows-to-WSL published-port boundary, then complete remaining FI/CB rows and browser degraded/recovery E2E before promoting 0B.3R2/0B.3 to PASS.
+Proceed to the next explicitly approved Phase; do not add business features outside its Goal.
 
 Last Updated: 2026-08-27

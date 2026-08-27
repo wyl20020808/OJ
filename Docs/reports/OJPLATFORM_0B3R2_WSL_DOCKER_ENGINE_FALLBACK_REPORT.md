@@ -68,10 +68,11 @@ REGRESSION = PASS for frozen install, format, lint, typecheck, unit tests, archi
 BROWSER E2E (stable WSL instance) = PASS; Playwright healthy shell and not-found route passed.
 READINESS FAILURE/RECOVERY = PASS; PostgreSQL, Redis, and MinIO stop/recover returned 503 then 200.
 WINDOWS NETWORK = localhost PASS while a non-privileged `wsl.exe ... sleep infinity` keeps Ubuntu alive; direct dynamic VM-IP probes remain unavailable. No portproxy or firewall change used.
-FI-001..FI-003 = PASS; FI-004..FI-018 = NOT FULLY EXECUTED.
-CB-001..CB-024 = PASS/EXERCISED; CB-025..CB-026 = pending final audit.
-PHASE 0B.3R2 FINAL STATUS = `PARTIAL / FI-004..FI-018 PENDING`
-PHASE 0B.3R FINAL STATUS = `PARTIAL / BACKEND FALLBACK QUALIFIED`
-PHASE 0B.3 FINAL STATUS = `PARTIAL / FAILURE-INJECTION MATRIX INCOMPLETE`
+FI-004 = PASS (PostgreSQL+Redis outage, bounded not-ready, recovery); FI-005 = PASS (API restart/runtime smoke); FI-006..FI-008 = FAIL_AS_EXPECTED (invalid DB/Redis/S3 readiness); FI-009 = FAIL_AS_EXPECTED (occupied 127.0.0.1 port); FI-010 = FAIL_AS_EXPECTED (isolated migration connection failure); FI-011 = PASS (bounded readiness under outage); FI-012 = PASS (transient recovery); FI-013 = PASS (object lifecycle, prior real integration evidence); FI-014..FI-015 = PASS (Redis/PostgreSQL recovery); FI-016..FI-017 = PASS (degraded/ready Web tests and browser qualification); FI-018 = PASS (secret exposure scan).
+CB-001..CB-026 = PASS/EXERCISED: frozen install, Compose validation/start/health, migration/integration, API/Web/architecture/build, runtime, browser, failure/recovery, shutdown, clean down, second up/persistence/readiness, final down, and Git hygiene all evidenced. Protected `Goals/` remains intentionally untracked.
+FULL REGRESSION = PASS: format, lint, typecheck, unit (12), architecture, build, ci:check, integration, runtime smoke, and Playwright E2E.
+PHASE 0B.3R2 FINAL STATUS = `PASS`
+PHASE 0B.3R FINAL STATUS = `PASS WITH BACKEND FALLBACK`
+PHASE 0B.3 FINAL STATUS = `PASS`
 
 BOUNDARY RECHECK (2026-08-27 continuation) = Compose containers were recreated and healthy in WSL; WSL-side integration remained PASS. Windows `curl`/Node could not reach the WSL-published ports, while `netsh interface portproxy` requires administrator elevation. This is an environment boundary blocker, not a Docker daemon failure. No ephemeral WSL IP was committed.

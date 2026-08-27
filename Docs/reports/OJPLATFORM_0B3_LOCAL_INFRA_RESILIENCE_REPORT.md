@@ -52,7 +52,9 @@ PHASE 0B.3R2 handoff (2026-08-27): Docker Desktop was officially uninstalled aft
 
 ## Qualification Status
 
-WSL Docker Engine fallback qualification (2026-08-27): official Docker CE/Compose, daemon-backed pulls, Compose health checks, migrations, real PostgreSQL/Redis/MinIO integration, Windows localhost API `/ready`, recovery checks, and Browser E2E passed when Ubuntu is kept alive by a non-privileged WSL process. Direct VM-IP probes remain unavailable; no portproxy/firewall modification was used. Remaining FI rows require execution.
+WSL Docker Engine fallback qualification (2026-08-27): official Docker CE/Compose, daemon-backed pulls, Compose health checks, migrations, real PostgreSQL/Redis/MinIO integration, Windows localhost API `/ready`, recovery checks, and Browser E2E passed when Ubuntu is kept alive by a non-privileged WSL process. Direct VM-IP probes remain unavailable; no portproxy/firewall modification was used.
+
+Final 0B.3 qualification: FI-004..FI-018 were executed with expected-failure classifications where applicable; CB-025 final infrastructure shutdown and CB-026 Git hygiene passed. Full regression and Playwright E2E passed. The canonical backend is WSL2 Ubuntu + official Docker Engine; a non-privileged WSL keepalive is required for stable Windows localhost forwarding. PHASE 0B.3 = PASS.
 
 Infrastructure implementation is PARTIAL. Project-owned Compose, local-only environment example, PostgreSQL/Drizzle, Redis, and S3-compatible adapters, a system-metadata migration, typed API configuration, and bounded `/ready` dependency checks are present and source-tested. Real container/runtime qualification remains BLOCKED_BY_ENVIRONMENT: Docker daemon recovery is intermittent and Docker Desktop's container registry access requires dedicated proxy configuration. No runtime feature result is claimed.
 
