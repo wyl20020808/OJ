@@ -2,8 +2,8 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 0B FINAL CLOSURE COMPLETE
-Current Status: PHASE 0B PASS
+Current Stage: PHASE 1A CORE PRODUCT FOUNDATION INTEGRATION
+Current Status: PHASE 1A PARTIAL - browser workflow qualification outstanding
 
 ## Completed Goals
 
@@ -52,6 +52,6 @@ Current Status: PHASE 0B PASS
 
 ## Next Planned Goal
 
-Proceed to the next explicitly approved Phase; do not add business features outside its Goal.
+Complete the Phase 1A browser integration qualification before declaring PASS; do not add business features outside its Goal.
 
 Last Updated: 2026-08-27
