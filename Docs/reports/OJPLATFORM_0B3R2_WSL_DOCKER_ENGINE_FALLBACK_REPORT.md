@@ -53,6 +53,8 @@ REPORTS = 0B.3 report/history preserved; 0B.3R report/history preserved; this 0B
 KNOWN LIMITATIONS = All WSL commands timed out after Desktop removal. A Windows restart or equivalent WSL service recovery is required before installing Docker Engine and running qualification.
 FOLLOW-UPS = After reboot, re-read this report, qualify Ubuntu/systemd/network/proxy, install Docker CE from Docker's official repository, then execute every remaining 0B.3 matrix row. Do not repeat Docker Desktop R1-R6.
 
+REBOOT-BOUNDARY RECHECK (2026-08-27) = `wsl --version` returned WSL `2.7.12` and kernel `6.1.18.3`. `wsl --status`, `wsl --list --verbose`, `wsl -d Ubuntu-24.04 -- uname -a`, and `wsl -d Ubuntu-24.04 -- bash -lc "printf 'SHELL_OK'"` did not return within 30 seconds. WSL platform qualification is therefore FAILED/BLOCKED; Docker Engine was not started or installed, and no 0B.3 runtime matrix command was run.
+
 PHASE 0B.3R2 FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`
 PHASE 0B.3R FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
 PHASE 0B.3 FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
