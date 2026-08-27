@@ -1,0 +1,17 @@
+# Canonical repository text format is LF across Windows, Linux, and CI.
+* text=auto eol=lf
+
+# Windows command scripts retain CRLF for native cmd.exe behavior.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Do not inspect or normalize binary artifacts.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.woff binary
+*.woff2 binary
