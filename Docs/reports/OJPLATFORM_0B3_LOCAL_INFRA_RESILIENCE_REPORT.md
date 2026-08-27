@@ -21,7 +21,7 @@ DOCKER VERSION = CLI `29.7.2` installed; daemon not qualified
 DOCKER COMPOSE = plugin `v5.4.0` available
 DOCKER BACKEND = Docker Desktop 4.88.1 Linux/WSL backend; startup blocked by inaccessible Docker runtime socket
 DOCKER HELLO-WORLD = NOT VERIFIED; daemon unavailable before reboot
-REBOOT REQUIRED = YES for Docker runtime recovery; see the retained 0B.3R recovery history below
+REBOOT REQUIRED = NO; post-reboot recovery progressed, but Docker runtime is unstable and image pulls are blocked by proxy/network configuration
 
 ## Recovery History — PHASE 0B.3R
 
@@ -42,22 +42,26 @@ Recovery ladder evidence:
 
 No Docker containers, images, volumes, meaningful WSL data, unrelated user files, global Git settings, or project files were removed. The remaining required action is a Windows restart, which is not authorized by this Goal execution and is required to release or repair the kernel-level reparse-point state. After restart, start Docker Desktop and rerun the 0B.3R Docker qualification gate before any project runtime claim.
 
+Post-reboot continuation: Windows restart did not clear the original socket, so the three-entry Docker `run` directory was quarantined as `run-quarantine-20260827-post-reboot` and Docker created a fresh runtime directory. Docker then progressed through WSL data-disk setup and briefly exposed a healthy daemon (`docker version`/`docker info` PASS). `hello-world` and Compose image pulls failed because Docker Desktop has no HTTPS proxy while the host network requires the local proxy `127.0.0.1:10809`; direct registry access timed out. A subsequent restart reproduced the socket failure, so the daemon is not currently stable. A second exact runtime quarantine was not performed after this recurrence.
+
+Current post-reboot update: a later clean runtime-directory quarantine allowed Docker to recreate its sockets and complete WSL data-disk initialization. The daemon was then reachable and `docker network`/`docker volume` lifecycle checks passed and were cleaned. `hello-world` and Compose image pulls remain blocked until Docker Desktop uses the verified local proxy; after the failed pull, Desktop exited and the runtime socket failure recurred. Therefore no project containers were started.
+
 ## Qualification Status
 
-Infrastructure implementation is PARTIAL. Project-owned Compose, local-only environment example, PostgreSQL/Drizzle, Redis, and S3-compatible adapters, a system-metadata migration, typed API configuration, and bounded `/ready` dependency checks are present and source-tested. Real container/runtime qualification is now BLOCKED_BY_REBOOT: Docker Desktop remains unable to access its own `C:\Users\WYL20\AppData\Local\Docker\run\sailor-ingest.sock` runtime socket after WSL recovery and official Docker-only uninstall/reinstall. The socket is a zero-length reparse point; after stopping Goal-owned Docker processes, Windows returned `The file cannot be accessed by the system` when attempting the exact-socket removal.
+Infrastructure implementation is PARTIAL. Project-owned Compose, local-only environment example, PostgreSQL/Drizzle, Redis, and S3-compatible adapters, a system-metadata migration, typed API configuration, and bounded `/ready` dependency checks are present and source-tested. Real container/runtime qualification remains BLOCKED_BY_ENVIRONMENT: Docker daemon recovery is intermittent and Docker Desktop's container registry access requires dedicated proxy configuration. No runtime feature result is claimed.
 
-HOST INSTALLATION = PARTIAL / BLOCKED_BY_REBOOT (Docker Desktop stale/inaccessible runtime socket survives official reinstall)
+HOST INSTALLATION = PARTIAL / BLOCKED_BY_ENVIRONMENT (daemon briefly recovered; Docker Desktop runtime socket recurs and registry access requires proxy configuration)
 CB-001 (`pnpm install --frozen-lockfile`) = NOT RUN in this Goal; prior 0B.2 evidence remains PASS
-CB-002 Docker engine reachable = BLOCKED_BY_REBOOT
-CB-003..CB-026 = BLOCKED_BY_REBOOT / NOT EXECUTED
-FI-001..FI-018 = BLOCKED_BY_REBOOT / NOT EXECUTED
+CB-002 Docker engine reachable = PARTIAL / UNSTABLE; post-reboot `docker info` passed briefly, then daemon exited
+CB-003..CB-026 = BLOCKED_BY_ENVIRONMENT / NOT EXECUTED
+FI-001..FI-018 = BLOCKED_BY_ENVIRONMENT / NOT EXECUTED
 
 ## Safety and Recovery
 
 No unrelated containers, volumes, distributions, files, or global Git settings were modified. Docker Desktop was officially uninstalled and reinstalled after the user approved the last-resort reset and the no-data preservation assessment. No reboot was initiated by this session.
 
 RESUME STEPS =
-1. Restart Windows to clear the inaccessible Docker runtime reparse point; do not delete unrelated user or WSL data.
+1. Configure Docker Desktop's dedicated proxy settings to use the verified local proxy `127.0.0.1:10809`, then restart Desktop; do not change Windows global proxy settings.
 2. Verify `docker version`, `docker info`, `docker compose version`, and `docker run --rm hello-world`.
 3. Continue PHASE 0B.3R from this report: execute every real integration, failure-injection, browser, CI, and clean-bootstrap matrix row before final status.
 
@@ -86,4 +90,4 @@ SECRET REVIEW = PASS; no project secrets introduced
 GIT DIFF CHECK = PASS
 
 COMMIT = PENDING 0B.3R recovery evidence commit
-FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`
+FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`

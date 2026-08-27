@@ -15,37 +15,37 @@ INITIAL docker info = FAILED; daemon pipe absent
 INITIAL DIAGNOSIS = Docker Desktop backend aborts before WSL engine initialization because it cannot remove its runtime socket.
 SAILOR-INGEST.SOCK FINDING = exact path `C:\Users\WYL20\AppData\Local\Docker\run\sailor-ingest.sock` is a zero-length reparse point dated 2026-08-26. With all Docker processes stopped, `fsutil`, ACL inspection, and exact deletion returned `The file cannot be accessed by the system`.
 
-RECOVERY LEVEL USED = R1-R6 attempted; terminal state `BLOCKED_BY_REBOOT`
+RECOVERY LEVEL USED = R1-R6 attempted; post-reboot continuation reached `PARTIAL / BLOCKED_BY_ENVIRONMENT`
 ACTIONS PERFORMED = R1 Docker start/restart; R2 Docker stop plus `wsl --shutdown`; R3 `wsl --update`; R4 update check and data-preserving installer check; R5 exact socket cleanup attempt; R6 user-approved Docker-only official uninstall/reinstall after data assessment. All preserve unrelated WSL distributions and project files.
 REINSTALL = YES
 FACTORY RESET = REQUESTED and user-approved; official dialog could not complete reset before backend exit. Official Docker-only uninstall/reinstall was completed as the supported replacement.
 DATA BACKUP REQUIRED = NO; no Docker data existed to preserve.
-REBOOT REQUIRED = YES; the inaccessible kernel-level reparse point survived official uninstall/reinstall.
+REBOOT REQUIRED = NO; Windows was restarted, but the runtime issue recurred after a brief daemon recovery.
 
-DOCKER QUALIFICATION = BLOCKED_BY_REBOOT
+DOCKER QUALIFICATION = PARTIAL / UNSTABLE
 docker version = client PASS; server BLOCKED
-docker info = BLOCKED
+docker info = PASSED briefly after runtime quarantine, then became unavailable again
 docker compose version = PASS (`v5.4.0`)
-hello-world = NOT RUN; daemon unavailable
+hello-world = FAILED; registry pull timed out because Docker Desktop has no HTTPS proxy
 test network lifecycle = NOT RUN; daemon unavailable
 test volume lifecycle = NOT RUN; daemon unavailable
 
-0B.3 RESUME = NOT STARTED; Docker qualification gate has not passed.
-POSTGRES REAL INTEGRATION = BLOCKED_BY_REBOOT
-REDIS REAL INTEGRATION = BLOCKED_BY_REBOOT
-MINIO REAL INTEGRATION = BLOCKED_BY_REBOOT
-MIGRATIONS = BLOCKED_BY_REBOOT
-REAL READINESS = BLOCKED_BY_REBOOT
-FAILURE INJECTION MATRIX = BLOCKED_BY_REBOOT; FI-001..FI-018 not executed
-CLEAN BOOTSTRAP MATRIX = BLOCKED_BY_REBOOT; CB-001..CB-026 not executed in this recovery run
-BROWSER DEGRADE/RECOVER E2E = BLOCKED_BY_REBOOT
-CI INTEGRATION = configuration exists; local runtime validation BLOCKED_BY_REBOOT
+0B.3 RESUME = BLOCKED; Docker daemon briefly recovered but qualification was not stable.
+POSTGRES REAL INTEGRATION = BLOCKED_BY_ENVIRONMENT
+REDIS REAL INTEGRATION = BLOCKED_BY_ENVIRONMENT
+MINIO REAL INTEGRATION = BLOCKED_BY_ENVIRONMENT
+MIGRATIONS = BLOCKED_BY_ENVIRONMENT
+REAL READINESS = BLOCKED_BY_ENVIRONMENT
+FAILURE INJECTION MATRIX = BLOCKED_BY_ENVIRONMENT; FI-001..FI-018 not executed
+CLEAN BOOTSTRAP MATRIX = BLOCKED_BY_ENVIRONMENT; CB-001..CB-026 not executed in this recovery run
+BROWSER DEGRADE/RECOVER E2E = BLOCKED_BY_ENVIRONMENT
+CI INTEGRATION = configuration exists; local runtime validation BLOCKED_BY_ENVIRONMENT
 
-FULL REGRESSION = NOT RUN; valid Docker runtime prerequisite absent.
+FULL REGRESSION = NOT RUN; valid Docker runtime and registry prerequisite absent.
 pnpm ci:check = prior 0B.3 evidence PASS; not rerun in this recovery transaction
-integration = BLOCKED_BY_REBOOT
+integration = BLOCKED_BY_ENVIRONMENT
 runtime smoke = prior 0B.3 evidence PASS; not rerun in this recovery transaction
-browser E2E = BLOCKED_BY_REBOOT
+browser E2E = BLOCKED_BY_ENVIRONMENT
 
 HYGIENE = Docker processes started by recovery were stopped. No project containers were ever created. No temporary project networks, volumes, objects, configuration, migrations, or API/Web processes were created by this recovery transaction.
 ORPHAN PROCESSES = none observed after final stop
@@ -61,8 +61,8 @@ COMMIT = PENDING
 FINAL HEAD = PENDING
 FINAL GIT STATUS = PENDING
 
-KNOWN LIMITATIONS = A Windows restart is required before Docker can be requalified. No Docker integration, fault injection, clean bootstrap, browser E2E, or final regression result is claimed.
-FOLLOW-UPS = After restart, start Docker Desktop; run the Docker qualification gate; then execute every blocked 0B.3 runtime, failure-injection, clean-bootstrap, browser, CI-local-equivalent, and regression row before changing either phase to PASS.
+KNOWN LIMITATIONS = Docker daemon recovered briefly after quarantining the exact runtime directory, then exited again; image pulls require Docker Desktop proxy configuration. No Docker integration, fault injection, clean bootstrap, browser E2E, or final regression result is claimed.
+FOLLOW-UPS = Configure Docker Desktop to use the verified local proxy `127.0.0.1:10809`; requalify daemon and `hello-world`; then execute every blocked 0B.3 runtime, failure-injection, clean-bootstrap, browser, CI-local-equivalent, and regression row before changing either phase to PASS.
 
-PHASE 0B.3R FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`
-PHASE 0B.3 FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`
+PHASE 0B.3R FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
+PHASE 0B.3 FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
