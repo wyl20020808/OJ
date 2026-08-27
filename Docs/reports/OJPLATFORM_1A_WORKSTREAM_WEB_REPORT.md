@@ -14,16 +14,25 @@ ERROR/LOADING STATES = IMPLEMENTED - readiness, auth, list, detail, empty, unava
 ACCESSIBILITY BASELINE = IMPLEMENTED - semantic headings, labels, status/alert live regions, keyboard-native controls
 
 TESTS = TESTED - `pnpm test:web` (5 passed)
-BROWSER TESTS = NOT VERIFIED - Playwright requires the API runtime; existing platform E2E remains available for lead integration
+BROWSER TESTS = DEFERRED_TO_LEAD_INTEGRATION - Playwright requires the real Auth API, Problem API, PostgreSQL, and Web runtime composition
 BUILD = TESTED - `pnpm build:web`; Web TypeScript check passed
 ARCHITECTURE REVIEW = IMPLEMENTED - Web imports only its typed client and shared public model; no API internals
 
+FINAL QUALIFICATION =
+FORMAT = BLOCKED / TOOLCHAIN BASELINE - canonical `pnpm format:check` reports 48 pre-existing repository files (including root and non-Web ownership) as unformatted; no formatting files were changed in this qualification.
+LINT = PASS - canonical `pnpm lint` passes after `pnpm install --frozen-lockfile --force`.
+LINT ROOT CAUSE = DEPENDENCY INSTALLATION FAILURE - ESLint 9.39.5 imports `../../../conf/ecma-version` from its own package. The file was absent from the incomplete node_modules linkage but is present after frozen reinstall. `pnpm why eslint` shows the existing root dev dependency chain through `typescript-eslint`; `pnpm-lock.yaml` contains no standalone `ecma-version` package, correctly. Bootstrap PASS is consistent with a complete pnpm installation/link state.
+TYPECHECK = PASS - `pnpm exec tsc -p apps/web/tsconfig.json --noEmit`
+WEB TESTS = PASS - 5/5
+BUILD = PASS - `pnpm build:web`
+ARCHITECTURE = PASS - `pnpm test:architecture`
+
 INTEGRATION REQUESTS = None
 DEPENDENCY REQUESTS = None
-KNOWN LIMITATIONS = Browser E2E against real Auth/Problem endpoints awaits lead API integration. ESLint execution was blocked by an environment-level missing ESLint module (`ecma-version`) after dependency linking; no source lint result is claimed.
+KNOWN LIMITATIONS = Browser E2E awaits lead integration of real Auth/Problem APIs and infrastructure. Canonical format check remains blocked by existing repository-wide formatting drift outside Web ownership.
 
 COMMIT = See final Git HEAD (`feat: implement phase 1A web foundation`)
 FINAL HEAD = updated by the final commit after report metadata update
 GIT STATUS = Clean (`## codex/phase1a-web`)
 
-WORKSTREAM STATUS = PARTIAL
+WORKSTREAM STATUS = PARTIAL (format gate and browser E2E remain deferred/blocking evidence outside this worker's scope)
