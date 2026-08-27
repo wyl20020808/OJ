@@ -16,4 +16,4 @@ KNOWN LIMITATIONS = no execution, judging, verdicts, sandbox, rate limiting, or 
 
 INTEGRATION COMMIT = `339ffac`
 PHASE CLOSURE COMMIT = `d8e1584`
-FINAL HEAD = recorded after closure metadata commit
+FINAL HEAD = `f7f76b37a14b67e96916f07911c74234eac80186`
