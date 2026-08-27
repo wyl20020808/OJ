@@ -45,7 +45,7 @@ function route(path = window.location.pathname): Route {
   if (path.startsWith('/author/problems/') && path.endsWith('/edit'))
     return { name: 'author-edit', id: decodeURIComponent(path.slice(17, -5)) };
   if (path.startsWith('/problems/') && path.endsWith('/submit'))
-    return { name: 'submit', id: decodeURIComponent(path.slice(10, -6)) };
+    return { name: 'submit', id: decodeURIComponent(path.slice(10, -7)) };
   if (path.startsWith('/problems/'))
     return { name: 'problem', id: decodeURIComponent(path.slice(10)) };
   if (path === '/submissions' || path === '/submissions/')
@@ -897,9 +897,7 @@ function SubmissionForm({
     try {
       const result = await api.createSubmission({
         problemId,
-        problemRevisionId:
-          (problem as (Problem & { revisionId?: string }) | null)?.revisionId ??
-          problemId,
+        problemRevisionId: problem?.currentRevisionId ?? problemId,
         testdataVersionRef: problem?.testdataVersion ?? null,
         languageId,
         source,
@@ -1119,6 +1117,10 @@ function SubmissionDetail({
       <Section title="Problem">
         {submission.problemId} · revision {submission.problemRevisionId}
       </Section>
+      <Section title="Testdata version">
+        {submission.testdataVersionRef}
+      </Section>
+      <Section title="Owner">{submission.ownerUserId}</Section>
       <Section title="Source">
         <pre className="source">{submission.source}</pre>
       </Section>

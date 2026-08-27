@@ -28,6 +28,7 @@ export type Problem = {
   status: 'draft' | 'published' | 'archived';
   testdataVersion: string | null;
   authorId: string | null;
+  currentRevisionId?: string;
   createdAt: string;
   updatedAt: string;
 };

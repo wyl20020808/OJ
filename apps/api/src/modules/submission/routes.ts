@@ -10,6 +10,7 @@ import {
   type SubmissionRepository,
 } from './repository.js';
 import { SubmissionService } from './service.js';
+import { LANGUAGE_CATALOG } from './languages.js';
 
 export type SubmissionModuleContext = {
   repository?: SubmissionRepository;
@@ -45,6 +46,18 @@ export async function registerSubmissionModule(
   );
   const auth = async (request: FastifyRequest) =>
     context.getAuthContext ? await context.getAuthContext(request) : undefined;
+  app.get('/api/submissions/languages', async (_request, reply) =>
+    reply.send(
+      [...LANGUAGE_CATALOG.values()].map(
+        ({ id, displayName, maxSourceBytes }) => ({
+          id,
+          name: displayName,
+          extension: id,
+          maxSourceBytes,
+        }),
+      ),
+    ),
+  );
   app.post('/api/submissions', async (request, reply) => {
     try {
       return reply

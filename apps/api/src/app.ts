@@ -18,7 +18,14 @@ import {
   registerProblemModule,
 } from './modules/problem/index.js';
 import { createMemoryAuditHook } from './modules/authz/index.js';
+import { createSubmissionAuthorizationPolicy } from './modules/authz/index.js';
 import type { AuditHook as ProblemAuditHook } from './modules/problem/model.js';
+import {
+  PostgresSubmissionRepository,
+  InMemorySubmissionRepository,
+  registerSubmissionModule,
+  type ProblemRevisionResolver,
+} from './modules/submission/index.js';
 
 const HealthResponse = Type.Object({ status: Type.Literal('ok') });
 const ReadyResponse = Type.Object({
@@ -135,8 +142,9 @@ export async function buildApp(options: AppOptions = {}) {
       production: process.env.NODE_ENV === 'production',
       auditHook,
     });
+    const problemRepository = new PostgresProblemRepository(database.pool);
     await registerProblemModule(app, {
-      repository: new PostgresProblemRepository(database.pool),
+      repository: problemRepository,
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       authorizationPolicy: {
@@ -151,6 +159,60 @@ export async function buildApp(options: AppOptions = {}) {
           ['read', 'create', 'update', 'transition'].includes(action),
       },
       auditHook: problemAuditHook,
+    });
+    const submissionPolicy = createSubmissionAuthorizationPolicy();
+    const problemResolver: ProblemRevisionResolver = {
+      getRevision: async (problemId, revisionId) => {
+        const revisions = await problemRepository.revisions(problemId);
+        const revision = revisions.find(
+          (item) => item.revisionId === revisionId,
+        );
+        if (
+          !revision ||
+          revision.status !== 'published' ||
+          revision.visibility !== 'public'
+        )
+          return undefined;
+        return {
+          problemId,
+          revisionId: revision.revisionId,
+          testdataVersionRef: revision.testdataVersion,
+        };
+      },
+    };
+    await registerSubmissionModule(app, {
+      repository: new PostgresSubmissionRepository(database.pool),
+      authorizationPolicy: {
+        canSubmit: (context, revision) =>
+          submissionPolicy.canSubmit(
+            { id: context.userId, status: 'active' },
+            {
+              id: revision.revisionId,
+              problemId: revision.problemId,
+              status: 'published',
+              visibility: 'public',
+            },
+          ),
+        canViewSubmission: (context, submission) =>
+          submissionPolicy.canViewSubmission(
+            { id: context.userId, status: 'active' },
+            {
+              id: submission.id,
+              ownerUserId: submission.ownerUserId,
+              problemId: submission.problemId,
+              problemRevisionId: '',
+              status: 'PENDING',
+            },
+          ),
+        listOwnSubmissions: (context) =>
+          submissionPolicy.canListOwnSubmissions({
+            id: context.userId,
+            status: 'active',
+          }),
+      },
+      problemResolver,
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
     owned = {
       checks: {
@@ -183,8 +245,9 @@ export async function buildApp(options: AppOptions = {}) {
       repository: createMemoryAuthRepository(),
       auditHook,
     });
+    const problemRepository = new InMemoryProblemRepository();
     await registerProblemModule(app, {
-      repository: new InMemoryProblemRepository(),
+      repository: problemRepository,
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       authorizationPolicy: {
@@ -199,6 +262,59 @@ export async function buildApp(options: AppOptions = {}) {
           ['read', 'create', 'update', 'transition'].includes(action),
       },
       auditHook: problemAuditHook,
+    });
+    const submissionPolicy = createSubmissionAuthorizationPolicy();
+    await registerSubmissionModule(app, {
+      repository: new InMemorySubmissionRepository(),
+      authorizationPolicy: {
+        canSubmit: (context, revision) =>
+          submissionPolicy.canSubmit(
+            { id: context.userId, status: 'active' },
+            {
+              id: revision.revisionId,
+              problemId: revision.problemId,
+              status: 'published',
+              visibility: 'public',
+            },
+          ),
+        canViewSubmission: (context, submission) =>
+          submissionPolicy.canViewSubmission(
+            { id: context.userId, status: 'active' },
+            {
+              id: submission.id,
+              ownerUserId: submission.ownerUserId,
+              problemId: submission.problemId,
+              problemRevisionId: '',
+              status: 'PENDING',
+            },
+          ),
+        listOwnSubmissions: (context) =>
+          submissionPolicy.canListOwnSubmissions({
+            id: context.userId,
+            status: 'active',
+          }),
+      },
+      problemResolver: {
+        getRevision: async (problemId, revisionId) => {
+          const revisions = await problemRepository.revisions(problemId);
+          const revision = revisions.find(
+            (item) => item.revisionId === revisionId,
+          );
+          if (
+            !revision ||
+            revision.status !== 'published' ||
+            revision.visibility !== 'public'
+          )
+            return undefined;
+          return {
+            problemId,
+            revisionId: revision.revisionId,
+            testdataVersionRef: revision.testdataVersion,
+          };
+        },
+      },
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
   }
   app.get(
