@@ -59,8 +59,8 @@ REBOOT-BOUNDARY RECHECK (2026-08-27) = `wsl --version` returned WSL `2.7.12` and
 
 0B.3R3 GATE RESULT (2026-08-27) = Windows reboot completed and two consecutive WSL acceptance cycles passed. Ubuntu 24.04 is VERSION 2; non-interactive probes, interactive shell, and timely `wsl --shutdown` passed. Docker Engine installation may now resume under the separate 0B.3R2 goal.
 
-PHASE 0B.3R2 FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`
-PHASE 0B.3R FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
+HISTORICAL SNAPSHOT PHASE 0B.3R2 FINAL STATUS = `PARTIAL / BLOCKED_BY_REBOOT`.
+HISTORICAL SNAPSHOT PHASE 0B.3R FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`.
 ENGINE QUALIFICATION (2026-08-27) = PASS. Official Docker CE `29.7.2` and Compose plugin `v5.5.0` are installed in Ubuntu 24.04 systemd. Daemon, hello-world, and all three pinned image pulls passed with systemd proxy `http://127.0.0.1:10809`.
 WINDOWS->WSL BRIDGE = IMPLEMENTED via `wsl.exe -d Ubuntu-24.04 -- docker ...`; Compose config/lifecycle and Linux named volumes pass.
 REAL INTEGRATION = PASS for PostgreSQL, Redis, MinIO object lifecycle, migration, and Linux-side readiness.

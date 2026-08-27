@@ -2,7 +2,7 @@
 
 GOAL ID = `OJPLATFORM-0B-FINAL-CLOSURE`
 STARTING HEAD = `4244c4b`
-FINAL HEAD = final closure commit recorded by Git after this report is staged
+FINAL HEAD = closure commit series ending with the final metadata correction commit
 
 0B.1 HISTORICAL STATUS = PASS
 0B.1 REGRESSION = PASS

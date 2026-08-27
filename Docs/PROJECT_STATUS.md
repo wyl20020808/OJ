@@ -23,7 +23,7 @@ Current Status: PHASE 0B PASS
 - Latest engineering foundation content commit: `3959bba` (`feat: establish local infrastructure foundation`)
 - Repository HEAD includes a metadata-only report correction after that content commit.
 - Business implementation: NOT STARTED
-- Framework/toolchain initialization: NOT STARTED
+- Framework/toolchain initialization: 0B foundation initialized; future business frameworks NOT STARTED
 - Local PostgreSQL/Redis/MinIO infrastructure: Docker Engine/Compose, Windows localhost API/browser boundary, and recovery behavior qualified with WSL instance kept alive
 - Judge, Sandbox, Plugin Runtime, and service infrastructure: NOT STARTED
 - Runtime security controls: NOT IMPLEMENTED
