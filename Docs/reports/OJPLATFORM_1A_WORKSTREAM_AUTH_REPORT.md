@@ -11,7 +11,9 @@ PASSWORD SECURITY = Node scrypt memory-hard hashing with random salt and timing-
 PERSISTENCE = PostgreSQL `users`, `user_credentials`, and `auth_sessions` in `0001_auth_foundation.sql`; revocation and expiry are durable.  
 API = `registerAuthModule(app, options)` registers `/api/auth/register`, `/login`, `/logout`, `/me`; central composition remains Lead-owned.  
 TESTS = Auth unit/API tests cover registration, duplicate, malformed input, login, wrong/nonexistent credentials, cookie/session, me, logout, and password omission.  
+FORMAT CHECK = FAIL (50 files remain: root/bootstrap baseline, non-Auth module, Web, and existing test/config files; after formatting Auth-owned `apps/api/src/modules/auth/postgres-repository.ts`, no Auth-owned format failures remain).  
 INTEGRATION TESTS = NOT RUN (requires configured PostgreSQL runtime).  
+POSTGRESQL REAL INTEGRATION = DEFERRED_TO_LEAD_INTEGRATION (mandatory acceptance: persistence, duplicate identity, login, session persistence, logout/revocation, `/me`, disabled user, restart/session behavior, and database constraints).  
 SECURITY REVIEW = Code review completed; no plaintext credentials, token responses, or credential logging introduced. Production qualification remains deferred.  
 ARCHITECTURE REVIEW = Module boundary and migration ownership respected; central bootstrap untouched.
 
@@ -22,11 +24,13 @@ INTEGRATION REQUESTS =
 - expected contract impact: none; use exported `registerAuthModule`
 - tests required: composed API endpoint smoke tests
 
+ARGON2 REQUEST = NON_BLOCKING / DEFERRED_SECURITY_HARDENING. Keep salted memory-hard scrypt for this phase; no dependency or implementation change.  
+
 DEPENDENCY REQUESTS =
-- DEPENDENCY REQUEST: PACKAGE = `argon2`; VERSION/RANGE = current approved release; REASON = replace built-in scrypt with Shared Contract's preferred Argon2id implementation after Lead dependency/security review.
+- DEPENDENCY REQUEST: PACKAGE = `argon2`; VERSION/RANGE = current approved release; REASON = optional future Argon2id migration after Lead dependency/security review (non-blocking/deferred).
 
 KNOWN LIMITATIONS = No rate limiting, email verification, password recovery, or production security qualification in this phase.  
 COMMIT = `feat: implement phase 1A auth foundation` (final hash shown by `git rev-parse HEAD`)  
 FINAL HEAD = final amended commit  
 GIT STATUS = clean after commit (excluding no user files)  
-WORKSTREAM STATUS = PARTIAL (central integration and PostgreSQL runtime qualification pending)
+WORKSTREAM STATUS = PARTIAL (canonical repo format baseline remains failing outside Auth ownership; central integration and PostgreSQL runtime qualification pending)

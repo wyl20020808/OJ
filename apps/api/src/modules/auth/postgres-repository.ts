@@ -45,9 +45,9 @@ export function createPostgresAuthRepository(pool: {
       );
       return r.rows[0]
         ? {
-        id: String(r.rows[0]!.id),
-        userId: String(r.rows[0]!.user_id),
-        expiresAt: new Date(String(r.rows[0]!.expires_at)),
+            id: String(r.rows[0]!.id),
+            userId: String(r.rows[0]!.user_id),
+            expiresAt: new Date(String(r.rows[0]!.expires_at)),
           }
         : null;
     },
