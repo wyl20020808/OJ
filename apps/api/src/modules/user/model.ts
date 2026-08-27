@@ -1,4 +1,4 @@
-export type UserStatus = 'active' | 'disabled';
+export type UserStatus = 'active' | 'disabled' | 'deactivated';
 export type User = {
   id: string;
   username: string;

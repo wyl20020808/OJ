@@ -5,11 +5,18 @@ import {
   tokenHash,
   verifyPassword,
 } from './crypto.js';
-import { publicUser, type AuthContext, type AuthRepository } from './types.js';
+import {
+  publicUser,
+  type AuthContext,
+  type AuthRepository,
+  type SessionMetadata,
+} from './types.js';
+import type { AuditHook } from '../authz/types.js';
 export type AuthModuleOptions = {
   repository: AuthRepository;
   production?: boolean;
   sessionTtlMs?: number;
+  auditHook?: AuditHook;
 };
 type AuthBody = {
   username?: unknown;
@@ -129,7 +136,72 @@ export async function registerAuthModule(
       return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
     return publicUser(user);
   });
-  return { getAuthContext: context };
+  const sessions = {
+    listForUser: (userId: string): Promise<SessionMetadata[]> =>
+      options.repository.listSessions(userId),
+    revoke: async (sessionId: string, actor: AuthContext) => {
+      if (actor.userId !== (await findSessionOwner(sessionId)))
+        throw new Error('FORBIDDEN');
+      await options.repository.revokeSession(sessionId);
+    },
+    revokeAllForUser: async (userId: string, actor: AuthContext) => {
+      if (actor.userId !== userId) throw new Error('FORBIDDEN');
+      await options.repository.revokeAllSessions(userId);
+    },
+  };
+  const findSessionOwner = (sessionId: string) =>
+    options.repository.findSessionOwner(sessionId);
+  return {
+    getAuthContext: context,
+    sessions,
+    setUserStatus: async (
+      id: string,
+      status: 'active' | 'disabled' | 'deactivated',
+      actor: AuthContext,
+      requestId = 'internal',
+    ) => {
+      if (actor.userId === id) {
+        await options.auditHook?.record({
+          actorUserId: actor.userId,
+          action: `account:${status}`,
+          resource: 'account',
+          resourceId: id,
+          outcome: 'denied',
+          requestId,
+          occurredAt: new Date().toISOString(),
+        });
+        throw new Error('FORBIDDEN');
+      }
+      const current = await options.repository.findById(id);
+      const valid =
+        current &&
+        current.status !== 'deactivated' &&
+        current.status !== status;
+      if (!valid) {
+        await options.auditHook?.record({
+          actorUserId: actor.userId,
+          action: `account:${status}`,
+          resource: 'account',
+          resourceId: id,
+          outcome: 'denied',
+          requestId,
+          occurredAt: new Date().toISOString(),
+        });
+        throw new Error('FORBIDDEN');
+      }
+      const user = await options.repository.updateUserStatus(id, status);
+      await options.auditHook?.record({
+        actorUserId: actor.userId,
+        action: `account:${status}`,
+        resource: 'account',
+        resourceId: id,
+        outcome: user ? 'allowed' : 'denied',
+        requestId,
+        occurredAt: new Date().toISOString(),
+      });
+      return user;
+    },
+  };
 }
 export * from './types.js';
 export * from './memory-repository.js';
