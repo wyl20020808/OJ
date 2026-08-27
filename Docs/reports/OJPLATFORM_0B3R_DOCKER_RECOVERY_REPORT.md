@@ -64,5 +64,9 @@ FINAL GIT STATUS = PENDING
 KNOWN LIMITATIONS = Docker daemon recovered briefly after quarantining the exact runtime directory, then exited again; image pulls require Docker Desktop proxy configuration. No Docker integration, fault injection, clean bootstrap, browser E2E, or final regression result is claimed.
 FOLLOW-UPS = Configure Docker Desktop to use the verified local proxy `127.0.0.1:10809`; requalify daemon and `hello-world`; then execute every blocked 0B.3 runtime, failure-injection, clean-bootstrap, browser, CI-local-equivalent, and regression row before changing either phase to PASS.
 
+POST-INTERRUPTION QUALIFICATION (2026-08-27) = Docker Desktop `4.88.1` again presented its startup error dialog and failed before exposing `dockerDesktopLinuxEngine`; `docker version` and `docker info` had client-only output, while `docker pull hello-world` and `docker run --rm hello-world` failed on the missing daemon pipe. The host proxy was re-confirmed as an HTTP CONNECT/mixed proxy at `127.0.0.1:10809` (xray listener). `httpproxy.log` still records `host will use proxy: disabled`, `Linux will use proxy: disabled`, and registry requests `container via direct connection because Docker Desktop has no HTTPS proxy`. Docker Desktop's supported CLI exposes lifecycle/diagnostic commands but no proxy-setting command, and the Settings UI is inaccessible because startup crashes at the `sailor-ingest.sock` initialization step. No unsupported settings-store or registry edit was made.
+
+POST-INTERRUPTION STATUS = `BLOCKED_BY_ENVIRONMENT`; Desktop proxy configuration and stable daemon qualification remain outstanding. No 0B.3 runtime matrix was rerun or claimed.
+
 PHASE 0B.3R FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
 PHASE 0B.3 FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`

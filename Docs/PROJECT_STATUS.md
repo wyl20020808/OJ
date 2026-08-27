@@ -34,6 +34,7 @@ Current Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
 - 0B.3 implementation: Compose/adapters/migration/readiness/integration and CI foundations are committed; real container qualification remains blocked
 - 0B.3R recovery: after Windows restart, quarantining the exact Docker runtime directory allowed brief daemon recovery and WSL data-disk setup; registry pulls then failed because Docker Desktop lacked the verified host proxy, and a later restart reproduced runtime socket failure
 - Known blocker: Docker Desktop needs dedicated proxy configuration using `127.0.0.1:10809`, and daemon stability must be requalified before real integration, fault injection, clean bootstrap, browser E2E, and final regression
+- Post-interruption recheck: Desktop still crashes during `sailor-ingest.sock` initialization; `dockerDesktopLinuxEngine` is absent. `httpproxy.log` confirms host/Linux proxy disabled and registry direct connection. Official proxy configuration cannot be reached while Settings is unavailable, so 0B.3/0B.3R remain blocked.
 - Known risks: Sandbox escape, Judge credential compromise, hidden-testdata leakage, authorization defects, plugin compromise, storage exposure, queue/result spoofing, DoS, supply chain, secret leakage, unsafe imports, and audit gaps remain OPEN in the risk register
 
 ## Next Planned Goal

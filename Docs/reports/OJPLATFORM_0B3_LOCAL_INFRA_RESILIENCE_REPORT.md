@@ -46,6 +46,8 @@ Post-reboot continuation: Windows restart did not clear the original socket, so 
 
 Current post-reboot update: a later clean runtime-directory quarantine allowed Docker to recreate its sockets and complete WSL data-disk initialization. The daemon was then reachable and `docker network`/`docker volume` lifecycle checks passed and were cleaned. `hello-world` and Compose image pulls remain blocked until Docker Desktop uses the verified local proxy; after the failed pull, Desktop exited and the runtime socket failure recurred. Therefore no project containers were started.
 
+Post-interruption recheck (2026-08-27): Docker Desktop again crashed at `sailor-ingest.sock` initialization. `docker version`, `docker info`, `docker pull hello-world`, and `docker run --rm hello-world` could not reach the daemon pipe. `httpproxy.log` continues to show both host and Linux proxy disabled and registry direct-connection attempts. The verified HTTP CONNECT proxy is listening at `127.0.0.1:10809`, but the official Settings UI is unavailable and the Docker Desktop CLI has no proxy configuration command. Runtime qualification therefore remains blocked.
+
 ## Qualification Status
 
 Infrastructure implementation is PARTIAL. Project-owned Compose, local-only environment example, PostgreSQL/Drizzle, Redis, and S3-compatible adapters, a system-metadata migration, typed API configuration, and bounded `/ready` dependency checks are present and source-tested. Real container/runtime qualification remains BLOCKED_BY_ENVIRONMENT: Docker daemon recovery is intermittent and Docker Desktop's container registry access requires dedicated proxy configuration. No runtime feature result is claimed.
