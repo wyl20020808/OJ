@@ -2,14 +2,14 @@
 
 GOAL = OJPLATFORM — PARALLEL WORKER WORKSPACE STABILIZATION
 STARTING HEAD = 6e4d368c01a069518b514d23be8af95d58a684f1
-FINAL HEAD = recorded at closure
+FINAL HEAD = 8e05f5e80a71aa9cc240d61f08c8c7d7bd23bc0d
 
 ## Audit
 
 PHASE 1A WORKTREES = audited; all three branches were clean, had no untracked files, and their tips were ancestors of `master` with zero unique commits.
-PHASE 1A CLEANUP RESULT = normal removal was attempted. Git metadata for `phase1a-auth` was detached before directory deletion failed on ignored installation content; all Phase 1A paths are retained pending explicit cleanup of generated contents. No force removal was used.
-OLD WORKTREES REMOVED = none
-OLD WORKTREES RETAINED = `D:\OJPlatform-worktrees\phase1a-auth`, `phase1a-problem`, `phase1a-web` (cleanup deferred due non-empty ignored/generated content)
+PHASE 1A CLEANUP RESULT = normal removal completed for the Auth path and the Problem worktree registration; the Problem directory remains as an unregistered repository copy, and the Web worktree remains registered because ignored installation content prevented ordinary removal. No force removal was used.
+OLD WORKTREES REMOVED = Auth worktree and Problem worktree registration
+OLD WORKTREES RETAINED = `D:\OJPlatform-worktrees\phase1a-problem` (unregistered directory copy) and `D:\OJPlatform-worktrees\phase1a-web` (registered worktree with ignored/generated content); cleanup deferred for both paths.
 
 PERMANENT AUTH SLOT = `D:\OJPlatform-worktrees\phase1b-authz`
 PERMANENT PROBLEM SLOT = `D:\OJPlatform-worktrees\phase1b-problem-authoring`
@@ -28,4 +28,3 @@ GIT HYGIENE = `Goals/` remains untracked and untouched; no secrets or generated 
 KNOWN LIMITATIONS = Phase 1A directory cleanup is deferred until ignored dependency/build contents can be removed with an explicit, separately audited cleanup.
 PERMANENT WORKER MODEL STATUS = PASS
 NEXT WAVE READY = YES (after a new Wave is explicitly bootstrapped)
-
