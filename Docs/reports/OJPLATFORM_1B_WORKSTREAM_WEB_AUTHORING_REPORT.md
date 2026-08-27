@@ -10,12 +10,12 @@ IMPLEMENTED: authenticated-aware authoring navigation, author dashboard, create/
 
 ## Evidence
 
-TESTED: `pnpm test:web` (5 tests passed).
+TESTED: `pnpm test:web` (7 tests passed), including unauthenticated authoring protection, required-field validation, and typed create-draft request coverage.
 TESTED: `pnpm exec tsc -p tsconfig.json --noEmit` passed.
 TESTED: targeted Web ESLint passed.
 TESTED: `pnpm test:architecture` passed; forbidden dependency fixtures were rejected.
 TESTED: `pnpm build:web` passed.
-NOT VERIFIED: real browser authoring journey against integrated Auth/Problem API; reserved for Lead Integration as required by the Goal.
+NOT VERIFIED: real Playwright authoring journey against integrated Auth/Problem API; reserved for Lead Integration as required by the Goal. Component-level authoring coverage is present and passing.
 NOT VERIFIED: repository-wide `pnpm format:check` due to pre-existing non-Web formatting drift documented by Phase 1A.
 
 ## Compatibility and Risks
