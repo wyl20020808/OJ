@@ -22,8 +22,8 @@ INTEGRATION REQUESTS = None
 DEPENDENCY REQUESTS = None
 KNOWN LIMITATIONS = Browser E2E against real Auth/Problem endpoints awaits lead API integration. ESLint execution was blocked by an environment-level missing ESLint module (`ecma-version`) after dependency linking; no source lint result is claimed.
 
-COMMIT = 24b016afc521bf9db2cb19a643d95a331f6c7bcc (`feat: implement phase 1A web foundation`)
-FINAL HEAD = 24b016afc521bf9db2cb19a643d95a331f6c7bcc
+COMMIT = See final Git HEAD (`feat: implement phase 1A web foundation`)
+FINAL HEAD = updated by the final commit after report metadata update
 GIT STATUS = Clean (`## codex/phase1a-web`)
 
 WORKSTREAM STATUS = PARTIAL
