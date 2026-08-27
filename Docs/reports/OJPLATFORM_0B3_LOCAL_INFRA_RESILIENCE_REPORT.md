@@ -99,3 +99,7 @@ GIT DIFF CHECK = PASS
 
 COMMIT = PENDING 0B.3R recovery evidence commit
 FINAL STATUS = `PARTIAL / BLOCKED_BY_ENVIRONMENT`
+
+## PHASE 0 FINAL CLOSURE ADDENDUM (2026-08-27)
+
+The earlier BLOCKED sections above are preserved historical snapshots. Subsequent WSL2 Docker Engine qualification completed the runtime work: all FI-001..FI-018 and CB-001..CB-026 classifications are recorded in the R2 report, Browser E2E and final regression passed, and Compose cleanup passed. Current 0B.3 status is PASS using the qualified WSL2 Ubuntu + Official Docker Engine backend.

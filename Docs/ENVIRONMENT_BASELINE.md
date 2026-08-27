@@ -16,9 +16,9 @@ This policy controls toolchain selection. The repository/tooling foundation is n
 - npm: VERIFIED during preflight; no npm lockfile is used.
 - Git: VERIFIED `2.51.0.windows.2`.
 - Go: NOT INSTALLED; not required for this TypeScript foundation.
-- Docker Desktop: officially uninstalled during PHASE 0B.3R2 fallback; WSL Docker Engine is the intended backend.
+- Docker Desktop: officially uninstalled during PHASE 0B.3R2 fallback; WSL Docker Engine is the qualified local backend.
 - Docker CLI: VERIFIED `29.7.2`; Docker Compose plugin VERIFIED `v5.5.0`; official Docker Engine daemon and pinned image pulls PASS inside Ubuntu 24.04 WSL2. Daemon proxy uses systemd at `127.0.0.1:10809`.
-- WSL: WSL `2.7.12` is installed; after the 2026-08-27 Windows reboot, Ubuntu `24.04` passed two bounded WSL acceptance cycles in WSL2 mode, including shell launch and timely shutdown. An independent rerun also passed. Docker Engine remains uninstalled and requires the separate 0B.3R2 resume.
+- WSL: WSL `2.7.12` is installed; Ubuntu `24.04` passed repeated WSL2 acceptance cycles. Official Docker Engine is installed and qualified inside the distro.
 - WSL / Linux sandbox primitives: WSL control-plane qualification PASS; Linux sandbox primitives remain NOT VERIFIED.
 
 ## Version and Dependency Policy
@@ -28,7 +28,7 @@ This policy controls toolchain selection. The repository/tooling foundation is n
 - Go will be pinned when selected.
 - PostgreSQL, Redis, and MinIO container images must use explicit versions, never a floating `latest` tag.
 - Dependency lockfiles are committed once package management is initialized.
-- Docker and Docker Compose versions are recorded above; backend and container qualification remain pending reboot.
+- Docker and Docker Compose versions are recorded above; backend and container qualification is complete for PHASE 0B.
 
 `.env.example` may contain variable names and safe default placeholders only. Secrets remain outside source control.
 
@@ -43,4 +43,4 @@ The following will be selected and recorded during the repository/toolchain foun
 - Docker and Docker Compose compatibility baseline.
 - The files and automation that enforce version parity between local development and CI.
 
-Node and pnpm selections above are now selected for the repository foundation. Go, container, Linux, and CI decisions remain unresolved. This document does not authorize service implementation.
+Node, pnpm, container backend, Linux, and CI baseline facts above are qualified for PHASE 0B. Go and production sandbox decisions remain unresolved. This document does not authorize service implementation.

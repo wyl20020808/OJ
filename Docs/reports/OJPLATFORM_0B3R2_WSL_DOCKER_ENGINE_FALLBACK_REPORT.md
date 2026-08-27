@@ -76,3 +76,7 @@ PHASE 0B.3R FINAL STATUS = `PASS WITH BACKEND FALLBACK`
 PHASE 0B.3 FINAL STATUS = `PASS`
 
 BOUNDARY RECHECK (2026-08-27 continuation) = Compose containers were recreated and healthy in WSL; WSL-side integration remained PASS. Windows `curl`/Node could not reach the WSL-published ports, while `netsh interface portproxy` requires administrator elevation. This is an environment boundary blocker, not a Docker daemon failure. No ephemeral WSL IP was committed.
+
+## PHASE 0 FINAL CLOSURE ADDENDUM (2026-08-27)
+
+The earlier BLOCKED/NOT RUN fields above are preserved historical snapshots. Final qualification supersedes them: WSL keepalive made Windows localhost forwarding stable without portproxy or firewall changes; FI-001..FI-018 and CB-001..CB-026 were classified, final full regression passed, and the current phase statuses are PASS/PASS WITH BACKEND FALLBACK/PASS as stated in the final qualification block.
