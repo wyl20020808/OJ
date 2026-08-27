@@ -2,8 +2,8 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 1A CORE PRODUCT FOUNDATION COMPLETE
-Current Status: PHASE 1A PASS
+Current Stage: PHASE 1B PARALLEL BOOTSTRAP
+Current Status: PHASE 1B IN PROGRESS / BOOTSTRAPPED
 
 ## Completed Goals
 
@@ -53,6 +53,6 @@ Current Status: PHASE 1A PASS
 
 ## Next Planned Goal
 
-Proceed to the next explicitly approved Phase; do not add business features outside its Goal.
+Begin Phase 1B worker work only after the Bootstrap commit and isolated worktrees are ready; do not add features outside its Goal.
 
 Last Updated: 2026-08-27
