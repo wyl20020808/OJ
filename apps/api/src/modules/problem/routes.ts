@@ -25,14 +25,12 @@ const error = (
   message: string,
   details?: unknown,
 ) =>
-  reply
-    .status(status)
-    .send({
-      code,
-      message,
-      requestId: request.id,
-      ...(details === undefined ? {} : { details }),
-    });
+  reply.status(status).send({
+    code,
+    message,
+    requestId: request.id,
+    ...(details === undefined ? {} : { details }),
+  });
 export async function registerProblemModule(
   app: FastifyInstance,
   context: ProblemModuleContext,
