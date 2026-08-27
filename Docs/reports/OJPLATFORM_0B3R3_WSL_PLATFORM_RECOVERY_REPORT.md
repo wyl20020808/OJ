@@ -43,6 +43,8 @@ FINAL WSL GATE CYCLE 2 = PASS: after shutdown/restart, `wsl --status`, `wsl --li
 
 POST-REBOOT REQUALIFICATION (2026-08-27) = The requested gate was independently rerun after the documented reboot. The first cycle again passed `wsl --version`, status, list, Ubuntu echo/uname, interactive shell, and shutdown; the second cycle again passed status, list, Ubuntu echo, and uname. No Docker command was executed.
 
+LATEST GATE RECHECK (2026-08-27) = `LastBootUpTime=2026-08-27 13:25:20` remained later than the recorded baseline. A fresh first cycle passed all requested probes, interactive Ubuntu shell, and timely `wsl --shutdown`; a fresh second cycle passed status, list, Ubuntu echo, and uname. Docker remained untouched.
+
 INTERACTIVE SHELL = PASS
 UBUNTU VERSION 2 = PASS in both acceptance cycles
 
