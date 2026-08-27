@@ -24,6 +24,7 @@ OWNERSHIP POLICY = Worker-exclusive module scopes; Lead-owned shared files requi
 GOAL ZIP POLICY = Bootstrap + three Worker ZIPs + Lead Integration ZIP; evidence reports are permanent
 
 SAFETY CHECKS = worktree status, HEAD, ancestry, unique-commit count, untracked-file audit, and protected `Goals/` check completed.
+REGRESSION = PASS (`format:check`, `lint`, `typecheck`, `test`, `test:architecture`, `build`, and `git diff --check`)
 GIT HYGIENE = `Goals/` remains untracked and untouched; no secrets or generated runtime artifacts added.
 KNOWN LIMITATIONS = Phase 1A directory cleanup is deferred until ignored dependency/build contents can be removed with an explicit, separately audited cleanup.
 PERMANENT WORKER MODEL STATUS = PASS
