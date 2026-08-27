@@ -90,15 +90,28 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'POST', body: JSON.stringify({ identity, password }) },
         fetcher,
       ),
-    register: (username: string, email: string, password: string) =>
+    register: (
+      username: string,
+      email: string,
+      password: string,
+      displayName = username,
+    ) =>
       request<AuthenticatedUser>(
         baseUrl,
         '/api/auth/register',
-        { method: 'POST', body: JSON.stringify({ username, email, password }) },
+        {
+          method: 'POST',
+          body: JSON.stringify({ username, email, displayName, password }),
+        },
         fetcher,
       ),
     logout: () =>
-      request<void>(baseUrl, '/api/auth/logout', { method: 'POST' }, fetcher),
+      request<void>(
+        baseUrl,
+        '/api/auth/logout',
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
     problems: (offset = 0, limit = 20) =>
       request<ProblemList>(
         baseUrl,
