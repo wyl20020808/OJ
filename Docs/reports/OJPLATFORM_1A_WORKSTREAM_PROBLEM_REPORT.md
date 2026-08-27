@@ -30,7 +30,7 @@ KNOWN LIMITATIONS = PostgreSQL unique-violation mapping is delegated to integrat
 
 FINAL FORMAT QUALIFICATION = `pnpm format:check` still reports 50 Bootstrap-owned files. Git evidence: `git diff --name-status ef460aa5478927ec69470e9608b404a2b2036425..HEAD` contains only this report plus the Problem-owned implementation/test/migration files; none of those 50 files changed in the branch. The current checkout has CRLF bytes (for example `apps/api/src/app.ts` contains `13 10`), while the exact Bootstrap blob piped through Prettier passes. Therefore the failure is checkout line-ending/environment drift, not a Problem change. Problem-owned `apps/api/src/modules/problem/routes.ts` had one real formatting issue and was corrected; all Problem files now pass a targeted Prettier check. Lead-owned files were not modified.
 
-COMMIT = e9dac36d296fca33d85dc21ce65ad5dcea3e5388 (`chore: finalize problem workstream formatting`)
-FINAL HEAD = e9dac36d296fca33d85dc21ce65ad5dcea3e5388
+COMMIT = ea6068f979eeb9741142933a2881740b21730d94 (`chore: finalize problem workstream formatting`)
+FINAL HEAD = pending metadata commit
 GIT STATUS = clean after correction commit
 WORKSTREAM STATUS = PARTIAL
