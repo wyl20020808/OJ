@@ -346,6 +346,7 @@ type Draft = {
   examples: { input: string; output: string; note?: string }[];
   timeLimitMs: number;
   memoryLimitBytes: number;
+  testdataVersion?: string | null;
   visibility: Problem['visibility'];
   status: Problem['status'];
   updatedAt?: string;
@@ -361,6 +362,7 @@ const emptyDraft: Draft = {
   examples: [{ input: '', output: '', note: '' }],
   timeLimitMs: 1000,
   memoryLimitBytes: 256 * 1024 * 1024,
+  testdataVersion: null,
   visibility: 'private' as const,
   status: 'draft' as const,
 };
@@ -489,9 +491,26 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     }
     setSaving(true);
     try {
+      const editable = {
+        slug: form.slug,
+        title: form.title,
+        statement: form.statement,
+        inputDescription: form.inputDescription,
+        outputDescription: form.outputDescription,
+        examples: form.examples,
+        constraints: form.constraints,
+        notes: form.notes,
+        timeLimitMs: form.timeLimitMs,
+        memoryLimitBytes: form.memoryLimitBytes,
+        testdataVersion: form.testdataVersion ?? null,
+      };
       const result = id
-        ? await api.updateProblem(id, form)
-        : await api.createProblem(form);
+        ? await api.updateProblem(id, editable)
+        : await api.createProblem({
+            ...editable,
+            visibility: form.visibility,
+            status: form.status,
+          });
       setMessage('Draft saved.');
       if (!id) navigate(`/author/problems/${result.slug || result.id}/edit`);
     } catch (e) {
@@ -515,7 +534,12 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     if (!id) return;
     setSaving(true);
     try {
-      await api.transitionProblem(id, { status });
+      await api.transitionProblem(id, {
+        status,
+        ...(status === 'published' && form.visibility === 'public'
+          ? { visibility: 'public' as const }
+          : {}),
+      });
       setForm((f) => ({ ...f, status }));
       setMessage(`Problem ${status}.`);
     } catch (e) {

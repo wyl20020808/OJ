@@ -28,27 +28,10 @@ export class ProblemService {
   async detail(key: string, context?: AuthContext): Promise<Problem> {
     const row = await this.repository.get(key);
     if (!row) throw new ProblemNotFoundError();
-    if (
-      row.visibility === 'public' &&
-      row.status === 'published' &&
-      !(
-        key === row.slug &&
-        !context &&
-        (await this.repository.revisions(key)).at(-1)?.status === 'draft'
-      )
-    )
-      return row;
-    const legacyDraftLookup =
-      !context && row.status === 'draft' && key === row.slug;
-    if (!context && key === row.slug) {
-      const revisions = await this.repository.revisions(key);
-      const draft = revisions.at(-1);
-      if (draft?.status === 'draft')
-        return { ...draft, id: row.id, currentRevisionId: draft.revisionId };
-    }
+    if (row.visibility === 'public' && row.status === 'published') return row;
     if (
       !(await this.policy.can('read', 'problem', context)) ||
-      (!legacyDraftLookup && row.authorId !== context?.userId)
+      row.authorId !== context?.userId
     )
       throw new ProblemNotFoundError();
     return row;

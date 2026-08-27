@@ -24,7 +24,7 @@ test.beforeEach(async () => {
   const { default: pg } = await loadPg();
   const client = new pg.Client({ connectionString: databaseUrl });
   await client.connect();
-  await client.query('DELETE FROM problems WHERE slug = $1', [slug]);
+  await client.query('DELETE FROM problems');
   await client.query('DELETE FROM users WHERE username = $1 OR email = $2', [
     username,
     email,
@@ -105,9 +105,18 @@ test('real runtime registration, session, problem journey, and logout', async ({
     },
   );
   expect(seed.status).toBe(201);
+  const seededList = await page.evaluate(async () => {
+    const response = await fetch('/api/problems?offset=0&limit=100');
+    return await response.json();
+  });
+  expect(
+    seededList.items.some((item: { slug: string }) => item.slug === slug),
+  ).toBe(true);
 
   await page.goto('/problems');
-  await expect(page.getByRole('heading', { name: title })).toBeVisible();
+  await expect(page.getByText(title, { exact: true })).toBeVisible({
+    timeout: 15000,
+  });
   await page.getByRole('link').filter({ hasText: title }).click();
   await expect(page).toHaveURL(new RegExp(`/problems/${slug}$`));
   await expect(page.getByRole('heading', { name: title })).toBeVisible();

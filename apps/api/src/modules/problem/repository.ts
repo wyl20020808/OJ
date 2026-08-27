@@ -152,7 +152,7 @@ export class PostgresProblemRepository implements ProblemRepository {
     const problem = mapRow(result.rows[0]!);
     const revisionId = randomUUID();
     await this.pool.query(
-      'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,status,testdata_version,author_id,created_by) VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)',
+      'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,status,testdata_version,author_id,created_by) VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)',
       [
         revisionId,
         problem.id,
@@ -305,7 +305,7 @@ function mapRow(row: Record<string, unknown>): Problem {
     testdataVersion: row.testdata_version as string | null,
     authorId: row.author_id as string | null,
     createdAt: new Date(String(row.created_at)).toISOString(),
-    updatedAt: new Date(String(row.updated_at)).toISOString(),
+    updatedAt: new Date(String(row.updated_at ?? row.created_at)).toISOString(),
     ...(row.current_revision_id
       ? { currentRevisionId: String(row.current_revision_id) }
       : {}),

@@ -17,6 +17,8 @@ import {
   PostgresProblemRepository,
   registerProblemModule,
 } from './modules/problem/index.js';
+import { createMemoryAuditHook } from './modules/authz/index.js';
+import type { AuditHook as ProblemAuditHook } from './modules/problem/model.js';
 
 const HealthResponse = Type.Object({ status: Type.Literal('ok') });
 const ReadyResponse = Type.Object({
@@ -119,17 +121,36 @@ export async function buildApp(options: AppOptions = {}) {
       secretKey: config.s3SecretKey,
       bucket: config.s3Bucket,
     });
+    const auditHook = createMemoryAuditHook();
+    const problemAuditHook: ProblemAuditHook = {
+      record: (event) =>
+        auditHook.record({
+          ...event,
+          outcome: event.outcome === 'success' ? 'allowed' : 'denied',
+          requestId: event.requestId ?? 'internal',
+        }),
+    };
     const auth = await registerAuthModule(app, {
       repository: createPostgresAuthRepository(database.pool),
       production: process.env.NODE_ENV === 'production',
+      auditHook,
     });
     await registerProblemModule(app, {
       repository: new PostgresProblemRepository(database.pool),
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       authorizationPolicy: {
-        can: async (_action, _resource, context) => Boolean(context),
+        can: async (action, resource, context, target) =>
+          resource === 'problem' &&
+          Boolean(
+            context?.userId &&
+            context.sessionId &&
+            context.strength === 'password',
+          ) &&
+          Boolean(target?.id || !target) &&
+          ['read', 'create', 'update', 'transition'].includes(action),
       },
+      auditHook: problemAuditHook,
     });
     owned = {
       checks: {
@@ -149,16 +170,35 @@ export async function buildApp(options: AppOptions = {}) {
     app.addHook('onClose', async () => owned?.close());
   }
   if (!options.withInfrastructure) {
+    const auditHook = createMemoryAuditHook();
+    const problemAuditHook: ProblemAuditHook = {
+      record: (event) =>
+        auditHook.record({
+          ...event,
+          outcome: event.outcome === 'success' ? 'allowed' : 'denied',
+          requestId: event.requestId ?? 'internal',
+        }),
+    };
     const auth = await registerAuthModule(app, {
       repository: createMemoryAuthRepository(),
+      auditHook,
     });
     await registerProblemModule(app, {
       repository: new InMemoryProblemRepository(),
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       authorizationPolicy: {
-        can: async (_action, _resource, context) => Boolean(context),
+        can: async (action, resource, context, target) =>
+          resource === 'problem' &&
+          Boolean(
+            context?.userId &&
+            context.sessionId &&
+            context.strength === 'password',
+          ) &&
+          Boolean(target?.id || !target) &&
+          ['read', 'create', 'update', 'transition'].includes(action),
       },
+      auditHook: problemAuditHook,
     });
   }
   app.get(
