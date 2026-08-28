@@ -4,6 +4,13 @@ export type AuthenticatedUser = Pick<
   User,
   'id' | 'username' | 'email' | 'displayName'
 > & { status: 'active' };
+export type AccountView = AuthenticatedUser & {
+  createdAt: string;
+  updatedAt: string;
+  capabilities: {
+    canManageSessions: boolean;
+  };
+};
 export type AuthContext = {
   userId: string;
   sessionId: string;
@@ -50,4 +57,11 @@ export const publicUser = (user: User): AuthenticatedUser => ({
   email: user.email,
   displayName: user.displayName,
   status: 'active',
+});
+
+export const publicAccount = (user: User): AccountView => ({
+  ...publicUser(user),
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+  capabilities: { canManageSessions: user.status === 'active' },
 });
