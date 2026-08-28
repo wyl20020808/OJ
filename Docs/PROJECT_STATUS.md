@@ -2,12 +2,13 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 1C SUBMISSION INTAKE FOUNDATION COMPLETE
-Current Status: PHASE 1C SUBMISSION INTAKE FOUNDATION COMPLETE
+Current Stage: PHASE 1E JUDGE PROTOCOL & QUEUE FOUNDATION BOOTSTRAPPED
+Current Status: PHASE 1E IN PROGRESS / BOOTSTRAPPED
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 PHASE 1C: PASS
 PHASE 1D: PASS
+PHASE 1E: IN PROGRESS / BOOTSTRAPPED
 
 ## Completed Goals
 
@@ -60,6 +61,6 @@ PHASE 1D: PASS
 
 ## Next Planned Goal
 
-PHASE 1D Product Experience & UI Foundation worker wave; no execution, Judge, Sandbox, Contest, or fabricated metrics.
+PHASE 1E Judge Protocol & Queue Worker Wave; no user-source execution, real Judge, Sandbox, Contest, or Phase 2.
 
 Last Updated: 2026-08-27
