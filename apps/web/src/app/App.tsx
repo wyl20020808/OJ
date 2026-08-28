@@ -15,6 +15,7 @@ import {
   type Language,
   type Problem,
   type Submission,
+  type SubmissionStatus,
 } from '../services/api.js';
 import './app.css';
 
@@ -128,6 +129,91 @@ function FormMessage({ error }: { error: string }) {
       {error}
     </p>
   ) : null;
+}
+
+type StatusPresentation = {
+  label: string;
+  tone: 'neutral' | 'progress' | 'warning' | 'danger' | 'synthetic';
+  note: string;
+};
+
+export function presentJudgeStatus(status: string): StatusPresentation {
+  switch (status as SubmissionStatus) {
+    case 'PENDING':
+      return {
+        label: 'Pending intake',
+        tone: 'neutral',
+        note: 'Waiting for protocol intake.',
+      };
+    case 'QUEUED':
+      return {
+        label: 'Queued',
+        tone: 'progress',
+        note: 'Waiting for a Judge Protocol worker.',
+      };
+    case 'LEASED':
+      return {
+        label: 'Leased',
+        tone: 'progress',
+        note: 'A qualification worker has leased this job.',
+      };
+    case 'RUNNING':
+      return {
+        label: 'Running',
+        tone: 'progress',
+        note: 'Synthetic qualification state only.',
+      };
+    case 'RETRYABLE_FAILURE':
+      return {
+        label: 'Retryable protocol failure',
+        tone: 'warning',
+        note: 'The protocol may retry this intake.',
+      };
+    case 'PROTOCOL_FAILURE':
+      return {
+        label: 'Terminal protocol failure',
+        tone: 'danger',
+        note: 'Intake stopped before any execution result.',
+      };
+    case 'SYNTHETIC_COMPLETED':
+      return {
+        label: 'Synthetic completion',
+        tone: 'synthetic',
+        note: 'SYNTHETIC · QUALIFICATION ONLY · NOT A REAL EXECUTION VERDICT',
+      };
+    default:
+      return {
+        label: 'Unknown protocol state',
+        tone: 'neutral',
+        note: 'This state is not recognized by this client.',
+      };
+  }
+}
+
+function JudgeStatus({ submission }: { submission: Submission }) {
+  const presentation = presentJudgeStatus(String(submission.status));
+  return (
+    <div className={`judge-status tone-${presentation.tone}`}>
+      <span className="status">{presentation.label}</span>
+      <span className="judge-note">{presentation.note}</span>
+      {submission.attempt !== undefined && (
+        <span className="judge-meta">
+          Attempt {submission.attempt}
+          {submission.maxAttempts ? ` / ${submission.maxAttempts}` : ''}
+        </span>
+      )}
+      {submission.retryAt && (
+        <span className="judge-meta">
+          Retry after {new Date(submission.retryAt).toLocaleString()}
+        </span>
+      )}
+      {submission.failureCode && (
+        <span className="judge-meta">
+          Protocol code: {submission.failureCode}
+        </span>
+      )}
+    </div>
+  );
 }
 function AuthForm({
   mode,
@@ -1203,9 +1289,9 @@ function SubmissionHistory({
                   <Link to={`/submissions/${s.id}`}>{s.id}</Link>
                 </h2>
                 <p>
-                  {s.languageId} · {s.status} ·{' '}
-                  {new Date(s.createdAt).toLocaleString()}
+                  {s.languageId} · {new Date(s.createdAt).toLocaleString()}
                 </p>
+                <JudgeStatus submission={s} />
               </div>
               <Link to={`/submissions/${s.id}`}>Details</Link>
             </article>
@@ -1276,10 +1362,10 @@ function SubmissionDetail({
       <p className="eyebrow">SUBMISSION</p>
       <h1>{submission.id}</h1>
       <div className="limits">
-        <span>Status {submission.status}</span>
         <span>Language {submission.languageId}</span>
         <span>Intake {new Date(submission.createdAt).toLocaleString()}</span>
       </div>
+      <JudgeStatus submission={submission} />
       <Section title="Problem">
         {submission.problemId} · revision {submission.problemRevisionId}
       </Section>
