@@ -48,7 +48,7 @@ test('real runtime registration, session, problem journey, and logout', async ({
 
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: 'Practice with purpose.' }),
+    page.getByRole('heading', { name: 'Build solutions that hold up.' }),
   ).toBeVisible();
   await page.getByRole('link', { name: 'Register' }).click();
   await page.getByLabel('Username').fill(username);
@@ -62,9 +62,11 @@ test('real runtime registration, session, problem journey, and logout', async ({
   const registrationResponse = await registration;
   expect(registrationResponse.status()).toBe(201);
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Sign in', exact: true }),
+  ).toBeVisible();
 
-  await page.getByRole('link', { name: 'Sign in' }).click();
+  await page.getByRole('link', { name: 'Sign in', exact: true }).click();
   await page.getByLabel('Email or username').fill(username);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
@@ -131,7 +133,9 @@ test('real runtime registration, session, problem journey, and logout', async ({
   );
   await page.getByRole('button', { name: 'Sign out' }).click();
   expect((await logout).status()).toBe(204);
-  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Sign in', exact: true }),
+  ).toBeVisible();
   const unauthenticated = await page.evaluate(async () => {
     const response = await fetch('/api/auth/me', { credentials: 'include' });
     return { status: response.status, body: await response.json() };

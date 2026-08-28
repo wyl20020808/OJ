@@ -159,7 +159,9 @@ test('real submission intake journey and ownership boundary', async ({
   await other.close();
 
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Sign in', exact: true }),
+  ).toBeVisible();
   await page.goto(`/problems/${seeded.body.id}/submit`);
   await expect(
     page.getByRole('heading', { name: 'Sign in required' }),

@@ -245,7 +245,25 @@ function AuthForm({
     </section>
   );
 }
-function Home({ user }: { user: AuthenticatedUser | null }) {
+function Home({
+  api,
+  user,
+}: {
+  api: ApiClient;
+  user: AuthenticatedUser | null;
+}) {
+  const [recentProblems, setRecentProblems] = useState<Problem[] | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    void api
+      .home()
+      .then((data) =>
+        setRecentProblems(
+          Array.isArray(data?.recentProblems) ? data.recentProblems : [],
+        ),
+      )
+      .catch(() => setError(true));
+  }, [api]);
   return (
     <section className="home-page">
       <div className="hero">
@@ -281,6 +299,33 @@ function Home({ user }: { user: AuthenticatedUser | null }) {
           </p>
         </div>
       </div>
+      {error ? (
+        <State
+          title="Problems unavailable"
+          text="The public problem feed could not be loaded."
+        />
+      ) : recentProblems === null ? (
+        <p className="muted">Loading recent problems...</p>
+      ) : recentProblems.length > 0 ? (
+        <section className="section-block">
+          <div className="page-heading">
+            <h2>Recent problems</h2>
+          </div>
+          <div className="problem-table" role="list">
+            {recentProblems.map((problem) => (
+              <Link
+                key={problem.id}
+                to={`/problems/${problem.slug || problem.id}`}
+              >
+                <article role="listitem">
+                  <span className="problem-id">{problem.slug}</span>
+                  <h2>{problem.title}</h2>
+                </article>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <div className="quick-grid">
         <Link to="/problems">
           <article className="quick-card">
@@ -918,6 +963,14 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
           Memory {Math.round(problem.memoryLimitBytes / 1024 / 1024)} MB
         </span>
       </div>
+      <p className="muted">
+        {problem.currentRevisionId
+          ? `Revision ${problem.currentRevisionId}`
+          : 'Revision metadata unavailable'}
+        {problem.testdataVersion
+          ? ` · Testdata ${problem.testdataVersion}`
+          : ''}
+      </p>
       <Section title="Statement">{problem.statement}</Section>
       <Section title="Input">{problem.inputDescription}</Section>
       <Section title="Output">{problem.outputDescription}</Section>
@@ -1311,7 +1364,7 @@ export function App() {
   }, [api]);
   const page =
     current.name === 'home' ? (
-      <Home user={user} />
+      <Home api={api} user={user} />
     ) : current.name === 'login' || current.name === 'register' ? (
       <AuthForm mode={current.name} api={api} onUser={setUser} />
     ) : current.name === 'forbidden' ? (

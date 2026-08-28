@@ -7,7 +7,7 @@ test('healthy platform shell and controlled not-found route', async ({
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: 'Practice with purpose.' }),
+    page.getByRole('heading', { name: 'Build solutions that hold up.' }),
   ).toBeVisible();
   await expect(
     page.getByText(

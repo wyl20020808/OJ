@@ -67,8 +67,10 @@ test('real authoring workflow, revision history, and forbidden access', async ({
   expect(history[0].statement).toBe('Original published statement.');
 
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
-  await page.getByRole('link', { name: 'Sign in' }).click();
+  await expect(
+    page.getByRole('link', { name: 'Sign in', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Sign in', exact: true }).click();
   await page.getByLabel('Email or username').fill(username);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();

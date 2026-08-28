@@ -34,6 +34,7 @@ export type Problem = {
 };
 export type Page = { limit: number; offset: number; total: number };
 export type ProblemList = { items: Problem[]; page: Page };
+export type Home = { recentProblems: Problem[] };
 export type Language = {
   id: string;
   name: string;
@@ -147,6 +148,7 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
+    home: () => request<Home>(baseUrl, '/api/home', undefined, fetcher),
     problem: (idOrSlug: string) =>
       request<Problem>(
         baseUrl,
