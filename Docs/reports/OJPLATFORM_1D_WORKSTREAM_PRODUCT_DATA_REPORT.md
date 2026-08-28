@@ -4,7 +4,7 @@ Status: IMPLEMENTED; TESTED: PASS; RUNTIME VERIFIED: NOT VERIFIED (Lead-owned ru
 
 Starting HEAD: `9cb01d6f5dd2ab207e705494916f554e87482592` (`chore: bootstrap phase 1D product experience wave`).
 
-Final HEAD: `6f26961` (`feat: implement phase 1D product data APIs`).
+Final implementation HEAD: `25c75f9` (`feat: implement phase 1D product data APIs`).
 
 Confirmed branch/worktree: `codex/phase1d-product-data` / `D:\OJPlatform-worktrees\phase1b-problem-authoring`.
 
