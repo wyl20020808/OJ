@@ -61,7 +61,7 @@ PARTIAL: real runtime browser qualification and complete V2 queue/failure matrix
 - Runtime container lifecycle is unstable under the current Windows/WSL orchestration during Playwright.
 
 PHASE 2 READINESS = NO; resolve the listed Phase 1E blockers first.
-INTEGRATION COMMIT = pending
-CLOSURE COMMIT = pending
-FINAL HEAD = pending
+INTEGRATION COMMIT = `a985afb2dbcdcb573842dd09071bb9f8630fe369`
+CLOSURE COMMIT = this documentation closure commit
+FINAL HEAD = recorded after closure commit
 GIT STATUS = see final closure commit
