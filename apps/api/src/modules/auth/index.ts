@@ -6,6 +6,7 @@ import {
   verifyPassword,
 } from './crypto.js';
 import {
+  publicAccount,
   publicUser,
   type AuthContext,
   type AuthRepository,
@@ -151,6 +152,48 @@ export async function registerAuthModule(
   };
   const findSessionOwner = (sessionId: string) =>
     options.repository.findSessionOwner(sessionId);
+  app.get('/api/auth/account', async (request, reply) => {
+    const ctx = await context(request);
+    if (!ctx)
+      return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
+    const user = await options.repository.findById(ctx.userId);
+    if (!user || user.status !== 'active')
+      return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
+    return reply.send(publicAccount(user));
+  });
+  app.get('/api/auth/sessions', async (request, reply) => {
+    const ctx = await context(request);
+    if (!ctx)
+      return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
+    return reply.send(await sessions.listForUser(ctx.userId));
+  });
+  app.delete('/api/auth/sessions/:id', async (request, reply) => {
+    const ctx = await context(request);
+    if (!ctx)
+      return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
+    const id = (request.params as { id?: string }).id;
+    if (!id) return error(reply, 400, 'VALIDATION_ERROR', 'Invalid session');
+    try {
+      await sessions.revoke(id, ctx);
+      return reply.status(204).send();
+    } catch (e) {
+      if (e instanceof Error && e.message === 'FORBIDDEN')
+        return error(
+          reply,
+          403,
+          'FORBIDDEN',
+          'Session revocation is forbidden',
+        );
+      throw e;
+    }
+  });
+  app.post('/api/auth/sessions/revoke-all', async (request, reply) => {
+    const ctx = await context(request);
+    if (!ctx)
+      return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
+    await sessions.revokeAllForUser(ctx.userId, ctx);
+    return reply.status(204).send();
+  });
   return {
     getAuthContext: context,
     sessions,

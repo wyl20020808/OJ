@@ -98,4 +98,57 @@ describe('auth foundation', () => {
     expect(me.statusCode).toBe(401);
     await server.close();
   });
+
+  it('serves a safe account view and manages sessions through the authenticated boundary', async () => {
+    const server = await app();
+    await server.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: {
+        username: 'account-user',
+        email: 'account@example.com',
+        displayName: 'Account User',
+        password: 'correct-password',
+      },
+    });
+    const login = await server.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { identity: 'account-user', password: 'correct-password' },
+    });
+    const cookie = login.headers['set-cookie'] as string;
+    const account = await server.inject({
+      method: 'GET',
+      url: '/api/auth/account',
+      headers: { cookie },
+    });
+    expect(account.statusCode).toBe(200);
+    expect(account.json()).toMatchObject({
+      username: 'account-user',
+      status: 'active',
+      capabilities: { canManageSessions: true },
+    });
+    expect(account.json()).not.toHaveProperty('passwordHash');
+    const sessions = await server.inject({
+      method: 'GET',
+      url: '/api/auth/sessions',
+      headers: { cookie },
+    });
+    expect(sessions.statusCode).toBe(200);
+    expect(sessions.json()).toHaveLength(1);
+    expect(sessions.json()[0]).not.toHaveProperty('tokenHash');
+    const revokeAll = await server.inject({
+      method: 'POST',
+      url: '/api/auth/sessions/revoke-all',
+      headers: { cookie },
+    });
+    expect(revokeAll.statusCode).toBe(204);
+    const after = await server.inject({
+      method: 'GET',
+      url: '/api/auth/account',
+      headers: { cookie },
+    });
+    expect(after.statusCode).toBe(401);
+    await server.close();
+  });
 });
