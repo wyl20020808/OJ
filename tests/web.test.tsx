@@ -8,7 +8,13 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App, ErrorBoundary, NotFound } from '../apps/web/src/app/App.js';
+import {
+  App,
+  ErrorBoundary,
+  Forbidden,
+  GenericError,
+  NotFound,
+} from '../apps/web/src/app/App.js';
 
 describe('Web platform shell', () => {
   afterEach(() => {
@@ -53,6 +59,20 @@ describe('Web platform shell', () => {
   it('renders controlled not-found UI', () => {
     render(<NotFound />);
     expect(screen.getByRole('heading')).toHaveTextContent('Page not found');
+  });
+  it('renders stable forbidden and generic error states', () => {
+    render(
+      <>
+        <Forbidden />
+        <GenericError />
+      </>,
+    );
+    expect(
+      screen.getByRole('heading', { name: 'Access not available' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Something went wrong' }),
+    ).toBeInTheDocument();
   });
   it('catches render failures at the application boundary', () => {
     const Broken = () => {

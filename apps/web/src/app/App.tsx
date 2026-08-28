@@ -32,6 +32,8 @@ type Route = {
     | 'author'
     | 'author-new'
     | 'author-edit'
+    | 'forbidden'
+    | 'error'
     | 'not-found';
   id?: string;
 };
@@ -39,6 +41,8 @@ function route(path = window.location.pathname): Route {
   if (path === '/') return { name: 'home' };
   if (path === '/login') return { name: 'login' };
   if (path === '/register') return { name: 'register' };
+  if (path === '/403' || path === '/forbidden') return { name: 'forbidden' };
+  if (path === '/error') return { name: 'error' };
   if (path === '/profile' || path === '/account') return { name: 'profile' };
   if (path === '/problems' || path === '/problems/')
     return { name: 'problems' };
@@ -1310,6 +1314,10 @@ export function App() {
       <Home user={user} />
     ) : current.name === 'login' || current.name === 'register' ? (
       <AuthForm mode={current.name} api={api} onUser={setUser} />
+    ) : current.name === 'forbidden' ? (
+      <Forbidden />
+    ) : current.name === 'error' ? (
+      <GenericError />
     ) : current.name === 'problems' ? (
       <ProblemList api={api} />
     ) : current.name === 'submit' ? (
@@ -1450,6 +1458,26 @@ export function NotFound() {
     <State
       title="Page not found"
       text="The requested page does not exist."
+      action={<Link to="/">Return home</Link>}
+    />
+  );
+}
+
+export function Forbidden() {
+  return (
+    <State
+      title="Access not available"
+      text="You do not have permission to view this page."
+      action={<Link to="/">Return home</Link>}
+    />
+  );
+}
+
+export function GenericError() {
+  return (
+    <State
+      title="Something went wrong"
+      text="The page could not be loaded. Try again or return home."
       action={<Link to="/">Return home</Link>}
     />
   );
