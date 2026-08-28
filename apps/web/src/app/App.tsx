@@ -28,9 +28,12 @@ type Route = {
     | 'submit'
     | 'submissions'
     | 'submission'
+    | 'profile'
     | 'author'
     | 'author-new'
     | 'author-edit'
+    | 'forbidden'
+    | 'error'
     | 'not-found';
   id?: string;
 };
@@ -38,6 +41,9 @@ function route(path = window.location.pathname): Route {
   if (path === '/') return { name: 'home' };
   if (path === '/login') return { name: 'login' };
   if (path === '/register') return { name: 'register' };
+  if (path === '/403' || path === '/forbidden') return { name: 'forbidden' };
+  if (path === '/error') return { name: 'error' };
+  if (path === '/profile' || path === '/account') return { name: 'profile' };
   if (path === '/problems' || path === '/problems/')
     return { name: 'problems' };
   if (path === '/author' || path === '/author/') return { name: 'author' };
@@ -58,10 +64,19 @@ function navigate(path: string) {
   window.history.pushState({}, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
-function Link({ to, children }: { to: string; children: ReactNode }) {
+function Link({
+  to,
+  children,
+  className,
+}: {
+  to: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <a
       href={to}
+      className={className}
       onClick={(e) => {
         e.preventDefault();
         navigate(to);
@@ -230,16 +245,80 @@ function AuthForm({
     </section>
   );
 }
-function Home() {
+function Home({ user }: { user: AuthenticatedUser | null }) {
   return (
-    <section className="hero">
-      <p className="eyebrow">ONLINE JUDGE PLATFORM</p>
-      <h1>Practice with purpose.</h1>
-      <p>
-        Explore curated programming problems, learn from constraints, and build
-        reliable solutions.
-      </p>
-      <Link to="/problems">Browse problems →</Link>
+    <section className="home-page">
+      <div className="hero">
+        <div className="hero-copy">
+          <p className="eyebrow">OJPLATFORM / PRACTICE ARENA</p>
+          <h1>Build solutions that hold up.</h1>
+          <p>
+            Read carefully, submit confidently, and keep every attempt tied to
+            the exact problem version.
+          </p>
+          <div className="hero-actions">
+            <Link to="/problems">
+              <button type="button">Browse problems</button>
+            </Link>
+            <Link to={user ? '/submissions' : '/login'}>
+              <button className="secondary" type="button">
+                {user ? 'My submissions' : 'Sign in to continue'}
+              </button>
+            </Link>
+          </div>
+        </div>
+        <div className="hero-panel">
+          <span className="panel-label">YOUR WORKSPACE</span>
+          <strong>
+            {user
+              ? `Welcome back, ${user.displayName}`
+              : 'A focused place to practice'}
+          </strong>
+          <p>
+            {user
+              ? 'Pick up where you left off with your submissions and drafts.'
+              : 'Start with a public problem, then keep your source and intake history in one place.'}
+          </p>
+        </div>
+      </div>
+      <div className="quick-grid">
+        <Link to="/problems">
+          <article className="quick-card">
+            <span className="quick-icon">01</span>
+            <div>
+              <h2>Problems</h2>
+              <p>Browse the published problem set.</p>
+            </div>
+            <span>→</span>
+          </article>
+        </Link>
+        <Link to={user ? '/submissions' : '/login'}>
+          <article className="quick-card">
+            <span className="quick-icon">02</span>
+            <div>
+              <h2>Submissions</h2>
+              <p>
+                {user
+                  ? 'Review your intake history.'
+                  : 'Sign in to view your submissions.'}
+              </p>
+            </div>
+            <span>→</span>
+          </article>
+        </Link>
+        {user && (
+          <Link to="/author">
+            <article className="quick-card">
+              <span className="quick-icon">03</span>
+              <div>
+                <h2>Authoring</h2>
+                <p>Manage your problem drafts.</p>
+              </div>
+              <span>→</span>
+            </article>
+          </Link>
+        )}
+      </div>
     </section>
   );
 }
@@ -267,6 +346,7 @@ function ProblemList({ api }: { api: ApiClient }) {
   } | null>(null);
   const [error, setError] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [query, setQuery] = useState('');
   const load = () => {
     setError(false);
     setData(null);
@@ -297,27 +377,60 @@ function ProblemList({ api }: { api: ApiClient }) {
         </div>
         <span className="muted">{data.page.total} total</span>
       </div>
-      {data.items.length === 0 ? (
+      <div className="toolbar">
+        <label className="search-field">
+          Search problems
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter by title or slug"
+          />
+        </label>
+        <span className="muted">
+          {
+            data.items.filter((p) =>
+              `${p.title} ${p.slug}`
+                .toLowerCase()
+                .includes(query.toLowerCase()),
+            ).length
+          }{' '}
+          shown
+        </span>
+      </div>
+      {data.items.filter((p) =>
+        `${p.title} ${p.slug}`.toLowerCase().includes(query.toLowerCase()),
+      ).length === 0 ? (
         <State
           title="No problems yet"
           text="Published problems will appear here."
         />
       ) : (
-        <div className="problem-list">
-          {data.items.map((p) => (
-            <Link key={p.id} to={`/problems/${p.slug || p.id}`}>
-              <article>
-                <div>
-                  <h2>{p.title}</h2>
-                  <p>
-                    {p.statement.slice(0, 140)}
-                    {p.statement.length > 140 ? '…' : ''}
-                  </p>
-                </div>
-                <span aria-hidden="true">→</span>
-              </article>
-            </Link>
-          ))}
+        <div className="problem-table" role="list">
+          {data.items
+            .filter((p) =>
+              `${p.title} ${p.slug}`
+                .toLowerCase()
+                .includes(query.toLowerCase()),
+            )
+            .map((p) => (
+              <Link key={p.id} to={`/problems/${p.slug || p.id}`}>
+                <article role="listitem">
+                  <span className="problem-id">{p.slug || p.id}</span>
+                  <div>
+                    <h2>{p.title}</h2>
+                    <p>
+                      {p.statement.slice(0, 110)}
+                      {p.statement.length > 110 ? '…' : ''}
+                    </p>
+                  </div>
+                  <span className="problem-meta">
+                    {p.timeLimitMs} ms ·{' '}
+                    {Math.round(p.memoryLimitBytes / 1024 / 1024)} MB
+                  </span>
+                  <span aria-hidden="true">→</span>
+                </article>
+              </Link>
+            ))}
         </div>
       )}
       <div className="pagination">
@@ -1131,6 +1244,48 @@ function SubmissionDetail({
     </article>
   );
 }
+
+function Profile({ user }: { user: AuthenticatedUser | null }) {
+  if (!user)
+    return (
+      <State
+        title="Sign in required"
+        text="Sign in to view your account."
+        action={<Link to="/login">Sign in</Link>}
+      />
+    );
+  return (
+    <section className="profile-page">
+      <p className="eyebrow">ACCOUNT</p>
+      <h1>Your profile</h1>
+      <div className="profile-grid">
+        <article className="profile-card profile-main">
+          <div className="avatar" aria-hidden="true">
+            {user.displayName.slice(0, 1).toUpperCase()}
+          </div>
+          <div>
+            <h2>{user.displayName}</h2>
+            <p className="muted">@{user.username}</p>
+            <p>{user.email}</p>
+            <span className="status status-active">{user.status}</span>
+          </div>
+        </article>
+        <article className="profile-card">
+          <p className="panel-label">QUICK LINKS</p>
+          <Link to="/submissions">My submissions</Link>
+          <Link to="/author">Authoring workspace</Link>
+        </article>
+      </div>
+      <div className="profile-note">
+        <h2>Account information</h2>
+        <p className="muted">
+          Identity and session management are handled by the platform. Activity
+          statistics are omitted until the public contract provides them.
+        </p>
+      </div>
+    </section>
+  );
+}
 export function App() {
   const api = useMemo(
     () => createApiClient(import.meta.env.VITE_API_URL ?? ''),
@@ -1156,9 +1311,13 @@ export function App() {
   }, [api]);
   const page =
     current.name === 'home' ? (
-      <Home />
+      <Home user={user} />
     ) : current.name === 'login' || current.name === 'register' ? (
       <AuthForm mode={current.name} api={api} onUser={setUser} />
+    ) : current.name === 'forbidden' ? (
+      <Forbidden />
+    ) : current.name === 'error' ? (
+      <GenericError />
     ) : current.name === 'problems' ? (
       <ProblemList api={api} />
     ) : current.name === 'submit' ? (
@@ -1175,6 +1334,8 @@ export function App() {
           action={<Link to="/login">Sign in</Link>}
         />
       )
+    ) : current.name === 'profile' ? (
+      <Profile user={user} />
     ) : current.name === 'author' ? (
       user ? (
         <AuthorDashboard api={api} />
@@ -1213,15 +1374,48 @@ export function App() {
   return (
     <div className="app">
       <header className="nav">
-        <Link to="/">
+        <Link to="/" className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            OJ
+          </span>
           <strong>OJPlatform</strong>
         </Link>
         <nav>
-          <Link to="/problems">Problems</Link>
+          <Link to="/" className={current.name === 'home' ? 'active' : ''}>
+            Home
+          </Link>
+          <Link
+            to="/problems"
+            className={
+              current.name === 'problems' ||
+              current.name === 'problem' ||
+              current.name === 'submit'
+                ? 'active'
+                : ''
+            }
+          >
+            Problems
+          </Link>
           {user ? (
             <>
+              <Link
+                to="/profile"
+                className={current.name === 'profile' ? 'active' : ''}
+              >
+                {user.displayName}
+              </Link>
               <Link to="/author">Authoring</Link>
-              <Link to="/submissions">Submissions</Link>
+              <Link
+                to="/submissions"
+                className={
+                  current.name === 'submissions' ||
+                  current.name === 'submission'
+                    ? 'active'
+                    : ''
+                }
+              >
+                Submissions
+              </Link>
               <button
                 className="link-button"
                 onClick={() => {
@@ -1264,6 +1458,26 @@ export function NotFound() {
     <State
       title="Page not found"
       text="The requested page does not exist."
+      action={<Link to="/">Return home</Link>}
+    />
+  );
+}
+
+export function Forbidden() {
+  return (
+    <State
+      title="Access not available"
+      text="You do not have permission to view this page."
+      action={<Link to="/">Return home</Link>}
+    />
+  );
+}
+
+export function GenericError() {
+  return (
+    <State
+      title="Something went wrong"
+      text="The page could not be loaded. Try again or return home."
       action={<Link to="/">Return home</Link>}
     />
   );
