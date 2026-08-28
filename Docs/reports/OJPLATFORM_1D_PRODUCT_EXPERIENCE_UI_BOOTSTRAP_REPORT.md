@@ -3,7 +3,7 @@
 GOAL = OJPLATFORM-1D-PRODUCT-EXPERIENCE-UI-BOOTSTRAP
 STARTING HEAD = `32ad3df359fe1eaabb4a70f14eae5cc48a86c5f9`
 CURRENT BRANCH = `master`
-COMMON BASELINE = to be recorded after Bootstrap docs commit
+COMMON BASELINE = `9cb01d6f5dd2ab207e705494916f554e87482592`
 
 PHASE 1C = PASS
 PERMANENT WORKER MODEL = PASS
@@ -24,9 +24,13 @@ MIGRATION ALLOCATION = NO NEW MIGRATION; existing schema/API covers current inve
 AUTH BRANCH = `codex/phase1d-account-product`
 BACKEND BRANCH = `codex/phase1d-product-data`
 WEB BRANCH = `codex/phase1d-product-ui`
-WEB HEAD AFTER CARRY-FORWARD = to be recorded after rotation
-BOOTSTRAP REGRESSION = pending
-WORKERS READY = pending
+WEB HEAD AFTER CARRY-FORWARD = `83d3eb7dc9234fe450c9895e126a34ec64d7635c` (cherry-pick of audited `8afb8a6`)
+AUTH STARTING HEAD = `9cb01d6f5dd2ab207e705494916f554e87482592`
+BACKEND STARTING HEAD = `9cb01d6f5dd2ab207e705494916f554e87482592`
+WEB STARTING BASE HEAD = `9cb01d6f5dd2ab207e705494916f554e87482592`
+BRANCH ROTATION = PASS; all three permanent paths preserved and no force operations used.
+BOOTSTRAP REGRESSION = PASS (`format:check`, `lint`, `typecheck`, `test` 38/38, `test:architecture`, `build`, `git diff --check`)
+WORKER SLOT STATUS = Auth and Backend clean at common baseline; Web clean after audited carry-forward.
+WORKERS READY = YES
 
 NON-GOALS = Judge, Sandbox, Contest, untrusted code execution, fake verdicts, and fabricated metrics.
-
