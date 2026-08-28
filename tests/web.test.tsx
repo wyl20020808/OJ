@@ -14,6 +14,7 @@ import {
   Forbidden,
   GenericError,
   NotFound,
+  presentJudgeStatus,
 } from '../apps/web/src/app/App.js';
 
 describe('Web platform shell', () => {
@@ -22,6 +23,30 @@ describe('Web platform shell', () => {
   });
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+  it('maps protocol states to safe UX and never to execution verdicts', () => {
+    expect(presentJudgeStatus('QUEUED').label).toBe('Queued');
+    expect(presentJudgeStatus('LEASED').label).toBe('Leased');
+    expect(presentJudgeStatus('RUNNING').note).toContain('Synthetic');
+    expect(presentJudgeStatus('RETRYABLE_FAILURE').label).toContain(
+      'Retryable',
+    );
+    expect(presentJudgeStatus('PROTOCOL_FAILURE').label).toContain('Terminal');
+    expect(presentJudgeStatus('SYNTHETIC_COMPLETED').note).toContain(
+      'NOT A REAL EXECUTION VERDICT',
+    );
+    expect(presentJudgeStatus('FUTURE_STATE').label).toBe(
+      'Unknown protocol state',
+    );
+    const labels = [
+      'QUEUED',
+      'LEASED',
+      'RUNNING',
+      'RETRYABLE_FAILURE',
+      'PROTOCOL_FAILURE',
+      'SYNTHETIC_COMPLETED',
+    ].map((state) => presentJudgeStatus(state).label);
+    expect(labels.join(' ')).not.toMatch(/\b(AC|WA|TLE|MLE|RE|CE)\b/);
   });
   it('renders loading then healthy state', async () => {
     vi.stubGlobal(

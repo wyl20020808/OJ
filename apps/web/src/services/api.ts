@@ -41,7 +41,14 @@ export type Language = {
   extension: string;
   maxSourceBytes: number;
 };
-export type SubmissionStatus = 'PENDING' | 'QUEUED';
+export type SubmissionStatus =
+  | 'PENDING'
+  | 'QUEUED'
+  | 'LEASED'
+  | 'RUNNING'
+  | 'RETRYABLE_FAILURE'
+  | 'PROTOCOL_FAILURE'
+  | 'SYNTHETIC_COMPLETED';
 export type Submission = {
   id: string;
   ownerUserId: string;
@@ -54,6 +61,11 @@ export type Submission = {
   status: SubmissionStatus;
   createdAt: string;
   updatedAt: string;
+  attempt?: number;
+  maxAttempts?: number;
+  retryAt?: string | null;
+  failureCode?: string | null;
+  synthetic?: boolean;
 };
 export type SubmissionList = { items: Submission[]; nextCursor: string | null };
 export type ProblemInput = Omit<
