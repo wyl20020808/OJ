@@ -166,17 +166,25 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
         created: false,
       };
     const job = normalize(input);
+    // Persist the payload before publishing the submission index. This avoids
+    // readers observing an index whose job body is not durable yet.
+    await this.redis.set(jobKey(job.id), JSON.stringify(job), 'NX');
     const claimed = await this.redis.set(
       submissionKey(input.submissionId),
       job.id,
       'NX',
     );
-    if (claimed !== 'OK')
-      return {
-        job: JSON.parse((await this.redis.get(jobKey(input.submissionId)))!),
-        created: false,
-      };
-    await this.redis.set(jobKey(job.id), JSON.stringify(job));
+    if (claimed !== 'OK') {
+      await this.redis.del(jobKey(job.id));
+      const existingId = await this.redis.get(
+        submissionKey(input.submissionId),
+      );
+      const existingJob = existingId
+        ? await this.redis.get(jobKey(existingId))
+        : null;
+      if (!existingJob) throw new Error('Judge job index unavailable');
+      return { job: JSON.parse(existingJob) as JudgeJob, created: false };
+    }
     await this.redis.lpush('oj:judge:queue', job.id);
     return { job, created: true };
   }
@@ -189,23 +197,35 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
     return id ? this.getById(id) : undefined;
   }
   async claim(workerId: string, leaseMs: number) {
+    const lockToken = randomUUID();
+    const locked = await (
+      this.redis.set as (...args: unknown[]) => Promise<string | null>
+    )('oj:judge:claim-lock', lockToken, 'PX', Math.max(1000, leaseMs), 'NX');
+    if (locked !== 'OK') return undefined;
     const id = await this.redis.rpop('oj:judge:queue');
-    if (!id) return undefined;
-    const job = await this.getById(id);
-    if (!job || (job.status !== 'QUEUED' && job.status !== 'RETRYABLE_FAILURE'))
-      return undefined;
-    const leaseToken = randomUUID();
-    const leased = {
-      ...job,
-      status: 'LEASED' as const,
-      attempt: job.attempt + 1,
-      workerId,
-      leaseToken,
-      leaseExpiresAt: new Date(Date.now() + leaseMs).toISOString(),
-      updatedAt: now(),
-    };
-    await this.redis.set(jobKey(id), JSON.stringify(leased));
-    return { job: leased, leaseToken };
+    try {
+      if (!id) return undefined;
+      const job = await this.getById(id);
+      if (
+        !job ||
+        (job.status !== 'QUEUED' && job.status !== 'RETRYABLE_FAILURE')
+      )
+        return undefined;
+      const leaseToken = randomUUID();
+      const leased = {
+        ...job,
+        status: 'LEASED' as const,
+        attempt: job.attempt + 1,
+        workerId,
+        leaseToken,
+        leaseExpiresAt: new Date(Date.now() + leaseMs).toISOString(),
+        updatedAt: now(),
+      };
+      await this.redis.set(jobKey(id), JSON.stringify(leased));
+      return { job: leased, leaseToken };
+    } finally {
+      await this.redis.del('oj:judge:claim-lock');
+    }
   }
   async complete(id: string, token: string) {
     const job = await this.getById(id);

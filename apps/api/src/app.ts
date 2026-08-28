@@ -19,6 +19,11 @@ import {
 } from './modules/problem/index.js';
 import { createMemoryAuditHook } from './modules/authz/index.js';
 import { createSubmissionAuthorizationPolicy } from './modules/authz/index.js';
+import {
+  InMemoryJudgeJobRepository,
+  RedisJudgeJobRepository,
+  registerJudgeModule,
+} from './modules/judge/index.js';
 import type { AuditHook as ProblemAuditHook } from './modules/problem/model.js';
 import {
   PostgresSubmissionRepository,
@@ -142,6 +147,15 @@ export async function buildApp(options: AppOptions = {}) {
       production: process.env.NODE_ENV === 'production',
       auditHook,
     });
+    const judgeRepository = new RedisJudgeJobRepository(cache);
+    await registerJudgeModule(app, {
+      repository: judgeRepository,
+      authorizationPolicy: (
+        await import('./modules/authz/judge.js')
+      ).createJudgeAuthorizationPolicy(),
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+    });
     const problemRepository = new PostgresProblemRepository(database.pool);
     await registerProblemModule(app, {
       repository: problemRepository,
@@ -213,6 +227,36 @@ export async function buildApp(options: AppOptions = {}) {
       problemResolver,
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
+      onCreated: async (submission) => {
+        await judgeRepository.enqueue({
+          submissionId: submission.id,
+          ownerUserId: submission.ownerUserId,
+          problemId: submission.problemId,
+          problemRevisionId: submission.problemRevisionId,
+          testdataVersionRef: submission.testdataVersionRef,
+          languageId: submission.languageId,
+        });
+      },
+      projectJudge: async (submission) => {
+        const job = await judgeRepository.getBySubmissionId(submission.id);
+        if (!job) return {};
+        return {
+          judgeJobId: job.id,
+          status:
+            job.status === 'QUEUED'
+              ? 'QUEUED'
+              : job.status === 'LEASED'
+                ? 'LEASED'
+                : job.status === 'COMPLETED'
+                  ? 'SYNTHETIC_COMPLETED'
+                  : job.status === 'RETRYABLE_FAILURE'
+                    ? 'RETRYABLE_FAILURE'
+                    : 'PROTOCOL_FAILURE',
+          attempt: job.attempt,
+          maxAttempts: job.maxAttempts,
+          synthetic: job.status === 'COMPLETED',
+        };
+      },
     });
     owned = {
       checks: {
@@ -244,6 +288,15 @@ export async function buildApp(options: AppOptions = {}) {
     const auth = await registerAuthModule(app, {
       repository: createMemoryAuthRepository(),
       auditHook,
+    });
+    const judgeRepository = new InMemoryJudgeJobRepository();
+    await registerJudgeModule(app, {
+      repository: judgeRepository,
+      authorizationPolicy: (
+        await import('./modules/authz/judge.js')
+      ).createJudgeAuthorizationPolicy(),
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
     const problemRepository = new InMemoryProblemRepository();
     await registerProblemModule(app, {
@@ -315,6 +368,36 @@ export async function buildApp(options: AppOptions = {}) {
       },
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
+      onCreated: async (submission) => {
+        await judgeRepository.enqueue({
+          submissionId: submission.id,
+          ownerUserId: submission.ownerUserId,
+          problemId: submission.problemId,
+          problemRevisionId: submission.problemRevisionId,
+          testdataVersionRef: submission.testdataVersionRef,
+          languageId: submission.languageId,
+        });
+      },
+      projectJudge: async (submission) => {
+        const job = await judgeRepository.getBySubmissionId(submission.id);
+        if (!job) return {};
+        return {
+          judgeJobId: job.id,
+          status:
+            job.status === 'QUEUED'
+              ? 'QUEUED'
+              : job.status === 'LEASED'
+                ? 'LEASED'
+                : job.status === 'COMPLETED'
+                  ? 'SYNTHETIC_COMPLETED'
+                  : job.status === 'RETRYABLE_FAILURE'
+                    ? 'RETRYABLE_FAILURE'
+                    : 'PROTOCOL_FAILURE',
+          attempt: job.attempt,
+          maxAttempts: job.maxAttempts,
+          synthetic: job.status === 'COMPLETED',
+        };
+      },
     });
   }
   app.get(

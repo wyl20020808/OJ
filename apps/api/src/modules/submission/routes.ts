@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type {
   AuthContext,
   ProblemRevisionResolver,
+  Submission,
   SubmissionAuthorizationPolicy,
 } from './model.js';
 import { SubmissionNotFoundError, SubmissionValidationError } from './model.js';
@@ -19,6 +20,8 @@ export type SubmissionModuleContext = {
   getAuthContext?: (
     request: FastifyRequest,
   ) => AuthContext | undefined | Promise<AuthContext | undefined>;
+  projectJudge?: (submission: Submission) => Promise<Partial<Submission>>;
+  onCreated?: (submission: Submission) => Promise<void> | void;
 };
 const error = (
   reply: FastifyReply,
@@ -44,6 +47,10 @@ export async function registerSubmissionModule(
     context.authorizationPolicy,
     context.problemResolver,
   );
+  const project = async (submission: Submission) =>
+    context.projectJudge
+      ? { ...submission, ...(await context.projectJudge(submission)) }
+      : submission;
   const auth = async (request: FastifyRequest) =>
     context.getAuthContext ? await context.getAuthContext(request) : undefined;
   app.get('/api/submissions/languages', async (_request, reply) =>
@@ -60,9 +67,18 @@ export async function registerSubmissionModule(
   );
   app.post('/api/submissions', async (request, reply) => {
     try {
-      return reply
-        .status(201)
-        .send(await service.create(request.body, await auth(request)));
+      return reply.status(201).send(
+        await project(
+          await (async () => {
+            const submission = await service.create(
+              request.body,
+              await auth(request),
+            );
+            await context.onCreated?.(submission);
+            return submission;
+          })(),
+        ),
+      );
     } catch (e) {
       if (e instanceof SubmissionValidationError)
         return error(
@@ -101,14 +117,16 @@ export async function registerSubmissionModule(
     }
   });
   app.get('/api/submissions', async (request, reply) =>
-    listRoute(service, request, reply, await auth(request)),
+    listRoute(service, request, reply, await auth(request), project),
   );
   app.get('/api/submissions/:id', async (request, reply) => {
     try {
       return reply.send(
-        await service.detail(
-          (request.params as { id: string }).id,
-          await auth(request),
+        await project(
+          await service.detail(
+            (request.params as { id: string }).id,
+            await auth(request),
+          ),
         ),
       );
     } catch (e) {
@@ -139,6 +157,7 @@ export async function registerSubmissionModule(
       request,
       reply,
       await auth(request),
+      project,
       (request.params as { problemId: string }).problemId,
     ),
   );
@@ -148,6 +167,7 @@ async function listRoute(
   request: FastifyRequest,
   reply: FastifyReply,
   context: AuthContext | undefined,
+  project: (submission: Submission) => Promise<Submission>,
   problemId?: string,
 ) {
   const query = request.query as Record<string, unknown>;
@@ -161,7 +181,10 @@ async function listRoute(
       ...(problemId ? { problemId } : {}),
     };
     const result = await service.list(listQuery, context);
-    return reply.send({ items: result.items, nextCursor: result.nextCursor });
+    return reply.send({
+      items: await Promise.all(result.items.map(project)),
+      nextCursor: result.nextCursor,
+    });
   } catch (e) {
     if (e instanceof Error && e.message === 'UNAUTHENTICATED')
       return error(

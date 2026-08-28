@@ -1,4 +1,10 @@
-export type IntakeStatus = 'PENDING' | 'QUEUED';
+export type IntakeStatus =
+  | 'PENDING'
+  | 'QUEUED'
+  | 'LEASED'
+  | 'RETRYABLE_FAILURE'
+  | 'PROTOCOL_FAILURE'
+  | 'SYNTHETIC_COMPLETED';
 
 export type Submission = {
   id: string;
@@ -11,6 +17,12 @@ export type Submission = {
   status: IntakeStatus;
   createdAt: string;
   updatedAt: string;
+  judgeJobId?: string;
+  attempt?: number;
+  maxAttempts?: number;
+  retryAt?: string | null;
+  failureCode?: string | null;
+  synthetic?: boolean;
 };
 
 export type SubmissionCreateInput = {
