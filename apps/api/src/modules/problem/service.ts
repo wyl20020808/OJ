@@ -17,13 +17,33 @@ export class ProblemService {
     private readonly policy: AuthorizationPolicy,
     private readonly audit?: AuditHook,
   ) {}
-  async list(query: { limit: number; offset: number; context?: AuthContext }) {
+  async list(query: {
+    limit: number;
+    offset?: number;
+    context?: AuthContext;
+    search?: string;
+    status?: Problem['status'];
+    visibility?: Problem['visibility'];
+  }) {
     const filter = query.context ? {} : { publicOnly: true as const };
     return this.repository.list({
       limit: query.limit,
-      offset: query.offset,
+      ...(query.offset === undefined ? {} : { offset: query.offset }),
       ...filter,
+      ...(query.search ? { search: query.search } : {}),
+      ...(query.context && query.status ? { status: query.status } : {}),
+      ...(query.context && query.visibility
+        ? { visibility: query.visibility }
+        : {}),
     });
+  }
+  async home() {
+    const recent = await this.repository.list({
+      limit: 6,
+      offset: 0,
+      publicOnly: true,
+    });
+    return { recentProblems: recent.items };
   }
   async detail(key: string, context?: AuthContext): Promise<Problem> {
     const row = await this.repository.get(key);

@@ -99,4 +99,34 @@ describe('problem foundation', () => {
     });
     await app.close();
   });
+
+  it('serves real product data for home and problemset search/filter pagination', async () => {
+    const app = Fastify();
+    const repository = new InMemoryProblemRepository();
+    const service = new ProblemService(repository, allow);
+    await service.create(input, { userId: 'u1' });
+    await service.create(
+      { ...input, slug: 'multiply-two', title: 'Multiply Two' },
+      { userId: 'u1' },
+    );
+    await registerProblemModule(app, {
+      repository,
+      authorizationPolicy: allow,
+      getAuthContext: () => undefined,
+    });
+    const home = await app.inject({ method: 'GET', url: '/api/home' });
+    expect(home.statusCode).toBe(200);
+    expect(home.json().recentProblems).toHaveLength(2);
+    expect(home.json()).not.toHaveProperty('rating');
+    const search = await app.inject({
+      method: 'GET',
+      url: '/api/problems?search=multiply&limit=1',
+    });
+    expect(search.statusCode).toBe(200);
+    expect(
+      search.json().items.map((item: { slug: string }) => item.slug),
+    ).toEqual(['multiply-two']);
+    expect(search.json().items[0].currentRevisionId).toBeTruthy();
+    await app.close();
+  });
 });

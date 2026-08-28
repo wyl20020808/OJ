@@ -49,7 +49,23 @@ export async function registerProblemModule(
   app.get('/api/problems', async (request, reply) => {
     const q = request.query as Record<string, unknown>;
     const limit = Number(q.limit ?? 20);
-    const offset = Number(q.offset ?? 0);
+    const cursor = typeof q.cursor === 'string' ? q.cursor : undefined;
+    const decodedOffset = cursor
+      ? Number(Buffer.from(cursor, 'base64url').toString('utf8'))
+      : Number(q.offset ?? 0);
+    const offset =
+      Number.isSafeInteger(decodedOffset) && decodedOffset >= 0
+        ? decodedOffset
+        : -1;
+    const search =
+      typeof q.search === 'string'
+        ? q.search.trim()
+        : typeof q.q === 'string'
+          ? q.q.trim()
+          : undefined;
+    const status = typeof q.status === 'string' ? q.status : undefined;
+    const visibility =
+      typeof q.visibility === 'string' ? q.visibility : undefined;
     if (
       !Number.isInteger(limit) ||
       limit < 1 ||
@@ -67,14 +83,41 @@ export async function registerProblemModule(
     const contextValue = await auth(request);
     const result = await service.list(
       contextValue
-        ? { limit, offset, context: contextValue }
-        : { limit, offset },
+        ? {
+            limit,
+            offset,
+            context: contextValue,
+            ...(search ? { search } : {}),
+            ...(status === 'draft' ||
+            status === 'published' ||
+            status === 'archived'
+              ? { status }
+              : {}),
+            ...(visibility === 'private' || visibility === 'public'
+              ? { visibility }
+              : {}),
+          }
+        : { limit, offset, ...(search ? { search } : {}) },
     );
+    const nextCursor =
+      result.items.length === limit
+        ? Buffer.from(String(offset + result.items.length), 'utf8').toString(
+            'base64url',
+          )
+        : undefined;
     return reply.send({
       items: result.items,
-      page: { limit, offset, total: result.total },
+      page: {
+        limit,
+        offset,
+        total: result.total,
+        ...(nextCursor ? { nextCursor } : {}),
+      },
     });
   });
+  app.get('/api/home', async (_request, reply) =>
+    reply.send(await service.home()),
+  );
   app.get('/api/problems/:idOrSlug', async (request, reply) => {
     try {
       return reply.send(

@@ -13,9 +13,12 @@ import type { ProblemRevision } from './model.js';
 
 export type ProblemListQuery = {
   limit: number;
-  offset: number;
+  offset?: number;
   publicOnly?: boolean;
   authorId?: string;
+  search?: string;
+  status?: Problem['status'];
+  visibility?: Problem['visibility'];
 };
 export interface ProblemRepository {
   create(input: ProblemCreateInput): Promise<Problem>;
@@ -62,11 +65,17 @@ export class InMemoryProblemRepository implements ProblemRepository {
         (p) =>
           (!query.publicOnly ||
             (p.visibility === 'public' && p.status === 'published')) &&
-          (!query.authorId || p.authorId === query.authorId),
+          (!query.authorId || p.authorId === query.authorId) &&
+          (!query.status || p.status === query.status) &&
+          (!query.visibility || p.visibility === query.visibility) &&
+          (!query.search ||
+            `${p.slug} ${p.title}`
+              .toLocaleLowerCase()
+              .includes(query.search.toLocaleLowerCase())),
       )
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     return {
-      items: rows.slice(query.offset, query.offset + query.limit),
+      items: rows.slice(query.offset ?? 0, (query.offset ?? 0) + query.limit),
       total: rows.length,
     };
   }
@@ -196,12 +205,26 @@ export class PostgresProblemRepository implements ProblemRepository {
       params.push(query.authorId);
       clauses.push(`author_id = $${params.length}`);
     }
+    if (query.status) {
+      params.push(query.status);
+      clauses.push(`status = $${params.length}`);
+    }
+    if (query.visibility) {
+      params.push(query.visibility);
+      clauses.push(`visibility = $${params.length}`);
+    }
+    if (query.search) {
+      params.push(`%${query.search}%`);
+      clauses.push(
+        `(slug ILIKE $${params.length} OR title ILIKE $${params.length})`,
+      );
+    }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const count = await this.pool.query(
       `SELECT count(*)::int AS total FROM problems ${where}`,
       params,
     );
-    params.push(query.limit, query.offset);
+    params.push(query.limit, query.offset ?? 0);
     const result = await this.pool.query(
       `SELECT * FROM problems ${where} ORDER BY created_at ASC, id ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
