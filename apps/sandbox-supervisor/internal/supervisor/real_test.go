@@ -609,6 +609,112 @@ func TestRealRuncCgroupfsExplicitRootfulDiagnostic(t *testing.T) {
 	t.Logf("cgroupfs rootless=false diagnostic result: %+v", got)
 }
 
+func TestRealRuncRootlessModeComparison(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	for _, mode := range []string{"true", "auto", "false"} {
+		got := runProfileWithSupervisorMode(t, "memory", 3000, 8<<20, 16, 64<<10, mode)
+		t.Logf("rootless mode=%s result: outcome=%s clean=%t diagnostic=%s", mode, got.Outcome, got.Clean, got.Diagnostic)
+	}
+}
+
+func TestRealRuncRootlessModeScopeComparison(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	for _, mode := range []string{"true", "auto", "false"} {
+		before := map[string]bool{}
+		_ = filepath.WalkDir("/sys/fs/cgroup", func(path string, entry os.DirEntry, err error) error {
+			if err == nil && entry.IsDir() {
+				before[path] = true
+			}
+			return nil
+		})
+		resultCh := make(chan model.Result, 1)
+		go func(mode string) {
+			resultCh <- runProfileWithSupervisorMode(t, "sleep", 3000, 8<<20, 16, 64<<10, mode)
+		}(mode)
+		var current string
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) && current == "" {
+			_ = filepath.WalkDir("/sys/fs/cgroup", func(path string, entry os.DirEntry, err error) error {
+				if err == nil && entry.IsDir() && !before[path] && strings.Contains(entry.Name(), "phase2b-sbx-") {
+					current = path
+					return filepath.SkipDir
+				}
+				return nil
+			})
+			if current == "" {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		if current == "" {
+			got := <-resultCh
+			t.Logf("rootless mode=%s scope unavailable: outcome=%s clean=%t diagnostic=%s", mode, got.Outcome, got.Clean, got.Diagnostic)
+			continue
+		}
+		t.Logf("rootless mode=%s observed cgroup=%s", mode, current)
+		logR32ScopeProperties(t, current)
+		for _, name := range []string{"memory.max", "pids.max", "memory.current", "memory.events", "pids.events"} {
+			data, err := os.ReadFile(filepath.Join(current, name))
+			if err != nil {
+				t.Logf("rootless mode=%s %s unavailable: %v", mode, name, err)
+				continue
+			}
+			t.Logf("rootless mode=%s %s=%s", mode, name, strings.TrimSpace(string(data)))
+		}
+		got := <-resultCh
+		t.Logf("rootless mode=%s scope result: outcome=%s clean=%t diagnostic=%s", mode, got.Outcome, got.Clean, got.Diagnostic)
+	}
+}
+
+func TestRealRuncRootlessModeMemoryScope(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	for _, mode := range []string{"true", "auto", "false"} {
+		before := map[string]bool{}
+		_ = filepath.WalkDir("/sys/fs/cgroup", func(path string, entry os.DirEntry, err error) error {
+			if err == nil && entry.IsDir() {
+				before[path] = true
+			}
+			return nil
+		})
+		resultCh := make(chan model.Result, 1)
+		go func(mode string) {
+			resultCh <- runProfileWithSupervisorMode(t, "memory", 3000, 8<<20, 16, 64<<10, mode)
+		}(mode)
+		var current string
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) && current == "" {
+			_ = filepath.WalkDir("/sys/fs/cgroup", func(path string, entry os.DirEntry, err error) error {
+				if err == nil && entry.IsDir() && !before[path] && strings.Contains(entry.Name(), "phase2b-sbx-") {
+					current = path
+					return filepath.SkipDir
+				}
+				return nil
+			})
+			if current == "" {
+				time.Sleep(5 * time.Millisecond)
+			}
+		}
+		if current != "" {
+			t.Logf("rootless mode=%s memory observed cgroup=%s", mode, current)
+			for _, name := range []string{"memory.max", "pids.max", "memory.current", "memory.events", "pids.events"} {
+				data, err := os.ReadFile(filepath.Join(current, name))
+				if err != nil {
+					t.Logf("rootless mode=%s memory %s unavailable: %v", mode, name, err)
+					continue
+				}
+				t.Logf("rootless mode=%s memory %s=%s", mode, name, strings.TrimSpace(string(data)))
+			}
+		}
+		got := <-resultCh
+		t.Logf("rootless mode=%s memory result: outcome=%s clean=%t diagnostic=%s", mode, got.Outcome, got.Clean, got.Diagnostic)
+	}
+}
+
 func runCgroupfsMode(t *testing.T, profile, mode string) model.Result {
 	return runCgroupfsModeLimits(t, profile, mode, 8<<20, 4)
 }

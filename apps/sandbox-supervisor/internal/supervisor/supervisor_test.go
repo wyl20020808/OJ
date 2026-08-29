@@ -65,7 +65,11 @@ func TestRootlessSystemdPathDiagnostics(t *testing.T) {
 		t.Fatalf("unexpected user.slice cgroupsPath: %q", got)
 	}
 	rootlessDefault := newWithRootlessDefaultProfile("/tmp/sandbox", "/usr/bin/runc", "/trusted/probe", "sleep")
-	if got := rootlessDefault.ociConfig("sbx-default", "/workspace", r, nil).Linux.CgroupsPath; got != "" {
+	cfg := rootlessDefault.ociConfig("sbx-default", "/workspace", r, nil)
+	if got := cfg.Linux.CgroupsPath; got != "" {
 		t.Fatalf("rootless default must omit cgroupsPath, got %q", got)
+	}
+	if len(cfg.Linux.UIDMappings) != 1 || cfg.Linux.UIDMappings[0]["hostID"] != 65534 || len(cfg.Linux.GIDMappings) != 1 || cfg.Linux.GIDMappings[0]["hostID"] != 65534 || cfg.Process.User.UID != 0 || cfg.Process.User.GID != 0 {
+		t.Fatalf("rootless user namespace mapping changed: %+v process=%+v", cfg.Linux, cfg.Process.User)
 	}
 }

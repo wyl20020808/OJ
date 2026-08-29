@@ -141,7 +141,7 @@ func newWithCgroupfsParentProfile(root, runc, probeBinary, profile, parent strin
 	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: false, rootlessMode: "auto", cgroupSlice: "system.slice", cgroupfsParent: parent, runcDebug: true}
 }
 func newWithRootlessMode(root, runc, probeBinary, profile, mode string) *Supervisor {
-	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: mode, cgroupSlice: "system.slice", runcDebug: true}
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: mode, cgroupSlice: "system.slice", systemdUserBus: true, runcDebug: true}
 }
 func newWithSliceProfile(root, runc, probeBinary, profile, slice string) *Supervisor {
 	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "auto", cgroupSlice: slice, runcDebug: true}
