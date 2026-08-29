@@ -143,7 +143,9 @@ No real Worker runtime, Redis, PostgreSQL, browser journey, or production sandbo
 
 ## 20. Final Git State
 
-Final HEAD: to be filled immediately before commit.
+Implementation commit / starting point for final verification: `39a4705` (`feat: implement phase 2A worker authorization`).
+
+The report metadata update is committed immediately after this implementation commit; `git log -1` is the authoritative final HEAD.
 
 `git status` must be clean after the scoped commit.
 
