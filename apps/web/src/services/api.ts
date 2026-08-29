@@ -45,10 +45,33 @@ export type SubmissionStatus =
   | 'PENDING'
   | 'QUEUED'
   | 'LEASED'
+  | 'CLAIMED'
+  | 'WORKER_ACCEPTED'
+  | 'SAFE_FIXTURE_RUNNING'
   | 'RUNNING'
+  | 'FAILED_RETRYABLE'
   | 'RETRYABLE_FAILURE'
+  | 'REQUEUED'
+  | 'FAILED_TERMINAL'
   | 'PROTOCOL_FAILURE'
-  | 'SYNTHETIC_COMPLETED';
+  | 'CANCELLED'
+  | 'SAFE_FIXTURE_SUCCEEDED'
+  | 'SYNTHETIC_COMPLETED'
+  | 'WORKER_DEGRADED'
+  | 'WORKER_OFFLINE';
+export type ExecutionStage =
+  | 'QUEUED'
+  | 'LEASED'
+  | 'CLAIMED'
+  | 'WORKER_ACCEPTED'
+  | 'SAFE_FIXTURE_RUNNING'
+  | 'FAILED_RETRYABLE'
+  | 'REQUEUED'
+  | 'FAILED_TERMINAL'
+  | 'CANCELLED'
+  | 'SAFE_FIXTURE_SUCCEEDED'
+  | 'WORKER_DEGRADED'
+  | 'WORKER_OFFLINE';
 export type Submission = {
   id: string;
   ownerUserId: string;
@@ -66,6 +89,7 @@ export type Submission = {
   retryAt?: string | null;
   failureCode?: string | null;
   synthetic?: boolean;
+  executionStage?: ExecutionStage;
 };
 export type SubmissionList = { items: Submission[]; nextCursor: string | null };
 export type ProblemInput = Omit<

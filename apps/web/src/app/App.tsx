@@ -158,29 +158,69 @@ export function presentJudgeStatus(status: string): StatusPresentation {
         tone: 'progress',
         note: 'Synthetic protocol qualification is in progress; submitted code is not executed.',
       };
+    case 'CLAIMED':
+      return {
+        label: 'Worker lease claimed',
+        tone: 'progress',
+        note: 'Synthetic protocol qualification is in progress; submitted code is not executed.',
+      };
+    case 'WORKER_ACCEPTED':
+      return {
+        label: 'Worker accepted the job',
+        tone: 'progress',
+        note: 'Qualification protocol work is accepted; submitted code is not executed.',
+      };
+    case 'SAFE_FIXTURE_RUNNING':
     case 'RUNNING':
       return {
-        label: 'Running',
+        label: 'Qualification fixture running',
         tone: 'progress',
-        note: 'Synthetic qualification state only.',
+        note: 'A Synthetic safe qualification fixture is running; submitted code is not executed.',
       };
+    case 'FAILED_RETRYABLE':
     case 'RETRYABLE_FAILURE':
       return {
         label: 'Retryable protocol failure',
         tone: 'warning',
         note: 'The protocol may retry this intake.',
       };
+    case 'REQUEUED':
+      return {
+        label: 'Retrying infrastructure step',
+        tone: 'warning',
+        note: 'The qualification job was requeued; this is not a source verdict.',
+      };
+    case 'FAILED_TERMINAL':
     case 'PROTOCOL_FAILURE':
       return {
         label: 'Terminal protocol failure',
         tone: 'danger',
         note: 'Intake stopped before any execution result.',
       };
+    case 'CANCELLED':
+      return {
+        label: 'Qualification job cancelled',
+        tone: 'neutral',
+        note: 'The Judge qualification job was cancelled; no submitted code was executed.',
+      };
+    case 'SAFE_FIXTURE_SUCCEEDED':
     case 'SYNTHETIC_COMPLETED':
       return {
         label: 'Synthetic completion',
         tone: 'synthetic',
         note: 'SYNTHETIC · QUALIFICATION ONLY · NOT A REAL EXECUTION VERDICT',
+      };
+    case 'WORKER_DEGRADED':
+      return {
+        label: 'Judge worker degraded',
+        tone: 'warning',
+        note: 'Worker infrastructure is degraded. This is not a Judge result or verdict.',
+      };
+    case 'WORKER_OFFLINE':
+      return {
+        label: 'Judge worker unavailable',
+        tone: 'danger',
+        note: 'Worker infrastructure is unavailable. This is not a Judge result or verdict.',
       };
     default:
       return {
@@ -192,7 +232,9 @@ export function presentJudgeStatus(status: string): StatusPresentation {
 }
 
 export function JudgeStatus({ submission }: { submission: Submission }) {
-  const presentation = presentJudgeStatus(String(submission.status));
+  const presentation = presentJudgeStatus(
+    String(submission.executionStage ?? submission.status),
+  );
   return (
     <div
       className={`judge-status tone-${presentation.tone}`}
@@ -1253,6 +1295,12 @@ function SubmissionHistory({
       });
   };
   useEffect(load, [api, cursor]);
+  useEffect(
+    () => () => {
+      requestVersion.current++;
+    },
+    [],
+  );
   if (!user)
     return (
       <State
@@ -1334,7 +1382,6 @@ function SubmissionDetail({
   const requestVersion = useRef(0);
   const load = () => {
     const version = ++requestVersion.current;
-    setSubmission(null);
     setError(null);
     setTransportError('');
     void api
@@ -1352,6 +1399,9 @@ function SubmissionDetail({
   useEffect(() => {
     if (!user) return;
     load();
+    return () => {
+      requestVersion.current++;
+    };
   }, [api, id, user]);
   if (!user)
     return (
@@ -1365,15 +1415,21 @@ function SubmissionDetail({
     return (
       <State
         title={
-          error.code === 'NOT_FOUND'
-            ? 'Submission not found'
-            : error.code === 'FORBIDDEN'
-              ? 'Submission forbidden'
-              : 'Submission unavailable'
+          error.status === 401
+            ? 'Sign in required'
+            : error.code === 'NOT_FOUND'
+              ? 'Submission not found'
+              : error.code === 'FORBIDDEN'
+                ? 'Submission forbidden'
+                : error.status === 409
+                  ? 'Submission state changed'
+                  : 'Submission unavailable'
         }
         text={error.message}
         action={
-          error.status >= 500 ? (
+          error.status === 401 ? (
+            <Link to="/login">Sign in</Link>
+          ) : error.status === 409 || error.status >= 500 ? (
             <button onClick={load}>Retry</button>
           ) : undefined
         }
@@ -1404,6 +1460,11 @@ function SubmissionDetail({
         <span>Intake {new Date(submission.createdAt).toLocaleString()}</span>
       </div>
       <JudgeStatus submission={submission} />
+      <div className="judge-actions">
+        <button type="button" className="secondary" onClick={load}>
+          Refresh qualification status
+        </button>
+      </div>
       <Section title="Problem">
         {submission.problemId} · revision {submission.problemRevisionId}
       </Section>
