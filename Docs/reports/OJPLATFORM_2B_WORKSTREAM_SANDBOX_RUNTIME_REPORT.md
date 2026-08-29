@@ -7,7 +7,7 @@ Baseline: `ebf2e06`
 
 ## Status
 
-**PARTIAL / BLOCKED_BY_ENVIRONMENT**. The dedicated Supervisor, OCI bundle, trusted probe registry, fail-closed adapter, cgroup/resource policy, namespace declarations, seccomp policy, bounded output and cleanup path are implemented. Full backend qualification is not claimed because the required user namespace cannot start under this WSL2/runc combination. No unsandboxed or rootful fallback is used.
+**PARTIAL / READY FOR REQUALIFICATION**. The dedicated Supervisor, OCI bundle, trusted probe registry, fail-closed adapter, cgroup/resource policy, namespace declarations, seccomp policy, bounded output and cleanup path are implemented. The initial environment blocker was recovered by fixing bundle directory traversal/mountpoint preparation; full backend qualification is still not claimed until the complete matrix passes. No unsandboxed or rootful fallback is used.
 
 ## Environment Evidence
 
@@ -16,7 +16,8 @@ Baseline: `ebf2e06`
 - `/sys/fs/cgroup` is `cgroup2fs`, writable; controllers: `cpuset cpu io memory hugetlb pids rdma`.
 - Host process seccomp mode 2 with one filter; `unshare -Ur true` succeeds outside runc.
 - `/mnt/c` and `/mnt/d` are writable 9p host mounts. The trusted probe checks that they are absent inside the guest.
-- Real runc attempts from both the Windows worktree and native WSL `/tmp` fail during OCI rootfs preparation: `remount-private ... MS_PRIVATE: permission denied` when user namespace and UID/GID mappings are enabled.
+- Before recovery, real runc attempts failed during OCI rootfs preparation: `remount-private ... MS_PRIVATE: permission denied` when user namespace and UID/GID mappings were enabled. The failure was reproduced on native WSL `/tmp` and Windows-mounted storage.
+- After commit `9496095`, the fixed trusted probe passes on both native WSL `/tmp` and a `/mnt/d` diagnostic root with the same mapping and isolation policy.
 
 ## Implementation
 
@@ -43,8 +44,8 @@ Stdout/stderr are collected through bounded writers using the request output cap
 
 - `go test ./...`: PASS.
 - `go vet ./...`: PASS.
-- Opt-in real runc test: EXECUTED; records the reproducible `remount-private MS_PRIVATE permission denied` environment blocker and does not fallback.
-- Real FS/NET/PID/cgroup/seccomp/concurrency qualification: NOT VERIFIED because the frozen user namespace prerequisite cannot start.
+- Opt-in real runc test: PASS after recovery on native and mounted diagnostic roots; the prior `remount-private` failure is retained as historical evidence.
+- Real FS/NET/PID/cgroup/seccomp/concurrency full qualification: NOT VERIFIED; this recovery only proves the minimal trusted probe path.
 - Repository-wide `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:architecture`, and `pnpm build`: PASS.
 
 ## Integration Requests / Limitations
@@ -57,4 +58,4 @@ Implementation commit: `9d6fb52`.
 Final HEAD: see `git log -1` (documentation follow-up commit).  
 Git status: must be clean after commit.
 
-**READY FOR LEAD INTEGRATION = NO**
+**READY FOR LEAD INTEGRATION = NO** (Runtime Worker full-matrix requalification is required first.)
