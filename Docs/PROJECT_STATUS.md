@@ -2,13 +2,14 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 1E FINAL REQUALIFICATION COMPLETE
-Current Status: PHASE 1E PASS / PHASE 1E-R RECOVERY CLOSED / PHASE 2 NOT STARTED
+Current Stage: PHASE 2A REAL JUDGE WORKER FOUNDATION BOOTSTRAPPED
+Current Status: PHASE 1E PASS / PHASE 1E-R RECOVERY CLOSED / PHASE 2A IN PROGRESS / BOOTSTRAPPED
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 PHASE 1C: PASS
 PHASE 1D: PASS
 PHASE 1E: PASS / FINAL REQUALIFICATION COMPLETE
+PHASE 2A: IN PROGRESS / BOOTSTRAPPED
 
 ## Completed Goals
 
@@ -35,7 +36,8 @@ PHASE 1E: PASS / FINAL REQUALIFICATION COMPLETE
 - Business implementation: NOT STARTED
 - Framework/toolchain initialization: 0B foundation initialized; future business frameworks NOT STARTED
 - Local PostgreSQL/Redis/MinIO infrastructure: Docker Engine/Compose, Windows localhost API/browser boundary, and recovery behavior qualified with WSL instance kept alive
-- Judge, Sandbox, Plugin Runtime, and service infrastructure: NOT STARTED
+- Judge Worker: Phase 2A bootstrap complete; runtime implementation NOT STARTED
+- Sandbox, Plugin Runtime, and production service infrastructure: NOT STARTED
 - Runtime security controls: NOT IMPLEMENTED
 - Runtime attack tests: NOT EXECUTED
 - Production security qualification: NOT QUALIFIED
@@ -62,6 +64,6 @@ PHASE 1E: PASS / FINAL REQUALIFICATION COMPLETE
 
 ## Next Planned Goal
 
-PHASE 2: NOT STARTED. No user-source execution, real Judge, Sandbox, or Contest has been implemented.
+PHASE 2A implementation may begin from the frozen Worker contracts. No submitted-source execution, Sandbox, real verdict, or Contest has been implemented.
 
 Last Updated: 2026-08-29
