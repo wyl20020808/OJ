@@ -141,6 +141,6 @@ No new dependency requests. Runtime isolation, OCI/runc, filesystem/network/PID/
 
 ## 18. Git State / Readiness
 
-Final HEAD: `2c50e26`. Tracked worktree is clean after the scoped commits.
+Final HEAD: latest report commit on `codex/phase2b-sandbox-security-policy` (verified with `git log -1`; the exact hash is included in the final response). Tracked worktree is clean after the scoped commits.
 
 READY FOR LEAD INTEGRATION = YES
