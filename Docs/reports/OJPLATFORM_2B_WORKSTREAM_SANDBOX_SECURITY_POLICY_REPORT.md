@@ -24,7 +24,7 @@ Files changed by this Worker:
 - `tests/sandbox-authz.test.ts`
 - this report
 
-Commits are recorded below after commit; no merge or history rewrite was performed.
+Implementation commit: `5b04f97 feat: implement phase 2B sandbox security policy`. Report metadata commit follows; no merge or history rewrite was performed.
 
 ## 4. Existing Authz Reuse
 
@@ -141,7 +141,6 @@ No new dependency requests. Runtime isolation, OCI/runc, filesystem/network/PID/
 
 ## 18. Git State / Readiness
 
-Final HEAD: recorded after commit below. Tracked worktree is clean after the scoped commit.
+Final HEAD: recorded by `git log -1` after the report metadata commit. Tracked worktree is clean after the scoped commits.
 
 READY FOR LEAD INTEGRATION = YES
-
