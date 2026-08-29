@@ -28,6 +28,8 @@ export type JudgeAuthorizationAction =
   | 'judge:job:enqueue'
   | 'judge:job:retry'
   | 'judge:job:cancel';
+export type JudgeOperation =
+  'view' | 'inspect' | 'enqueue' | 'retry' | 'cancel';
 
 export type JudgeAuditEvent = {
   actorUserId: string;
@@ -56,6 +58,7 @@ export type JudgeAuthorizationPolicy = {
   ): Promise<boolean>;
   canEnqueueJudgeJob(
     user: JudgeAuthorizationUser | undefined,
+    job?: JudgeJobReference,
     requestId?: string,
   ): Promise<boolean>;
   canRetryJudgeJob(
@@ -68,11 +71,20 @@ export type JudgeAuthorizationPolicy = {
     job: JudgeJobReference | undefined,
     requestId?: string,
   ): Promise<boolean>;
+  canJudgeJobOperation(
+    operation: string,
+    user: JudgeAuthorizationUser | undefined,
+    job?: JudgeJobReference,
+    requestId?: string,
+  ): Promise<boolean>;
 };
 
 export type JudgeAuthorizationOptions = {
   roles?: ReadonlyMap<string, ReadonlySet<JudgeAuthorizationAction>>;
   auditHook?: JudgeAuditHook;
+  resolveSubmissionOwner?: (
+    submissionId: string,
+  ) => Promise<string | null> | string | null;
 };
 
 const roleAllows = (
@@ -89,8 +101,21 @@ const validUser = (user: JudgeAuthorizationUser | undefined) =>
     user.strength === 'password',
   );
 
+const VALID_STATES = new Set<JudgeJobReference['state']>([
+  'QUEUED',
+  'LEASED_FAKE',
+  'SUCCEEDED_FAKE',
+  'FAILED_RETRYABLE',
+  'FAILED_TERMINAL',
+  'CANCELLED',
+]);
 const validJob = (job: JudgeJobReference | undefined) =>
-  Boolean(job?.id && job.submissionId && job.ownerUserId && job.state);
+  Boolean(
+    job?.id &&
+    job.submissionId &&
+    job.ownerUserId &&
+    VALID_STATES.has(job.state),
+  );
 
 export function createJudgeAuthorizationPolicy(
   options: JudgeAuthorizationOptions = {},
@@ -124,47 +149,68 @@ export function createJudgeAuthorizationPolicy(
     await audit(user, action, job, allowed, requestId);
     return allowed;
   };
+  const linkedOwner = async (job: JudgeJobReference | undefined) => {
+    if (!validJob(job) || !options.resolveSubmissionOwner) return null;
+    const owner = await options.resolveSubmissionOwner(job!.submissionId);
+    return owner && owner === job!.ownerUserId ? owner : null;
+  };
+  const ownerOrCapability = async (
+    user: JudgeAuthorizationUser | undefined,
+    job: JudgeJobReference | undefined,
+    action: JudgeAuthorizationAction,
+  ) => {
+    if (!validUser(user) || !validJob(job)) return false;
+    const owner = await linkedOwner(job);
+    return owner === user!.userId || roleAllows(user!, action, roles);
+  };
+  const capabilityOnly = (
+    user: JudgeAuthorizationUser | undefined,
+    action: JudgeAuthorizationAction,
+  ) => validUser(user) && roleAllows(user!, action, roles);
   return {
     async canViewJudgeJob(user, job, requestId) {
-      const allowed =
-        validUser(user) &&
-        validJob(job) &&
-        (job!.ownerUserId === user!.userId ||
-          roleAllows(user!, 'judge:job:view', roles));
+      const allowed = await ownerOrCapability(user, job, 'judge:job:view');
       return decide(user, 'judge:job:view', job, allowed, requestId);
     },
     async canInspectJudgeJob(user, job, requestId) {
-      const allowed =
-        validUser(user) &&
-        validJob(job) &&
-        (job!.ownerUserId === user!.userId ||
-          roleAllows(user!, 'judge:job:inspect', roles));
+      const allowed = await ownerOrCapability(user, job, 'judge:job:inspect');
       return decide(user, 'judge:job:inspect', job, allowed, requestId);
     },
-    async canEnqueueJudgeJob(user, requestId) {
+    async canEnqueueJudgeJob(user, job, requestId) {
       const allowed =
-        validUser(user) && roleAllows(user!, 'judge:job:enqueue', roles);
-      return decide(user, 'judge:job:enqueue', undefined, allowed, requestId);
+        (await linkedOwner(job)) !== null &&
+        capabilityOnly(user, 'judge:job:enqueue');
+      return decide(user, 'judge:job:enqueue', job, allowed, requestId);
     },
     async canRetryJudgeJob(user, job, requestId) {
       const allowed =
-        validUser(user) &&
-        validJob(job) &&
-        roleAllows(user!, 'judge:job:retry', roles) &&
-        job!.state !== 'CANCELLED' &&
-        job!.state !== 'SUCCEEDED_FAKE' &&
-        job!.state !== 'FAILED_TERMINAL';
+        capabilityOnly(user, 'judge:job:retry') &&
+        (await linkedOwner(job)) !== null &&
+        job!.state === 'FAILED_RETRYABLE';
       return decide(user, 'judge:job:retry', job, allowed, requestId);
     },
     async canCancelJudgeJob(user, job, requestId) {
       const allowed =
-        validUser(user) &&
-        validJob(job) &&
-        roleAllows(user!, 'judge:job:cancel', roles) &&
-        job!.state !== 'CANCELLED' &&
-        job!.state !== 'SUCCEEDED_FAKE' &&
-        job!.state !== 'FAILED_TERMINAL';
+        capabilityOnly(user, 'judge:job:cancel') &&
+        (await linkedOwner(job)) !== null &&
+        ['QUEUED', 'LEASED_FAKE', 'FAILED_RETRYABLE'].includes(job!.state);
       return decide(user, 'judge:job:cancel', job, allowed, requestId);
+    },
+    async canJudgeJobOperation(operation, user, job, requestId) {
+      switch (operation) {
+        case 'view':
+          return this.canViewJudgeJob(user, job, requestId);
+        case 'inspect':
+          return this.canInspectJudgeJob(user, job, requestId);
+        case 'retry':
+          return this.canRetryJudgeJob(user, job, requestId);
+        case 'cancel':
+          return this.canCancelJudgeJob(user, job, requestId);
+        case 'enqueue':
+          return this.canEnqueueJudgeJob(user, job, requestId);
+        default:
+          return decide(user, 'judge:job:view', job, false, requestId);
+      }
     },
   };
 }
