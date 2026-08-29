@@ -1,6 +1,6 @@
 # PHASE 2B Sandbox Backend Decision
 
-Status: selected production-intent architecture; NOT QUALIFIED.
+Status: selected production-intent architecture; rootless runc recovery qualified for the minimal trusted probe, full Sandbox qualification remains pending.
 
 ## Environment Evidence
 
@@ -20,5 +20,6 @@ This is preferable to timeout-only, chroot-only, default-container-only, nsjail-
 
 ## Qualification Boundary
 
-No backend is currently qualified. Docker/runc availability demonstrates capability only. A future implementation must prove every matrix row with trusted probes, including hostile-path and WSL `/mnt/c` denial, network denial, syscall/process isolation, limits, and cleanup. No unsandboxed fallback is permitted.
+The initial Runtime Worker failure was caused by bundle preparation: the Supervisor root was mode `0700` while guest UID/GID `0` mapped to host `65534`, and required `/dev`, `/proc`, and `/tmp` mountpoints were absent. runc surfaced this as `remount-private ... MS_PRIVATE: permission denied`. The recovery requires a Supervisor-owned root traversable by the mapped identity without listing (`0711`), pre-created mountpoints, explicit `/dev` tmpfs, and cleanup before verification.
 
+With those exact changes, runc 1.4.3 successfully started the fixed trusted probe with user/mount/PID/network namespaces, UID/GID mapping `0 -> 65534`, dropped capabilities, no-new-privileges, seccomp policy, cgroup resources, and no host mounts. Native WSL and a `/mnt/d` diagnostic root both passed the minimal probe. This is recovery evidence only; FS/NET/PS/RL/ENV/LC full qualification remains pending and no unsandboxed fallback is permitted.

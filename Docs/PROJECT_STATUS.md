@@ -3,7 +3,7 @@
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: PHASE 2B SANDBOX SECURITY QUALIFICATION BOOTSTRAP
-Current Status: PHASE 2B IN PROGRESS / BOOTSTRAPPED
+Current Status: PHASE 2B IN PROGRESS / RUNTIME RECOVERY
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 PHASE 1C: PASS
@@ -66,6 +66,6 @@ PHASE 2B: IN PROGRESS / BOOTSTRAPPED
 
 ## Next Planned Goal
 
-Phase 2A is qualified for the frozen safe-fixture Worker foundation. Phase 2B Sandbox security bootstrap is in progress; Sandbox runtime, compiler/runtime adapters, real submitted-source execution, real verdicts, and Contest remain not started or not qualified.
+Phase 2A is qualified for the frozen safe-fixture Worker foundation. Phase 2B Sandbox runtime recovery is in progress; full Sandbox qualification, compiler/runtime adapters, real submitted-source execution, real verdicts, and Contest remain not started or not qualified.
 
 Last Updated: 2026-08-29
