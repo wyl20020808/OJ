@@ -3,6 +3,7 @@ package supervisor
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,80 @@ import (
 	"github.com/ojplatform/sandbox-supervisor/internal/model"
 	"github.com/ojplatform/sandbox-supervisor/internal/probe"
 )
+
+func TestRealR31PropagationForensics(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root, err := os.MkdirTemp("/tmp", "ojp-r31-forensics-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	probeBinary := filepath.Join(root, "trusted-probe")
+	build := exec.CommandContext(ctx, "go", "build", "-o", probeBinary, "../../cmd/trusted-probe")
+	build.Dir, _ = os.Getwd()
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("probe build: %v %s", err, out)
+	}
+	hash, err := probe.ArtifactHash(probeBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capturedConfig := filepath.Join(root, "captured-config.json")
+	capturedArgs := filepath.Join(root, "captured-args.txt")
+	wrapper := filepath.Join(root, "runc-wrapper")
+	wrapperScript := fmt.Sprintf(`#!/bin/sh
+set -eu
+capture_config=%s
+capture_args=%s
+printf '%%s\n' '--- invocation ---' >> "$capture_args"
+printf '%%s\n' "$@" >> "$capture_args"
+bundle=""
+previous=""
+for argument in "$@"; do
+  if [ "$previous" = "--bundle" ]; then
+    bundle="$argument"
+    break
+  fi
+  previous="$argument"
+done
+if [ -n "$bundle" ]; then
+  cp "$bundle/config.json" "$capture_config"
+fi
+exec /usr/bin/runc "$@"
+`, capturedConfig, capturedArgs)
+	if err := os.WriteFile(wrapper, []byte(wrapperScript), 0700); err != nil {
+		t.Fatal(err)
+	}
+	r := model.Request{ContractVersion: model.ContractVersion, SandboxJobID: "r31-memory-8m-pids-16", JudgeJobID: "r31-forensics-judge", WorkerID: "worker", WorkerInstanceID: "instance", TrustedProbeID: probe.ID, ProbeVersion: probe.Version, ProbeHash: hash, PolicyIDs: []string{"default"}, CPUMillis: 100, WallTimeMS: 3000, MemoryBytes: 8 << 20, OutputBytes: 64 << 10, Pids: 16, DeadlineAt: time.Now().Add(time.Minute), CorrelationID: "r31-memory-8m-pids-16", ExecutionMode: "SANDBOX_PROBE_QUALIFICATION"}
+	s := newWithProfile(root, wrapper, probeBinary, "sleep")
+	got, runErr := s.Run(ctx, r)
+	if runErr != nil && !got.Clean {
+		t.Fatalf("forensics run failed with dirty cleanup: %v result=%+v", runErr, got)
+	}
+	configData, err := os.ReadFile(capturedConfig)
+	if err != nil {
+		t.Fatalf("captured config missing: %v; result=%+v", err, got)
+	}
+	var config bundleConfig
+	if err := json.Unmarshal(configData, &config); err != nil {
+		t.Fatal(err)
+	}
+	argsData, err := os.ReadFile(capturedArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("R3.1 request: memory=%d pids=%d sandbox_id=%s correlation_id=%s", r.MemoryBytes, r.Pids, r.SandboxJobID, r.CorrelationID)
+	t.Logf("R3.1 OCI config: cgroupsPath=%s memory.limit=%d pids.limit=%d unified=%v", config.Linux.CgroupsPath, config.Linux.Resources.Memory.Limit, config.Linux.Resources.Pids.Limit, config.Linux.Resources.Unified)
+	t.Logf("R3.1 runc argv:\n%s", strings.TrimSpace(string(argsData)))
+	t.Logf("R3.1 result: outcome=%s clean=%t diagnostic=%s", got.Outcome, got.Clean, got.Diagnostic)
+	if config.Linux.Resources.Memory.Limit != r.MemoryBytes || config.Linux.Resources.Pids.Limit != int64(r.Pids) {
+		t.Fatalf("finite limits lost in captured real config: %+v", config.Linux.Resources)
+	}
+}
 
 func TestRealRuncTrustedProbeIsolation(t *testing.T) {
 	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
