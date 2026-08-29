@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -270,6 +271,7 @@ func TestRealRuncUserBusSystemdEvidence(t *testing.T) {
 		return
 	}
 	t.Logf("user-bus systemd observed cgroup=%s", current)
+	logR32ScopeProperties(t, current)
 	for _, name := range []string{"memory.max", "pids.max", "memory.current", "memory.events", "pids.events"} {
 		data, err := os.ReadFile(filepath.Join(current, name))
 		if err != nil {
@@ -279,6 +281,156 @@ func TestRealRuncUserBusSystemdEvidence(t *testing.T) {
 	}
 	got := <-resultCh
 	t.Logf("user-bus systemd evidence result: outcome=%s clean=%t diagnostic=%s", got.Outcome, got.Clean, got.Diagnostic)
+}
+
+func TestRealRuncRootlessDefaultSliceEvidence(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	before := map[string]bool{}
+	_ = filepath.WalkDir("/sys/fs/cgroup", func(path string, entry os.DirEntry, err error) error {
+		if err == nil && entry.IsDir() {
+			before[path] = true
+		}
+		return nil
+	})
+	resultCh := make(chan model.Result, 1)
+	go func() { resultCh <- runProfileWithRootlessUserBus(t, "sleep", 3000, 8<<20, 16, 64<<10, true) }()
+	var current string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && current == "" {
+		_ = filepath.WalkDir("/sys/fs/cgroup", func(path string, entry os.DirEntry, err error) error {
+			if err == nil && entry.IsDir() && !before[path] && strings.HasSuffix(entry.Name(), ".scope") {
+				current = path
+				return filepath.SkipDir
+			}
+			return nil
+		})
+		if current == "" {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if current == "" {
+		got := <-resultCh
+		t.Logf("rootless default scope was not observable: outcome=%s clean=%t diagnostic=%s", got.Outcome, got.Clean, got.Diagnostic)
+		return
+	}
+	t.Logf("rootless default observed cgroup=%s", current)
+	logR32ScopeProperties(t, current)
+	for _, name := range []string{"memory.max", "pids.max", "memory.current", "memory.events", "pids.events"} {
+		data, err := os.ReadFile(filepath.Join(current, name))
+		if err != nil {
+			t.Logf("rootless default %s unavailable: %v", name, err)
+			continue
+		}
+		t.Logf("rootless default %s=%s", name, strings.TrimSpace(string(data)))
+	}
+	got := <-resultCh
+	t.Logf("rootless default evidence result: outcome=%s clean=%t diagnostic=%s", got.Outcome, got.Clean, got.Diagnostic)
+}
+
+func TestRealRuncDirectUpstreamStyleUserSlice(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root, err := os.MkdirTemp("/tmp", "ojp-r32-direct-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	probeBinary := filepath.Join(root, "trusted-probe")
+	build := exec.CommandContext(ctx, "go", "build", "-o", probeBinary, "../../cmd/trusted-probe")
+	build.Dir, _ = os.Getwd()
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("probe build: %v %s", err, out)
+	}
+	bundle := filepath.Join(root, "bundle")
+	rootfs := filepath.Join(bundle, "rootfs")
+	for _, path := range []string{filepath.Join(rootfs, "dev"), filepath.Join(rootfs, "proc"), filepath.Join(rootfs, "tmp"), filepath.Join(rootfs, "workspace")} {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := copyFile(probeBinary, filepath.Join(rootfs, "probe"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	s := New(root, "/usr/bin/runc", probeBinary)
+	r := model.Request{CPUMillis: 100, MemoryBytes: 8 << 20, Pids: 16}
+	containerID := "direct-r31-" + strings.TrimPrefix(filepath.Base(root), "ojp-r32-direct-")
+	config := s.ociConfig(containerID, "/workspace", r, []string{"PATH=/usr/bin:/bin", "OJPLATFORM_TRUSTED_PROFILE=sleep"})
+	config.Linux.CgroupsPath = "user.slice:runc:" + containerID
+	encoded, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "config.json"), encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"--debug", "--systemd-cgroup", "--rootless=true", "run", "--bundle", bundle, containerID}
+	cmd := exec.CommandContext(ctx, "/usr/bin/runc", args...)
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
+	for _, name := range []string{"DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"} {
+		if value := os.Getenv(name); value != "" {
+			cmd.Env = append(cmd.Env, name+"="+value)
+		}
+	}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	resultCh := make(chan error, 1)
+	go func() { resultCh <- cmd.Run() }()
+	var current string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && current == "" {
+		_ = filepath.WalkDir("/sys/fs/cgroup", func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr == nil && entry.IsDir() && strings.Contains(entry.Name(), containerID) && strings.HasSuffix(entry.Name(), ".scope") {
+				current = path
+				return filepath.SkipDir
+			}
+			return nil
+		})
+		if current == "" {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if current != "" {
+		t.Logf("direct upstream-style observed cgroup=%s", current)
+		logR32ScopeProperties(t, current)
+		for _, name := range []string{"memory.max", "pids.max", "memory.current", "memory.events", "pids.events"} {
+			data, readErr := os.ReadFile(filepath.Join(current, name))
+			if readErr != nil {
+				t.Logf("direct upstream-style %s unavailable: %v", name, readErr)
+				continue
+			}
+			t.Logf("direct upstream-style %s=%s", name, strings.TrimSpace(string(data)))
+		}
+	}
+	runErr := <-resultCh
+	t.Logf("direct upstream-style stdout=%s", strings.TrimSpace(stdout.String()))
+	t.Logf("direct upstream-style stderr=%s", strings.TrimSpace(stderr.String()))
+	t.Logf("direct upstream-style result: err=%v", runErr)
+	cleanup := exec.Command("/usr/bin/runc", "--systemd-cgroup", "delete", "--force", containerID)
+	cleanup.Env = cmd.Env
+	_ = cleanup.Run()
+}
+
+func logR32ScopeProperties(t *testing.T, cgroupPath string) {
+	t.Helper()
+	unit := filepath.Base(cgroupPath)
+	properties := []string{"ControlGroup", "Slice", "Delegate", "MemoryAccounting", "TasksAccounting", "MemoryMax", "TasksMax", "ActiveState", "SubState"}
+	for _, command := range [][]string{{"systemctl", "show", unit}, {"systemctl", "--user", "show", unit}} {
+		args := append([]string{}, command[1:]...)
+		for _, property := range properties {
+			args = append(args, "-p", property)
+		}
+		out, err := exec.Command(command[0], args...).CombinedOutput()
+		if err != nil {
+			t.Logf("scope manager=%s unit=%s unavailable: %v %s", strings.Join(command, " "), unit, err, strings.TrimSpace(string(out)))
+			continue
+		}
+		t.Logf("scope manager=%s unit=%s properties:\n%s", strings.Join(command, " "), unit, strings.TrimSpace(string(out)))
+	}
 }
 
 func TestRealRuncExplicitRootlessUserBusEvidence(t *testing.T) {
@@ -293,7 +445,7 @@ func TestRealRuncExplicitRootlessUserBusEvidence(t *testing.T) {
 		return nil
 	})
 	resultCh := make(chan model.Result, 1)
-	go func() { resultCh <- runProfileWithRootlessUserBus(t, "sleep", 3000, 8<<20, 4, 64<<10) }()
+	go func() { resultCh <- runProfileWithRootlessUserBus(t, "sleep", 3000, 8<<20, 4, 64<<10, false) }()
 	var current string
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && current == "" {
@@ -326,7 +478,7 @@ func TestRealRuncExplicitRootlessUserBusEvidence(t *testing.T) {
 	t.Logf("explicit rootless user-bus evidence result: outcome=%s clean=%t diagnostic=%s", got.Outcome, got.Clean, got.Diagnostic)
 }
 
-func runProfileWithRootlessUserBus(t *testing.T, profile string, wall int, memory int64, pids, output int) model.Result {
+func runProfileWithRootlessUserBus(t *testing.T, profile string, wall int, memory int64, pids, output int, defaultPath bool) model.Result {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -347,6 +499,9 @@ func runProfileWithRootlessUserBus(t *testing.T, profile string, wall int, memor
 	}
 	r := model.Request{ContractVersion: model.ContractVersion, SandboxJobID: "rootless-userbus-" + profile, JudgeJobID: "rootless-userbus-judge", WorkerID: "worker", WorkerInstanceID: "instance", TrustedProbeID: probe.ID, ProbeVersion: probe.Version, ProbeHash: hash, PolicyIDs: []string{"default"}, CPUMillis: 100, WallTimeMS: wall, MemoryBytes: memory, OutputBytes: output, Pids: pids, DeadlineAt: time.Now().Add(time.Minute), CorrelationID: "rootless-userbus-" + profile, ExecutionMode: "SANDBOX_PROBE_QUALIFICATION"}
 	s := newWithRootlessUserBusProfile(root, "/usr/bin/runc", probeBinary, profile)
+	if defaultPath {
+		s = newWithRootlessDefaultProfile(root, "/usr/bin/runc", probeBinary, profile)
+	}
 	got, _ := s.Run(ctx, r)
 	return got
 }

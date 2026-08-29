@@ -57,3 +57,15 @@ func TestOCIConfigCarriesFiniteResources(t *testing.T) {
 		t.Fatalf("serialized finite resources lost: %s", encoded)
 	}
 }
+
+func TestRootlessSystemdPathDiagnostics(t *testing.T) {
+	r := model.Request{CPUMillis: 100, MemoryBytes: 8 << 20, Pids: 16}
+	userSlice := newWithSliceProfile("/tmp/sandbox", "/usr/bin/runc", "/trusted/probe", "sleep", "user.slice")
+	if got := userSlice.ociConfig("sbx-user", "/workspace", r, nil).Linux.CgroupsPath; got != "user.slice:phase2b:sbx-user" {
+		t.Fatalf("unexpected user.slice cgroupsPath: %q", got)
+	}
+	rootlessDefault := newWithRootlessDefaultProfile("/tmp/sandbox", "/usr/bin/runc", "/trusted/probe", "sleep")
+	if got := rootlessDefault.ociConfig("sbx-default", "/workspace", r, nil).Linux.CgroupsPath; got != "" {
+		t.Fatalf("rootless default must omit cgroupsPath, got %q", got)
+	}
+}
