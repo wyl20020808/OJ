@@ -93,7 +93,34 @@ All 15 rows PASS in individually named tests in `tests/worker-authz.test.ts`:
 
 ## 12. A2A Matrix
 
-A2A-01 through A2A-24 all PASS (24 individually named tests). Coverage includes authentication, operator scope, malformed contexts, exact capabilities, authoritative ownership, cross-user denial, terminal rules, projection honesty, audit marker exclusion, side-effect freedom, replay safety, mismatch handling, and secret-free reason codes.
+All rows are individually named tests in `tests/worker-authz.test.ts` (24/24 PASS).
+
+| ID | Setup | Expected | Actual / evidence | Result |
+|---|---|---|---|---|
+| A2A-01 | unauthenticated diagnostics | deny | false, focused test | PASS |
+| A2A-02 | active operator status | allow | true, focused test | PASS |
+| A2A-03 | ordinary user global inspect | deny | false, focused test | PASS |
+| A2A-04 | disabled operator | deny | false, focused test | PASS |
+| A2A-05 | malformed auth context | deny | false, focused test | PASS |
+| A2A-06 | unknown operation | deny | false, focused test | PASS |
+| A2A-07 | unknown job state | deny | false, focused test | PASS |
+| A2A-08 | spoofed capability/role | deny | false, server-role resolver test | PASS |
+| A2A-09 | forged owner linkage | deny | false, authoritative resolver test | PASS |
+| A2A-10 | cross-user actor | deny | false, focused test | PASS |
+| A2A-11 | terminal canonical job | deny/no-op | false, canonical-state test | PASS |
+| A2A-12 | inspect-only role attempts cancel | deny cancel, allow inspect | true/false, focused test | PASS |
+| A2A-13 | drain operation | deny | false, focused test | PASS |
+| A2A-14 | worker advertises real mode | safe-only projection | real flags forced false | PASS |
+| A2A-15 | source marker in request | absent from audit | marker scan passes | PASS |
+| A2A-16 | session secret in actor | absent from audit | marker scan passes | PASS |
+| A2A-17 | raw lease token in worker | absent from audit | marker scan passes | PASS |
+| A2A-18 | arbitrary command/path metadata | not copied | marker scan passes | PASS |
+| A2A-19 | diagnostics decision | no mutation | resolver called once | PASS |
+| A2A-20 | repeated denied cancel | stable denial | false twice | PASS |
+| A2A-21 | deactivated account | deny | false, focused test | PASS |
+| A2A-22 | worker/job mismatch | deny | false, focused test | PASS |
+| A2A-23 | empty worker identity | deny | false, focused test | PASS |
+| A2A-24 | unknown operation with secret-like data | bounded reason/no leak | `DENIED`, scan passes | PASS |
 
 ## 13. JU Auth-Owned Rows
 
