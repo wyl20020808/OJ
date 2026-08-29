@@ -53,8 +53,8 @@ Lead integration must keep the adapter typed and preserve the qualification-only
 
 ## Commit and Readiness
 
-Implementation commit: `7ef29cb`.  
-Final HEAD: `7ef29cb`.  
+Implementation commit: `9d6fb52`.  
+Final HEAD: see `git log -1` (documentation follow-up commit).  
 Git status: must be clean after commit.
 
 **READY FOR LEAD INTEGRATION = NO**
