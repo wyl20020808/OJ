@@ -21,7 +21,12 @@ func TestRealRuncTrustedProbeIsolation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	root, _ := os.Getwd()
-	probeBinary := filepath.Join(t.TempDir(), "trusted-probe")
+	linuxTemp, err := os.MkdirTemp("/tmp", "ojp-2b-real-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(linuxTemp)
+	probeBinary := filepath.Join(linuxTemp, "trusted-probe")
 	build := exec.CommandContext(ctx, "go", "build", "-o", probeBinary, "../../cmd/trusted-probe")
 	build.Dir = root
 	if out, err := build.CombinedOutput(); err != nil {
@@ -32,7 +37,7 @@ func TestRealRuncTrustedProbeIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := model.Request{ContractVersion: model.ContractVersion, SandboxJobID: "real-sandbox", JudgeJobID: "real-judge", WorkerID: "worker", WorkerInstanceID: "instance", TrustedProbeID: probe.ID, ProbeVersion: probe.Version, ProbeHash: hash, PolicyIDs: []string{"default-seccomp-no-privilege"}, CPUMillis: 100, WallTimeMS: 3000, MemoryBytes: 32 << 20, OutputBytes: 64 << 10, Pids: 16, DeadlineAt: time.Now().Add(time.Minute), CorrelationID: "real-correlation", ExecutionMode: "SANDBOX_PROBE_QUALIFICATION"}
-	s := New(t.TempDir(), "/usr/bin/runc", probeBinary)
+	s := New(linuxTemp, "/usr/bin/runc", probeBinary)
 	result, err := s.Run(ctx, r)
 	if err != nil {
 		if strings.Contains(result.Diagnostic, "remount-private") || strings.Contains(result.Diagnostic, "permission denied") {

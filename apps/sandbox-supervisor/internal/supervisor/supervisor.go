@@ -177,7 +177,7 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	cleanup := exec.Command(s.Runc, "delete", "--force", sid)
 	_ = cleanup.Run()
 	result.CompletedAt = time.Now().UTC()
-	result.Clean = guestGone(sid)
+	result.Clean = guestGone(s.Runc, sid) && !pathExists(dir)
 	if !result.Clean {
 		result.Outcome = CleanupFailureOutcome
 		return result, errors.New("sandbox cleanup verification failed")
@@ -224,4 +224,9 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	_, err = io.Copy(out, in)
 	return err
 }
-func guestGone(id string) bool { return exec.Command("runc", "state", id).Run() != nil }
+func guestGone(runcPath, id string) bool { return exec.Command(runcPath, "state", id).Run() != nil }
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}

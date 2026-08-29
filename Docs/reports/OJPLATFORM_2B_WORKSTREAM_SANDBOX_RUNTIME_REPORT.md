@@ -16,13 +16,13 @@ Baseline: `ebf2e06`
 - `/sys/fs/cgroup` is `cgroup2fs`, writable; controllers: `cpuset cpu io memory hugetlb pids rdma`.
 - Host process seccomp mode 2 with one filter; `unshare -Ur true` succeeds outside runc.
 - `/mnt/c` and `/mnt/d` are writable 9p host mounts. The trusted probe checks that they are absent inside the guest.
-- Real runc attempt fails during OCI rootfs preparation: `remount-private ... MS_PRIVATE: permission denied` when user namespace and UID/GID mappings are enabled.
+- Real runc attempts from both the Windows worktree and native WSL `/tmp` fail during OCI rootfs preparation: `remount-private ... MS_PRIVATE: permission denied` when user namespace and UID/GID mappings are enabled.
 
 ## Implementation
 
 `apps/sandbox-supervisor` contains the Go Supervisor and fixed `SANDBOX_PROBE_QUALIFICATION` binary. Requests are contract `2B.1`, mode-gated, identity/path validated, deadline/limits checked, and probe ID/version/SHA-256 verified before staging. The Supervisor creates a per-job bundle/workspace, runs `runc` with PID/mount/network/IPC/UTS/user namespaces, cgroup v2 CPU/memory/pids resources, masked/readonly proc paths, no-new-privileges, empty capabilities, and a server-controlled seccomp deny list. `/tmp` and `/workspace` are private tmpfs mounts; no host bind mounts, devices, sockets, credentials, or inherited environment are supplied.
 
-Stdout/stderr are collected through bounded writers using the request output cap. Context cancellation and wall deadline terminate the runc invocation, followed by forced delete and state verification. Cleanup failure is a distinct security-significant outcome. Runs have unique IDs and no global serialization lock, allowing independent concurrent sandboxes.
+Stdout/stderr are collected through bounded writers using the request output cap. Context cancellation and wall deadline terminate the runc invocation, followed by forced delete, state verification, and per-job directory absence verification. Cleanup failure is a distinct security-significant outcome. Runs have unique IDs and no global serialization lock, allowing independent concurrent sandboxes.
 
 `internal/adapter` is the typed Worker boundary. It accepts only the qualification probe and returns synthetic results; `REAL_SUBMISSION_EXECUTION` and unknown probe IDs are rejected. It has no application database dependency and cannot execute arbitrary commands, source, paths, mounts, environment, or network targets.
 
