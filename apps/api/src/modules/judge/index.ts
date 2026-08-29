@@ -1,6 +1,7 @@
 export * from './model.js';
 export * from './repository.js';
 export * from './service.js';
+export * from './safety.js';
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AuthContext } from '../submission/model.js';
