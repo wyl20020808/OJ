@@ -484,6 +484,9 @@ pre {
   color: #40515c;
   font-variant-numeric: tabular-nums;
 }
+.judge-actions {
+  margin-top: 0.65rem;
+}
 .tone-progress {
   border-color: #a8d5df;
   background: #effafd;
