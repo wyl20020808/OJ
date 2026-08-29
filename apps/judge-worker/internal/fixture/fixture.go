@@ -26,7 +26,8 @@ func (e Executor) Run(ctx context.Context, id string) (protocol.Outcome, string,
 	}
 	steps := 1
 	if id == "FX-SLOW" || id == "FX-CANCEL" {
-		steps = 20
+		// Keep cancellation/crash qualification observable while remaining bounded.
+		steps = 100
 	}
 	for i := 0; i < steps; i++ {
 		select {

@@ -105,8 +105,13 @@ func (w *Worker) emitHeartbeat() {
 	if w.Queue.Redis != nil {
 		encoded, _ := json.Marshal(payload)
 		if err := w.Queue.Redis.Set(context.Background(), w.Config.HeartbeatPrefix+":"+w.WorkerID+":"+w.InstanceID, string(encoded), time.Duration(w.Config.LivenessTimeoutMS)*time.Millisecond); err != nil {
+			w.setState(Degraded)
+			_ = w.Queue.Redis.Close()
 			w.logger.Printf(`{"event":"worker_heartbeat_error","worker_id":%q,"worker_instance_id":%q}`, w.WorkerID, w.InstanceID)
 			return
+		}
+		if w.State() == Degraded {
+			w.setState(Ready)
 		}
 	}
 	w.logger.Printf(`{"event":"worker_heartbeat","worker_id":%q,"worker_instance_id":%q,"protocol_version":%q,"build_version":%q,"state":%q,"max_concurrency":%d,"active":%d,"safe_fixture":true}`, w.WorkerID, w.InstanceID, protocol.Version, w.Config.BuildVersion, w.State(), w.Config.MaxConcurrency, w.active.Load())
@@ -131,6 +136,10 @@ func (w *Worker) claimLoop(ctx context.Context) {
 		lease, err := w.Queue.Claim(ctx, w.InstanceID, time.Duration(w.Config.LeaseMS)*time.Millisecond)
 		if err != nil {
 			w.setState(Degraded)
+			if w.Queue.Redis != nil {
+				_ = w.Queue.Redis.Close()
+			}
+			w.logger.Printf(`{"event":"worker_queue_error","worker_id":%q,"error":%q}`, w.WorkerID, err.Error())
 			time.Sleep(backoff)
 			if w.Queue.Redis.Connect(ctx) == nil {
 				w.setState(Ready)
@@ -241,7 +250,9 @@ func (w *Worker) Drain(ctx context.Context) error {
 	}
 	w.setState(Stopping)
 	w.stopOnce.Do(func() { close(w.stop) })
-	_ = w.Queue.Redis.Close()
+	if w.Queue.Redis != nil {
+		_ = w.Queue.Redis.Close()
+	}
 	w.setState(Stopped)
 	return nil
 }

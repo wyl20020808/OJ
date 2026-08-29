@@ -2,15 +2,15 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 1E-R FINAL REQUALIFICATION
-Current Status: PHASE 1E-R PARTIAL / mandatory gates unresolved
+Current Stage: PHASE 2A REAL JUDGE WORKER FOUNDATION
+Current Status: PHASE 2A PASS / real multi-process qualification complete
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 PHASE 1C: PASS
 PHASE 1D: PASS
 PHASE 1E: HISTORICAL PASS / FINAL RERUN PARTIAL
 PHASE 1E-R: RECOVERY CLOSED HISTORICALLY / FINAL RERUN PARTIAL
-PHASE 2A: PRESENT IN CURRENT CHECKOUT / NOT QUALIFIED FOR THIS GOAL
+PHASE 2A: PASS / REAL MULTI-PROCESS QUALIFICATION COMPLETE
 PHASE 2B: NOT STARTED
 
 ## Completed Goals
@@ -66,6 +66,6 @@ PHASE 2B: NOT STARTED
 
 ## Next Planned Goal
 
-Resolve the Phase 1E-R final rerun blockers, including the live browser `Leased` projection gate and missing Go process qualification. Do not claim Phase 1E final PASS or begin further phase work from this result.
+Phase 2A is qualified for the frozen safe-fixture Worker foundation. Phase 2B/Sandbox, compiler/runtime adapters, real submitted-source execution, real verdicts, and Contest remain not started or not qualified.
 
 Last Updated: 2026-08-29

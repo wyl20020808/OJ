@@ -274,7 +274,9 @@ export async function buildApp(options: AppOptions = {}) {
                 ? 'SYNTHETIC_COMPLETED'
                 : job.status === 'FAILED_RETRYABLE'
                   ? 'RETRYABLE_FAILURE'
-                  : 'PROTOCOL_FAILURE';
+                  : job.status === 'CANCELLED'
+                    ? 'CANCELLED'
+                    : 'PROTOCOL_FAILURE';
         return {
           judgeJobId: job.id,
           status,
@@ -449,7 +451,9 @@ export async function buildApp(options: AppOptions = {}) {
                 ? 'SYNTHETIC_COMPLETED'
                 : job.status === 'FAILED_RETRYABLE'
                   ? 'RETRYABLE_FAILURE'
-                  : 'PROTOCOL_FAILURE';
+                  : job.status === 'CANCELLED'
+                    ? 'CANCELLED'
+                    : 'PROTOCOL_FAILURE';
         return {
           judgeJobId: job.id,
           status,

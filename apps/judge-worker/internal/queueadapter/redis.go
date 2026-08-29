@@ -146,12 +146,22 @@ func readRESP(r *bufio.Reader) (any, error) {
 	return nil, errors.New("bad redis response")
 }
 func (c *Client) do(ctx context.Context, args ...string) (any, error) {
-	if err := c.Connect(ctx); err != nil {
-		return nil, err
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := c.Connect(ctx); err != nil {
+			lastErr = err
+			continue
+		}
+		c.mu.Lock()
+		value, err := c.command(args...)
+		c.mu.Unlock()
+		if err == nil {
+			return value, nil
+		}
+		lastErr = err
+		_ = c.Close()
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.command(args...)
+	return nil, lastErr
 }
 func (c *Client) String(ctx context.Context, args ...string) (string, error) {
 	v, err := c.do(ctx, args...)
