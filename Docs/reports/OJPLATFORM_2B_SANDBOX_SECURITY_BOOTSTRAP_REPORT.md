@@ -75,6 +75,5 @@ Not qualified: Sandbox isolation, escape resistance, network denial, syscall pol
 
 - Common bootstrap: `ebf2e06` (`docs: bootstrap phase 2b sandbox security`).
 - Phase 2A baseline report commit: `dd81f4e`.
-- Final Lead HEAD at report creation: recorded by the closing commit.
+- Final Lead HEAD: `48c0450` (`docs: record phase 2b sandbox bootstrap`).
 - No new worktrees created; protected `Goals/` and prior qualification artifacts preserved.
-
