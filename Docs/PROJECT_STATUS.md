@@ -2,8 +2,8 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 2A REAL JUDGE WORKER FOUNDATION
-Current Status: PHASE 2A PASS / real multi-process qualification complete
+Current Stage: PHASE 2B SANDBOX SECURITY QUALIFICATION BOOTSTRAP
+Current Status: PHASE 2B IN PROGRESS / BOOTSTRAPPED
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 PHASE 1C: PASS
@@ -11,7 +11,7 @@ PHASE 1D: PASS
 PHASE 1E: HISTORICAL PASS / FINAL RERUN PARTIAL
 PHASE 1E-R: RECOVERY CLOSED HISTORICALLY / FINAL RERUN PARTIAL
 PHASE 2A: PASS / REAL MULTI-PROCESS QUALIFICATION COMPLETE
-PHASE 2B: NOT STARTED
+PHASE 2B: IN PROGRESS / BOOTSTRAPPED
 
 ## Completed Goals
 
@@ -66,6 +66,6 @@ PHASE 2B: NOT STARTED
 
 ## Next Planned Goal
 
-Phase 2A is qualified for the frozen safe-fixture Worker foundation. Phase 2B/Sandbox, compiler/runtime adapters, real submitted-source execution, real verdicts, and Contest remain not started or not qualified.
+Phase 2A is qualified for the frozen safe-fixture Worker foundation. Phase 2B Sandbox security bootstrap is in progress; Sandbox runtime, compiler/runtime adapters, real submitted-source execution, real verdicts, and Contest remain not started or not qualified.
 
 Last Updated: 2026-08-29
