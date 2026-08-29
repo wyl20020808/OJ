@@ -136,6 +136,49 @@ func TestRealRuncCgroupAttachment(t *testing.T) {
 	}
 }
 
+func runProfile(t *testing.T, profile string, wall int, memory int64, pids, output int) model.Result {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root, err := os.MkdirTemp("/tmp", "ojp-2b-profile-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	probeBinary := filepath.Join(root, "trusted-probe")
+	build := exec.CommandContext(ctx, "go", "build", "-o", probeBinary, "../../cmd/trusted-probe")
+	build.Dir, _ = os.Getwd()
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("probe build: %v %s", err, out)
+	}
+	hash, err := probe.ArtifactHash(probeBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := model.Request{ContractVersion: model.ContractVersion, SandboxJobID: "profile-" + profile, JudgeJobID: "profile-judge", WorkerID: "worker", WorkerInstanceID: "instance", TrustedProbeID: probe.ID, ProbeVersion: probe.Version, ProbeHash: hash, PolicyIDs: []string{"default"}, CPUMillis: 100, WallTimeMS: wall, MemoryBytes: memory, OutputBytes: output, Pids: pids, DeadlineAt: time.Now().Add(time.Minute), CorrelationID: "profile-" + profile, ExecutionMode: "SANDBOX_PROBE_QUALIFICATION"}
+	s := newWithProfile(root, "/usr/bin/runc", probeBinary, profile)
+	got, _ := s.Run(ctx, r)
+	return got
+}
+
+func TestRealRuncResourceProfiles(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	if got := runProfile(t, "sleep", 50, 32<<20, 16, 64<<10); got.Outcome != "SANDBOX_WALL_LIMIT" || !got.Clean {
+		t.Fatalf("sleep limit: %+v", got)
+	}
+	if got := runProfile(t, "output", 3000, 32<<20, 16, 4096); got.Outcome != "SANDBOX_OUTPUT_LIMIT" || !got.Clean {
+		t.Fatalf("output limit: %+v", got)
+	}
+	if got := runProfile(t, "memory", 3000, 8<<20, 16, 64<<10); got.Clean && got.Outcome == ProbeOutcome {
+		t.Logf("memory pressure was not enforced by the rootless cgroup: %+v", got)
+	}
+	if got := runProfile(t, "pids", 3000, 32<<20, 4, 64<<10); got.Clean && got.Outcome == ProbeOutcome {
+		t.Logf("pids pressure was not enforced by the rootless cgroup: %+v", got)
+	}
+}
+
 func TestRealRuncConcurrentQualification(t *testing.T) {
 	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
 		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")

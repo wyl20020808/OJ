@@ -12,6 +12,41 @@ import (
 
 func main() {
 	marker := "qualification-marker"
+	profile := os.Getenv("OJPLATFORM_TRUSTED_PROFILE")
+	switch profile {
+	case "sleep":
+		time.Sleep(10 * time.Second)
+	case "cpu":
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			_ = filepath.Base("/workspace/marker")
+		}
+	case "memory":
+		memory := make([]byte, 64<<20)
+		for i := range memory {
+			memory[i] = byte(i)
+		}
+		time.Sleep(time.Second)
+	case "output":
+		_, _ = os.Stdout.Write([]byte(strings.Repeat("O", 2<<20)))
+	case "pids":
+		children := make([]*os.Process, 0, 64)
+		for i := 0; i < 64; i++ {
+			child, err := os.StartProcess("/probe", []string{"/probe"}, &os.ProcAttr{Env: []string{"PATH=/usr/bin:/bin", "OJPLATFORM_TRUSTED_PROFILE=pids-child"}})
+			if err != nil {
+				break
+			}
+			children = append(children, child)
+		}
+		for _, child := range children {
+			_, _ = child.Wait()
+		}
+	case "pids-child":
+		time.Sleep(500 * time.Millisecond)
+	case "":
+	default:
+		os.Exit(64)
+	}
 	_ = os.WriteFile("/workspace/marker", []byte(marker), 0600)
 	checks := map[string]bool{}
 	for _, path := range []string{"/etc/hostname", "/host", "/mnt/c", "/mnt/d", "/workspace/marker", "/workspace/../etc/passwd", "/proc/1/cmdline"} {

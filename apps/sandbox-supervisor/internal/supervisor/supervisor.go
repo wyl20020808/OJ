@@ -25,9 +25,10 @@ const (
 )
 
 type Supervisor struct {
-	Root        string
-	Runc        string
-	ProbeBinary string
+	Root                 string
+	Runc                 string
+	ProbeBinary          string
+	qualificationProfile string
 }
 type bundleConfig struct {
 	OciVersion string        `json:"ociVersion"`
@@ -96,6 +97,9 @@ type bundleSyscall struct {
 
 func New(root, runc, probeBinary string) *Supervisor {
 	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary}
+}
+func newWithProfile(root, runc, probeBinary, profile string) *Supervisor {
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile}
 }
 func Validate(r model.Request) error {
 	if r.ContractVersion != model.ContractVersion || r.ExecutionMode != "SANDBOX_PROBE_QUALIFICATION" {
@@ -170,7 +174,16 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	if err := copyFile(s.ProbeBinary, filepath.Join(rootfs, "probe"), 0755); err != nil {
 		return result, err
 	}
-	config := bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: []string{"PATH=/usr/bin:/bin", "LANG=C"}, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "noexec", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: "phase2b/" + sid, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
+	guestEnv := []string{"PATH=/usr/bin:/bin", "LANG=C"}
+	if s.qualificationProfile != "" {
+		switch s.qualificationProfile {
+		case "sleep", "cpu", "memory", "pids", "pids-child", "output":
+			guestEnv = append(guestEnv, "OJPLATFORM_TRUSTED_PROFILE="+s.qualificationProfile)
+		default:
+			return result, errors.New("unknown trusted qualification profile")
+		}
+	}
+	config := bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: guestEnv, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "noexec", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: "phase2b/" + sid, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
 	encoded, _ := json.MarshalIndent(config, "", "  ")
 	if err := os.WriteFile(filepath.Join(bundle, "config.json"), encoded, 0600); err != nil {
 		return result, err
@@ -178,7 +191,15 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	commandCtx, cancel := context.WithTimeout(ctx, time.Duration(r.WallTimeMS)*time.Millisecond)
 	defer cancel()
 	create := exec.CommandContext(commandCtx, s.Runc, "run", "--bundle", bundle, sid)
-	create.Env = []string{"PATH=/usr/bin:/bin"}
+	create.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
+	if s.qualificationProfile != "" {
+		switch s.qualificationProfile {
+		case "sleep", "cpu", "memory", "pids", "pids-child", "output":
+			create.Env = append(create.Env, "OJPLATFORM_TRUSTED_PROFILE="+s.qualificationProfile)
+		default:
+			return result, errors.New("unknown trusted qualification profile")
+		}
+	}
 	var stdout, stderr = boundedWriter{limit: r.OutputBytes}, boundedWriter{limit: r.OutputBytes}
 	create.Stdout = &stdout
 	create.Stderr = &stderr

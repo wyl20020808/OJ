@@ -15,7 +15,7 @@ Starting HEAD for R2: `91daf87` (`fix: recover rootless runc sandbox qualificati
 
 ## Backend and Implementation
 
-Dedicated Go Supervisor with rootless OCI/runc, user/mount/PID/network/IPC/UTS namespaces, UID/GID mapping to host 65534, empty capabilities, no-new-privileges, controlled `/proc`, tmpfs `/dev`/`/tmp`/`/workspace`, server-owned seccomp policy, cgroup v2 CPU/memory/pids resources, bounded output, context wall deadline, forced delete, and state/workspace cleanup verification. Only the fixed, versioned, SHA-256 verified `SANDBOX_PROBE_QUALIFICATION` is executable. No arbitrary command, source, path, mount, environment, network target, compiler, runtime judge, verdict, or app database access exists.
+Dedicated Go Supervisor with rootless OCI/runc, user/mount/PID/network/IPC/UTS namespaces, UID/GID mapping to host 65534, empty capabilities, no-new-privileges, controlled `/proc`, tmpfs `/dev`/`/tmp`/`/workspace`, server-owned seccomp policy, cgroup v2 CPU/memory/pids resources, bounded output, context wall deadline, forced delete, and state/workspace cleanup verification. The trusted probe also has Supervisor-selected, non-request-controlled fixed qualification profiles for sleep, CPU, memory, pids, and output pressure. Only the fixed, versioned, SHA-256 verified `SANDBOX_PROBE_QUALIFICATION` is executable. No arbitrary command, source, path, mount, environment, network target, compiler, runtime judge, verdict, or app database access exists.
 
 ## Matrix Results
 
@@ -25,7 +25,7 @@ Dedicated Go Supervisor with rootless OCI/runc, user/mount/PID/network/IPC/UTS n
 | FS01-FS10 | PASS for real probe: workspace marker, host root/project paths, `/mnt/c`, `/mnt/d`, traversal and `/host` absent; cleanup PASS |
 | NET01-NET10 | PASS for no default route and network namespace; endpoint-specific gateway/service cases remain not separately probed |
 | PS01-PS10 | PASS for PID init isolation, UID/GID namespace identity, zero effective caps, no-new-privs/seccomp policy; safe signal/ptrace/device cases not separately exercised |
-| RL2B-01..10 | PARTIAL: real cgroup membership and exact `cpu.max`, `memory.max`, `pids.max` configuration observed; pressure enforcement and cancellation-under-pressure not qualified |
+| RL2B-01..10 | PARTIAL: real wall timeout and bounded output pressure pass; exact `cpu.max`, `memory.max`, `pids.max` configuration is observed, but fixed memory/pids pressure probes complete successfully, proving enforcement is not qualified |
 | ENV01-ENV08 | PASS for allowlisted `PATH`/`LANG` and no inherited host secret/path mounts; synthetic secret rows not all separately probed |
 | LC01-LC10 | PASS for normal, repeated, concurrent runc state and workspace cleanup; timeout/child-fanout/stale cgroup stress rows not all exercised |
 | WI01-WI06 | PASS for typed adapter, qualification-only mode, hash enforcement, synthetic result, cancellation context propagation, and no DB dependency |
@@ -35,6 +35,7 @@ Dedicated Go Supervisor with rootless OCI/runc, user/mount/PID/network/IPC/UTS n
 - Real runc probe: PASS. Example output: `pid=1`, `uid=0`, `gid=0`, `cap_eff=0000000000000000`, `seccomp_mode=2`, `default_route=false`, cgroup `0::/phase2b/sbx-...`; `/mnt/c`, `/mnt/d`, `/host`, traversal and host root checks are false; workspace marker is true.
 - Real concurrent qualification: two unique sandbox IDs run concurrently and both cleanly complete; repeated `-count=3` runs passed.
 - Real cgroup attachment: while probe ran, host observed `cpu.max=100000 100000`, `memory.max=33554432`, `pids.max=16` in `/sys/fs/cgroup/phase2b/sbx-*`. This is configuration/attachment evidence, not pressure enforcement evidence.
+- Fixed trusted pressure profiles: `sleep` produced `SANDBOX_WALL_LIMIT`; `output` produced `SANDBOX_OUTPUT_LIMIT`; 8 MiB memory and pids=4 probes completed successfully, so RL memory/pids enforcement is a hard unresolved gap. CPU pressure and cancellation-under-pressure remain unqualified.
 - Real seccomp evidence: guest reports seccomp mode 2 and the OCI config contains the trusted deny list for mount/namespace/ptrace/bpf/perf syscalls. Forbidden-syscall execution was not attempted.
 - Cleanup evidence: `runc delete --force`, `runc state` absence, and per-job directory absence are checked. No stale state remained after passing runs.
 
@@ -50,7 +51,7 @@ Normal and concurrent qualification were repeated three times with no failures, 
 
 ## Integration Requests and Limitations
 
-Lead must preserve the typed adapter and qualification-only boundary. To reach R2 PASS, run dedicated repository-owned fixed pressure probes for CPU, memory, pids, output, timeout/cancel, child fanout, and stale cgroup/network namespace checks on this rootless backend, then repeat the full SB/FS/NET/PS/RL/ENV/LC/WI matrices. LSM enforcement beyond seccomp was not independently qualified. No changes were made to Auth, Web, shared contracts, `PROJECT_STATUS`, or Phase 2C.
+Lead must preserve the typed adapter and qualification-only boundary. To reach R2 PASS, repair rootless cgroup controller enforcement and rerun the fixed CPU, memory, pids, output, timeout/cancel, child fanout, and stale cgroup/network namespace probes, then repeat the full SB/FS/NET/PS/RL/ENV/LC/WI matrices. LSM enforcement beyond seccomp was not independently qualified. No changes were made to Auth, Web, shared contracts, `PROJECT_STATUS`, or Phase 2C.
 
 ## Commits and Final State
 
