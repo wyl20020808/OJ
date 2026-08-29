@@ -27,18 +27,18 @@ Starting and final implementation ancestor: `2a43c675a284f60ca54b9249b56b18b8dd4
 | Immutable submission/revision/testdata/language linkage | enqueue payload and job validation | Q28-Q30 test coverage | PASS |
 | Enqueue, lease, retry, recovery, completion | token-checked Redis repository | Q01-Q27 and R01-R08 evidence | PASS |
 | Authoritative owner authorization | API resolves owner from Submission, not client field | A-FINAL and J3 | PASS |
-| Server-backed synthetic-only web state | API projection plus qualification control | W01-W30, J1-J4, Playwright x2 | PASS |
+| Server-backed synthetic-only web state | API projection plus qualification control | Web/unit coverage; live browser gate failed at Leased projection | PARTIAL |
 
 ## Matrix Results
 
 | Matrix | Evidence | Result |
 |---|---|---|
-| A-FINAL-01..16 | `judge-api-composition`, `judge-authz`, `submission-authz`, real J3 browser denial; owner, unrelated, operator/ordinary, inactive/malformed/unknown fail closed, forged owner denial, no job side effect | PASS |
-| Q01..Q30 | `judge-queue`, `judge-queue-redis`, composed R05/R06 probe; real concurrent duplicate enqueue and concurrent claim, token/race/retry/terminal/reconnect/immutability/isolation coverage | PASS |
-| R01..R10 | unavailable/disconnect/reconnect/restart queue tests; live Redis restart; scoped API lifecycle R05/R06; worker pre-ack recovery; malformed payload handling; J4 runtime recovery | PASS |
-| S01..S10 | static execution-primitive audit, queue guard tests, inert-marker runtime runs, API harness log scan, projection/browser checks | PASS |
-| W01..W30 | `web-recovery.test.tsx` plus two real server-backed Playwright runs; mobile, focus, error, protected-cache, product regression assertions | PASS |
-| J1..J4 | two independent real browser journeys covering synthetic success, retry/requeue, forbidden user, API/Redis recovery | PASS |
+| A-FINAL-01..16 | Focused authorization/composition tests pass; complete fresh actor matrix not rerun | NOT VERIFIED |
+| Q01..Q30 | Queue suites and live bridge probe pass selected concurrency/idempotency/recovery cases; full fresh matrix not rerun | PARTIAL |
+| R01..R10 | R05/R06 live probe passes; integration was initially blocked with Redis down; worker/browser paths remain incomplete | PARTIAL |
+| S01..S10 | Existing static/inert-fixture evidence retained; complete fresh composed security rerun not performed | NOT VERIFIED |
+| W01..W30 | Web unit coverage passes; live Playwright runs failed before full journey | PARTIAL |
+| J1..J4 | Bridge/API evidence covers recovery; browser J1/J2/J4 gate failed at Leased state | PARTIAL |
 
 Authorization used the authoritative Submission owner resolver on the live API path. Client-supplied ownership cannot authorize view/inspect/retry operations. Public job projections omit source, owner identity, lease owner/token/expiry, Redis details, and credentials. Unknown state/operation and malformed or inactive contexts fail closed.
 
@@ -46,7 +46,7 @@ Authorization used the authoritative Submission owner resolver on the live API p
 
 `phase1er-bridge-probe.mjs`, run against PostgreSQL, Redis, and the scoped API harness, passed R05/R06: same job after API restart, idempotent re-enqueue, unchanged pre-fixture attempt, valid lease completion after restart, stale lease recovery to attempt 2, and old-token rejection. PostgreSQL and Redis were healthy before and after the API restarts.
 
-Playwright Run 1 and Run 2 both passed the real runtime suite with separate test-owned accounts/data. Each exercised UI registration/login, real Problem/Submission creation, Redis-backed Job transitions, synthetic completion, retry/requeue, cross-user denial, Redis stop/start, scoped API stop/start, refresh, logout and protected-detail denial. The intentional outage paths produced service-unavailable UI, never a Judge verdict. After both runs PostgreSQL, Redis, MinIO, and `/ready` were healthy; the WSL keepalive remained active. Browser console/page errors were clean except expected resource messages during explicit API/Redis outage injection.
+The fresh Playwright Run 1 and Run 2 both failed at `getByText('Leased')` after an authoritative fixture claim; Run 2 therefore remains blocked by the hard gate. The run did not reach outage, logout, console, or responsive assertions. PostgreSQL, Redis, and MinIO were healthy after infrastructure startup; no claim is made for the unexecuted browser portions.
 
 ## Security and Honesty
 
@@ -54,7 +54,7 @@ Only inert source markers were submitted. No compile, interpreter, eval, shell, 
 
 ## Regression and Architecture
 
-PASS: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (114 passed, 3 opt-in Redis skipped), targeted Judge/Web suites (78 passed, 3 opt-in Redis skipped), `pnpm integration` (4 passed), `pnpm test:architecture`, `pnpm build`, `pnpm runtime:smoke` (two rounds), API smoke, Playwright Run 1, Playwright Run 2, and `git diff --check`.
+`pnpm format:check`, lint, typecheck, unit tests (197 passed, 3 skipped), architecture, build, runtime smoke (two rounds), and `git diff --check` passed. The first integration attempt was blocked while Redis was unavailable and the fresh Playwright hard gate failed on both runs. Go process qualification could not be rerun because `go` is unavailable on PATH in this environment.
 
 Product regression coverage includes register/login/me/logout, Home, Problemset, Problem Detail, Profile/Account, Authoring, submission create/history/detail, 390px responsive behavior, keyboard/focus, and browser console checks. Architecture gate passed. No dependency, migration, shared-contract, or dependency-direction drift was introduced.
 
@@ -66,4 +66,4 @@ Deferred to Phase 2: real Judge Worker, Sandbox/security qualification, real ver
 
 ## Final State
 
-PHASE 1E FINAL STATUS: **PASS**. PHASE 1E-R RECOVERY: **CLOSED**. PHASE 2: **NOT STARTED**.
+PHASE 1E FINAL STATUS: **PARTIAL**. PHASE 1E-R RECOVERY: **CLOSED HISTORICALLY; FINAL RERUN NOT CLOSED**. PHASE 2A CODE IS PRESENT IN THIS CHECKOUT AND IS NOT QUALIFIED BY THIS GOAL.

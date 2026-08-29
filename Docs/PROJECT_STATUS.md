@@ -3,14 +3,15 @@
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: PHASE 1E-R FINAL REQUALIFICATION
-Current Status: PHASE 1E-R PARTIAL / mandatory rerun blockers remain
+Current Status: PHASE 1E-R PARTIAL / mandatory gates unresolved
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 PHASE 1C: PASS
 PHASE 1D: PASS
 PHASE 1E: HISTORICAL PASS / FINAL RERUN PARTIAL
-PHASE 1E-R: PARTIAL / format, Windows process-stop, and Playwright gates unresolved
-PHASE 2A: PRESENT IN CURRENT CHECKOUT / NOT QUALIFIED FOR 1E-R CLOSURE
+PHASE 1E-R: RECOVERY CLOSED HISTORICALLY / FINAL RERUN PARTIAL
+PHASE 2A: PRESENT IN CURRENT CHECKOUT / NOT QUALIFIED FOR THIS GOAL
+PHASE 2B: NOT STARTED
 
 ## Completed Goals
 
@@ -65,6 +66,6 @@ PHASE 2A: PRESENT IN CURRENT CHECKOUT / NOT QUALIFIED FOR 1E-R CLOSURE
 
 ## Next Planned Goal
 
-Resolve the Phase 1E-R rerun blockers and reconcile the mixed Phase 1E/2A checkout before any final PASS decision. No submitted-source execution, Sandbox, real verdict, or Contest qualification is claimed.
+Resolve the Phase 1E-R final rerun blockers, including the live browser `Leased` projection gate and missing Go process qualification. Do not claim Phase 1E final PASS or begin further phase work from this result.
 
 Last Updated: 2026-08-29
