@@ -2,6 +2,7 @@ import {
   Component,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ErrorInfo,
   type FormEvent,
@@ -155,7 +156,7 @@ export function presentJudgeStatus(status: string): StatusPresentation {
       return {
         label: 'Leased',
         tone: 'progress',
-        note: 'A qualification worker has leased this job.',
+        note: 'Synthetic protocol qualification is in progress; submitted code is not executed.',
       };
     case 'RUNNING':
       return {
@@ -190,10 +191,14 @@ export function presentJudgeStatus(status: string): StatusPresentation {
   }
 }
 
-function JudgeStatus({ submission }: { submission: Submission }) {
+export function JudgeStatus({ submission }: { submission: Submission }) {
   const presentation = presentJudgeStatus(String(submission.status));
   return (
-    <div className={`judge-status tone-${presentation.tone}`}>
+    <div
+      className={`judge-status tone-${presentation.tone}`}
+      role="status"
+      aria-label={`${presentation.label}. ${presentation.note}`}
+    >
       <span className="status">{presentation.label}</span>
       <span className="judge-note">{presentation.note}</span>
       {submission.attempt !== undefined && (
@@ -1228,20 +1233,24 @@ function SubmissionHistory({
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [cursor, setCursor] = useState<string | undefined>();
+  const requestVersion = useRef(0);
   const load = () => {
+    const version = ++requestVersion.current;
     setItems(null);
     setError('');
     void api
       .submissions(cursor)
       .then((d) => {
+        if (version !== requestVersion.current) return;
         setItems(d.items);
         setNext(d.nextCursor);
       })
-      .catch((e) =>
+      .catch((e) => {
+        if (version !== requestVersion.current) return;
         setError(
           e instanceof ApiError ? e.message : 'Unable to load submissions.',
-        ),
-      );
+        );
+      });
   };
   useEffect(load, [api, cursor]);
   if (!user)
@@ -1321,12 +1330,28 @@ function SubmissionDetail({
 }) {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  useEffect(() => {
-    if (!user) return;
+  const [transportError, setTransportError] = useState('');
+  const requestVersion = useRef(0);
+  const load = () => {
+    const version = ++requestVersion.current;
+    setSubmission(null);
+    setError(null);
+    setTransportError('');
     void api
       .submission(id)
-      .then(setSubmission)
-      .catch((e) => setError(e instanceof ApiError ? e : null));
+      .then((value) => {
+        if (version !== requestVersion.current) return;
+        setSubmission(value);
+      })
+      .catch((e) => {
+        if (version !== requestVersion.current) return;
+        if (e instanceof ApiError) setError(e);
+        else setTransportError('The service could not be reached.');
+      });
+  };
+  useEffect(() => {
+    if (!user) return;
+    load();
   }, [api, id, user]);
   if (!user)
     return (
@@ -1347,6 +1372,19 @@ function SubmissionDetail({
               : 'Submission unavailable'
         }
         text={error.message}
+        action={
+          error.status >= 500 ? (
+            <button onClick={load}>Retry</button>
+          ) : undefined
+        }
+      />
+    );
+  if (transportError)
+    return (
+      <State
+        title="Submission unavailable"
+        text={transportError}
+        action={<button onClick={load}>Retry</button>}
       />
     );
   if (!submission)

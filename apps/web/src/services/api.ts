@@ -78,12 +78,14 @@ export class ApiError extends Error {
   readonly code: string;
   readonly requestId: string;
   readonly details?: unknown;
+  readonly status: number;
   constructor(body: ApiErrorBody, status: number) {
     super(body.message);
     this.name = 'ApiError';
     this.code = body.code;
     this.requestId = body.requestId;
     this.details = body.details;
+    this.status = status;
     this.cause = status;
   }
 }
