@@ -206,6 +206,45 @@ func cgroupEntries() ([]string, error) {
 	return append(a, b...), nil
 }
 
+func TestRealRuncTransientScopeProperties(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	before := map[string]bool{}
+	entries, _ := cgroupEntries()
+	for _, entry := range entries {
+		before[entry] = true
+	}
+	resultCh := make(chan model.Result, 1)
+	go func() { resultCh <- runProfile(t, "sleep", 3000, 8<<20, 4, 64<<10) }()
+	var scope string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && scope == "" {
+		entries, _ = cgroupEntries()
+		for _, entry := range entries {
+			if !before[entry] {
+				scope = entry
+				break
+			}
+		}
+		if scope == "" {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if scope == "" {
+		t.Fatal("no transient cgroup scope observed")
+	}
+	unit := filepath.Base(scope)
+	cmd := exec.Command("systemctl", "show", unit, "-p", "ControlGroup", "-p", "Delegate", "-p", "MemoryMax", "-p", "TasksMax", "-p", "MemoryAccounting", "-p", "TasksAccounting")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("scope properties: %v %s", err, out)
+	}
+	t.Logf("transient scope %s properties: %s", unit, strings.TrimSpace(string(out)))
+	got := <-resultCh
+	t.Logf("scope probe result: outcome=%s clean=%t", got.Outcome, got.Clean)
+}
+
 func TestRealRuncConcurrentQualification(t *testing.T) {
 	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
 		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")

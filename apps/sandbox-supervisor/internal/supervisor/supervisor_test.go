@@ -3,6 +3,7 @@ package supervisor
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"github.com/ojplatform/sandbox-supervisor/internal/model"
 	"github.com/ojplatform/sandbox-supervisor/internal/probe"
 	"os"
@@ -30,5 +31,29 @@ func TestValidationRejectsRealAndInjection(t *testing.T) {
 	r.SandboxJobID = "../host"
 	if err := Validate(r); err == nil {
 		t.Fatal("path traversal accepted")
+	}
+}
+
+func TestOCIConfigCarriesFiniteResources(t *testing.T) {
+	s := New("/tmp/sandbox", "/usr/bin/runc", "/trusted/probe")
+	cfg := s.ociConfig("sbx-test", "/workspace", model.Request{CPUMillis: 100, MemoryBytes: 8 << 20, Pids: 4}, []string{"PATH=/usr/bin:/bin", "LANG=C"})
+	if cfg.Linux.Resources.Memory.Limit != 8<<20 || cfg.Linux.Resources.Pids.Limit != 4 {
+		t.Fatalf("finite limits lost: %+v", cfg.Linux.Resources)
+	}
+	if cfg.Linux.CgroupsPath != "system.slice:phase2b:sbx-test" {
+		t.Fatalf("unexpected systemd cgroup path: %q", cfg.Linux.CgroupsPath)
+	}
+	encoded, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatal(err)
+	}
+	linux := raw["linux"].(map[string]any)
+	resources := linux["resources"].(map[string]any)
+	if resources["memory"].(map[string]any)["limit"] != float64(8<<20) || resources["pids"].(map[string]any)["limit"] != float64(4) {
+		t.Fatalf("serialized finite resources lost: %s", encoded)
 	}
 }
