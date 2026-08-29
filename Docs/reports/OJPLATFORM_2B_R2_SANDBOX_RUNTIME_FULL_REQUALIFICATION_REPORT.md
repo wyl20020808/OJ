@@ -15,7 +15,7 @@ Starting HEAD for R2: `91daf87` (`fix: recover rootless runc sandbox qualificati
 
 ## Backend and Implementation
 
-Dedicated Go Supervisor with rootless OCI/runc, user/mount/PID/network/IPC/UTS namespaces, UID/GID mapping to host 65534, empty capabilities, no-new-privileges, controlled `/proc`, tmpfs `/dev`/`/tmp`/`/workspace`, server-owned seccomp policy, cgroup v2 CPU/memory/pids resources, bounded output, context wall deadline, forced delete, and state/workspace cleanup verification. The trusted probe also has Supervisor-selected, non-request-controlled fixed qualification profiles for sleep, CPU, memory, pids, and output pressure. Only the fixed, versioned, SHA-256 verified `SANDBOX_PROBE_QUALIFICATION` is executable. No arbitrary command, source, path, mount, environment, network target, compiler, runtime judge, verdict, or app database access exists.
+Dedicated Go Supervisor with rootless OCI/runc, user/mount/PID/network/IPC/UTS namespaces, UID/GID mapping to host 65534, empty capabilities, no-new-privileges, controlled `/proc`, tmpfs `/dev`/`/tmp`/`/workspace`, server-owned seccomp policy, systemd cgroup v2 CPU/memory/pids resources, bounded output, context wall deadline, forced delete, and state/workspace cleanup verification. The trusted probe also has Supervisor-selected, non-request-controlled fixed qualification profiles for sleep, CPU, memory, pids, and output pressure. Only the fixed, versioned, SHA-256 verified `SANDBOX_PROBE_QUALIFICATION` is executable. No arbitrary command, source, path, mount, environment, network target, compiler, runtime judge, verdict, or app database access exists.
 
 ## Matrix Results
 
@@ -34,7 +34,7 @@ Dedicated Go Supervisor with rootless OCI/runc, user/mount/PID/network/IPC/UTS n
 
 - Real runc probe: PASS. Example output: `pid=1`, `uid=0`, `gid=0`, `cap_eff=0000000000000000`, `seccomp_mode=2`, `default_route=false`, cgroup `0::/phase2b/sbx-...`; `/mnt/c`, `/mnt/d`, `/host`, traversal and host root checks are false; workspace marker is true.
 - Real concurrent qualification: two unique sandbox IDs run concurrently and both cleanly complete; repeated `-count=3` runs passed.
-- Real cgroup attachment: probe reports membership in `0::/phase2b/sbx-<id>`. During a current memory-pressure job, host observation recorded `memory.max=max`, `memory.current=0`, and `memory.events` OOM counters at zero; this directly demonstrates missing memory enforcement in the current rootless setup.
+- Real cgroup attachment: probe reports membership in `0::/system.slice/phase2b-sbx-<id>.scope`. During a current memory-pressure job under systemd cgroup mode, host observation recorded `memory.max=max`, `memory.current=0`, and `memory.events` OOM counters at zero; this directly demonstrates missing memory enforcement even with systemd delegation.
 - Fixed trusted pressure profiles: `sleep` produced `SANDBOX_WALL_LIMIT`; `output` produced `SANDBOX_OUTPUT_LIMIT`; 8 MiB memory and pids=4 probes completed successfully, so RL memory/pids enforcement is a hard unresolved gap. CPU pressure and cancellation-under-pressure remain unqualified.
 - Real seccomp evidence: guest reports seccomp mode 2 and the OCI config contains the trusted deny list for mount/namespace/ptrace/bpf/perf syscalls. Forbidden-syscall execution was not attempted.
 - Cleanup evidence: `runc delete --force`, `runc state` absence, and per-job directory absence are checked. No stale state remained after passing runs.

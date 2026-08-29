@@ -107,7 +107,7 @@ func TestRealRuncCgroupAttachment(t *testing.T) {
 	if err := json.Unmarshal([]byte(got.Stdout), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if cgroup, _ := payload["cgroup"].(string); !strings.Contains(cgroup, "/phase2b/sbx-") {
+	if cgroup, _ := payload["cgroup"].(string); !(strings.Contains(cgroup, "/phase2b/sbx-") || strings.Contains(cgroup, "/system.slice/phase2b-sbx-")) {
 		t.Fatalf("missing phase2b cgroup membership: %q", cgroup)
 	}
 }
@@ -160,7 +160,7 @@ func TestRealRuncMemoryCgroupCurrentJob(t *testing.T) {
 		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
 	}
 	before := map[string]bool{}
-	entries, _ := filepath.Glob("/sys/fs/cgroup/phase2b/sbx-*")
+	entries, _ := cgroupEntries()
 	for _, entry := range entries {
 		before[entry] = true
 	}
@@ -169,7 +169,7 @@ func TestRealRuncMemoryCgroupCurrentJob(t *testing.T) {
 	var current string
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && current == "" {
-		entries, _ = filepath.Glob("/sys/fs/cgroup/phase2b/sbx-*")
+		entries, _ = cgroupEntries()
 		for _, entry := range entries {
 			if !before[entry] {
 				current = entry
@@ -192,6 +192,18 @@ func TestRealRuncMemoryCgroupCurrentJob(t *testing.T) {
 	}
 	got := <-resultCh
 	t.Logf("memory profile result: outcome=%s clean=%t", got.Outcome, got.Clean)
+}
+
+func cgroupEntries() ([]string, error) {
+	a, err := filepath.Glob("/sys/fs/cgroup/phase2b/sbx-*")
+	if err != nil {
+		return nil, err
+	}
+	b, err := filepath.Glob("/sys/fs/cgroup/system.slice/phase2b-sbx-*.scope")
+	if err != nil {
+		return nil, err
+	}
+	return append(a, b...), nil
 }
 
 func TestRealRuncConcurrentQualification(t *testing.T) {
