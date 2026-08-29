@@ -4,3 +4,4 @@ export * from './audit.js';
 export * from './submission.js';
 export * from './judge.js';
 export * from './worker.js';
+export * from './sandbox.js';
