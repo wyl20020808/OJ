@@ -8,6 +8,8 @@ Status: PASS / BOOTSTRAPPED
 
 Starting HEAD was approved Phase 1E closure `11bc091`. Phase 1E final status remains PASS and Phase 1E-R remains CLOSED. Common Bootstrap commit is `6cd4b7c72767714b7c31864ecea87b657a9dba77` (`docs: bootstrap phase 2A judge worker foundation`). This Bootstrap freezes contracts and work ownership only; it does not implement a Worker, Sandbox, compiler, runtime adapter, real verdict, Contest, or submitted-source execution.
 
+Final Lead HEAD at Bootstrap closure report recording: `113a28c54a4ab139ac255c68112df2599b4b140a`.
+
 Go tooling was verified/installed as `go1.27.0 windows/amd64`. No Go module or Worker code was created in this Bootstrap.
 
 ## Frozen Architecture
