@@ -9,7 +9,7 @@ Status: PARTIAL. Queue-owned implementation defects were fixed and the Q/S quali
 Worktree: `D:\OJPlatform-worktrees\phase1b-problem-authoring`  
 Branch: `codex/phase1er-judge-queue-recovery`  
 Starting HEAD: `38fdbc48695f8851df47d7ae433eb551b9b340a4`  
-Final implementation commit: recorded below.
+Final implementation commit: `88a32cc96d4dab9245d6abc68a61a54db2fafe75` (`feat: harden phase 1E judge queue recovery`).
 
 ## 3. Commits and files
 
