@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 )
 
 func main() {
@@ -24,6 +27,25 @@ func main() {
 	if _, err := os.ReadFile("/workspace/../etc/passwd"); err == nil {
 		fmt.Print("PATH_TRAVERSAL_VISIBLE")
 	}
-	data, _ := json.Marshal(map[string]any{"probe": "SANDBOX_PROBE_QUALIFICATION", "version": "1", "marker": marker, "checks": checks, "pid": os.Getpid()})
+	status, _ := os.ReadFile("/proc/self/status")
+	statusText := string(status)
+	seccomp := ""
+	capEff := ""
+	for _, line := range strings.Split(statusText, "\n") {
+		if strings.HasPrefix(line, "Seccomp:") {
+			seccomp = strings.TrimSpace(strings.TrimPrefix(line, "Seccomp:"))
+		}
+		if strings.HasPrefix(line, "CapEff:") {
+			capEff = strings.TrimSpace(strings.TrimPrefix(line, "CapEff:"))
+		}
+	}
+	route, _ := os.ReadFile("/proc/net/route")
+	cgroup, _ := os.ReadFile("/proc/self/cgroup")
+	time.Sleep(100 * time.Millisecond)
+	payload := map[string]any{"probe": "SANDBOX_PROBE_QUALIFICATION", "version": "1", "marker": marker, "checks": checks, "pid": os.Getpid(), "uid": os.Getuid(), "gid": os.Getgid(), "pid_is_init": os.Getpid() == 1, "seccomp": seccomp, "cap_eff": capEff, "default_route": strings.Contains(string(route), "00000000"), "cgroup": strings.TrimSpace(string(cgroup))}
+	if n, err := strconv.Atoi(seccomp); err == nil {
+		payload["seccomp_mode"] = n
+	}
+	data, _ := json.Marshal(payload)
 	_, _ = os.Stdout.Write(data)
 }
