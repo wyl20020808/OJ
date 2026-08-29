@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const apiProxy = {
-  target: 'http://127.0.0.1:3010',
+  target: `http://127.0.0.1:${process.env.OJPLATFORM_API_PORT ?? '3010'}`,
   changeOrigin: true,
 };
 

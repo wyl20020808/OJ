@@ -55,6 +55,11 @@ export type JudgeJobRepository = {
   getById(id: string): Promise<JudgeJob | undefined>;
   getBySubmissionId(id: string): Promise<JudgeJob | undefined>;
   claim(workerId: string, leaseMs: number): Promise<JudgeJobClaim | undefined>;
+  claimById(
+    id: string,
+    workerId: string,
+    leaseMs: number,
+  ): Promise<JudgeJobClaim | undefined>;
   complete(id: string, token: string, fixtureId: string): Promise<JudgeJob>;
   retry(id: string, token: string, reason: string): Promise<JudgeJob>;
   recoverStale(now?: Date): Promise<number>;

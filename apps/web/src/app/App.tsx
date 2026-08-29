@@ -1470,6 +1470,9 @@ export function App() {
   );
   const [current, setCurrent] = useState<Route>(route());
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const [authState, setAuthState] = useState<
+    'loading' | 'authenticated' | 'unauthenticated' | 'unavailable'
+  >('loading');
   const [readiness, setReadiness] = useState<
     'loading' | 'ready' | 'degraded' | 'error'
   >('loading');
@@ -1478,8 +1481,18 @@ export function App() {
     window.addEventListener('popstate', h);
     void api
       .me()
-      .then(setUser)
-      .catch(() => setUser(null));
+      .then((value) => {
+        setUser(value);
+        setAuthState('authenticated');
+      })
+      .catch((error) => {
+        setUser(null);
+        setAuthState(
+          error instanceof ApiError && error.status === 401
+            ? 'unauthenticated'
+            : 'unavailable',
+        );
+      });
     void api
       .readiness()
       .then((r) => setReadiness(r.status === 'ok' ? 'ready' : 'degraded'))
@@ -1490,7 +1503,14 @@ export function App() {
     current.name === 'home' ? (
       <Home api={api} user={user} />
     ) : current.name === 'login' || current.name === 'register' ? (
-      <AuthForm mode={current.name} api={api} onUser={setUser} />
+      <AuthForm
+        mode={current.name}
+        api={api}
+        onUser={(value) => {
+          setUser(value);
+          setAuthState('authenticated');
+        }}
+      />
     ) : current.name === 'forbidden' ? (
       <Forbidden />
     ) : current.name === 'error' ? (
@@ -1504,6 +1524,14 @@ export function App() {
     ) : current.name === 'submission' ? (
       user && current.id ? (
         <SubmissionDetail api={api} id={current.id} user={user} />
+      ) : authState === 'unavailable' ? (
+        <State
+          title="Submission unavailable"
+          text="The service could not be reached. Your authentication state was not changed."
+          action={
+            <button onClick={() => window.location.reload()}>Retry</button>
+          }
+        />
       ) : (
         <State
           title="Sign in required"
@@ -1598,6 +1626,7 @@ export function App() {
                 onClick={() => {
                   void api.logout().finally(() => {
                     setUser(null);
+                    setAuthState('unauthenticated');
                     navigate('/');
                   });
                 }}

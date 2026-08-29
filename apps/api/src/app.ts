@@ -19,6 +19,7 @@ import {
 } from './modules/problem/index.js';
 import { createMemoryAuditHook } from './modules/authz/index.js';
 import { createSubmissionAuthorizationPolicy } from './modules/authz/index.js';
+import { createJudgeAuthorizationPolicy } from './modules/authz/judge.js';
 import {
   InMemoryJudgeJobRepository,
   RedisJudgeJobRepository,
@@ -123,6 +124,8 @@ export async function buildApp(options: AppOptions = {}) {
 
   let owned: Owned | undefined;
   if (options.withInfrastructure) {
+    const qualificationMode =
+      process.env.OJPLATFORM_PHASE1E_QUALIFICATION === 'true';
     const config = options.config ?? loadConfig();
     const database = createDatabase({ url: config.databaseUrl });
     const cache = createCache({ url: config.redisUrl });
@@ -147,14 +150,27 @@ export async function buildApp(options: AppOptions = {}) {
       production: process.env.NODE_ENV === 'production',
       auditHook,
     });
-    const judgeRepository = new RedisJudgeJobRepository(cache);
+    const submissionRepository = new PostgresSubmissionRepository(
+      database.pool,
+    );
+    const judgeRepository = new RedisJudgeJobRepository(
+      cache,
+      process.env.OJPLATFORM_PHASE1E_REDIS_KEY_PREFIX ??
+        (qualificationMode ? 'oj:judge:qualification' : 'oj:judge'),
+    );
     await registerJudgeModule(app, {
       repository: judgeRepository,
-      authorizationPolicy: (
-        await import('./modules/authz/judge.js')
-      ).createJudgeAuthorizationPolicy(),
+      authorizationPolicy: createJudgeAuthorizationPolicy({
+        resolveSubmissionOwner: async (submissionId) =>
+          (await submissionRepository.get(submissionId))?.ownerUserId ?? null,
+      }),
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
+      resolveSubmissionOwner: async (submissionId) =>
+        (await submissionRepository.get(submissionId))?.ownerUserId ?? null,
+      qualificationMode,
+      qualificationControlKey:
+        process.env.OJPLATFORM_PHASE1E_QUALIFICATION_CONTROL_KEY,
     });
     const problemRepository = new PostgresProblemRepository(database.pool);
     await registerProblemModule(app, {
@@ -195,7 +211,7 @@ export async function buildApp(options: AppOptions = {}) {
       },
     };
     await registerSubmissionModule(app, {
-      repository: new PostgresSubmissionRepository(database.pool),
+      repository: submissionRepository,
       authorizationPolicy: {
         canSubmit: (context, revision) =>
           submissionPolicy.canSubmit(
@@ -240,21 +256,22 @@ export async function buildApp(options: AppOptions = {}) {
       projectJudge: async (submission) => {
         const job = await judgeRepository.getBySubmissionId(submission.id);
         if (!job) return {};
+        const status =
+          job.status === 'QUEUED'
+            ? 'QUEUED'
+            : job.status === 'LEASED_FAKE'
+              ? 'LEASED'
+              : job.status === 'SUCCEEDED_FAKE'
+                ? 'SYNTHETIC_COMPLETED'
+                : job.status === 'FAILED_RETRYABLE'
+                  ? 'RETRYABLE_FAILURE'
+                  : 'PROTOCOL_FAILURE';
         return {
           judgeJobId: job.id,
-          status:
-            job.status === 'QUEUED'
-              ? 'QUEUED'
-              : job.status === 'LEASED'
-                ? 'LEASED'
-                : job.status === 'COMPLETED'
-                  ? 'SYNTHETIC_COMPLETED'
-                  : job.status === 'RETRYABLE_FAILURE'
-                    ? 'RETRYABLE_FAILURE'
-                    : 'PROTOCOL_FAILURE',
+          status,
           attempt: job.attempt,
           maxAttempts: job.maxAttempts,
-          synthetic: job.status === 'COMPLETED',
+          synthetic: job.status === 'SUCCEEDED_FAKE',
         };
       },
     });
@@ -276,6 +293,8 @@ export async function buildApp(options: AppOptions = {}) {
     app.addHook('onClose', async () => owned?.close());
   }
   if (!options.withInfrastructure) {
+    const qualificationMode =
+      process.env.OJPLATFORM_PHASE1E_QUALIFICATION === 'true';
     const auditHook = createMemoryAuditHook();
     const problemAuditHook: ProblemAuditHook = {
       record: (event) =>
@@ -289,14 +308,21 @@ export async function buildApp(options: AppOptions = {}) {
       repository: createMemoryAuthRepository(),
       auditHook,
     });
+    const submissionRepository = new InMemorySubmissionRepository();
     const judgeRepository = new InMemoryJudgeJobRepository();
     await registerJudgeModule(app, {
       repository: judgeRepository,
-      authorizationPolicy: (
-        await import('./modules/authz/judge.js')
-      ).createJudgeAuthorizationPolicy(),
+      authorizationPolicy: createJudgeAuthorizationPolicy({
+        resolveSubmissionOwner: async (submissionId) =>
+          (await submissionRepository.get(submissionId))?.ownerUserId ?? null,
+      }),
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
+      resolveSubmissionOwner: async (submissionId) =>
+        (await submissionRepository.get(submissionId))?.ownerUserId ?? null,
+      qualificationMode,
+      qualificationControlKey:
+        process.env.OJPLATFORM_PHASE1E_QUALIFICATION_CONTROL_KEY,
     });
     const problemRepository = new InMemoryProblemRepository();
     await registerProblemModule(app, {
@@ -318,7 +344,7 @@ export async function buildApp(options: AppOptions = {}) {
     });
     const submissionPolicy = createSubmissionAuthorizationPolicy();
     await registerSubmissionModule(app, {
-      repository: new InMemorySubmissionRepository(),
+      repository: submissionRepository,
       authorizationPolicy: {
         canSubmit: (context, revision) =>
           submissionPolicy.canSubmit(
@@ -381,21 +407,22 @@ export async function buildApp(options: AppOptions = {}) {
       projectJudge: async (submission) => {
         const job = await judgeRepository.getBySubmissionId(submission.id);
         if (!job) return {};
+        const status =
+          job.status === 'QUEUED'
+            ? 'QUEUED'
+            : job.status === 'LEASED_FAKE'
+              ? 'LEASED'
+              : job.status === 'SUCCEEDED_FAKE'
+                ? 'SYNTHETIC_COMPLETED'
+                : job.status === 'FAILED_RETRYABLE'
+                  ? 'RETRYABLE_FAILURE'
+                  : 'PROTOCOL_FAILURE';
         return {
           judgeJobId: job.id,
-          status:
-            job.status === 'QUEUED'
-              ? 'QUEUED'
-              : job.status === 'LEASED'
-                ? 'LEASED'
-                : job.status === 'COMPLETED'
-                  ? 'SYNTHETIC_COMPLETED'
-                  : job.status === 'RETRYABLE_FAILURE'
-                    ? 'RETRYABLE_FAILURE'
-                    : 'PROTOCOL_FAILURE',
+          status,
           attempt: job.attempt,
           maxAttempts: job.maxAttempts,
-          synthetic: job.status === 'COMPLETED',
+          synthetic: job.status === 'SUCCEEDED_FAKE',
         };
       },
     });

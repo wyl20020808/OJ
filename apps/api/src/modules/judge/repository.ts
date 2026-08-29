@@ -154,6 +154,26 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       return { job: { ...leased }, leaseToken: token };
     });
   }
+  async claimById(id: string, worker: string, ms: number) {
+    return this.atomic(async () => {
+      await this.recoverUnsafe(new Date());
+      const j = this.jobs.get(id);
+      if (!j || !(j.status === 'QUEUED' || j.status === 'FAILED_RETRYABLE'))
+        return undefined;
+      const token = randomUUID(),
+        leased: JudgeJob = {
+          ...j,
+          status: 'LEASED_FAKE',
+          attempt: j.attempt + 1,
+          leaseOwner: worker,
+          leaseToken: token,
+          leaseExpiresAt: new Date(Date.now() + ms).toISOString(),
+          updatedAt: stamp(),
+        };
+      this.jobs.set(id, leased);
+      return { job: { ...leased }, leaseToken: token };
+    });
+  }
   async complete(id: string, t: string, f: string) {
     return this.atomic(async () => {
       const j = this.jobs.get(id);
@@ -325,6 +345,26 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
       await this.recoverStaleUnsafe(new Date());
       const id = await this.redis.rpop(this.queueKey);
       if (!id) return undefined;
+      const j = await this.read(id);
+      if (!j || !(j.status === 'QUEUED' || j.status === 'FAILED_RETRYABLE'))
+        return undefined;
+      const leaseToken = randomUUID(),
+        x: JudgeJob = {
+          ...j,
+          status: 'LEASED_FAKE',
+          attempt: j.attempt + 1,
+          leaseOwner: worker,
+          leaseToken,
+          leaseExpiresAt: new Date(Date.now() + ms).toISOString(),
+          updatedAt: stamp(),
+        };
+      await this.redis.set(this.jobKey(id), JSON.stringify(x));
+      return { job: x, leaseToken };
+    });
+  }
+  async claimById(id: string, worker: string, ms: number) {
+    return this.exclusive(async () => {
+      await this.recoverStaleUnsafe(new Date());
       const j = await this.read(id);
       if (!j || !(j.status === 'QUEUED' || j.status === 'FAILED_RETRYABLE'))
         return undefined;
