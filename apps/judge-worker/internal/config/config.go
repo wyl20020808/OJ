@@ -17,6 +17,8 @@ type Config struct {
 	ShutdownTimeoutMS   int
 	LeaseMS             int
 	HealthAddr          string
+	HeartbeatPrefix     string
+	LivenessTimeoutMS   int
 }
 
 func Load(env map[string]string) (Config, error) {
@@ -51,7 +53,11 @@ func Load(env map[string]string) (Config, error) {
 	if err != nil || lease < 50 || lease > 300000 {
 		return Config{}, fmt.Errorf("invalid lease")
 	}
-	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080")}, nil
+	liveness, err := strconv.Atoi(get("LIVENESS_TIMEOUT_MS", "15000"))
+	if err != nil || liveness < hb*2 || liveness > 300000 {
+		return Config{}, fmt.Errorf("invalid liveness timeout")
+	}
+	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", "oj:judge:workers"), LivenessTimeoutMS: liveness}, nil
 }
 
 func FromEnv() (Config, error) {

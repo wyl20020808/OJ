@@ -2,7 +2,15 @@
 
 Goal: `OJPLATFORM-1E-R-FINAL-DETAILED-REQUALIFICATION`
 Date: 2026-08-29
-Status: **PASS**
+Status: **PARTIAL**
+
+## 2026-08-29 Independent Rerun Addendum
+
+The requested final requalification was rerun from the current checkout. `pnpm exec tsx scripts/phase1er-bridge-probe.mjs` passed R05/R06: API PID changed across restarts, PostgreSQL/Redis/API remained ready, duplicate enqueue was idempotent, valid leases survived restart, stale recovery advanced to attempt 2, and the old lease token was rejected.
+
+The TypeScript unit suite passed (194 passed, 3 skipped after fixing an intake timing regression); integration, lint, typecheck, architecture, build, runtime smoke (two rounds), and `git diff --check` passed. The final decision remains PARTIAL because `format:check` flags `apps/api/src/modules/judge/worker-control.ts`; the real Go process stop test exits status 1 on Windows after successful completion; and Playwright Run 1 failed to observe `Leased` after fixture claim, leaving Run 2 blocked. The checkout also contains Phase 2A worker commits, so the frozen “Phase 2 not started” condition cannot be claimed.
+
+See `Docs/testing/PHASE_1E_R_FINAL_REQUALIFICATION_MATRIX.md` for the executed matrix. No PASS status is asserted for this rerun.
 
 ## Scope and History
 

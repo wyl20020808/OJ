@@ -101,6 +101,14 @@ func (w *Worker) heartbeat(ctx context.Context) {
 	}
 }
 func (w *Worker) emitHeartbeat() {
+	payload := map[string]any{"worker_id": w.WorkerID, "worker_instance_id": w.InstanceID, "protocol_version": protocol.Version, "build_version": w.Config.BuildVersion, "state": w.State(), "max_concurrency": w.Config.MaxConcurrency, "active_job_count": w.active.Load(), "safe_fixture": true, "real_sandboxed_execution": false, "sandbox_qualified": false, "language_capabilities": []string{}, "execution_modes": []string{string(protocol.SafeFixtureQualification)}, "heartbeat_at": time.Now().UTC().Format(time.RFC3339Nano)}
+	if w.Queue.Redis != nil {
+		encoded, _ := json.Marshal(payload)
+		if err := w.Queue.Redis.Set(context.Background(), w.Config.HeartbeatPrefix+":"+w.WorkerID+":"+w.InstanceID, string(encoded), time.Duration(w.Config.LivenessTimeoutMS)*time.Millisecond); err != nil {
+			w.logger.Printf(`{"event":"worker_heartbeat_error","worker_id":%q,"worker_instance_id":%q}`, w.WorkerID, w.InstanceID)
+			return
+		}
+	}
 	w.logger.Printf(`{"event":"worker_heartbeat","worker_id":%q,"worker_instance_id":%q,"protocol_version":%q,"build_version":%q,"state":%q,"max_concurrency":%d,"active":%d,"safe_fixture":true}`, w.WorkerID, w.InstanceID, protocol.Version, w.Config.BuildVersion, w.State(), w.Config.MaxConcurrency, w.active.Load())
 }
 func (w *Worker) claimLoop(ctx context.Context) {
@@ -148,6 +156,7 @@ func (w *Worker) process(parent context.Context, lease queueadapter.Lease) {
 	}()
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
+	go w.observeCancellation(ctx, lease.Job.ID, cancel)
 	w.cancelMu.Lock()
 	w.cancelJobs[lease.Job.ID] = cancel
 	w.cancelMu.Unlock()
@@ -175,6 +184,23 @@ func (w *Worker) process(parent context.Context, lease queueadapter.Lease) {
 		_ = w.Queue.FailTerminal(parent, lease, code)
 	default:
 		_ = w.Queue.FailTerminal(parent, lease, "WORKER_PROTOCOL_ERROR")
+	}
+}
+
+func (w *Worker) observeCancellation(ctx context.Context, jobID string, cancel context.CancelFunc) {
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			requested, err := w.Queue.CancellationRequested(ctx, jobID)
+			if err == nil && requested {
+				cancel()
+				return
+			}
+		}
 	}
 }
 func (w *Worker) Cancel(jobID string) bool {

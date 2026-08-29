@@ -25,6 +25,11 @@ export class JudgeQueueService {
   failTerminal(id: string, token: string, reason: string) {
     return this.repository.failTerminal(id, token, reason);
   }
+  cancel(id: string) {
+    if (!this.repository.cancel)
+      return Promise.reject(new Error('Cancellation unavailable'));
+    return this.repository.cancel(id);
+  }
 }
 export const SYNTHETIC_FIXTURES = Object.freeze({
   'control-pass-v1': Object.freeze({ outcome: 'FIXTURE_PASS' as const }),

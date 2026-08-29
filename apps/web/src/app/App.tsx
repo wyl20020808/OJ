@@ -1176,7 +1176,8 @@ function SubmissionForm({
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!languageId) {
+    const effectiveLanguageId = languageId || languages[0]?.id || '';
+    if (!effectiveLanguageId) {
       setError('Choose a language.');
       return;
     }
@@ -1184,7 +1185,7 @@ function SubmissionForm({
       setError('Source code is required.');
       return;
     }
-    const selected = languages.find((l) => l.id === languageId);
+    const selected = languages.find((l) => l.id === effectiveLanguageId);
     if (
       selected &&
       new TextEncoder().encode(source).byteLength > selected.maxSourceBytes
@@ -1198,7 +1199,7 @@ function SubmissionForm({
         problemId,
         problemRevisionId: problem?.currentRevisionId ?? problemId,
         testdataVersionRef: problem?.testdataVersion ?? null,
-        languageId,
+        languageId: effectiveLanguageId,
         source,
       });
       setState('success');
@@ -1379,6 +1380,7 @@ function SubmissionDetail({
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [transportError, setTransportError] = useState('');
+  const [cancelling, setCancelling] = useState(false);
   const requestVersion = useRef(0);
   const load = () => {
     const version = ++requestVersion.current;
@@ -1463,6 +1465,26 @@ function SubmissionDetail({
       <div className="judge-actions">
         <button type="button" className="secondary" onClick={load}>
           Refresh qualification status
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={cancelling || submission.executionStage === 'CANCELLED'}
+          onClick={() => {
+            setCancelling(true);
+            void api
+              .cancelSubmission(submission.id)
+              .then(load)
+              .catch((error: unknown) => {
+                if (error instanceof ApiError) setError(error);
+                else setTransportError('The service could not be reached.');
+              })
+              .finally(() => setCancelling(false));
+          }}
+        >
+          {cancelling
+            ? 'Cancelling qualification job...'
+            : 'Cancel qualification job'}
         </button>
       </div>
       <Section title="Problem">

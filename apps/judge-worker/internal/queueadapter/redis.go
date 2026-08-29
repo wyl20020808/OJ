@@ -167,6 +167,10 @@ func (c *Client) SetNX(ctx context.Context, key, value string, ttl time.Duration
 	v, err := c.String(ctx, "SET", key, value, "NX", "PX", strconv.FormatInt(ttl.Milliseconds(), 10))
 	return v == "OK", err
 }
+func (c *Client) Set(ctx context.Context, key, value string, ttl time.Duration) error {
+	_, err := c.String(ctx, "SET", key, value, "PX", strconv.FormatInt(ttl.Milliseconds(), 10))
+	return err
+}
 func (c *Client) Del(ctx context.Context, key string) error {
 	_, err := c.String(ctx, "DEL", key)
 	return err
@@ -388,4 +392,9 @@ func (q Queue) FailTerminal(ctx context.Context, l Lease, reason string) error {
 }
 func (q Queue) Cancel(ctx context.Context, l Lease) error {
 	return q.update(ctx, l, "CANCELLED", "cancelled")
+}
+
+func (q Queue) CancellationRequested(ctx context.Context, jobID string) (bool, error) {
+	value, err := q.Redis.Get(ctx, q.key("cancel", jobID))
+	return value != "", err
 }

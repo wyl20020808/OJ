@@ -64,6 +64,7 @@ export type JudgeJobRepository = {
   retry(id: string, token: string, reason: string): Promise<JudgeJob>;
   recoverStale(now?: Date): Promise<number>;
   failTerminal(id: string, token: string, reason: string): Promise<JudgeJob>;
+  cancel?(id: string): Promise<JudgeJob>;
 };
 export class JudgeJobConflictError extends Error {
   constructor(message = 'Judge job lease conflict') {

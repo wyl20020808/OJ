@@ -91,6 +91,29 @@ export type Submission = {
   synthetic?: boolean;
   executionStage?: ExecutionStage;
 };
+export type WorkerDiagnostics = {
+  items: Array<{
+    workerId: string;
+    workerInstanceId: string;
+    lifecycleState: string;
+    lastHeartbeatAt?: string;
+    heartbeatAgeMs: number | null;
+    protocolVersion: '2A.1';
+    buildVersion: string;
+    maxConcurrency: number;
+    activeJobCount: number;
+    degraded: boolean;
+    offline: boolean;
+    diagnosticCode?: string;
+    capabilityManifest: {
+      executionModes: ['SAFE_FIXTURE_QUALIFICATION'];
+      safeFixture: true;
+      realSandboxedExecution: false;
+      sandboxCapability: false;
+      languageCapabilities: [];
+    };
+  }>;
+};
 export type SubmissionList = { items: Submission[]; nextCursor: string | null };
 export type ProblemInput = Omit<
   Problem,
@@ -252,6 +275,26 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<Submission>(
         baseUrl,
         `/api/submissions/${encodeURIComponent(id)}`,
+        undefined,
+        fetcher,
+      ),
+    cancelSubmission: (id: string) =>
+      request<{
+        judgeJobId: string;
+        status: string;
+        attempt: number;
+        maxAttempts: number;
+        synthetic: false;
+      }>(
+        baseUrl,
+        `/api/submissions/${encodeURIComponent(id)}/judge/cancel`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    workerDiagnostics: () =>
+      request<WorkerDiagnostics>(
+        baseUrl,
+        '/api/operations/judge-workers',
         undefined,
         fetcher,
       ),

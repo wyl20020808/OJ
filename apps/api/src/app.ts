@@ -25,6 +25,7 @@ import {
   RedisJudgeJobRepository,
   registerJudgeModule,
 } from './modules/judge/index.js';
+import { registerWorkerControlRoutes } from './modules/judge/worker-control.js';
 import type { AuditHook as ProblemAuditHook } from './modules/problem/model.js';
 import {
   PostgresSubmissionRepository,
@@ -32,6 +33,14 @@ import {
   registerSubmissionModule,
   type ProblemRevisionResolver,
 } from './modules/submission/index.js';
+
+const operatorUserIds = () =>
+  new Set(
+    (process.env.OJPLATFORM_OPERATOR_USER_IDS ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
 
 const HealthResponse = Type.Object({ status: Type.Literal('ok') });
 const ReadyResponse = Type.Object({
@@ -272,8 +281,32 @@ export async function buildApp(options: AppOptions = {}) {
           attempt: job.attempt,
           maxAttempts: job.maxAttempts,
           synthetic: job.status === 'SUCCEEDED_FAKE',
+          executionStage:
+            job.status === 'QUEUED'
+              ? 'QUEUED'
+              : job.status === 'LEASED_FAKE'
+                ? 'SAFE_FIXTURE_RUNNING'
+                : job.status === 'SUCCEEDED_FAKE'
+                  ? 'SAFE_FIXTURE_SUCCEEDED'
+                  : job.status === 'FAILED_RETRYABLE'
+                    ? 'FAILED_RETRYABLE'
+                    : job.status === 'CANCELLED'
+                      ? 'CANCELLED'
+                      : 'FAILED_TERMINAL',
         };
       },
+    });
+    await registerWorkerControlRoutes(app, {
+      cache,
+      ...(process.env.OJPLATFORM_WORKER_HEARTBEAT_PREFIX
+        ? { heartbeatPrefix: process.env.OJPLATFORM_WORKER_HEARTBEAT_PREFIX }
+        : {}),
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      judgeRepository,
+      resolveSubmission: async (submissionId) =>
+        (await submissionRepository.get(submissionId)) ?? undefined,
+      operatorUserIds: operatorUserIds(),
     });
     owned = {
       checks: {
@@ -423,8 +456,28 @@ export async function buildApp(options: AppOptions = {}) {
           attempt: job.attempt,
           maxAttempts: job.maxAttempts,
           synthetic: job.status === 'SUCCEEDED_FAKE',
+          executionStage:
+            job.status === 'QUEUED'
+              ? 'QUEUED'
+              : job.status === 'LEASED_FAKE'
+                ? 'SAFE_FIXTURE_RUNNING'
+                : job.status === 'SUCCEEDED_FAKE'
+                  ? 'SAFE_FIXTURE_SUCCEEDED'
+                  : job.status === 'FAILED_RETRYABLE'
+                    ? 'FAILED_RETRYABLE'
+                    : job.status === 'CANCELLED'
+                      ? 'CANCELLED'
+                      : 'FAILED_TERMINAL',
         };
       },
+    });
+    await registerWorkerControlRoutes(app, {
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      judgeRepository,
+      resolveSubmission: async (submissionId) =>
+        (await submissionRepository.get(submissionId)) ?? undefined,
+      operatorUserIds: operatorUserIds(),
     });
   }
   app.get(

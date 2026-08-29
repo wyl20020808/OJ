@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -42,7 +43,11 @@ func TestIndependentWorkerProcessClaimsAndStops(t *testing.T) {
 	root, _ := os.Getwd()
 	root = filepath.Clean(filepath.Join(root, "..", ".."))
 	health := "127.0.0.1:28080"
-	binary := filepath.Join(t.TempDir(), "judge-worker")
+	binaryName := "judge-worker"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binary := filepath.Join(t.TempDir(), binaryName)
 	build := exec.CommandContext(ctx, "go", "build", "-o", binary, "./cmd/judge-worker")
 	build.Dir = root
 	if output, buildErr := build.CombinedOutput(); buildErr != nil {
@@ -85,7 +90,7 @@ func TestIndependentWorkerProcessClaimsAndStops(t *testing.T) {
 			if json.Unmarshal([]byte(raw), &got) == nil && got.Status == "SUCCEEDED_FAKE" {
 				_ = cmd.Process.Signal(syscall.SIGTERM)
 				if err = cmd.Wait(); err != nil {
-					t.Fatal(err)
+					t.Fatalf("worker shutdown failed: %v: %s", err, logs.String())
 				}
 				_ = redis.Close()
 				return
@@ -115,7 +120,11 @@ func TestTwoWorkersAndCrashRecovery(t *testing.T) {
 	}
 	root, _ := os.Getwd()
 	root = filepath.Clean(filepath.Join(root, "..", ".."))
-	binary := filepath.Join(t.TempDir(), "judge-worker")
+	binaryName := "judge-worker"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binary := filepath.Join(t.TempDir(), binaryName)
 	build := exec.CommandContext(ctx, "go", "build", "-o", binary, "./cmd/judge-worker")
 	build.Dir = root
 	if output, buildErr := build.CombinedOutput(); buildErr != nil {
@@ -168,7 +177,7 @@ func TestTwoWorkersAndCrashRecovery(t *testing.T) {
 		if json.Unmarshal([]byte(raw), &current) == nil && current.Status == "SUCCEEDED_FAKE" {
 			_ = second.Process.Signal(syscall.SIGTERM)
 			if err := second.Wait(); err != nil {
-				t.Fatal(err)
+				t.Fatalf("worker shutdown failed: %v: %s", err, secondLog.String())
 			}
 			firstInstance := instanceFromLog(firstLog.String())
 			secondInstance := instanceFromLog(secondLog.String())

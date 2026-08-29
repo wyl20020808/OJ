@@ -246,6 +246,23 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       return { ...x };
     });
   }
+  async cancel(id: string) {
+    return this.atomic(async () => {
+      const j = this.jobs.get(id);
+      if (!j) throw new JudgeJobNotFoundError();
+      if (['SUCCEEDED_FAKE', 'FAILED_TERMINAL', 'CANCELLED'].includes(j.status))
+        return { ...j };
+      const x = clear({
+        ...j,
+        status: 'CANCELLED' as const,
+        failureReason: 'cancelled',
+        completedAt: stamp(),
+        updatedAt: stamp(),
+      });
+      this.jobs.set(id, x);
+      return { ...x };
+    });
+  }
 }
 export type RedisJudgeClient = Pick<
   Redis,
@@ -456,6 +473,29 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
         updatedAt: stamp(),
       });
       await this.redis.set(this.jobKey(id), JSON.stringify(x));
+      return x;
+    });
+  }
+  async cancel(id: string) {
+    return this.exclusive(async () => {
+      const j = await this.read(id);
+      if (!j) throw new JudgeJobNotFoundError();
+      if (['SUCCEEDED_FAKE', 'FAILED_TERMINAL', 'CANCELLED'].includes(j.status))
+        return j;
+      const x = clear({
+        ...j,
+        status: 'CANCELLED' as const,
+        failureReason: 'cancelled',
+        completedAt: stamp(),
+        updatedAt: stamp(),
+      });
+      await this.redis.set(this.jobKey(id), JSON.stringify(x));
+      await this.redis.set(
+        `${this.keyPrefix}:cancel:${id}`,
+        new Date().toISOString(),
+        'PX',
+        86_400_000,
+      );
       return x;
     });
   }
