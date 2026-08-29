@@ -112,6 +112,14 @@ func Validate(r model.Request) error {
 	if len(r.PolicyIDs) == 0 {
 		return errors.New("policy required")
 	}
+	if r.CancellationGeneration < 0 {
+		return errors.New("invalid cancellation generation")
+	}
+	for _, policy := range r.PolicyIDs {
+		if policy != "default" && policy != "default-seccomp-no-privilege" {
+			return errors.New("unknown sandbox policy")
+		}
+	}
 	return nil
 }
 func id() string { var b [16]byte; _, _ = rand.Read(b[:]); return fmt.Sprintf("sbx-%x", b[:]) }
