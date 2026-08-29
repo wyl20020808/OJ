@@ -11,7 +11,7 @@ Common baseline: `ebf2e06`
 
 ## Provenance and Versions
 
-Starting HEAD: `0a27f072e51f2c28ce984276041f9a64f6264616` (R2 descendant). `ebf2e06`, `9496095`, and `91daf87` are ancestors. Final HEAD is recorded after this report commit. `git status --short` is clean after commit. Environment: Ubuntu 24.04 WSL2, kernel `6.18.33.2-microsoft-standard-WSL2`, UID/GID `0/0`, `/usr/bin/runc` `1.4.3`, systemd `255.4-1ubuntu8.17`, cgroup filesystem `cgroup2fs`. Host `/sys/fs/cgroup` controllers are `cpuset cpu io memory hugetlb pids rdma`; root subtree control enables the same controllers. D-Bus/systemd user manager is running; `user@0.service` is active with `Delegate=yes` and `cpu memory pids` available/enabled in its subtree.
+Starting HEAD: `0a27f072e51f2c28ce984276041f9a64f6264616` (R2 descendant). `ebf2e06`, `9496095`, and `91daf87` are ancestors. R3 implementation commit: `5ec5586e6b5f47776235b8907f233a0295911a01`; final documentation follow-up is recorded in `git log`. `git status --short` is clean after commit. Environment: Ubuntu 24.04 WSL2, kernel `6.18.33.2-microsoft-standard-WSL2`, UID/GID `0/0`, `/usr/bin/runc` `1.4.3`, systemd `255.4-1ubuntu8.17`, cgroup filesystem `cgroup2fs`. Host `/sys/fs/cgroup` controllers are `cpuset cpu io memory hugetlb pids rdma`; root subtree control enables the same controllers. D-Bus/systemd user manager is running; `user@0.service` is active with `Delegate=yes` and `cpu memory pids` available/enabled in its subtree.
 
 ## Actual cgroup Topology
 
@@ -78,7 +78,7 @@ The unresolved hard gate is kernel resource enforcement, not namespace isolation
 
 ## Final State
 
-R1 commits present: `9496095`, `91daf87`. R2 baseline: `0a27f07`. R3 code/report commits are recorded in `git log` after commit. Final worktree must be clean.
+R1 commits present: `9496095`, `91daf87`. R2 baseline: `0a27f07`. R3 implementation/report commit: `5ec5586`; final documentation follow-up is recorded in `git log`. Final worktree is clean.
 
 **PHASE 2B-R3 CGROUP RECOVERY = PARTIAL / BLOCKED**  
 **READY FOR R4 FINAL RUNTIME REQUALIFICATION = NO**  
