@@ -1,7 +1,7 @@
 # OJPlatform Phase 1E Final Requalification Report
 
-Goal: `OJPLATFORM-1E-R-FINAL-DETAILED-REQUALIFICATION`  
-Date: 2026-08-29  
+Goal: `OJPLATFORM-1E-R-FINAL-DETAILED-REQUALIFICATION`
+Date: 2026-08-29
 Status: **PASS**
 
 ## Scope and History
