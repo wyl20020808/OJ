@@ -84,7 +84,7 @@ The unresolved hard gate is kernel resource enforcement, not namespace isolation
 
 ## Final State
 
-R1 commits present: `9496095`, `91daf87`. R2 baseline: `0a27f07`. R3 implementation/evidence commits include `5ec5586`, `201cda1`, and `ad4e91d`; the final documentation follow-up is the delivery commit immediately after `ad4e91d`. Final worktree is clean after that commit.
+R1 commits present: `9496095`, `91daf87`. R2 baseline: `0a27f07`. R3 implementation/evidence commits include `5ec5586`, `201cda1`, and `10f66ca`; the final documentation follow-up is the delivery commit immediately after `10f66ca`. Final worktree is clean after that commit.
 
 **PHASE 2B-R3 CGROUP RECOVERY = PARTIAL / BLOCKED**  
 **READY FOR R4 FINAL RUNTIME REQUALIFICATION = NO**  
