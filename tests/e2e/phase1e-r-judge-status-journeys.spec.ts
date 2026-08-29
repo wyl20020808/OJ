@@ -7,7 +7,8 @@ const apiPort = process.env.PHASE1E_API_PORT ?? '3021';
 
 test.describe.configure({ mode: 'serial' });
 test.describe('PHASE 1E-R server-backed Judge status journeys', () => {
-  test.beforeEach((_, testInfo) => {
+  test.beforeEach(({ browser }, testInfo) => {
+    void browser;
     testInfo.skip(
       !realRuntime || !controlKey,
       'Requires the Lead-owned real API, Redis namespace, and qualification control plane.',
@@ -29,7 +30,10 @@ test.describe('PHASE 1E-R server-backed Judge status journeys', () => {
       if (message.type() === 'error') consoleErrors.push(message.text());
     });
     page.on('requestfailed', (request) => {
-      if (!request.url().includes('/api/submissions/'))
+      if (
+        !request.url().includes('/api/submissions/') &&
+        !request.url().includes('/api/auth/logout')
+      )
         unexpectedFailures.push(
           `${request.url()} ${request.failure()?.errorText}`,
         );
@@ -169,7 +173,11 @@ test.describe('PHASE 1E-R server-backed Judge status journeys', () => {
     ).toBeVisible();
 
     // Logout makes the protected detail inaccessible without retaining the old state.
+    const logout = page.waitForResponse((response) =>
+      response.url().endsWith('/api/auth/logout'),
+    );
     await page.getByRole('button', { name: 'Sign out' }).click();
+    expect((await logout).status()).toBe(204);
     await page.goto(`/submissions/${successSubmission.id}`);
     await expect(
       page.getByRole('heading', { name: 'Sign in required' }),
