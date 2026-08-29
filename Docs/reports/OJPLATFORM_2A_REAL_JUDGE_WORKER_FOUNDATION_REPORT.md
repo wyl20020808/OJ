@@ -42,4 +42,4 @@ Phase 2B, Sandbox, compiler/runtime adapters, real submitted-source execution, r
 
 PHASE 2A FINAL STATUS: **PASS**  
 READY FOR PHASE 2B: **YES**  
-Final implementation commit: recorded after this report/matrix update. Runtime cleanup completed after evidence collection.
+Qualification commit: `9cc3a7c` (`feat: complete phase 2a worker qualification`). Runtime cleanup completed after evidence collection; this report is retained as the qualification evidence for that commit.
