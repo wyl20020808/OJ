@@ -21,7 +21,11 @@ func TestRealRuncTrustedProbeIsolation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	root, _ := os.Getwd()
-	linuxTemp, err := os.MkdirTemp("/tmp", "ojp-2b-real-")
+	testRoot := os.Getenv("OJPLATFORM_SANDBOX_TEST_ROOT")
+	if testRoot == "" {
+		testRoot = "/tmp"
+	}
+	linuxTemp, err := os.MkdirTemp(testRoot, "ojp-2b-real-")
 	if err != nil {
 		t.Fatal(err)
 	}
