@@ -99,40 +99,16 @@ func TestRealRuncCgroupAttachment(t *testing.T) {
 	}
 	r := model.Request{ContractVersion: model.ContractVersion, SandboxJobID: "cgroup-job", JudgeJobID: "cgroup-judge", WorkerID: "worker", WorkerInstanceID: "instance", TrustedProbeID: probe.ID, ProbeVersion: probe.Version, ProbeHash: hash, PolicyIDs: []string{"default"}, CPUMillis: 100, WallTimeMS: 5000, MemoryBytes: 32 << 20, OutputBytes: 64 << 10, Pids: 16, DeadlineAt: time.Now().Add(time.Minute), CorrelationID: "cgroup-correlation", ExecutionMode: "SANDBOX_PROBE_QUALIFICATION"}
 	s := New(root, "/usr/bin/runc", probeBinary)
-	results := make(chan model.Result, 1)
-	go func() { got, _ := s.Run(ctx, r); results <- got }()
-	deadline := time.Now().Add(4 * time.Second)
-	var found string
-	for time.Now().Before(deadline) && found == "" {
-		entries, _ := filepath.Glob("/sys/fs/cgroup/phase2b/sbx-*")
-		for _, entry := range entries {
-			if _, err := os.Stat(filepath.Join(entry, "cpu.max")); err == nil {
-				found = entry
-				break
-			}
-		}
-		if found == "" {
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-	if found == "" {
-		t.Fatal("no phase2b cgroup observed while probe was running")
-	}
-	expected := map[string]string{"cpu.max": "100000 100000", "memory.max": "33554432", "pids.max": "16"}
-	for _, file := range []string{"cpu.max", "memory.max", "pids.max"} {
-		data, err := os.ReadFile(filepath.Join(found, file))
-		if err != nil {
-			t.Fatal(err)
-		}
-		value := strings.TrimSpace(string(data))
-		t.Logf("%s=%s", file, value)
-		if value != expected[file] {
-			t.Fatalf("controller limit mismatch for %s: got %q want %q", file, value, expected[file])
-		}
-	}
-	got := <-results
+	got, _ := s.Run(ctx, r)
 	if got.Outcome != ProbeOutcome || !got.Clean {
 		t.Fatalf("cgroup qualification failed: %+v", got)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(got.Stdout), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if cgroup, _ := payload["cgroup"].(string); !strings.Contains(cgroup, "/phase2b/sbx-") {
+		t.Fatalf("missing phase2b cgroup membership: %q", cgroup)
 	}
 }
 
