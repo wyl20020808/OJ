@@ -155,6 +155,45 @@ func TestRealRuncResourceProfiles(t *testing.T) {
 	}
 }
 
+func TestRealRuncMemoryCgroupCurrentJob(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	before := map[string]bool{}
+	entries, _ := filepath.Glob("/sys/fs/cgroup/phase2b/sbx-*")
+	for _, entry := range entries {
+		before[entry] = true
+	}
+	resultCh := make(chan model.Result, 1)
+	go func() { resultCh <- runProfile(t, "memory", 3000, 8<<20, 16, 64<<10) }()
+	var current string
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && current == "" {
+		entries, _ = filepath.Glob("/sys/fs/cgroup/phase2b/sbx-*")
+		for _, entry := range entries {
+			if !before[entry] {
+				current = entry
+				break
+			}
+		}
+		if current == "" {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if current == "" {
+		t.Fatal("current memory cgroup was not observable")
+	}
+	for _, name := range []string{"memory.max", "memory.current", "memory.events"} {
+		data, err := os.ReadFile(filepath.Join(current, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("current job %s=%s", name, strings.TrimSpace(string(data)))
+	}
+	got := <-resultCh
+	t.Logf("memory profile result: outcome=%s clean=%t", got.Outcome, got.Clean)
+}
+
 func TestRealRuncConcurrentQualification(t *testing.T) {
 	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
 		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")

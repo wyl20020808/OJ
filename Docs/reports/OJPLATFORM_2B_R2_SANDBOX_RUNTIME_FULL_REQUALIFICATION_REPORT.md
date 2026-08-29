@@ -34,7 +34,7 @@ Dedicated Go Supervisor with rootless OCI/runc, user/mount/PID/network/IPC/UTS n
 
 - Real runc probe: PASS. Example output: `pid=1`, `uid=0`, `gid=0`, `cap_eff=0000000000000000`, `seccomp_mode=2`, `default_route=false`, cgroup `0::/phase2b/sbx-...`; `/mnt/c`, `/mnt/d`, `/host`, traversal and host root checks are false; workspace marker is true.
 - Real concurrent qualification: two unique sandbox IDs run concurrently and both cleanly complete; repeated `-count=3` runs passed.
-- Real cgroup attachment: probe reports membership in `0::/phase2b/sbx-<id>`. The runc-created cgroup is removed before Supervisor returns, so host-side controller values for the current job were not retained as evidence.
+- Real cgroup attachment: probe reports membership in `0::/phase2b/sbx-<id>`. During a current memory-pressure job, host observation recorded `memory.max=max`, `memory.current=0`, and `memory.events` OOM counters at zero; this directly demonstrates missing memory enforcement in the current rootless setup.
 - Fixed trusted pressure profiles: `sleep` produced `SANDBOX_WALL_LIMIT`; `output` produced `SANDBOX_OUTPUT_LIMIT`; 8 MiB memory and pids=4 probes completed successfully, so RL memory/pids enforcement is a hard unresolved gap. CPU pressure and cancellation-under-pressure remain unqualified.
 - Real seccomp evidence: guest reports seccomp mode 2 and the OCI config contains the trusted deny list for mount/namespace/ptrace/bpf/perf syscalls. Forbidden-syscall execution was not attempted.
 - Cleanup evidence: `runc delete --force`, `runc state` absence, and per-job directory absence are checked. No stale state remained after passing runs.
