@@ -30,15 +30,26 @@ type Supervisor struct {
 	ProbeBinary          string
 	qualificationProfile string
 	systemdCgroup        bool
+	rootlessMode         string
+	cgroupSlice          string
+	cgroupfsParent       string
+	systemdUserBus       bool
 }
 
 // ociConfig constructs the immutable server-owned OCI policy for one sandbox.
 // Keeping this separate permits forensic tests to inspect the exact finite
 // resource values before invoking runc.
 func (s *Supervisor) ociConfig(sid, workspace string, r model.Request, env []string) bundleConfig {
+	slice := s.cgroupSlice
+	if slice == "" {
+		slice = "system.slice"
+	}
 	cgroupPath := "phase2b/" + sid
+	if !s.systemdCgroup && s.cgroupfsParent != "" {
+		cgroupPath = strings.TrimSuffix(s.cgroupfsParent, "/") + "/phase2b/" + sid
+	}
 	if s.systemdCgroup {
-		cgroupPath = "system.slice:phase2b:" + sid
+		cgroupPath = slice + ":phase2b:" + sid
 	}
 	return bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: env, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: cgroupPath, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
 }
@@ -84,9 +95,10 @@ type bundleLinux struct {
 	ReadonlyPaths     []string            `json:"readonlyPaths"`
 }
 type bundleResources struct {
-	CPU    bundleCPU    `json:"cpu"`
-	Memory bundleMemory `json:"memory"`
-	Pids   bundlePids   `json:"pids"`
+	CPU     bundleCPU         `json:"cpu"`
+	Memory  bundleMemory      `json:"memory"`
+	Pids    bundlePids        `json:"pids"`
+	Unified map[string]string `json:"unified,omitempty"`
 }
 type bundleCPU struct {
 	Quota  int64  `json:"quota"`
@@ -109,10 +121,31 @@ type bundleSyscall struct {
 }
 
 func New(root, runc, probeBinary string) *Supervisor {
-	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, systemdCgroup: true}
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, systemdCgroup: true, rootlessMode: "auto", cgroupSlice: "system.slice"}
 }
 func newWithProfile(root, runc, probeBinary, profile string) *Supervisor {
-	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true}
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "auto", cgroupSlice: "system.slice"}
+}
+func newWithCgroupfsProfile(root, runc, probeBinary, profile string) *Supervisor {
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: false, rootlessMode: "auto", cgroupSlice: "system.slice"}
+}
+func newWithCgroupfsRootlessMode(root, runc, probeBinary, profile, mode string) *Supervisor {
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: false, rootlessMode: mode, cgroupSlice: "system.slice"}
+}
+func newWithCgroupfsParentProfile(root, runc, probeBinary, profile, parent string) *Supervisor {
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: false, rootlessMode: "auto", cgroupSlice: "system.slice", cgroupfsParent: parent}
+}
+func newWithRootlessMode(root, runc, probeBinary, profile, mode string) *Supervisor {
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: mode, cgroupSlice: "system.slice"}
+}
+func newWithSliceProfile(root, runc, probeBinary, profile, slice string) *Supervisor {
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "auto", cgroupSlice: slice}
+}
+func newWithUserBusProfile(root, runc, probeBinary, profile string) *Supervisor {
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "auto", cgroupSlice: "user.slice", systemdUserBus: true}
+}
+func newWithRootlessUserBusProfile(root, runc, probeBinary, profile string) *Supervisor {
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "true", cgroupSlice: "user.slice", systemdUserBus: true}
 }
 func Validate(r model.Request) error {
 	if r.ContractVersion != model.ContractVersion || r.ExecutionMode != "SANDBOX_PROBE_QUALIFICATION" {
@@ -198,8 +231,13 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	}
 	config := bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: guestEnv, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "noexec", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: "phase2b/" + sid, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
 	config = s.ociConfig(sid, workspace, r, guestEnv)
+	config.Linux.Resources.Unified = map[string]string{"memory.max": fmt.Sprintf("%d", r.MemoryBytes), "pids.max": fmt.Sprintf("%d", r.Pids)}
 	if s.systemdCgroup {
-		config.Linux.CgroupsPath = "system.slice:phase2b:" + sid
+		slice := s.cgroupSlice
+		if slice == "" {
+			slice = "system.slice"
+		}
+		config.Linux.CgroupsPath = slice + ":phase2b:" + sid
 	}
 	encoded, _ := json.MarshalIndent(config, "", "  ")
 	if err := os.WriteFile(filepath.Join(bundle, "config.json"), encoded, 0600); err != nil {
@@ -208,11 +246,21 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	commandCtx, cancel := context.WithTimeout(ctx, time.Duration(r.WallTimeMS)*time.Millisecond)
 	defer cancel()
 	args := []string{"run", "--bundle", bundle, sid}
+	if s.rootlessMode != "" {
+		args = append([]string{"--rootless=" + s.rootlessMode}, args...)
+	}
 	if s.systemdCgroup {
 		args = append([]string{"--systemd-cgroup"}, args...)
 	}
 	create := exec.CommandContext(commandCtx, s.Runc, args...)
 	create.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
+	if s.systemdUserBus {
+		for _, name := range []string{"DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"} {
+			if value := os.Getenv(name); value != "" {
+				create.Env = append(create.Env, name+"="+value)
+			}
+		}
+	}
 	if s.qualificationProfile != "" {
 		switch s.qualificationProfile {
 		case "sleep", "cpu", "memory", "pids", "pids-child", "output":
@@ -235,6 +283,9 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	} else if err != nil {
 		result.Outcome = "SANDBOX_RUNTIME_ERROR"
 		result.Diagnostic = output
+		if result.Diagnostic == "" {
+			result.Diagnostic = err.Error()
+		}
 	} else {
 		result.Outcome = ProbeOutcome
 		result.Stdout = stdout.String()

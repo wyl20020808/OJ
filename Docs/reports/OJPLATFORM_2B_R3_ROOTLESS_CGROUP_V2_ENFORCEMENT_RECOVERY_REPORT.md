@@ -37,6 +37,12 @@ The server-owned `ociConfig` builder and regression test carry finite values bef
 | E3 | Capture transient scope properties | correlate OCI to systemd | `Delegate=yes`, accounting enabled, finite properties absent | confirms first broken link |
 | E4 | Existing user-manager delegation (`Delegate=yes`) | finite delegated controllers | controllers available but actual system scope remains unlimited | insufficient |
 | E5 | Explicit systemd-form `system.slice:phase2b:<id>` | valid scope path | scope created, limits still unlimited | path is valid but not sufficient |
+| E6 | cgroupfs driver + `--rootless=false` diagnostic, then `linux.resources.unified` finite keys | finite leaf limits | cgroupfs leaf still `memory.max=max`, `pids.max=max`; unified keys did not change systemd scope; no pressure enforcement | diagnostic only; no production switch |
+| E7 | cgroupfs parent moved under `/user.slice/user-0.slice/user@0.service` | delegated user-manager subtree should expose finite leaf limits | live leaf still `memory.max=max`, `pids.max=max`, events remain zero; one probe returned exit 137 without finite cgroup evidence | delegated parent is not a recovery |
+| E8 | Preserve `DBUS_SESSION_BUS_ADDRESS`/`XDG_RUNTIME_DIR`, use `user.slice` with `--systemd-cgroup` | runc should target user-manager scope | scope observed at `/user.slice/phase2b-<id>.scope` (system manager hierarchy), `memory.max=max`, `pids.max=19077` | session environment does not repair runc property translation |
+| E9 | Run Supervisor from a temporary `systemd-run --user --scope -p Delegate=yes` parent | inherited delegation should enable finite child limits | runc systemd/cgroupfs probes still lost finite values; parent scope was temporary and cleaned | parent placement alone is insufficient |
+| E10 | Direct `systemd-run --user --scope -p MemoryMax=8M -p TasksMax=4` control | systemd should support finite properties in this host | control scope reported `MemoryMax=8388608`, `TasksMax=4` | systemd property mechanism works outside runc path |
+| E11 | Explicit `--rootless=true`, `user.slice`, and preserved user D-Bus/session environment | runc should use the delegated user manager and translate finite OCI memory/pids limits | scope observed at `/user.slice/user-0.slice/user@0.service/user.slice/phase2b-sbx-<id>.scope`; `memory.max=max`, `pids.max=19077`, `memory.events` and `pids.events` remained zero; probe returned a runtime thread-creation error under the inherited task context | explicit rootless user-manager path still does not enforce finite values; no production change |
 
 An attempted `runc update`/`systemctl set-property` mutation was rejected and removed because it was post-start, racy, and caused lifecycle hangs/created-container residue. It is not evidence or a production fix.
 
@@ -68,17 +74,17 @@ No host/systemd files were changed. Existing `Delegate=yes` was observed, not mo
 ## Test Evidence
 
 - `gofmt`, `go test ./...`, `go vet ./...`: PASS.
-- Focused real runc tests: isolation PASS; live transient scope properties captured; cgroup membership observed; `memory.max=max` and zero OOM events under current memory profile; memory/pids pressure profiles complete successfully.
+- Focused real runc tests: isolation PASS; live transient scope properties captured; cgroup membership observed; systemd, root-level cgroupfs, user-manager-parent cgroupfs, and explicit `--rootless=true` user-bus leaves all reported unlimited memory/pids values; memory/pids events remained zero. Session-D-Bus and delegated-parent diagnostics reproduced the same loss. The explicit rootless user-bus scope was observed at the expected delegated user-manager path, but still had `memory.max=max` and `pids.max=19077`; its trusted probe returned a runtime thread-creation error and is not classified as resource-limit enforcement. A user-manager-parent probe returned exit 137, but without finite cgroup evidence it is not classified as memory-limit enforcement. The direct systemd control scope independently reported finite `MemoryMax=8388608` and `TasksMax=4`.
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:architecture`, `pnpm build`: PASS in the R2/R3 code line.
 - `git diff --check`: PASS.
 
 ## Risks and Integration Requests
 
-The unresolved hard gate is kernel resource enforcement, not namespace isolation. Lead must not mark Phase 2B ready or map these outcomes to TLE/MLE/OLE. Provide a Linux/systemd environment where the actual runc scope receives finite `MemoryMax`/`TasksMax`, or approve a narrowly documented delegated-subtree repair. Backend reconsideration may be required only after correct OCI, driver, path, and delegation evidence still fails. No changes were made to Auth, Web, shared contracts, `PROJECT_STATUS`, Lead Integration, or Phase 2C.
+The unresolved hard gate is kernel resource enforcement, not namespace isolation. Lead must not mark Phase 2B ready or map these outcomes to TLE/MLE/OLE. Provide a Linux/systemd environment where the actual runc scope receives finite `MemoryMax`/`TasksMax`, or approve a narrowly documented delegated-subtree repair. Both systemd and cgroupfs driver diagnostics, including the existing delegated user-manager parent, currently lose finite values at the runc/cgroup setup boundary. Backend reconsideration may be required only after correct OCI, driver, path, and delegation evidence still fails. No changes were made to Auth, Web, shared contracts, `PROJECT_STATUS`, Lead Integration, or Phase 2C.
 
 ## Final State
 
-R1 commits present: `9496095`, `91daf87`. R2 baseline: `0a27f07`. R3 implementation/report commit: `5ec5586`; final documentation follow-up is recorded in `git log`. Final worktree is clean.
+R1 commits present: `9496095`, `91daf87`. R2 baseline: `0a27f07`. R3 implementation/evidence commits include `5ec5586`, `201cda1`, and `ad4e91d`; the final documentation follow-up is the delivery commit immediately after `ad4e91d`. Final worktree is clean after that commit.
 
 **PHASE 2B-R3 CGROUP RECOVERY = PARTIAL / BLOCKED**  
 **READY FOR R4 FINAL RUNTIME REQUALIFICATION = NO**  
