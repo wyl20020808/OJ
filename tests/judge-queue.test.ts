@@ -148,33 +148,60 @@ describe('judge queue recovery matrix', () => {
       JudgeJobPayloadError,
     );
   });
-  it('R07/R08 fake worker recovery is deterministic and synthetic', async () => {
+  it('R07/R08 recovers a fake worker abort after result generation and before acknowledgement', async () => {
     const q = create();
     await q.enqueue(input);
-    const worker = new DeterministicFakeJudgeWorker(q, 'fake');
+    const guard = new NoSourceExecutionGuard();
+    const crashed = new DeterministicFakeJudgeWorker(
+      q,
+      'crashed-fake',
+      guard,
+      () => {
+        throw new Error('simulated fake-worker crash before acknowledgement');
+      },
+      1,
+    );
+    await expect(crashed.processOne('control-pass-v1')).rejects.toThrow(
+      'simulated fake-worker crash',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    expect(await q.recoverStale()).toBe(1);
+    const worker = new DeterministicFakeJudgeWorker(q, 'recovered-fake', guard);
     const result = await worker.processOne('control-pass-v1');
     expect(result).toMatchObject({
       kind: 'SYNTHETIC_QUALIFICATION_ONLY',
       outcome: 'FIXTURE_PASS',
       fixtureId: 'control-pass-v1',
     });
+    expect(guard.attempts).toEqual([]);
     await expect(worker.processOne('control-pass-v1')).resolves.toBeUndefined();
   });
   it('S01-S10 has no source execution primitive or real verdict', () => {
     expect(
       DeterministicFakeJudgeWorker.prototype.processOne.toString(),
-    ).not.toMatch(/child_process|spawn|exec|compile|eval|shell|system\(/i);
+    ).not.toMatch(
+      /child_process|\bspawn\s*\(|\bexec\s*\(|\bcompile\s*\(|\beval\s*\(|\bshell\s*\(|\bsystem\s*\(/i,
+    );
   });
-  it('S07-S09 use a fail-closed guard and source-free structured logging', async () => {
+  it('S01-S10 reject execution, retain no source body, and log safe metadata only', async () => {
     const guard = new NoSourceExecutionGuard();
     expect(() => guard.forbid('execute')).toThrow('Forbidden source operation');
     const q = create();
-    const created = await q.enqueue({ ...input, idempotencyKey: 'marker' });
-    const claim = await q.claim('worker');
     const marker = 'QUEUE_SOURCE_MUST_NOT_BE_LOGGED_unique';
+    const sourceShapedInput = {
+      ...input,
+      idempotencyKey: 'marker',
+      source: `system('x'); eval('x'); os.system('x'); <script>${marker}</script>`,
+    };
+    const created = await q.enqueue(sourceShapedInput);
+    const claim = await q.claim('worker');
     const log = JSON.stringify(safeJudgeLog('claim', claim!.job));
+    await q.retry(claim!.job.id, claim!.leaseToken, 'qualification');
+    const retry = await q.claim('worker-retry');
+    await q.complete(retry!.job.id, retry!.leaseToken);
     expect(log).not.toContain(marker);
     expect(JSON.stringify(created.job)).not.toContain(marker);
+    expect(log).not.toContain(claim!.leaseToken);
     expect(guard.attempts).toEqual(['execute']);
   });
 });

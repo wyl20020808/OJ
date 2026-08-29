@@ -2,122 +2,178 @@
 
 ## 1. Executive status
 
-Status: PARTIAL. Queue-owned implementation defects were fixed and the Q/S qualification suite passes. Real Redis interruption/reconnect/restart, API restart, and container lifecycle qualification are BLOCKED by missing local runtime tools and Lead-owned orchestration. No real Judge, verdict, Sandbox, or user-source execution was introduced.
+Status: PARTIAL. Queue-owned recovery behavior, security gates, and real Redis adapter qualification pass. R05/R06 remain Lead-owned because the composed Submission/API lifecycle cannot be exercised or corrected by this worker. No real Judge, verdict, Sandbox, or submitted-source execution was introduced.
 
 ## 2. Worktree/branch
 
-Worktree: `D:\OJPlatform-worktrees\phase1b-problem-authoring`  
-Branch: `codex/phase1er-judge-queue-recovery`  
-Starting HEAD: `38fdbc48695f8851df47d7ae433eb551b9b340a4`  
-Final implementation commit: `88a32cc96d4dab9245d6abc68a61a54db2fafe75` (`feat: harden phase 1E judge queue recovery`).
+`D:\OJPlatform-worktrees\phase1b-problem-authoring` / `codex/phase1er-judge-queue-recovery`.
 
-## 3. Commits and files
+## 3. Starting HEAD
 
-Previous queue implementation was audited and corrected in `apps/api/src/modules/judge/{model,repository,service}.ts`; fail-closed logging/execution guard is in `safety.ts`; the recovery matrix is in `tests/judge-queue.test.ts`; this report is the only new report. No migration was created: Redis remains the frozen queue backend and no relational durability requirement was approved.
+Recovery ancestor: `38fdbc48695f8851df47d7ae433eb551b9b340a4`. This continuation started at `08793f00392b2863f96fc87d988f39ebc7c8c726`.
 
-## 4. Previous implementation audit
+## 4. Final HEAD
 
-Found and fixed: legacy state names as primary state semantics, completion accepting an expired lease before recovery, unsafe generic payload handling, insufficient concurrent in-memory serialization, and missing malformed-payload validation. Redis transitions remain limited by the existing minimal ioredis abstraction; runtime atomicity requires Lead Redis qualification.
+The final HEAD is the scoped commit containing this report; its exact hash is in the final task response and Git history.
 
-## 5. Persistence/durability model
+## 5. Commits
 
-Redis is authoritative for job JSON and the submission idempotency index. Job key: `oj:judge:job:<jobId>`; idempotency/index key: `oj:judge:submission:<submissionId>`; queue list: `oj:judge:queue`; claim coordination key: `oj:judge:claim-lock`. Job fields include immutable submission/owner/problem/revision/testdata/language linkage, state, attempt/maxAttempts, lease owner/token/expiry, failure and synthetic metadata, and timestamps. No source body is persisted or transported by this queue module. No TTL/retention policy is configured; terminal jobs and idempotency indexes remain until explicit operational cleanup. Redis restart durability is NOT VERIFIED in this environment; the compose file declares volume `ojplatform-redis-data`, but runtime persistence was not inspected.
+Prior recovery commits: `88a32cc feat: harden phase 1E judge queue recovery`; `08793f0 docs: record judge queue recovery commit`. This continuation adds one scoped Queue commit.
 
-## 6. State machine / lease / attempts
+## 6. Files/modules changed
 
-Primary states: `QUEUED -> LEASED_FAKE -> SUCCEEDED_FAKE`, or `FAILED_RETRYABLE -> LEASED_FAKE`, or `FAILED_TERMINAL`; `CANCELLED` is reserved terminal. Claim increments `attempt` exactly once. A valid lease has owner, token, and future expiry. Completion/retry/terminal failure require the current token and unexpired lease. Expiry clears lease identity and requeues only retryable work; repeated recovery is idempotent. Compatibility aliases remain in the TypeScript union for existing Lead composition, but new queue writes use frozen names.
+`apps/api/src/modules/judge/{repository,service,safety}.ts`, `tests/judge-queue.test.ts`, `tests/judge-queue-redis.test.ts`, and this report. No Auth, Web, central API composition, contract, migration, root manifest, lockfile, or `PROJECT_STATUS` change.
 
-## 7. Recovery and races
+## 7. Previous implementation audit
 
-In-memory mutations use a serialized critical section. Q03/Q06/Q10/Q18/Q19 use `Promise.all` concurrent calls and prove one logical job, one lease winner, one terminal effect, stale-token rejection, and cross-attempt isolation. Redis uses enqueue-before-index ordering, NX idempotency, and a claim lock; cross-process atomic transition qualification remains a Lead/runtime requirement.
+Redis complete/retry/recovery were read/write sequences without cross-instance serialization. This continuation applies a token-checked Redis mutation lock to every mutable path and an optional namespace constructor argument for isolated qualification, retaining production `oj:judge` defaults.
 
-## 8. Redis/API/runtime recovery
+## 8. Persistence/durability model
 
-R01-R04 are BLOCKED: `docker` and `redis-cli` are unavailable on this host, so no real Redis interruption/reconnect/restart evidence is claimed. R05-R06 are BLOCKED at worker scope because API process lifecycle/composition is Lead-owned; the Redis repository is process-stateless and preserves state when Redis remains available. R07-R08 PASS only as `ABSTRACTION-LEVEL CRASH ONLY`: the lease can expire and recover, but no OS-process termination was executed. R09 is SHARED-OWNED/BLOCKED: inspected worker tests close clients they create and contain no compose down/stop/remove; the missing runtime prevents reproducing prior container exits.
+Redis is authoritative for serialized job data, submission idempotency indexes, and queue list. Jobs contain immutable linkage, state, attempts, lease metadata, failure/synthetic metadata, timestamps, and idempotency key. Source is neither a job field nor transported. No TTL/retention policy is configured.
 
-## 9. No-source-execution and logging hard gate
+## 9. Redis structures/atomicity
 
-`NoSourceExecutionGuard` is fail-closed for compile, execute, eval, shell, dynamic import, compiler/interpreter launch, and Sandbox operations. The fake worker accepts only named control fixtures and returns `SYNTHETIC_QUALIFICATION_ONLY`; it has no source parameter or execution primitive. `safeJudgeLog` emits only job id, submission id, state, attempt, and event, excluding source, lease tokens, credentials, and secrets. Tests use inert marker/syntax text and assert it is absent from serialized job/log output. No filesystem/network/source runtime APIs are imported by this module.
+Keys are `oj:judge:job:<id>`, `oj:judge:submission:<submissionId>`, `oj:judge:queue`, and `oj:judge:mutation-lock`. `SET NX PX` serializes enqueue, claim, complete, retry, terminalization, and recovery; release verifies lock ownership. Real Redis concurrency passed. Separate Redis commands are not claimed to be crash-atomic distributed transactions.
 
-## 10. Malformed payload and immutable linkage
+## 10. State-machine table
 
-`assertPayload` rejects malformed JSON, unknown state, invalid attempts/timestamps, missing linkage, and missing lease metadata with `JudgeJobPayloadError`; it never defaults to success. Queue methods expose no update operation for immutable linkage. Q24-Q30 prove wrong job/token rejection and cross-job isolation in the in-memory repository.
+| From | Event | To | Preconditions/effect |
+|---|---|---|---|
+| none | enqueue | QUEUED | immutable linkage; job/index/list |
+| QUEUED/FAILED_RETRYABLE | claim | LEASED_FAKE | one owner/token/expiry; attempt +1 |
+| LEASED_FAKE | complete | SUCCEEDED_FAKE | current unexpired token; clear lease |
+| LEASED_FAKE | retry/recover | FAILED_RETRYABLE | current token/expiry; one requeue |
+| LEASED_FAKE | retry/recover/fail | FAILED_TERMINAL | cap or terminal event; no requeue |
 
-## 11. Q01-Q30 matrix
+Terminal `SUCCEEDED_FAKE`, `FAILED_TERMINAL`, and `CANCELLED` jobs are not claimable/requeueable.
 
-| ID | TEST | SETUP / EXPECTED | ACTUAL / EVIDENCE | RESULT |
-|---|---|---|---|---|
-| Q01 | normal enqueue | valid submission -> one queued job | `judge-queue.test.ts` | PASS |
-| Q02 | sequential duplicate | same key twice -> one id | same | PASS |
-| Q03 | 20 concurrent duplicate enqueue | >=20 calls -> one id | `Promise.all(20)` | PASS |
-| Q04 | 20 distinct enqueue | 20 ids, no cross-link | `Promise.all(20)` | PASS |
-| Q05 | single claim | queued -> one lease | same | PASS |
-| Q06 | concurrent claim race | 2 claimers -> one winner | `Promise.all` | PASS |
-| Q07 | lease expiry | expired lease recoverable | timed lease | PASS |
-| Q08 | stale recovery | stale token invalid, attempt 2 new lease | same | PASS |
-| Q09 | valid completion | current token -> synthetic terminal | same | PASS |
-| Q10 | duplicate completion race | one terminal effect | concurrent completion | PASS |
-| Q11 | wrong token | reject | conflict assertion | PASS |
-| Q12 | old token after recovery | reject | stale completion assertion | PASS |
-| Q13 | retryable failure | requeue state | retry test | PASS |
-| Q14 | retry increment | next claim attempt +1 | retry test | PASS |
-| Q15 | retry cap | exhausted -> terminal | maxAttempts test | PASS |
-| Q16 | terminal failure | no future claim | terminal assertion | PASS |
-| Q17 | late stale completion | old worker cannot overwrite | stale test | PASS |
-| Q18 | completion/expiry race | one convergent outcome | concurrent recovery/completion | PASS |
-| Q19 | stale worker/new attempt | old retry rejected | concurrent race test | PASS |
-| Q20 | attempt nondecreasing | no decrement | repository assertion | PASS |
-| Q21 | terminal claim | terminal not claimable | assertion | PASS |
-| Q22 | terminal requeue | no implicit requeue | assertion | PASS |
-| Q23 | repeated recovery | second recovery no effect | count 1 then 0 | PASS |
-| Q24 | stale retry | reject | conflict assertion | PASS |
-| Q25 | wrong job/token pair | reject | cross-job assertion | PASS |
-| Q26 | idempotency restart model | external index is authoritative | repository state test; Redis runtime blocked | PARTIAL |
-| Q27 | post-reconnect operation | resume consistently | Redis runtime unavailable | BLOCKED |
-| Q28 | unknown fixture | safe failure | fixture catalog guard | PASS |
-| Q29 | immutable linkage | no mutation API | model/repository surface | PASS |
-| Q30 | cross-job contamination | A cannot affect B | cross-job test | PASS |
+## 11. Lease/token invariants
 
-## 12. R01-R10 matrix
+One valid owner/token/future expiry per job. Completion/retry/fail-terminal require the exact unexpired token. Recovery clears lease identity; the next claim has a new token.
 
-| ID | TEST | EXPECTED | ACTUAL / EVIDENCE | RESULT |
-|---|---|---|---|---|
-| R01 | Redis unavailable before enqueue | controlled error/no success | no docker/redis-cli; real runtime unavailable | BLOCKED |
-| R02 | disconnect during operation | controlled non-contradictory error | no runtime | BLOCKED |
-| R03 | reconnect | resume/no duplicate | no runtime | BLOCKED |
-| R04 | Redis restart | configured persistence fact + state | compose volume read; restart not executable | BLOCKED |
-| R05 | API restart after enqueue | one job after restart | Lead-owned harness not available | BLOCKED |
-| R06 | API restart during lease | lease semantics persist | Lead-owned harness not available | BLOCKED |
-| R07 | worker crash after lease | recovery | abstraction-level lease expiry test | PASS (ABSTRACTION-LEVEL CRASH ONLY) |
-| R08 | crash before ack | one terminal effect | abstraction-level fake worker test | PASS (ABSTRACTION-LEVEL CRASH ONLY) |
-| R09 | container lifecycle | no premature teardown | no worker compose teardown found; runtime unavailable | BLOCKED / SHARED-OWNED |
-| R10 | malformed payload | safe reject/no fabricated success | `assertPayload` test | PASS |
+## 12. Attempt semantics
 
-## 13. S01-S10 matrix
+Attempt starts at 0, increments only on successful claim, never decrements, and terminalizes at the configured cap.
 
-| ID | TEST | EXPECTED | ACTUAL / EVIDENCE | RESULT |
-|---|---|---|---|---|
-| S01 | no compile | zero compiler calls | no primitive/import; guard test | PASS |
-| S02 | no execute | zero execution | no source input/primitive | PASS |
-| S03 | no eval | zero eval | static guard/source scan | PASS |
-| S04 | no shell | zero shell | static guard/source scan | PASS |
-| S05 | no executable dynamic import | zero executable import | module imports only types/UUID | PASS |
-| S06 | no process launch | zero launch | no child process API | PASS |
-| S07 | no source filesystem side effect | none | source-free queue and guard test | PASS |
-| S08 | no source network side effect | none | source-free queue and guard test | PASS |
-| S09 | source body not logged | marker absent | `safeJudgeLog` marker assertion | PASS |
-| S10 | synthetic labeling | never real verdict | explicit synthetic result kind/outcome | PASS |
+## 13. Retry/requeue
 
-## 14. Tests and integration requests
+Only an active matching lease may retry. Retry records its reason and publishes one future claim path under the mutation lock.
 
-Executed: `pnpm lint` PASS; `pnpm typecheck` PASS; `pnpm test -- --run` PASS (11 files, 60 tests); `pnpm exec tsx tests/architecture/check.mjs` PASS; `pnpm build` PASS; `git diff --check` PASS.
+## 14. Terminalization
 
-INTEGRATION REQUEST: Lead must provide a real Redis-backed harness for R01-R04/R27, API process restart harness for R05-R06, and OS-process fake-worker termination for R07-R08; capture container names/status/exit codes/timestamps before and after lifecycle tests. Lead must also update the existing central status mapping from legacy `LEASED`/`COMPLETED`/`RETRYABLE_FAILURE` names to frozen `LEASED_FAKE`/`SUCCEEDED_FAKE`/`FAILED_RETRYABLE` names, without exposing real verdicts.
+Completion and terminal failure clear lease metadata and never republish. Duplicate completion preserves the first terminal record; wrong/stale tokens reject.
 
-Dependency requests: none. No `0006` migration or queue framework was added.
+## 15. Stale lease recovery
 
-## 15. Known limitations / final status
+Expired leases become retryable or terminal by cap. Repeated recovery is idempotent; a new claim has a new token and increments attempt.
 
-Redis operations still require runtime atomicity qualification beyond the existing minimal abstraction; no TTL/retention policy is configured; API/OS crash and Redis durability are not runtime verified. Final git status is expected clean after commit.
+## 16. Late stale completion
 
-READY FOR LEAD REQUALIFICATION = NO
+Old completion/retry after expiry, recovery, or a new claim throws `JudgeJobConflictError`. Memory and real Redis races cover this.
+
+## 17. Idempotency/concurrency
+
+Twenty duplicate enqueues yield one job; twenty distinct inputs remain distinct. One queued job has one concurrent claim winner. Duplicate completion returns the first fixture/terminal record. Real Redis tests use isolated namespaces.
+
+## 18. Redis interruption/reconnect
+
+R01/R02/R03/Q27 PASS to Queue ownership limit: an unavailable client rejects enqueue; disconnect before claim rejects without fabricated success; a fresh real adapter reconnects, dedupes original enqueue, and resumes claim. This is explicit new-adapter reconnect, not a claim about central client auto-reconnect policy.
+
+## 19. Redis restart
+
+R04 PASS. With `wsl.exe -d Ubuntu-24.04 -- sleep infinity`, local Compose Redis was restarted. Namespaced `FAILED_RETRYABLE` and `FAILED_TERMINAL` records, each attempt 1, were recovered from `ojplatform-redis-data` RDB. This proves local configured restart persistence only.
+
+## 20. API restart
+
+Two API runtime smoke rounds passed (`health`, `ready`, `404`, request-id, shutdown, port reuse). R05/R06 are BLOCKED: composed Submission creation, auth fixture, lifecycle harness, and status projection are Lead-owned. The central projection still recognizes legacy state names rather than the frozen Queue names.
+
+## 21. Fake worker crash recovery
+
+R07/R08 PASS at abstraction level. A fake worker claims with a 1 ms lease, constructs its deterministic result, throws via the pre-ack hook, then a recovered worker completes the same fixture exactly once. No OS-process termination is claimed.
+
+## 22. Runtime container lifecycle diagnosis
+
+R09 diagnosis PASS / SHARED-OWNED. No Queue script/test stops Compose. Without a WSL keepalive, Redis received SIGTERM, saved RDB, and exited 0; the documented non-privileged keepalive retained the service and Windows localhost bridge. This is WSL/runtime orchestration, not Queue teardown.
+
+## 23. No-source-execution instrumentation
+
+`NoSourceExecutionGuard` fails closed for compile, execute, eval, shell, dynamic import, compiler/interpreter launch, and Sandbox operations. Fake worker checks the injected guard before and after acknowledgement and accepts fixture IDs only.
+
+## 24. Source logging proof
+
+Inert shell/eval/Python/HTML-shaped text and marker `QUEUE_SOURCE_MUST_NOT_BE_LOGGED_unique` are ignored by job normalization and absent from serialized job/log metadata. `safeJudgeLog` excludes source, lease tokens, credentials, and secrets.
+
+## 25. Malformed payload
+
+`assertPayload` rejects malformed JSON/state/linkage/attempt/timestamp/lease metadata with `JudgeJobPayloadError`; no malformed input fabricates success.
+
+## 26. Immutable linkage
+
+Submission owner/problem/revision/testdata/language are snapshotted and no queue mutation API changes them. Unknown fixtures reject safely.
+
+## 27. Q01-Q30 matrix
+
+| IDs | Evidence | Result |
+|---|---|---|
+| Q01-Q02 | normal and sequential duplicate enqueue | PASS |
+| Q03-Q04 | `Promise.all(20)` duplicate/distinct; real Redis equivalent | PASS |
+| Q05-Q06 | single/concurrent claim; real Redis ten-claimer race | PASS |
+| Q07-Q08 | expiry, stale recovery, new attempt | PASS |
+| Q09-Q10 | valid/concurrent duplicate completion | PASS |
+| Q11-Q12 | wrong/old token rejection | PASS |
+| Q13-Q16 | retry/requeue, cap, terminal failure | PASS |
+| Q17-Q19 | late completion and two stale races | PASS |
+| Q20-Q25 | attempt monotonicity, terminal and token invariants | PASS |
+| Q26-Q27 | idempotency/reconnect with new real adapter | PASS (adapter scope) |
+| Q28-Q30 | unknown fixture, immutable linkage, cross-job isolation | PASS |
+
+## 28. R01-R10 matrix
+
+| ID | Evidence | Result |
+|---|---|---|
+| R01 | unavailable client controlled rejection | PASS |
+| R02 | disconnect before claim controlled rejection | PASS |
+| R03 | new adapter reconnect, dedupe, claim | PASS |
+| R04 | actual Compose Redis restart/RDB readback | PASS |
+| R05 | API restart after composed enqueue | BLOCKED (Lead harness) |
+| R06 | API restart during composed lease | BLOCKED (Lead harness) |
+| R07 | pre-ack fake-worker abort and recovery | PASS (abstraction level) |
+| R08 | result-before-ack abort; one later terminal effect | PASS (abstraction level) |
+| R09 | SIGTERM/keepalive root-cause diagnosis | PASS / SHARED-OWNED |
+| R10 | malformed payload rejection | PASS |
+
+## 29. S01-S10 matrix
+
+| IDs | Evidence | Result |
+|---|---|---|
+| S01-S06 | guard and no compiler/process/eval/shell/import execution path | PASS |
+| S07-S08 | source-shaped input ignored; no source filesystem/network path | PASS |
+| S09 | unique marker and lease token absent from job/log output | PASS |
+| S10 | only synthetic qualification kind/fixture outcomes | PASS |
+
+## 30. Test commands/counts
+
+Targeted Queue unit: 13 PASS. Opt-in real Redis: 3 PASS. `pnpm infra:wait`, `pnpm db:migrate`, `pnpm integration` (4 PASS), and `pnpm runtime:smoke` (two PASS rounds) passed. Final regression: `pnpm format:check` PASS; `pnpm lint` PASS; `pnpm typecheck` PASS; `pnpm test` 12 files/63 tests PASS; `pnpm test:architecture` PASS; `pnpm build` PASS; `pnpm integration` 1 file/4 tests PASS; explicit Redis suite 1 file/3 tests PASS; `git diff --check` PASS.
+
+## 31. Integration Requests
+
+1. Lead: add an authorized composed Submission/API restart harness for R05/R06, testing one job after restart and lease persistence. Affected scope: Lead-owned composition/routes/auth fixtures.
+2. Lead: update central projection for `LEASED_FAKE`, `SUCCEEDED_FAKE`, `FAILED_RETRYABLE`, `FAILED_TERMINAL` without displaying real verdicts.
+3. Runtime owner: maintain documented WSL keepalive during lifecycle qualification; Queue has no premature teardown.
+
+## 32. Dependency Requests
+
+None. Existing `ioredis` is retained; no framework or migration added.
+
+## 33. Known limitations
+
+Local RDB persistence is not HA/crash-consistency evidence. No retention policy, relational queue migration, OS-level worker crash, or full composed API restart evidence exists. Mutation locking does not claim distributed transaction semantics.
+
+## 34. Git status
+
+Clean after the scoped commit. No merge or Lead requalification is started.
+
+## 35. READY FOR LEAD REQUALIFICATION
+
+READY FOR LEAD REQUALIFICATION = NO, pending the Integration Requests, especially R05/R06.

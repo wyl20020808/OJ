@@ -4,6 +4,7 @@ import type {
   JudgeJobRepository,
   SyntheticJudgeResult,
 } from './model.js';
+import { NoSourceExecutionGuard } from './safety.js';
 export class JudgeQueueService {
   constructor(private readonly repository: JudgeJobRepository) {}
   enqueue(input: JudgeJobCreateInput) {
@@ -33,13 +34,17 @@ export class DeterministicFakeJudgeWorker {
   constructor(
     private readonly queue: JudgeQueueService,
     private readonly workerId = `fake-${randomUUID()}`,
+    private readonly executionGuard = new NoSourceExecutionGuard(),
+    private readonly beforeAcknowledge?: () => void | Promise<void>,
+    private readonly leaseMs = 30_000,
   ) {}
   async processOne(
     fixtureId: keyof typeof SYNTHETIC_FIXTURES = 'control-pass-v1',
   ): Promise<SyntheticJudgeResult | undefined> {
+    this.executionGuard.assertClear();
     const fixture = SYNTHETIC_FIXTURES[fixtureId];
     if (!fixture) throw new Error('Unknown synthetic fixture');
-    const claim = await this.queue.claim(this.workerId);
+    const claim = await this.queue.claim(this.workerId, this.leaseMs);
     if (!claim) return undefined;
     const result: SyntheticJudgeResult = {
       kind: 'SYNTHETIC_QUALIFICATION_ONLY',
@@ -48,7 +53,9 @@ export class DeterministicFakeJudgeWorker {
       attempt: claim.job.attempt,
       fixtureId,
     };
+    await this.beforeAcknowledge?.();
     await this.queue.complete(claim.job.id, claim.leaseToken, fixtureId);
+    this.executionGuard.assertClear();
     return result;
   }
 }

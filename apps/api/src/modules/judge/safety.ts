@@ -33,4 +33,10 @@ export class NoSourceExecutionGuard {
     this.attempts.push(operation);
     throw new Error(`Forbidden source operation: ${operation}`);
   }
+  assertClear(): void {
+    if (this.attempts.length > 0)
+      throw new Error(
+        `Source execution guard was invoked: ${this.attempts.join(', ')}`,
+      );
+  }
 }
