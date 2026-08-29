@@ -6,7 +6,7 @@
 
 ## 2. Worktree / branch
 
-Worktree: `D:\OJPlatform-worktrees\phase1b-problem-authoring`  
+Worktree: `D:\OJPlatform-worktrees\phase1b-problem-authoring`
 Branch: `codex/phase2a-worker-runtime`
 
 ## 3. Baseline / provenance
