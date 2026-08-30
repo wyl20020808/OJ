@@ -2,8 +2,8 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 2B SANDBOX SECURITY QUALIFICATION
-Current Status: PHASE 2B PARTIAL / LEAD INTEGRATION QUALIFICATION IN PROGRESS
+Current Stage: PHASE 2B SANDBOX SECURITY QUALIFICATION CLOSED
+Current Status: PHASE 2B PASS / FINAL REAL SANDBOX SECURITY QUALIFICATION COMPLETE
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 PHASE 1C: PASS
@@ -11,7 +11,9 @@ PHASE 1D: PASS
 PHASE 1E: HISTORICAL PASS / FINAL RERUN PARTIAL
 PHASE 1E-R: RECOVERY CLOSED HISTORICALLY / FINAL RERUN PARTIAL
 PHASE 2A: PASS / REAL MULTI-PROCESS QUALIFICATION COMPLETE
-PHASE 2B: PARTIAL / LEAD CONTROL PLANE INTEGRATED; FINAL HARD GATES INCOMPLETE
+PHASE 2B: PASS / FINAL REAL SANDBOX SECURITY QUALIFICATION COMPLETE
+PHASE 2C: NOT STARTED
+READY FOR PHASE 2C: YES
 
 ## Completed Goals
 
@@ -30,19 +32,21 @@ PHASE 2B: PARTIAL / LEAD CONTROL PLANE INTEGRATED; FINAL HARD GATES INCOMPLETE
 - PHASE 1C — Submission Intake Foundation: PASS
 - PHASE 1D — Product Experience & UI Foundation: PASS
 - PHASE 1E — Judge Protocol & Queue Foundation: PASS
+- PHASE 2A — Real Judge Worker Foundation: PASS
+- PHASE 2B — Sandbox Security Qualification: PASS
 
 ## Current Project State
 
-- Latest engineering foundation content commit: `3959bba` (`feat: establish local infrastructure foundation`)
-- Repository HEAD includes a metadata-only report correction after that content commit.
-- Business implementation: NOT STARTED
-- Framework/toolchain initialization: 0B foundation initialized; future business frameworks NOT STARTED
+- Phase 2B Lead integration checkpoint: `6381784` (`feat: integrate phase 2B sandbox control plane`)
+- Phase 2B qualification code/test commit: `e9f45e3` (`test: complete phase 2B final sandbox qualification`)
+- Business implementation: Phase 1 product foundations, Phase 2A Worker foundation, and Phase 2B trusted-probe Sandbox boundary implemented
+- Framework/toolchain: initialized and qualified through the current Phase 2B scope
 - Local PostgreSQL/Redis/MinIO infrastructure: Docker Engine/Compose, Windows localhost API/browser boundary, and recovery behavior qualified with WSL instance kept alive
-- Judge Worker: Phase 2A qualification complete; Phase 2B Lead control plane integrated
-- Sandbox: trusted-probe-only Supervisor protocol integrated; final qualification incomplete
-- Runtime security controls: implemented in dedicated non-root R4 runtime; final Lead qualification partial
-- Runtime attack tests: named R4 groups executed; full integrated matrix not complete
-- Production security qualification: NOT QUALIFIED
+- Judge Worker: Phase 2A qualification complete; Phase 2B Sandbox boundary qualified
+- Sandbox: trusted-probe-only loopback Supervisor protocol qualified through the real API/Web path
+- Runtime security controls: dedicated non-root Supervisor, rootless OCI/runc, systemd user manager, cgroup v2, namespaces, seccomp, and finite memory/pids limits qualified
+- Runtime attack tests: integrated FS, NET, process/privilege, resource, lifecycle, cleanup-failure, crash, cancellation and concurrent-isolation matrices PASS
+- Production security qualification: NOT CLAIMED; Phase 2B development-runtime trusted-probe scope only
 - TypeScript quality gates: PASS (format, lint, typecheck, tests, architecture, build)
 - Real Web/API platform skeleton: AVAILABLE
 - CI foundation: AVAILABLE (local workflow validation; remote run not observed)
@@ -66,6 +70,6 @@ PHASE 2B: PARTIAL / LEAD CONTROL PLANE INTEGRATED; FINAL HARD GATES INCOMPLETE
 
 ## Next Planned Goal
 
-Phase 2A is qualified for the frozen safe-fixture Worker foundation. Phase 2B has a real trusted-probe-only Lead control plane and dedicated non-root runtime, but final Sandbox security qualification remains PARTIAL. Compiler/runtime adapters for submitted source, real submitted-source execution, real verdicts, and Contest remain not started or not qualified.
+Phase 2A and Phase 2B are qualified within their frozen safe-fixture and trusted-probe scopes. Phase 2C is ready to begin as a separate Goal but is NOT STARTED. Compiler/runtime adapters for submitted source, real submitted-source execution, real verdicts, Contest, production HA, and production deployment remain not started or not qualified.
 
 Last Updated: 2026-08-30
