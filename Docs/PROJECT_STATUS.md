@@ -2,8 +2,8 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 2B SANDBOX SECURITY QUALIFICATION CLOSED
-Current Status: PHASE 2B PASS / FINAL REAL SANDBOX SECURITY QUALIFICATION COMPLETE
+Current Stage: PHASE 2C IN PROGRESS
+Current Status: PHASE 2C.1 PASS / C++20 REAL EXECUTION FOUNDATION QUALIFIED
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 PHASE 1C: PASS
@@ -11,9 +11,12 @@ PHASE 1D: PASS
 PHASE 1E: HISTORICAL PASS / FINAL RERUN PARTIAL
 PHASE 1E-R: RECOVERY CLOSED HISTORICALLY / FINAL RERUN PARTIAL
 PHASE 2A: PASS / REAL MULTI-PROCESS QUALIFICATION COMPLETE
-PHASE 2B: PASS / FINAL REAL SANDBOX SECURITY QUALIFICATION COMPLETE
-PHASE 2C: NOT STARTED
-READY FOR PHASE 2C: YES
+PHASE 2B: PASS / CLOSED
+PHASE 2C: IN PROGRESS / C++20 REAL EXECUTION FOUNDATION QUALIFIED
+REAL C++20 EXECUTION: QUALIFICATION ONLY
+VERDICT ENGINE: NOT STARTED
+PHASE 2D: NOT STARTED
+READY FOR NEXT PHASE 2C GOAL: YES
 
 ## Completed Goals
 
@@ -34,20 +37,24 @@ READY FOR PHASE 2C: YES
 - PHASE 1E — Judge Protocol & Queue Foundation: PASS
 - PHASE 2A — Real Judge Worker Foundation: PASS
 - PHASE 2B — Sandbox Security Qualification: PASS
+- PHASE 2C.1 — C++20 Real Compiler & Runtime Execution Foundation: PASS
 
 ## Current Project State
 
 - Phase 2B Lead integration checkpoint: `6381784` (`feat: integrate phase 2B sandbox control plane`)
 - Phase 2B qualification code/test commit: `e9f45e3` (`test: complete phase 2B final sandbox qualification`)
-- Business implementation: Phase 1 product foundations, Phase 2A Worker foundation, and Phase 2B trusted-probe Sandbox boundary implemented
-- Framework/toolchain: initialized and qualified through the current Phase 2B scope
+- Phase 2C.1 implementation commit: `0c230df` (`feat: add phase 2C.1 C++20 execution foundation`)
+- Business implementation: Phase 1 product foundations, Phase 2A Worker foundation, Phase 2B trusted-probe Sandbox boundary, and the Phase 2C.1 qualification-only C++20 execution foundation implemented
+- Framework/toolchain: initialized and qualified through the current Phase 2C.1 scope
 - Local PostgreSQL/Redis/MinIO infrastructure: Docker Engine/Compose, Windows localhost API/browser boundary, and recovery behavior qualified with WSL instance kept alive
-- Judge Worker: Phase 2A qualification complete; Phase 2B Sandbox boundary qualified
-- Sandbox: trusted-probe-only loopback Supervisor protocol qualified through the real API/Web path
+- Judge Worker: Phase 2A qualification complete; Phase 2B Sandbox boundary and Phase 2C.1 real C++20 queue/Worker path qualified; no Application PostgreSQL access
+- Sandbox: trusted-probe protocol remains available; gated 2C.1 source compilation and raw execution use the dedicated non-root Supervisor and separate rootless-runc lifecycles
 - Runtime security controls: dedicated non-root Supervisor, rootless OCI/runc, systemd user manager, cgroup v2, namespaces, seccomp, and finite memory/pids limits qualified
 - Runtime attack tests: integrated FS, NET, process/privilege, resource, lifecycle, cleanup-failure, crash, cancellation and concurrent-isolation matrices PASS
 - Production security qualification: NOT CLAIMED; Phase 2B development-runtime trusted-probe scope only
-- TypeScript quality gates: PASS (format, lint, typecheck, tests, architecture, build)
+- C++20 profile: fixed `cpp20-gcc-13-v1`, GCC 13.3.0, immutable source hash, fixed argv, bounded compile/runtime resources, verified static ELF artifact, and raw result only
+- Real C++20 execution: QUALIFICATION ONLY; no verdict mapping, output comparison, checker, scoring, testcase aggregation, multi-language support, or production readiness claim
+- TypeScript quality gates: PASS (format, lint, typecheck, 318 tests/3 skipped, architecture, build, and 4/4 infrastructure integration)
 - Real Web/API platform skeleton: AVAILABLE
 - CI foundation: AVAILABLE (local workflow validation; remote run not observed)
 - 0B.3 implementation and runtime qualification: PASS; see the final closure report
@@ -70,6 +77,6 @@ READY FOR PHASE 2C: YES
 
 ## Next Planned Goal
 
-Phase 2A and Phase 2B are qualified within their frozen safe-fixture and trusted-probe scopes. Phase 2C is ready to begin as a separate Goal but is NOT STARTED. Compiler/runtime adapters for submitted source, real submitted-source execution, real verdicts, Contest, production HA, and production deployment remain not started or not qualified.
+Continue Phase 2C from the qualified C++20 compiler/runtime foundation. Verdict mapping, expected-output comparison, checker support, testcase aggregation, multi-language support, Contest, production HA, and production deployment remain not started or not qualified. Phase 2D is NOT STARTED.
 
 Last Updated: 2026-08-30
