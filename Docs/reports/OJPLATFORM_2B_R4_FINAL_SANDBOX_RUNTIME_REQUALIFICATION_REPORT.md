@@ -9,7 +9,7 @@ Runtime-owned qualification only. This report does not claim overall Phase 2B co
 - Worktree: `D:\OJPlatform-worktrees\phase1b-problem-authoring`
 - Branch: `codex/phase2b-sandbox-runtime`
 - Starting HEAD: `5763a99b60b24d694fa03a96d7f61824c20b7392`
-- Final HEAD: recorded after the scoped implementation and report commits below
+- Final HEAD: `58f935480d9ebe7552e035fe7ddb3ef517ff400c`
 
 ## Execution Identity Contract
 
