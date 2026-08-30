@@ -26,6 +26,10 @@ import {
   registerJudgeModule,
 } from './modules/judge/index.js';
 import { registerWorkerControlRoutes } from './modules/judge/worker-control.js';
+import {
+  createSandboxRuntime,
+  registerSandboxControlRoutes,
+} from './modules/sandbox/control.js';
 import type { AuditHook as ProblemAuditHook } from './modules/problem/model.js';
 import {
   PostgresSubmissionRepository,
@@ -39,6 +43,13 @@ const operatorUserIds = () =>
     (process.env.OJPLATFORM_OPERATOR_USER_IDS ?? '')
       .split(',')
       .map((value) => value.trim())
+      .filter(Boolean),
+  );
+const operatorUsernames = () =>
+  new Set(
+    (process.env.OJPLATFORM_OPERATOR_USERNAMES ?? '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
       .filter(Boolean),
   );
 
@@ -60,6 +71,8 @@ export type AppOptions = {
   exposeTestErrorRoute?: boolean;
   withInfrastructure?: boolean;
   config?: RuntimeConfig;
+  operatorUserIds?: ReadonlySet<string>;
+  operatorUsernames?: ReadonlySet<string>;
 };
 type Owned = {
   close: () => Promise<void>;
@@ -90,6 +103,10 @@ const bounded = async (
 };
 
 export async function buildApp(options: AppOptions = {}) {
+  const configuredOperatorUserIds =
+    options.operatorUserIds ?? operatorUserIds();
+  const configuredOperatorUsernames =
+    options.operatorUsernames ?? operatorUsernames();
   const app = Fastify({
     logger: options.logger ?? true,
     genReqId: (request: IncomingMessage) => {
@@ -308,7 +325,16 @@ export async function buildApp(options: AppOptions = {}) {
       judgeRepository,
       resolveSubmission: async (submissionId) =>
         (await submissionRepository.get(submissionId)) ?? undefined,
-      operatorUserIds: operatorUserIds(),
+      operatorUserIds: configuredOperatorUserIds,
+    });
+    const sandboxRuntime = await createSandboxRuntime();
+    await registerSandboxControlRoutes(app, {
+      runtime: sandboxRuntime,
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      operatorUserIds: configuredOperatorUserIds,
+      operatorUsernames: configuredOperatorUsernames,
+      resolveUserName: async (userId) => (await auth.getUser(userId))?.username,
     });
     owned = {
       checks: {
@@ -320,6 +346,7 @@ export async function buildApp(options: AppOptions = {}) {
         storage: () => checkStorage(storage),
       },
       close: async () => {
+        await sandboxRuntime.close();
         await database.pool.end();
         cache.disconnect();
         storage.client.destroy();
@@ -481,8 +508,18 @@ export async function buildApp(options: AppOptions = {}) {
       judgeRepository,
       resolveSubmission: async (submissionId) =>
         (await submissionRepository.get(submissionId)) ?? undefined,
-      operatorUserIds: operatorUserIds(),
+      operatorUserIds: configuredOperatorUserIds,
     });
+    const sandboxRuntime = await createSandboxRuntime();
+    await registerSandboxControlRoutes(app, {
+      runtime: sandboxRuntime,
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      operatorUserIds: configuredOperatorUserIds,
+      operatorUsernames: configuredOperatorUsernames,
+      resolveUserName: async (userId) => (await auth.getUser(userId))?.username,
+    });
+    app.addHook('onClose', async () => sandboxRuntime.close());
   }
   app.get(
     '/health',

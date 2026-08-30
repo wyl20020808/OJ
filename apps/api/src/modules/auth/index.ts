@@ -196,6 +196,7 @@ export async function registerAuthModule(
   });
   return {
     getAuthContext: context,
+    getUser: (id: string) => options.repository.findById(id),
     sessions,
     setUserStatus: async (
       id: string,

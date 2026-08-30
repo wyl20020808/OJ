@@ -114,6 +114,23 @@ export type WorkerDiagnostics = {
     };
   }>;
 };
+export type SandboxOverview = {
+  resourceId: string;
+  backendType: string;
+  qualificationState: string;
+  policyVersion: string | null;
+  probeSuiteVersion: string | null;
+  lastQualificationAt: string | null;
+  capabilities: Array<{ id: string; label: string; state: string }>;
+  failureCategory?: string | null;
+  realSubmissionExecution: 'DISABLED';
+};
+export type SandboxProbe = {
+  probeId: string;
+  version: string;
+  purpose: string;
+  timeoutMs: number;
+};
 export type SubmissionList = { items: Submission[]; nextCursor: string | null };
 export type ProblemInput = Omit<
   Problem,
@@ -296,6 +313,41 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         baseUrl,
         '/api/operations/judge-workers',
         undefined,
+        fetcher,
+      ),
+    sandboxOverview: () =>
+      request<SandboxOverview>(
+        baseUrl,
+        '/api/operations/sandbox',
+        undefined,
+        fetcher,
+      ),
+    sandboxProbes: () =>
+      request<{ items: SandboxProbe[] }>(
+        baseUrl,
+        '/api/operations/sandbox/probes',
+        undefined,
+        fetcher,
+      ),
+    startSandboxProbe: (probeId: string) =>
+      request<unknown>(
+        baseUrl,
+        `/api/operations/sandbox/probes/${encodeURIComponent(probeId)}`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    cancelSandboxProbe: (probeId: string) =>
+      request<unknown>(
+        baseUrl,
+        `/api/operations/sandbox/probes/${encodeURIComponent(probeId)}/cancel`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    verifySandboxCleanup: () =>
+      request<unknown>(
+        baseUrl,
+        '/api/operations/sandbox/cleanup/verify',
+        { method: 'POST', body: '{}' },
         fetcher,
       ),
     readiness: () =>

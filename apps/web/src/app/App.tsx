@@ -19,6 +19,7 @@ import {
   type SubmissionStatus,
 } from '../services/api.js';
 import './app.css';
+import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 
 type Route = {
   name:
@@ -34,6 +35,7 @@ type Route = {
     | 'author'
     | 'author-new'
     | 'author-edit'
+    | 'sandbox'
     | 'forbidden'
     | 'error'
     | 'not-found';
@@ -46,6 +48,7 @@ function route(path = window.location.pathname): Route {
   if (path === '/403' || path === '/forbidden') return { name: 'forbidden' };
   if (path === '/error') return { name: 'error' };
   if (path === '/profile' || path === '/account') return { name: 'profile' };
+  if (path === '/operations/sandbox') return { name: 'sandbox' };
   if (path === '/problems' || path === '/problems/')
     return { name: 'problems' };
   if (path === '/author' || path === '/author/') return { name: 'author' };
@@ -1622,6 +1625,8 @@ export function App() {
           action={<Link to="/login">Sign in</Link>}
         />
       )
+    ) : current.name === 'sandbox' ? (
+      <SandboxOperationsPage api={api} authorized={Boolean(user)} />
     ) : current.name === 'profile' ? (
       <Profile user={user} />
     ) : current.name === 'author' ? (

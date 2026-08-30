@@ -2,8 +2,8 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 2B SANDBOX SECURITY QUALIFICATION BOOTSTRAP
-Current Status: PHASE 2B IN PROGRESS / RUNTIME RECOVERY
+Current Stage: PHASE 2B SANDBOX SECURITY QUALIFICATION
+Current Status: PHASE 2B PARTIAL / LEAD INTEGRATION QUALIFICATION IN PROGRESS
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 PHASE 1C: PASS
@@ -11,7 +11,7 @@ PHASE 1D: PASS
 PHASE 1E: HISTORICAL PASS / FINAL RERUN PARTIAL
 PHASE 1E-R: RECOVERY CLOSED HISTORICALLY / FINAL RERUN PARTIAL
 PHASE 2A: PASS / REAL MULTI-PROCESS QUALIFICATION COMPLETE
-PHASE 2B: IN PROGRESS / BOOTSTRAPPED
+PHASE 2B: PARTIAL / LEAD CONTROL PLANE INTEGRATED; FINAL HARD GATES INCOMPLETE
 
 ## Completed Goals
 
@@ -38,10 +38,10 @@ PHASE 2B: IN PROGRESS / BOOTSTRAPPED
 - Business implementation: NOT STARTED
 - Framework/toolchain initialization: 0B foundation initialized; future business frameworks NOT STARTED
 - Local PostgreSQL/Redis/MinIO infrastructure: Docker Engine/Compose, Windows localhost API/browser boundary, and recovery behavior qualified with WSL instance kept alive
-- Judge Worker: Phase 2A bootstrap complete; runtime implementation NOT STARTED
-- Sandbox, Plugin Runtime, and production service infrastructure: NOT STARTED
-- Runtime security controls: NOT IMPLEMENTED
-- Runtime attack tests: NOT EXECUTED
+- Judge Worker: Phase 2A qualification complete; Phase 2B Lead control plane integrated
+- Sandbox: trusted-probe-only Supervisor protocol integrated; final qualification incomplete
+- Runtime security controls: implemented in dedicated non-root R4 runtime; final Lead qualification partial
+- Runtime attack tests: named R4 groups executed; full integrated matrix not complete
 - Production security qualification: NOT QUALIFIED
 - TypeScript quality gates: PASS (format, lint, typecheck, tests, architecture, build)
 - Real Web/API platform skeleton: AVAILABLE
@@ -66,6 +66,6 @@ PHASE 2B: IN PROGRESS / BOOTSTRAPPED
 
 ## Next Planned Goal
 
-Phase 2A is qualified for the frozen safe-fixture Worker foundation. Phase 2B Sandbox runtime recovery is in progress; full Sandbox qualification, compiler/runtime adapters, real submitted-source execution, real verdicts, and Contest remain not started or not qualified.
+Phase 2A is qualified for the frozen safe-fixture Worker foundation. Phase 2B has a real trusted-probe-only Lead control plane and dedicated non-root runtime, but final Sandbox security qualification remains PARTIAL. Compiler/runtime adapters for submitted source, real submitted-source execution, real verdicts, and Contest remain not started or not qualified.
 
-Last Updated: 2026-08-29
+Last Updated: 2026-08-30
