@@ -16,27 +16,73 @@ import (
 )
 
 type Job struct {
-	ID                 string    `json:"id"`
-	SubmissionID       string    `json:"submissionId"`
-	IdempotencyKey     string    `json:"idempotencyKey"`
-	OwnerUserID        string    `json:"ownerUserId"`
-	ProblemID          string    `json:"problemId"`
-	ProblemRevisionID  string    `json:"problemRevisionId"`
-	TestdataVersionRef string    `json:"testdataVersionRef"`
-	LanguageID         string    `json:"languageId"`
-	Status             string    `json:"status"`
-	Attempt            int       `json:"attempt"`
-	MaxAttempts        int       `json:"maxAttempts"`
-	LeaseOwner         string    `json:"leaseOwner"`
-	LeaseToken         string    `json:"leaseToken"`
-	LeaseExpiresAt     time.Time `json:"leaseExpiresAt"`
-	FixtureID          string    `json:"fixtureId"`
-	FailureReason      string    `json:"failureReason"`
-	SyntheticFixtureID string    `json:"syntheticFixtureId"`
-	CompletedAt        string    `json:"completedAt"`
-	CreatedAt          string    `json:"createdAt"`
-	UpdatedAt          string    `json:"updatedAt"`
+	ID                 string          `json:"id"`
+	SubmissionID       string          `json:"submissionId"`
+	IdempotencyKey     string          `json:"idempotencyKey"`
+	OwnerUserID        string          `json:"ownerUserId"`
+	ProblemID          string          `json:"problemId"`
+	ProblemRevisionID  string          `json:"problemRevisionId"`
+	TestdataVersionRef string          `json:"testdataVersionRef"`
+	LanguageID         string          `json:"languageId"`
+	ExecutionMode      string          `json:"executionMode"`
+	LanguageProfileID  string          `json:"languageProfileId"`
+	SourceSnapshotRef  string          `json:"sourceSnapshotRef"`
+	SourceBytes        string          `json:"sourceBytes"`
+	SourceSHA256       string          `json:"sourceSha256"`
+	ControlledInputID  string          `json:"controlledInputId"`
+	RawExecutionResult json.RawMessage `json:"rawExecutionResult,omitempty"`
+	Status             string          `json:"status"`
+	Attempt            int             `json:"attempt"`
+	MaxAttempts        int             `json:"maxAttempts"`
+	LeaseOwner         string          `json:"leaseOwner"`
+	LeaseToken         string          `json:"leaseToken"`
+	LeaseExpiresAt     time.Time       `json:"leaseExpiresAt"`
+	FixtureID          string          `json:"fixtureId"`
+	FailureReason      string          `json:"failureReason"`
+	SyntheticFixtureID string          `json:"syntheticFixtureId"`
+	CompletedAt        string          `json:"completedAt"`
+	CreatedAt          string          `json:"createdAt"`
+	UpdatedAt          string          `json:"updatedAt"`
 }
+
+type rawExecutionResultIdentity struct {
+	ProtocolVersion    string          `json:"protocol_version"`
+	ExecutionRequestID string          `json:"execution_request_id"`
+	JudgeJobID         string          `json:"judge_job_id"`
+	SubmissionID       string          `json:"submission_id"`
+	Attempt            int             `json:"attempt"`
+	LanguageProfileID  string          `json:"language_profile_id"`
+	SourceSHA256       string          `json:"source_sha256"`
+	PipelineOutcome    string          `json:"pipeline_outcome"`
+	Compile            json.RawMessage `json:"compile"`
+}
+
+func validateRawExecutionResult(result json.RawMessage, job Job) error {
+	var identity rawExecutionResultIdentity
+	if !json.Valid(result) || json.Unmarshal(result, &identity) != nil {
+		return errors.New("invalid raw execution result")
+	}
+	allowedOutcome := map[string]bool{
+		"PIPELINE_COMPLETED":      true,
+		"PIPELINE_COMPILE_FAILED": true,
+		"PIPELINE_LIMIT_HIT":      true,
+		"PIPELINE_CANCELLED":      true,
+		"PIPELINE_INFRA_FAILURE":  true,
+	}
+	if identity.ProtocolVersion != "2C.1" ||
+		identity.ExecutionRequestID != fmt.Sprintf("%s:%d", job.ID, job.Attempt) ||
+		identity.JudgeJobID != job.ID ||
+		identity.SubmissionID != job.SubmissionID ||
+		identity.Attempt != job.Attempt ||
+		identity.LanguageProfileID != job.LanguageProfileID ||
+		identity.SourceSHA256 != job.SourceSHA256 ||
+		!allowedOutcome[identity.PipelineOutcome] ||
+		len(identity.Compile) == 0 || string(identity.Compile) == "null" {
+		return errors.New("raw execution result identity mismatch")
+	}
+	return nil
+}
+
 type Lease struct {
 	Job   Job
 	Token string
@@ -217,9 +263,10 @@ type Queue struct {
 }
 
 type CreateInput struct {
-	ID, SubmissionID, OwnerUserID, ProblemID, ProblemRevisionID, TestdataVersionRef, LanguageID string
-	FixtureID                                                                                   string
-	MaxAttempts                                                                                 int
+	ID, SubmissionID, OwnerUserID, ProblemID, ProblemRevisionID, TestdataVersionRef, LanguageID       string
+	ExecutionMode, LanguageProfileID, SourceSnapshotRef, SourceBytes, SourceSHA256, ControlledInputID string
+	FixtureID                                                                                         string
+	MaxAttempts                                                                                       int
 }
 
 func (q Queue) Enqueue(ctx context.Context, in CreateInput) (Job, error) {
@@ -252,7 +299,10 @@ func (q Queue) Enqueue(ctx context.Context, in CreateInput) (Job, error) {
 		max = 3
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	j := Job{ID: in.ID, SubmissionID: in.SubmissionID, IdempotencyKey: "submission:" + in.SubmissionID, OwnerUserID: in.OwnerUserID, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, LanguageID: in.LanguageID, FixtureID: in.FixtureID, Status: "QUEUED", MaxAttempts: max, CreatedAt: now, UpdatedAt: now}
+	j := Job{ID: in.ID, SubmissionID: in.SubmissionID, IdempotencyKey: "submission:" + in.SubmissionID, OwnerUserID: in.OwnerUserID, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, LanguageID: in.LanguageID, ExecutionMode: in.ExecutionMode, LanguageProfileID: in.LanguageProfileID, SourceSnapshotRef: in.SourceSnapshotRef, SourceBytes: in.SourceBytes, SourceSHA256: in.SourceSHA256, ControlledInputID: in.ControlledInputID, FixtureID: in.FixtureID, Status: "QUEUED", MaxAttempts: max, CreatedAt: now, UpdatedAt: now}
+	if j.ExecutionMode == "" {
+		j.ExecutionMode = "SAFE_FIXTURE_QUALIFICATION"
+	}
 	encoded, _ := json.Marshal(j)
 	if _, err = q.Redis.String(ctx, "SET", q.key("job", j.ID), string(encoded)); err != nil {
 		return Job{}, err
@@ -295,10 +345,17 @@ func (q Queue) claim(ctx context.Context, worker string, lease time.Duration) (*
 	if err = json.Unmarshal([]byte(raw), &j); err != nil {
 		return nil, err
 	}
+	if j.ExecutionMode == "" {
+		j.ExecutionMode = "SAFE_FIXTURE_QUALIFICATION"
+	}
 	if j.Status != "QUEUED" && j.Status != "FAILED_RETRYABLE" {
 		return nil, nil
 	}
-	j.Status = "LEASED_FAKE"
+	if j.ExecutionMode == "REAL_SANDBOXED_EXECUTION" {
+		j.Status = "LEASED"
+	} else {
+		j.Status = "LEASED_FAKE"
+	}
 	j.Attempt++
 	j.LeaseOwner = worker
 	j.LeaseToken = fmt.Sprintf("%d", time.Now().UnixNano())
@@ -327,7 +384,7 @@ func (q Queue) recoverStaleLocked(ctx context.Context) error {
 		if json.Unmarshal([]byte(raw), &j) != nil {
 			continue
 		}
-		if j.Status != "LEASED_FAKE" || j.LeaseExpiresAt.IsZero() || time.Now().Before(j.LeaseExpiresAt) {
+		if (j.Status != "LEASED_FAKE" && j.Status != "LEASED") || j.LeaseExpiresAt.IsZero() || time.Now().Before(j.LeaseExpiresAt) {
 			continue
 		}
 		j.LeaseOwner, j.LeaseToken = "", ""
@@ -350,7 +407,7 @@ func (q Queue) recoverStaleLocked(ctx context.Context) error {
 	}
 	return nil
 }
-func (q Queue) update(ctx context.Context, l Lease, status, reason string) error {
+func (q Queue) update(ctx context.Context, l Lease, status, reason string, result json.RawMessage) error {
 	lock := q.key("mutation-lock", "")
 	token := fmt.Sprintf("%d", time.Now().UnixNano())
 	ok, err := q.Redis.SetNX(ctx, lock, token, 5*time.Second)
@@ -366,13 +423,28 @@ func (q Queue) update(ctx context.Context, l Lease, status, reason string) error
 	if err = json.Unmarshal([]byte(raw), &j); err != nil {
 		return err
 	}
-	if j.Status == "SUCCEEDED_FAKE" || j.Status == "FAILED_TERMINAL" || j.Status == "CANCELLED" {
+	if j.Status == "SUCCEEDED_FAKE" || j.Status == "COMPLETED" || j.Status == "FAILED_TERMINAL" || j.Status == "CANCELLED" {
 		return nil
 	}
-	if j.Status != "LEASED_FAKE" || j.LeaseToken != l.Token || time.Now().After(j.LeaseExpiresAt) {
+	expectedLease := "LEASED_FAKE"
+	if j.ExecutionMode == "REAL_SANDBOXED_EXECUTION" {
+		expectedLease = "LEASED"
+	}
+	if j.Status != expectedLease || j.LeaseToken != l.Token || time.Now().After(j.LeaseExpiresAt) {
 		return errors.New("lease conflict")
 	}
+	if (status == "COMPLETED") != (j.ExecutionMode == "REAL_SANDBOXED_EXECUTION") {
+		return errors.New("execution mode completion mismatch")
+	}
+	if status == "COMPLETED" {
+		if err = validateRawExecutionResult(result, j); err != nil {
+			return err
+		}
+	}
 	j.Status = status
+	if status == "FAILED_RETRYABLE" && j.Attempt >= j.MaxAttempts {
+		j.Status = "FAILED_TERMINAL"
+	}
 	j.LeaseToken = ""
 	j.LeaseOwner = ""
 	j.LeaseExpiresAt = time.Time{}
@@ -382,26 +454,33 @@ func (q Queue) update(ctx context.Context, l Lease, status, reason string) error
 		j.SyntheticFixtureID = l.Job.FixtureID
 		j.CompletedAt = j.UpdatedAt
 	}
+	if status == "COMPLETED" {
+		j.RawExecutionResult = append(json.RawMessage(nil), result...)
+		j.CompletedAt = j.UpdatedAt
+	}
 	encoded, _ := json.Marshal(j)
 	if _, err = q.Redis.String(ctx, "SET", q.key("job", j.ID), string(encoded)); err != nil {
 		return err
 	}
-	if status == "FAILED_RETRYABLE" {
+	if j.Status == "FAILED_RETRYABLE" {
 		return q.Redis.Push(ctx, q.key("queue", ""), j.ID)
 	}
 	return nil
 }
 func (q Queue) Complete(ctx context.Context, l Lease) error {
-	return q.update(ctx, l, "SUCCEEDED_FAKE", "")
+	return q.update(ctx, l, "SUCCEEDED_FAKE", "", nil)
+}
+func (q Queue) CompleteReal(ctx context.Context, l Lease, result json.RawMessage) error {
+	return q.update(ctx, l, "COMPLETED", "", result)
 }
 func (q Queue) Retry(ctx context.Context, l Lease, reason string) error {
-	return q.update(ctx, l, "FAILED_RETRYABLE", reason)
+	return q.update(ctx, l, "FAILED_RETRYABLE", reason, nil)
 }
 func (q Queue) FailTerminal(ctx context.Context, l Lease, reason string) error {
-	return q.update(ctx, l, "FAILED_TERMINAL", reason)
+	return q.update(ctx, l, "FAILED_TERMINAL", reason, nil)
 }
 func (q Queue) Cancel(ctx context.Context, l Lease) error {
-	return q.update(ctx, l, "CANCELLED", "cancelled")
+	return q.update(ctx, l, "CANCELLED", "cancelled", nil)
 }
 
 func (q Queue) CancellationRequested(ctx context.Context, jobID string) (bool, error) {

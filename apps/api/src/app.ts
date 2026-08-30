@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import type { IncomingMessage } from 'node:http';
+import { createHash } from 'node:crypto';
 import { Type } from '@sinclair/typebox';
 import { createDatabase, checkDatabase } from '@ojplatform/database';
 import { createCache, checkCache } from '@ojplatform/cache';
@@ -36,6 +37,7 @@ import {
   InMemorySubmissionRepository,
   registerSubmissionModule,
   type ProblemRevisionResolver,
+  type Submission,
 } from './modules/submission/index.js';
 
 const operatorUserIds = () =>
@@ -73,6 +75,7 @@ export type AppOptions = {
   config?: RuntimeConfig;
   operatorUserIds?: ReadonlySet<string>;
   operatorUsernames?: ReadonlySet<string>;
+  realSubmissionExecution?: boolean;
 };
 type Owned = {
   close: () => Promise<void>;
@@ -103,6 +106,9 @@ const bounded = async (
 };
 
 export async function buildApp(options: AppOptions = {}) {
+  const realSubmissionExecution =
+    options.realSubmissionExecution ??
+    process.env.REAL_SUBMISSION_EXECUTION === 'true';
   const configuredOperatorUserIds =
     options.operatorUserIds ?? operatorUserIds();
   const configuredOperatorUsernames =
@@ -270,14 +276,9 @@ export async function buildApp(options: AppOptions = {}) {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       onCreated: async (submission) => {
-        await judgeRepository.enqueue({
-          submissionId: submission.id,
-          ownerUserId: submission.ownerUserId,
-          problemId: submission.problemId,
-          problemRevisionId: submission.problemRevisionId,
-          testdataVersionRef: submission.testdataVersionRef,
-          languageId: submission.languageId,
-        });
+        await judgeRepository.enqueue(
+          judgeInputForSubmission(submission, realSubmissionExecution),
+        );
       },
       projectJudge: async (submission) => {
         const job = await judgeRepository.getBySubmissionId(submission.id);
@@ -285,15 +286,17 @@ export async function buildApp(options: AppOptions = {}) {
         const status =
           job.status === 'QUEUED'
             ? 'QUEUED'
-            : job.status === 'LEASED_FAKE'
+            : job.status === 'LEASED_FAKE' || job.status === 'LEASED'
               ? 'LEASED'
               : job.status === 'SUCCEEDED_FAKE'
                 ? 'SYNTHETIC_COMPLETED'
-                : job.status === 'FAILED_RETRYABLE'
-                  ? 'RETRYABLE_FAILURE'
-                  : job.status === 'CANCELLED'
-                    ? 'CANCELLED'
-                    : 'PROTOCOL_FAILURE';
+                : job.status === 'COMPLETED'
+                  ? 'EXECUTION_COMPLETED'
+                  : job.status === 'FAILED_RETRYABLE'
+                    ? 'RETRYABLE_FAILURE'
+                    : job.status === 'CANCELLED'
+                      ? 'CANCELLED'
+                      : 'PROTOCOL_FAILURE';
         return {
           judgeJobId: job.id,
           status,
@@ -305,13 +308,17 @@ export async function buildApp(options: AppOptions = {}) {
               ? 'QUEUED'
               : job.status === 'LEASED_FAKE'
                 ? 'SAFE_FIXTURE_RUNNING'
-                : job.status === 'SUCCEEDED_FAKE'
-                  ? 'SAFE_FIXTURE_SUCCEEDED'
-                  : job.status === 'FAILED_RETRYABLE'
-                    ? 'FAILED_RETRYABLE'
-                    : job.status === 'CANCELLED'
-                      ? 'CANCELLED'
-                      : 'FAILED_TERMINAL',
+                : job.status === 'LEASED'
+                  ? 'REAL_EXECUTION_RUNNING'
+                  : job.status === 'SUCCEEDED_FAKE'
+                    ? 'SAFE_FIXTURE_SUCCEEDED'
+                    : job.status === 'COMPLETED'
+                      ? 'EXECUTION_COMPLETED'
+                      : job.status === 'FAILED_RETRYABLE'
+                        ? 'FAILED_RETRYABLE'
+                        : job.status === 'CANCELLED'
+                          ? 'CANCELLED'
+                          : 'FAILED_TERMINAL',
         };
       },
     });
@@ -457,14 +464,9 @@ export async function buildApp(options: AppOptions = {}) {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       onCreated: async (submission) => {
-        await judgeRepository.enqueue({
-          submissionId: submission.id,
-          ownerUserId: submission.ownerUserId,
-          problemId: submission.problemId,
-          problemRevisionId: submission.problemRevisionId,
-          testdataVersionRef: submission.testdataVersionRef,
-          languageId: submission.languageId,
-        });
+        await judgeRepository.enqueue(
+          judgeInputForSubmission(submission, realSubmissionExecution),
+        );
       },
       projectJudge: async (submission) => {
         const job = await judgeRepository.getBySubmissionId(submission.id);
@@ -472,15 +474,17 @@ export async function buildApp(options: AppOptions = {}) {
         const status =
           job.status === 'QUEUED'
             ? 'QUEUED'
-            : job.status === 'LEASED_FAKE'
+            : job.status === 'LEASED_FAKE' || job.status === 'LEASED'
               ? 'LEASED'
               : job.status === 'SUCCEEDED_FAKE'
                 ? 'SYNTHETIC_COMPLETED'
-                : job.status === 'FAILED_RETRYABLE'
-                  ? 'RETRYABLE_FAILURE'
-                  : job.status === 'CANCELLED'
-                    ? 'CANCELLED'
-                    : 'PROTOCOL_FAILURE';
+                : job.status === 'COMPLETED'
+                  ? 'EXECUTION_COMPLETED'
+                  : job.status === 'FAILED_RETRYABLE'
+                    ? 'RETRYABLE_FAILURE'
+                    : job.status === 'CANCELLED'
+                      ? 'CANCELLED'
+                      : 'PROTOCOL_FAILURE';
         return {
           judgeJobId: job.id,
           status,
@@ -492,13 +496,17 @@ export async function buildApp(options: AppOptions = {}) {
               ? 'QUEUED'
               : job.status === 'LEASED_FAKE'
                 ? 'SAFE_FIXTURE_RUNNING'
-                : job.status === 'SUCCEEDED_FAKE'
-                  ? 'SAFE_FIXTURE_SUCCEEDED'
-                  : job.status === 'FAILED_RETRYABLE'
-                    ? 'FAILED_RETRYABLE'
-                    : job.status === 'CANCELLED'
-                      ? 'CANCELLED'
-                      : 'FAILED_TERMINAL',
+                : job.status === 'LEASED'
+                  ? 'REAL_EXECUTION_RUNNING'
+                  : job.status === 'SUCCEEDED_FAKE'
+                    ? 'SAFE_FIXTURE_SUCCEEDED'
+                    : job.status === 'COMPLETED'
+                      ? 'EXECUTION_COMPLETED'
+                      : job.status === 'FAILED_RETRYABLE'
+                        ? 'FAILED_RETRYABLE'
+                        : job.status === 'CANCELLED'
+                          ? 'CANCELLED'
+                          : 'FAILED_TERMINAL',
         };
       },
     });
@@ -557,4 +565,31 @@ export async function buildApp(options: AppOptions = {}) {
       },
     );
   return app;
+}
+
+function judgeInputForSubmission(
+  submission: Submission,
+  realSubmissionExecution: boolean,
+) {
+  const base = {
+    submissionId: submission.id,
+    ownerUserId: submission.ownerUserId,
+    problemId: submission.problemId,
+    problemRevisionId: submission.problemRevisionId,
+    testdataVersionRef: submission.testdataVersionRef,
+    languageId: submission.languageId,
+  };
+  if (!realSubmissionExecution || submission.languageId !== 'cpp20')
+    return base;
+  return {
+    ...base,
+    executionMode: 'REAL_SANDBOXED_EXECUTION' as const,
+    languageProfileId: 'cpp20-gcc-13-v1' as const,
+    sourceSnapshotRef: `submission:${submission.id}`,
+    sourceBytes: submission.source,
+    sourceSha256: createHash('sha256')
+      .update(submission.source, 'utf8')
+      .digest('hex'),
+    controlledInputId: 'stdin-empty-v1' as const,
+  };
 }

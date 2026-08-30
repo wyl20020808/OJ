@@ -5,6 +5,7 @@ export type IntakeStatus =
   | 'RETRYABLE_FAILURE'
   | 'PROTOCOL_FAILURE'
   | 'CANCELLED'
+  | 'EXECUTION_COMPLETED'
   | 'SYNTHETIC_COMPLETED';
 
 export type Submission = {

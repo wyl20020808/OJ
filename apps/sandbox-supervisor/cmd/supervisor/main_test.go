@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,8 +11,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ojplatform/sandbox-supervisor/internal/model"
+	"github.com/ojplatform/sandbox-supervisor/internal/supervisor"
 )
 
 func TestQualificationFaultProbeIsExplicitlyGated(t *testing.T) {
@@ -77,5 +81,50 @@ func TestResourceQualificationRequiresFiniteKernelEvidence(t *testing.T) {
 	pidsResult.Evidence.PidsEvents = "max 0"
 	if expectedPass(pids, pidsResult) {
 		t.Fatal("pids profile without kernel event was accepted")
+	}
+}
+
+func TestRealExecutionIsDisabledByDefault(t *testing.T) {
+	server := &protocolServer{}
+	recorder := httptest.NewRecorder()
+	server.startExecution(recorder, httptest.NewRequest(http.MethodPost, "/v1/executions/start", bytes.NewBufferString(`{}`)))
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("disabled real execution returned %d", recorder.Code)
+	}
+}
+
+func TestRealExecutionIdempotencyRejectsDifferentSnapshot(t *testing.T) {
+	source := "int main(){}"
+	digest := sha256.Sum256([]byte(source))
+	request := model.RealExecutionRequest{ProtocolVersion: model.ExecutionContractVersion, ExecutionRequestID: "execution-1", JudgeJobID: "job", SubmissionID: "submission", Attempt: 1, CorrelationID: "correlation", ProblemRevisionID: "revision", TestdataVersionRef: "testdata", LanguageProfileID: supervisor.CPP20ProfileID, SourceSnapshotRef: "submission:submission", SourceBytes: source, SourceSHA256: hex.EncodeToString(digest[:]), ControlledInputID: "stdin-empty-v1", DeadlineAt: time.Now().Add(time.Minute)}
+	server := &protocolServer{realExecutionEnabled: true, executions: map[string]*executionRecord{"execution-1": {requestIdentity: realExecutionRequestIdentity(request), active: true}}}
+	request.SourceBytes += " "
+	tamperedDigest := sha256.Sum256([]byte(request.SourceBytes))
+	request.SourceSHA256 = hex.EncodeToString(tamperedDigest[:])
+	body, _ := json.Marshal(request)
+	recorder := httptest.NewRecorder()
+	server.startExecution(recorder, httptest.NewRequest(http.MethodPost, "/v1/executions/start", bytes.NewReader(body)))
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("different idempotent request returned %d", recorder.Code)
+	}
+}
+
+func TestExecutionRecordsAreBoundedAndExpiredRecordsArePruned(t *testing.T) {
+	now := time.Now().UTC()
+	server := &protocolServer{executions: map[string]*executionRecord{
+		"active": {active: true},
+		"fresh": {
+			result: model.RealExecutionResult{CompletedAt: now.Add(-time.Minute)},
+		},
+		"expired": {
+			result: model.RealExecutionResult{CompletedAt: now.Add(-executionRetention)},
+		},
+	}}
+	server.pruneExecutionRecords(now)
+	if server.executions["active"] == nil || server.executions["fresh"] == nil {
+		t.Fatal("active or retained execution record was removed")
+	}
+	if server.executions["expired"] != nil {
+		t.Fatal("expired execution record was retained")
 	}
 }

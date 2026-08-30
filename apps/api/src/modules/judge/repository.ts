@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import {
   JudgeJobConflictError,
@@ -7,8 +7,51 @@ import {
   type JudgeJob,
   type JudgeJobCreateInput,
   type JudgeJobRepository,
+  type RawExecutionResult,
 } from './model.js';
 const stamp = () => new Date().toISOString();
+const safeMode = 'SAFE_FIXTURE_QUALIFICATION' as const;
+const realMode = 'REAL_SANDBOXED_EXECUTION' as const;
+const sha256 = (value: string) =>
+  createHash('sha256').update(value, 'utf8').digest('hex');
+const rawPipelineOutcomes = new Set<RawExecutionResult['pipeline_outcome']>([
+  'PIPELINE_COMPLETED',
+  'PIPELINE_COMPILE_FAILED',
+  'PIPELINE_LIMIT_HIT',
+  'PIPELINE_CANCELLED',
+  'PIPELINE_INFRA_FAILURE',
+]);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+const validRawExecutionResult = (
+  value: unknown,
+  job: Record<string, unknown> | JudgeJob,
+): value is RawExecutionResult => {
+  if (!isRecord(value)) return false;
+  const startedAt = Date.parse(String(value.started_at));
+  const completedAt = Date.parse(String(value.completed_at));
+  return (
+    value.protocol_version === '2C.1' &&
+    value.execution_request_id === `${String(job.id)}:${String(job.attempt)}` &&
+    value.judge_job_id === job.id &&
+    value.submission_id === job.submissionId &&
+    value.attempt === job.attempt &&
+    value.language_profile_id === job.languageProfileId &&
+    value.source_sha256 === job.sourceSha256 &&
+    typeof value.correlation_id === 'string' &&
+    value.correlation_id.length > 0 &&
+    rawPipelineOutcomes.has(
+      value.pipeline_outcome as RawExecutionResult['pipeline_outcome'],
+    ) &&
+    isRecord(value.compile) &&
+    (value.artifact === undefined || isRecord(value.artifact)) &&
+    (value.runtime === undefined || isRecord(value.runtime)) &&
+    Number.isFinite(startedAt) &&
+    Number.isFinite(completedAt) &&
+    completedAt >= startedAt &&
+    typeof value.clean === 'boolean'
+  );
+};
 const normalize = (i: JudgeJobCreateInput): JudgeJob => {
   if (
     !i.submissionId ||
@@ -19,6 +62,19 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
     !i.languageId
   )
     throw new JudgeJobPayloadError('Missing immutable linkage');
+  const executionMode = i.executionMode ?? safeMode;
+  if (
+    executionMode === realMode &&
+    (i.languageId !== 'cpp20' ||
+      i.languageProfileId !== 'cpp20-gcc-13-v1' ||
+      !i.sourceSnapshotRef ||
+      !i.sourceBytes ||
+      Buffer.byteLength(i.sourceBytes, 'utf8') > 256 * 1024 ||
+      !/^[a-f0-9]{64}$/.test(i.sourceSha256 ?? '') ||
+      sha256(i.sourceBytes) !== i.sourceSha256 ||
+      !['stdin-empty-v1', 'stdin-echo-v1'].includes(i.controlledInputId ?? ''))
+  )
+    throw new JudgeJobPayloadError('Invalid real execution snapshot');
   const t = stamp();
   return {
     id: randomUUID(),
@@ -29,6 +85,16 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
     problemRevisionId: i.problemRevisionId,
     testdataVersionRef: i.testdataVersionRef,
     languageId: i.languageId,
+    executionMode,
+    ...(executionMode === realMode
+      ? {
+          languageProfileId: i.languageProfileId!,
+          sourceSnapshotRef: i.sourceSnapshotRef!,
+          sourceBytes: i.sourceBytes!,
+          sourceSha256: i.sourceSha256!,
+          controlledInputId: i.controlledInputId!,
+        }
+      : {}),
     status: 'QUEUED',
     attempt: 0,
     maxAttempts:
@@ -42,6 +108,7 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
 export function assertPayload(v: unknown): asserts v is JudgeJob {
   if (!v || typeof v !== 'object') throw new JudgeJobPayloadError();
   const j = v as Record<string, unknown>;
+  if (j.executionMode === undefined) j.executionMode = safeMode;
   const states = [
     'QUEUED',
     'LEASED_FAKE',
@@ -49,6 +116,8 @@ export function assertPayload(v: unknown): asserts v is JudgeJob {
     'FAILED_RETRYABLE',
     'FAILED_TERMINAL',
     'CANCELLED',
+    'LEASED',
+    'COMPLETED',
   ];
   if (
     typeof j.id !== 'string' ||
@@ -59,6 +128,9 @@ export function assertPayload(v: unknown): asserts v is JudgeJob {
     typeof j.problemRevisionId !== 'string' ||
     typeof j.testdataVersionRef !== 'string' ||
     typeof j.languageId !== 'string' ||
+    ![safeMode, realMode].includes(
+      j.executionMode as typeof safeMode | typeof realMode,
+    ) ||
     !states.includes(String(j.status)) ||
     !Number.isSafeInteger(j.attempt) ||
     Number(j.attempt) < 0 ||
@@ -71,13 +143,33 @@ export function assertPayload(v: unknown): asserts v is JudgeJob {
   )
     throw new JudgeJobPayloadError();
   if (
-    j.status === 'LEASED_FAKE' &&
+    j.executionMode === realMode &&
+    (j.languageId !== 'cpp20' ||
+      j.languageProfileId !== 'cpp20-gcc-13-v1' ||
+      typeof j.sourceSnapshotRef !== 'string' ||
+      typeof j.sourceBytes !== 'string' ||
+      Buffer.byteLength(j.sourceBytes, 'utf8') > 256 * 1024 ||
+      typeof j.sourceSha256 !== 'string' ||
+      sha256(j.sourceBytes) !== j.sourceSha256 ||
+      !['stdin-empty-v1', 'stdin-echo-v1'].includes(
+        String(j.controlledInputId),
+      ))
+  )
+    throw new JudgeJobPayloadError('Invalid real execution snapshot');
+  if (
+    (j.status === 'LEASED_FAKE' || j.status === 'LEASED') &&
     (typeof j.leaseOwner !== 'string' ||
       typeof j.leaseToken !== 'string' ||
       typeof j.leaseExpiresAt !== 'string' ||
       Number.isNaN(Date.parse(j.leaseExpiresAt as string)))
   )
     throw new JudgeJobPayloadError('Missing lease metadata');
+  if (
+    (j.status === 'COMPLETED' &&
+      !validRawExecutionResult(j.rawExecutionResult, j)) ||
+    (j.status !== 'COMPLETED' && j.rawExecutionResult !== undefined)
+  )
+    throw new JudgeJobPayloadError('Invalid raw execution result');
 }
 const clear = <T extends JudgeJob>(j: T): JudgeJob => {
   const x = { ...j };
@@ -89,7 +181,7 @@ const clear = <T extends JudgeJob>(j: T): JudgeJob => {
 function lease(j: JudgeJob | undefined, t: string): asserts j is JudgeJob {
   if (!j) throw new JudgeJobNotFoundError();
   if (
-    j.status !== 'LEASED_FAKE' ||
+    !['LEASED_FAKE', 'LEASED'].includes(j.status) ||
     j.leaseToken !== t ||
     !j.leaseExpiresAt ||
     Date.parse(j.leaseExpiresAt) <= Date.now()
@@ -143,7 +235,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       const token = randomUUID(),
         leased: JudgeJob = {
           ...j,
-          status: 'LEASED_FAKE',
+          status: j.executionMode === realMode ? 'LEASED' : 'LEASED_FAKE',
           attempt: j.attempt + 1,
           leaseOwner: worker,
           leaseToken: token,
@@ -163,7 +255,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       const token = randomUUID(),
         leased: JudgeJob = {
           ...j,
-          status: 'LEASED_FAKE',
+          status: j.executionMode === realMode ? 'LEASED' : 'LEASED_FAKE',
           attempt: j.attempt + 1,
           leaseOwner: worker,
           leaseToken: token,
@@ -179,10 +271,29 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       const j = this.jobs.get(id);
       if (j?.status === 'SUCCEEDED_FAKE') return { ...j };
       lease(j, t);
+      if (j.executionMode !== safeMode) throw new JudgeJobConflictError();
       const done = clear({
         ...j,
         status: 'SUCCEEDED_FAKE' as const,
         syntheticFixtureId: f,
+        completedAt: stamp(),
+        updatedAt: stamp(),
+      });
+      this.jobs.set(id, done);
+      return { ...done };
+    });
+  }
+  async completeReal(id: string, t: string, result: RawExecutionResult) {
+    return this.atomic(async () => {
+      const j = this.jobs.get(id);
+      if (j?.status === 'COMPLETED') return { ...j };
+      lease(j, t);
+      if (j.executionMode !== realMode || !validRawExecutionResult(result, j))
+        throw new JudgeJobConflictError('Real execution result mismatch');
+      const done = clear({
+        ...j,
+        status: 'COMPLETED' as const,
+        rawExecutionResult: result,
         completedAt: stamp(),
         updatedAt: stamp(),
       });
@@ -210,7 +321,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
     let n = 0;
     for (const j of this.jobs.values())
       if (
-        j.status === 'LEASED_FAKE' &&
+        ['LEASED_FAKE', 'LEASED'].includes(j.status) &&
         j.leaseExpiresAt &&
         Date.parse(j.leaseExpiresAt) <= at.getTime()
       ) {
@@ -250,7 +361,14 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
     return this.atomic(async () => {
       const j = this.jobs.get(id);
       if (!j) throw new JudgeJobNotFoundError();
-      if (['SUCCEEDED_FAKE', 'FAILED_TERMINAL', 'CANCELLED'].includes(j.status))
+      if (
+        [
+          'SUCCEEDED_FAKE',
+          'COMPLETED',
+          'FAILED_TERMINAL',
+          'CANCELLED',
+        ].includes(j.status)
+      )
         return { ...j };
       const x = clear({
         ...j,
@@ -368,7 +486,7 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
       const leaseToken = randomUUID(),
         x: JudgeJob = {
           ...j,
-          status: 'LEASED_FAKE',
+          status: j.executionMode === realMode ? 'LEASED' : 'LEASED_FAKE',
           attempt: j.attempt + 1,
           leaseOwner: worker,
           leaseToken,
@@ -388,7 +506,7 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
       const leaseToken = randomUUID(),
         x: JudgeJob = {
           ...j,
-          status: 'LEASED_FAKE',
+          status: j.executionMode === realMode ? 'LEASED' : 'LEASED_FAKE',
           attempt: j.attempt + 1,
           leaseOwner: worker,
           leaseToken,
@@ -404,6 +522,7 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
       const j = await this.read(id);
       if (j?.status === 'SUCCEEDED_FAKE') return j;
       lease(j, t);
+      if (j.executionMode !== safeMode) throw new JudgeJobConflictError();
       const x = clear({
         ...j,
         status: 'SUCCEEDED_FAKE' as const,
@@ -413,6 +532,24 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
       });
       await this.redis.set(this.jobKey(id), JSON.stringify(x));
       return x as JudgeJob;
+    });
+  }
+  async completeReal(id: string, t: string, result: RawExecutionResult) {
+    return this.exclusive(async () => {
+      const j = await this.read(id);
+      if (j?.status === 'COMPLETED') return j;
+      lease(j, t);
+      if (j.executionMode !== realMode || !validRawExecutionResult(result, j))
+        throw new JudgeJobConflictError('Real execution result mismatch');
+      const x = clear({
+        ...j,
+        status: 'COMPLETED' as const,
+        rawExecutionResult: result,
+        completedAt: stamp(),
+        updatedAt: stamp(),
+      });
+      await this.redis.set(this.jobKey(id), JSON.stringify(x));
+      return x;
     });
   }
   async retry(id: string, t: string, r: string) {
@@ -439,7 +576,8 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
     for (const k of await this.redis.keys(`${jobsPrefix}*`)) {
       const j = await this.read(k.slice(jobsPrefix.length));
       if (
-        j?.status === 'LEASED_FAKE' &&
+        j &&
+        ['LEASED_FAKE', 'LEASED'].includes(j.status) &&
         j.leaseExpiresAt &&
         Date.parse(j.leaseExpiresAt) <= at.getTime()
       ) {
@@ -480,7 +618,14 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
     return this.exclusive(async () => {
       const j = await this.read(id);
       if (!j) throw new JudgeJobNotFoundError();
-      if (['SUCCEEDED_FAKE', 'FAILED_TERMINAL', 'CANCELLED'].includes(j.status))
+      if (
+        [
+          'SUCCEEDED_FAKE',
+          'COMPLETED',
+          'FAILED_TERMINAL',
+          'CANCELLED',
+        ].includes(j.status)
+      )
         return j;
       const x = clear({
         ...j,

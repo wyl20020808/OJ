@@ -13,6 +13,7 @@ import (
 )
 
 const Version = "2A.1"
+const RealVersion = "2C.1"
 
 type ExecutionMode string
 
@@ -84,6 +85,7 @@ type Capabilities struct {
 	SandboxQualified       bool     `json:"sandbox_qualified"`
 	LanguageCapabilities   []string `json:"language_capabilities"`
 	MaxConcurrency         int      `json:"max_concurrency"`
+	RealProtocolVersion    string   `json:"real_execution_protocol_version,omitempty"`
 }
 
 var refPattern = regexp.MustCompile(`^[A-Za-z0-9._:/-]{1,256}$`)
@@ -126,7 +128,13 @@ func (r ExecutionRequest) Validate(now time.Time, c Capabilities) error {
 }
 
 func (c Capabilities) Supports(mode ExecutionMode) bool {
-	if mode != SafeFixtureQualification || !c.SafeFixture || c.RealSandboxedExecution || c.MaxConcurrency < 1 {
+	if c.MaxConcurrency < 1 {
+		return false
+	}
+	if mode == RealSandboxedExecution {
+		return c.RealSandboxedExecution && c.SandboxQualified && c.RealProtocolVersion == RealVersion && len(c.LanguageCapabilities) == 1 && c.LanguageCapabilities[0] == "cpp20-gcc-13-v1"
+	}
+	if mode != SafeFixtureQualification || !c.SafeFixture {
 		return false
 	}
 	for _, m := range c.ExecutionModes {
@@ -137,8 +145,15 @@ func (c Capabilities) Supports(mode ExecutionMode) bool {
 	return false
 }
 
-func NewCapabilities(workerID, instanceID, build string, max int) Capabilities {
-	return Capabilities{ProtocolVersion: Version, WorkerID: workerID, WorkerInstanceID: instanceID, BuildVersion: build, ExecutionModes: []string{string(SafeFixtureQualification)}, SafeFixture: true, RealSandboxedExecution: false, SandboxQualified: false, LanguageCapabilities: []string{}, MaxConcurrency: max}
+func NewCapabilities(workerID, instanceID, build string, max int, real ...bool) Capabilities {
+	enabled := len(real) > 0 && real[0]
+	capabilities := Capabilities{ProtocolVersion: Version, WorkerID: workerID, WorkerInstanceID: instanceID, BuildVersion: build, ExecutionModes: []string{string(SafeFixtureQualification)}, SafeFixture: true, RealSandboxedExecution: enabled, SandboxQualified: enabled, LanguageCapabilities: []string{}, MaxConcurrency: max}
+	if enabled {
+		capabilities.ExecutionModes = append(capabilities.ExecutionModes, string(RealSandboxedExecution))
+		capabilities.LanguageCapabilities = []string{"cpp20-gcc-13-v1"}
+		capabilities.RealProtocolVersion = RealVersion
+	}
+	return capabilities
 }
 
 func SourceDigest(source []byte) string { h := sha256.Sum256(source); return hex.EncodeToString(h[:]) }

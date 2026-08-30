@@ -31,3 +31,14 @@ func TestResultEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRealCapabilityIsExplicit(t *testing.T) {
+	disabled := NewCapabilities("w", "i", "v", 1)
+	if disabled.Supports(RealSandboxedExecution) {
+		t.Fatal("default capability enabled real execution")
+	}
+	enabled := NewCapabilities("w", "i", "v", 1, true)
+	if !enabled.Supports(RealSandboxedExecution) || enabled.RealProtocolVersion != RealVersion {
+		t.Fatal("explicit real capability missing")
+	}
+}

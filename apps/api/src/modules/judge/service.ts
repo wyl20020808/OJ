@@ -16,6 +16,15 @@ export class JudgeQueueService {
   complete(id: string, token: string, fixtureId = 'control-pass-v1') {
     return this.repository.complete(id, token, fixtureId);
   }
+  completeReal(
+    id: string,
+    token: string,
+    result: Parameters<NonNullable<JudgeJobRepository['completeReal']>>[2],
+  ) {
+    if (!this.repository.completeReal)
+      return Promise.reject(new Error('Real completion unavailable'));
+    return this.repository.completeReal(id, token, result);
+  }
   retry(id: string, token: string, reason: string) {
     return this.repository.retry(id, token, reason);
   }

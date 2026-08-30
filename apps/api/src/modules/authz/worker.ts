@@ -28,6 +28,7 @@ export type WorkerJobLink = {
     | 'WORKER_ACCEPTED'
     | 'SAFE_FIXTURE_RUNNING'
     | 'SAFE_FIXTURE_SUCCEEDED'
+    | 'EXECUTION_COMPLETED'
     | 'SAFE_FIXTURE_FAILED_RETRYABLE'
     | 'SAFE_FIXTURE_FAILED_TERMINAL'
     | 'CANCELLED';
@@ -76,16 +77,7 @@ export type SafeWorkerStatus = {
   activeJobCount?: number;
   activeJobIds?: readonly string[];
   diagnosticCode?: string;
-  capabilityManifest?: {
-    protocolVersion: '2A.1';
-    buildVersion: string;
-    executionModes: readonly ['SAFE_FIXTURE_QUALIFICATION'];
-    safeFixture: true;
-    realSandboxedExecution: false;
-    sandboxCapability: false;
-    maxConcurrency: number;
-    languageCapabilities: readonly [];
-  };
+  capabilityManifest?: WorkerCapabilityManifest;
 };
 
 export type WorkerAuthorizationAction =
@@ -148,6 +140,7 @@ const VALID_JOB_STATES = new Set<WorkerJobLink['state']>([
   'WORKER_ACCEPTED',
   'SAFE_FIXTURE_RUNNING',
   'SAFE_FIXTURE_SUCCEEDED',
+  'EXECUTION_COMPLETED',
   'SAFE_FIXTURE_FAILED_RETRYABLE',
   'SAFE_FIXTURE_FAILED_TERMINAL',
   'CANCELLED',
@@ -191,15 +184,51 @@ const safeManifest = (
   manifest: WorkerCapabilityManifest,
   maxConcurrency: number,
 ): NonNullable<SafeWorkerStatus['capabilityManifest']> => ({
-  protocolVersion: '2A.1',
+  protocolVersion:
+    manifest.realSandboxedExecution &&
+    manifest.sandboxCapability &&
+    manifest.protocolVersion === '2C.1' &&
+    manifest.executionModes.includes('REAL_SANDBOXED_EXECUTION') &&
+    manifest.languageCapabilities.length === 1 &&
+    manifest.languageCapabilities[0] === 'cpp20-gcc-13-v1'
+      ? '2C.1'
+      : '2A.1',
   buildVersion: manifest.buildVersion,
-  executionModes: ['SAFE_FIXTURE_QUALIFICATION'],
+  executionModes:
+    manifest.realSandboxedExecution &&
+    manifest.sandboxCapability &&
+    manifest.protocolVersion === '2C.1' &&
+    manifest.executionModes.includes('REAL_SANDBOXED_EXECUTION') &&
+    manifest.languageCapabilities.length === 1 &&
+    manifest.languageCapabilities[0] === 'cpp20-gcc-13-v1'
+      ? ['SAFE_FIXTURE_QUALIFICATION', 'REAL_SANDBOXED_EXECUTION']
+      : ['SAFE_FIXTURE_QUALIFICATION'],
   safeFixture: true,
-  realSandboxedExecution: false,
-  sandboxCapability: false,
+  realSandboxedExecution:
+    manifest.realSandboxedExecution &&
+    manifest.sandboxCapability &&
+    manifest.protocolVersion === '2C.1' &&
+    manifest.executionModes.includes('REAL_SANDBOXED_EXECUTION') &&
+    manifest.languageCapabilities.length === 1 &&
+    manifest.languageCapabilities[0] === 'cpp20-gcc-13-v1',
+  sandboxCapability:
+    manifest.realSandboxedExecution &&
+    manifest.sandboxCapability &&
+    manifest.protocolVersion === '2C.1' &&
+    manifest.executionModes.includes('REAL_SANDBOXED_EXECUTION') &&
+    manifest.languageCapabilities.length === 1 &&
+    manifest.languageCapabilities[0] === 'cpp20-gcc-13-v1',
   maxConcurrency:
     Number.isInteger(maxConcurrency) && maxConcurrency > 0 ? maxConcurrency : 1,
-  languageCapabilities: [],
+  languageCapabilities:
+    manifest.realSandboxedExecution &&
+    manifest.sandboxCapability &&
+    manifest.protocolVersion === '2C.1' &&
+    manifest.executionModes.includes('REAL_SANDBOXED_EXECUTION') &&
+    manifest.languageCapabilities.length === 1 &&
+    manifest.languageCapabilities[0] === 'cpp20-gcc-13-v1'
+      ? ['cpp20-gcc-13-v1']
+      : [],
 });
 
 export function projectWorkerStatus(

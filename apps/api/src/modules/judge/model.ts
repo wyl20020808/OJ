@@ -9,6 +9,30 @@ export type JudgeJobStatus =
   | 'COMPLETED'
   | 'RETRYABLE_FAILURE'
   | 'TERMINAL_FAILURE';
+export type JudgeExecutionMode =
+  'SAFE_FIXTURE_QUALIFICATION' | 'REAL_SANDBOXED_EXECUTION';
+export type RawExecutionResult = {
+  protocol_version: '2C.1';
+  execution_request_id: string;
+  judge_job_id: string;
+  submission_id: string;
+  attempt: number;
+  correlation_id: string;
+  language_profile_id: 'cpp20-gcc-13-v1';
+  source_sha256: string;
+  pipeline_outcome:
+    | 'PIPELINE_COMPLETED'
+    | 'PIPELINE_COMPILE_FAILED'
+    | 'PIPELINE_LIMIT_HIT'
+    | 'PIPELINE_CANCELLED'
+    | 'PIPELINE_INFRA_FAILURE';
+  compile: Record<string, unknown>;
+  artifact?: Record<string, unknown> | undefined;
+  runtime?: Record<string, unknown> | undefined;
+  started_at: string;
+  completed_at: string;
+  clean: boolean;
+};
 export type JudgeJob = {
   id: string;
   submissionId: string;
@@ -18,6 +42,13 @@ export type JudgeJob = {
   problemRevisionId: string;
   testdataVersionRef: string;
   languageId: string;
+  executionMode: JudgeExecutionMode;
+  languageProfileId?: 'cpp20-gcc-13-v1' | undefined;
+  sourceSnapshotRef?: string | undefined;
+  sourceBytes?: string | undefined;
+  sourceSha256?: string | undefined;
+  controlledInputId?: 'stdin-empty-v1' | 'stdin-echo-v1' | undefined;
+  rawExecutionResult?: RawExecutionResult | undefined;
   status: JudgeJobStatus;
   attempt: number;
   maxAttempts: number;
@@ -37,6 +68,12 @@ export type JudgeJobCreateInput = {
   problemRevisionId: string;
   testdataVersionRef: string;
   languageId: string;
+  executionMode?: JudgeExecutionMode;
+  languageProfileId?: 'cpp20-gcc-13-v1';
+  sourceSnapshotRef?: string;
+  sourceBytes?: string;
+  sourceSha256?: string;
+  controlledInputId?: 'stdin-empty-v1' | 'stdin-echo-v1';
   idempotencyKey?: string;
   maxAttempts?: number;
 };
@@ -61,6 +98,11 @@ export type JudgeJobRepository = {
     leaseMs: number,
   ): Promise<JudgeJobClaim | undefined>;
   complete(id: string, token: string, fixtureId: string): Promise<JudgeJob>;
+  completeReal?(
+    id: string,
+    token: string,
+    result: RawExecutionResult,
+  ): Promise<JudgeJob>;
   retry(id: string, token: string, reason: string): Promise<JudgeJob>;
   recoverStale(now?: Date): Promise<number>;
   failTerminal(id: string, token: string, reason: string): Promise<JudgeJob>;

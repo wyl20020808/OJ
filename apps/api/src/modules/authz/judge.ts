@@ -16,6 +16,8 @@ export type JudgeJobReference = {
     | 'QUEUED'
     | 'LEASED_FAKE'
     | 'SUCCEEDED_FAKE'
+    | 'LEASED'
+    | 'COMPLETED'
     | 'FAILED_RETRYABLE'
     | 'FAILED_TERMINAL'
     | 'CANCELLED';
@@ -105,6 +107,8 @@ const VALID_STATES = new Set<JudgeJobReference['state']>([
   'QUEUED',
   'LEASED_FAKE',
   'SUCCEEDED_FAKE',
+  'LEASED',
+  'COMPLETED',
   'FAILED_RETRYABLE',
   'FAILED_TERMINAL',
   'CANCELLED',
@@ -193,7 +197,9 @@ export function createJudgeAuthorizationPolicy(
       const allowed =
         capabilityOnly(user, 'judge:job:cancel') &&
         (await linkedOwner(job)) !== null &&
-        ['QUEUED', 'LEASED_FAKE', 'FAILED_RETRYABLE'].includes(job!.state);
+        ['QUEUED', 'LEASED_FAKE', 'LEASED', 'FAILED_RETRYABLE'].includes(
+          job!.state,
+        );
       return decide(user, 'judge:job:cancel', job, allowed, requestId);
     },
     async canJudgeJobOperation(operation, user, job, requestId) {

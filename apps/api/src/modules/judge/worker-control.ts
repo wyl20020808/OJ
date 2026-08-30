@@ -36,6 +36,7 @@ type HeartbeatRecord = {
   language_capabilities: string[];
   execution_modes: string[];
   heartbeat_at: string;
+  real_execution_protocol_version?: string;
 };
 
 const safeRef = (job: JudgeJob): WorkerJobLink => ({
@@ -46,27 +47,42 @@ const safeRef = (job: JudgeJob): WorkerJobLink => ({
   state:
     job.status === 'LEASED_FAKE'
       ? 'LEASED'
-      : job.status === 'SUCCEEDED_FAKE'
-        ? 'SAFE_FIXTURE_SUCCEEDED'
-        : job.status === 'FAILED_RETRYABLE'
-          ? 'SAFE_FIXTURE_FAILED_RETRYABLE'
-          : job.status === 'FAILED_TERMINAL'
-            ? 'SAFE_FIXTURE_FAILED_TERMINAL'
-            : job.status === 'CANCELLED'
-              ? 'CANCELLED'
-              : 'QUEUED',
+      : job.status === 'LEASED'
+        ? 'LEASED'
+        : job.status === 'SUCCEEDED_FAKE'
+          ? 'SAFE_FIXTURE_SUCCEEDED'
+          : job.status === 'COMPLETED'
+            ? 'EXECUTION_COMPLETED'
+            : job.status === 'FAILED_RETRYABLE'
+              ? 'SAFE_FIXTURE_FAILED_RETRYABLE'
+              : job.status === 'FAILED_TERMINAL'
+                ? 'SAFE_FIXTURE_FAILED_TERMINAL'
+                : job.status === 'CANCELLED'
+                  ? 'CANCELLED'
+                  : 'QUEUED',
 });
 
-const safeManifest = (record: HeartbeatRecord): WorkerCapabilityManifest => ({
-  protocolVersion: '2A.1',
-  buildVersion: record.build_version,
-  executionModes: ['SAFE_FIXTURE_QUALIFICATION'],
-  safeFixture: true,
-  realSandboxedExecution: false,
-  sandboxCapability: false,
-  maxConcurrency: record.max_concurrency,
-  languageCapabilities: [],
-});
+const safeManifest = (record: HeartbeatRecord): WorkerCapabilityManifest => {
+  const real =
+    record.real_sandboxed_execution === true &&
+    record.sandbox_qualified === true &&
+    record.real_execution_protocol_version === '2C.1' &&
+    record.execution_modes?.includes('REAL_SANDBOXED_EXECUTION') &&
+    record.language_capabilities?.length === 1 &&
+    record.language_capabilities[0] === 'cpp20-gcc-13-v1';
+  return {
+    protocolVersion: real ? '2C.1' : '2A.1',
+    buildVersion: record.build_version,
+    executionModes: real
+      ? ['SAFE_FIXTURE_QUALIFICATION', 'REAL_SANDBOXED_EXECUTION']
+      : ['SAFE_FIXTURE_QUALIFICATION'],
+    safeFixture: true,
+    realSandboxedExecution: real,
+    sandboxCapability: real,
+    maxConcurrency: record.max_concurrency,
+    languageCapabilities: real ? ['cpp20-gcc-13-v1'] : [],
+  };
+};
 
 function parseHeartbeat(raw: string): WorkerStatusReference | undefined {
   try {
@@ -234,7 +250,7 @@ export async function registerWorkerControlRoutes(
         message: 'Cancellation forbidden',
         requestId: request.id,
       });
-    if (['SUCCEEDED_FAKE', 'FAILED_TERMINAL'].includes(job.status))
+    if (['SUCCEEDED_FAKE', 'COMPLETED', 'FAILED_TERMINAL'].includes(job.status))
       return reply.status(409).send({
         code: 'TERMINAL',
         message: 'Judge job is already terminal',

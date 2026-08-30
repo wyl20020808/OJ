@@ -16,6 +16,7 @@ import (
 	"github.com/ojplatform/judge-worker/internal/fixture"
 	"github.com/ojplatform/judge-worker/internal/protocol"
 	"github.com/ojplatform/judge-worker/internal/queueadapter"
+	"github.com/ojplatform/judge-worker/internal/supervisorclient"
 )
 
 type State string
@@ -39,6 +40,7 @@ type Worker struct {
 	Capabilities protocol.Capabilities
 	Queue        queueadapter.Queue
 	Executor     fixture.Executor
+	Supervisor   *supervisorclient.Client
 	state        atomic.Value
 	active       atomic.Int32
 	shutdownOnce sync.Once
@@ -59,7 +61,11 @@ func New(cfg config.Config, redis *queueadapter.Client, logger *log.Logger) *Wor
 	if logger == nil {
 		logger = log.Default()
 	}
-	w := &Worker{Config: cfg, WorkerID: cfg.WorkerID, InstanceID: instance, Capabilities: protocol.NewCapabilities(cfg.WorkerID, instance, cfg.BuildVersion, cfg.MaxConcurrency), Queue: queueadapter.Queue{Redis: redis, Prefix: cfg.QueuePrefix}, Executor: fixture.Executor{}, drain: make(chan struct{}), stop: make(chan struct{}), logger: logger, cancelJobs: make(map[string]context.CancelFunc)}
+	var supervisor *supervisorclient.Client
+	if cfg.RealSubmissionExecution {
+		supervisor, _ = supervisorclient.New(cfg.SupervisorURL)
+	}
+	w := &Worker{Config: cfg, WorkerID: cfg.WorkerID, InstanceID: instance, Capabilities: protocol.NewCapabilities(cfg.WorkerID, instance, cfg.BuildVersion, cfg.MaxConcurrency, cfg.RealSubmissionExecution), Queue: queueadapter.Queue{Redis: redis, Prefix: cfg.QueuePrefix}, Executor: fixture.Executor{}, Supervisor: supervisor, drain: make(chan struct{}), stop: make(chan struct{}), logger: logger, cancelJobs: make(map[string]context.CancelFunc)}
 	w.state.Store(State(Starting))
 	return w
 }
@@ -76,6 +82,19 @@ func (w *Worker) setState(s State) {
 func (w *Worker) Heartbeat() protocol.Capabilities { return w.Capabilities }
 func (w *Worker) Start(ctx context.Context) error {
 	w.setState(ConfigValidated)
+	if w.Config.RealSubmissionExecution {
+		if w.Supervisor == nil {
+			w.setState(Degraded)
+			return errors.New("real execution Supervisor unavailable")
+		}
+		preflightCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err := w.Supervisor.Preflight(preflightCtx)
+		cancel()
+		if err != nil {
+			w.setState(Degraded)
+			return fmt.Errorf("real execution preflight failed: %w", err)
+		}
+	}
 	if err := w.Queue.Redis.Connect(ctx); err != nil {
 		w.setState(Degraded)
 	} else {
@@ -101,7 +120,10 @@ func (w *Worker) heartbeat(ctx context.Context) {
 	}
 }
 func (w *Worker) emitHeartbeat() {
-	payload := map[string]any{"worker_id": w.WorkerID, "worker_instance_id": w.InstanceID, "protocol_version": protocol.Version, "build_version": w.Config.BuildVersion, "state": w.State(), "max_concurrency": w.Config.MaxConcurrency, "active_job_count": w.active.Load(), "safe_fixture": true, "real_sandboxed_execution": false, "sandbox_qualified": false, "language_capabilities": []string{}, "execution_modes": []string{string(protocol.SafeFixtureQualification)}, "heartbeat_at": time.Now().UTC().Format(time.RFC3339Nano)}
+	payload := map[string]any{"worker_id": w.WorkerID, "worker_instance_id": w.InstanceID, "protocol_version": protocol.Version, "build_version": w.Config.BuildVersion, "state": w.State(), "max_concurrency": w.Config.MaxConcurrency, "active_job_count": w.active.Load(), "safe_fixture": true, "real_sandboxed_execution": w.Capabilities.RealSandboxedExecution, "sandbox_qualified": w.Capabilities.SandboxQualified, "language_capabilities": w.Capabilities.LanguageCapabilities, "execution_modes": w.Capabilities.ExecutionModes, "heartbeat_at": time.Now().UTC().Format(time.RFC3339Nano)}
+	if w.Capabilities.RealProtocolVersion != "" {
+		payload["real_execution_protocol_version"] = w.Capabilities.RealProtocolVersion
+	}
 	if w.Queue.Redis != nil {
 		encoded, _ := json.Marshal(payload)
 		if err := w.Queue.Redis.Set(context.Background(), w.Config.HeartbeatPrefix+":"+w.WorkerID+":"+w.InstanceID, string(encoded), time.Duration(w.Config.LivenessTimeoutMS)*time.Millisecond); err != nil {
@@ -170,6 +192,10 @@ func (w *Worker) process(parent context.Context, lease queueadapter.Lease) {
 	w.cancelJobs[lease.Job.ID] = cancel
 	w.cancelMu.Unlock()
 	defer func() { w.cancelMu.Lock(); delete(w.cancelJobs, lease.Job.ID); w.cancelMu.Unlock() }()
+	if lease.Job.ExecutionMode == string(protocol.RealSandboxedExecution) {
+		w.processReal(ctx, parent, lease)
+		return
+	}
 	fixtureID := lease.Job.FixtureID
 	if fixtureID == "" {
 		fixtureID = "FX-SUCCESS"
@@ -193,6 +219,39 @@ func (w *Worker) process(parent context.Context, lease queueadapter.Lease) {
 		_ = w.Queue.FailTerminal(parent, lease, code)
 	default:
 		_ = w.Queue.FailTerminal(parent, lease, "WORKER_PROTOCOL_ERROR")
+	}
+}
+
+func (w *Worker) processReal(ctx, queueCtx context.Context, lease queueadapter.Lease) {
+	if !w.Config.RealSubmissionExecution || w.Supervisor == nil || !w.Capabilities.Supports(protocol.RealSandboxedExecution) {
+		_ = w.Queue.FailTerminal(queueCtx, lease, "WORKER_CAPABILITY_MISMATCH")
+		return
+	}
+	deadline := lease.Job.LeaseExpiresAt.Add(-100 * time.Millisecond)
+	if !deadline.After(time.Now()) {
+		_ = w.Queue.Retry(queueCtx, lease, "EXECUTION_DEADLINE_UNAVAILABLE")
+		return
+	}
+	request := supervisorclient.Request{
+		ProtocolVersion: supervisorclient.ProtocolVersion, ExecutionRequestID: fmt.Sprintf("%s:%d", lease.Job.ID, lease.Job.Attempt),
+		JudgeJobID: lease.Job.ID, SubmissionID: lease.Job.SubmissionID, Attempt: lease.Job.Attempt,
+		CorrelationID: lease.Job.ID, ProblemRevisionID: lease.Job.ProblemRevisionID,
+		TestdataVersionRef: lease.Job.TestdataVersionRef, LanguageProfileID: lease.Job.LanguageProfileID,
+		SourceSnapshotRef: lease.Job.SourceSnapshotRef, SourceBytes: lease.Job.SourceBytes,
+		SourceSHA256: lease.Job.SourceSHA256, ControlledInputID: lease.Job.ControlledInputID,
+		DeadlineAt: deadline, CancellationGeneration: 0,
+	}
+	execution, err := w.Supervisor.Execute(ctx, request)
+	if ctx.Err() != nil || execution.Result.PipelineOutcome == "PIPELINE_CANCELLED" {
+		_ = w.Queue.Cancel(queueCtx, lease)
+		return
+	}
+	if err != nil {
+		_ = w.Queue.Retry(queueCtx, lease, "REAL_EXECUTION_INFRA_FAILURE")
+		return
+	}
+	if err = w.Queue.CompleteReal(queueCtx, lease, execution.Raw); err != nil {
+		w.logger.Printf(`{"event":"worker_result_persist_error","worker_id":%q,"job_id":%q}`, w.WorkerID, lease.Job.ID)
 	}
 }
 

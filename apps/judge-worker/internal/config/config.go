@@ -8,17 +8,19 @@ import (
 )
 
 type Config struct {
-	RedisURL            string
-	QueuePrefix         string
-	WorkerID            string
-	BuildVersion        string
-	MaxConcurrency      int
-	HeartbeatIntervalMS int
-	ShutdownTimeoutMS   int
-	LeaseMS             int
-	HealthAddr          string
-	HeartbeatPrefix     string
-	LivenessTimeoutMS   int
+	RedisURL                string
+	QueuePrefix             string
+	WorkerID                string
+	BuildVersion            string
+	MaxConcurrency          int
+	HeartbeatIntervalMS     int
+	ShutdownTimeoutMS       int
+	LeaseMS                 int
+	HealthAddr              string
+	HeartbeatPrefix         string
+	LivenessTimeoutMS       int
+	RealSubmissionExecution bool
+	SupervisorURL           string
 }
 
 func Load(env map[string]string) (Config, error) {
@@ -57,7 +59,19 @@ func Load(env map[string]string) (Config, error) {
 	if err != nil || liveness < hb*2 || liveness > 300000 {
 		return Config{}, fmt.Errorf("invalid liveness timeout")
 	}
-	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", "oj:judge:workers"), LivenessTimeoutMS: liveness}, nil
+	realExecution := get("REAL_SUBMISSION_EXECUTION", "false") == "true"
+	supervisorURL := get("OJPLATFORM_SANDBOX_SUPERVISOR_URL", "http://127.0.0.1:19092")
+	if realExecution {
+		supervisor, parseErr := url.Parse(supervisorURL)
+		if parseErr != nil || supervisor.Scheme != "http" || supervisor.Host == "" || supervisor.User != nil || supervisor.RawQuery != "" || supervisor.Fragment != "" || (supervisor.Path != "" && supervisor.Path != "/") {
+			return Config{}, fmt.Errorf("invalid loopback Supervisor URL")
+		}
+		host := supervisor.Hostname()
+		if host != "localhost" && host != "127.0.0.1" && host != "::1" {
+			return Config{}, fmt.Errorf("Supervisor URL must be loopback")
+		}
+	}
+	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", "oj:judge:workers"), LivenessTimeoutMS: liveness, RealSubmissionExecution: realExecution, SupervisorURL: supervisorURL}, nil
 }
 
 func FromEnv() (Config, error) {

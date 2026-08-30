@@ -162,6 +162,7 @@ describe('Lead Judge API composition', () => {
         languageId: 'javascript',
         idempotencyKey: 'submission:submission',
         status: 'SUCCEEDED_FAKE',
+        executionMode: 'SAFE_FIXTURE_QUALIFICATION',
         attempt: 1,
         maxAttempts: 3,
         syntheticFixtureId: 'internal-fixture-id',

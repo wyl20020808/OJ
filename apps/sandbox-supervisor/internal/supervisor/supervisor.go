@@ -493,20 +493,30 @@ type boundedWriter struct {
 	buf      bytes.Buffer
 	limit    int
 	exceeded bool
+	onLimit  func()
 }
 
 func (w *boundedWriter) Write(p []byte) (int, error) {
 	remaining := w.limit - w.buf.Len()
 	if remaining <= 0 {
-		w.exceeded = true
+		w.markExceeded()
 		return len(p), nil
 	}
 	if len(p) > remaining {
 		_, _ = w.buf.Write(p[:remaining])
-		w.exceeded = true
+		w.markExceeded()
 		return len(p), nil
 	}
 	return w.buf.Write(p)
+}
+func (w *boundedWriter) markExceeded() {
+	if w.exceeded {
+		return
+	}
+	w.exceeded = true
+	if w.onLimit != nil {
+		w.onLimit()
+	}
 }
 func (w *boundedWriter) String() string { return w.buf.String() }
 func (w *boundedWriter) Len() int       { return w.buf.Len() }
@@ -597,11 +607,18 @@ func (m *resourceMonitor) capture() {
 		}
 		return strings.TrimSpace(string(data))
 	}
+	memoryMax := read("memory.max")
+	pidsMax := read("pids.max")
+	if memoryMax != strconv.FormatInt(m.request.MemoryBytes, 10) || pidsMax != strconv.Itoa(m.request.Pids) {
+		// A new systemd scope is briefly visible with inherited parent limits.
+		// Do not publish those transient values as execution evidence.
+		return
+	}
 	m.mu.Lock()
 	m.evidence.ControlGroup = path
 	for target, value := range map[*string]string{
-		&m.evidence.MemoryMax: read("memory.max"), &m.evidence.MemoryCurrent: read("memory.current"),
-		&m.evidence.MemoryEvents: read("memory.events"), &m.evidence.PidsMax: read("pids.max"),
+		&m.evidence.MemoryMax: memoryMax, &m.evidence.MemoryCurrent: read("memory.current"),
+		&m.evidence.MemoryEvents: read("memory.events"), &m.evidence.PidsMax: pidsMax,
 		&m.evidence.PidsCurrent: read("pids.current"), &m.evidence.PidsEvents: read("pids.events"),
 		&m.evidence.CPUMax: read("cpu.max"), &m.evidence.CPUStat: read("cpu.stat"),
 	} {
@@ -614,10 +631,10 @@ func (m *resourceMonitor) capture() {
 		show := exec.Command("systemctl", "--user", "show", unit, "--property=MemoryMax", "--property=TasksMax", "--value")
 		if output, err := show.Output(); err == nil {
 			values := strings.Fields(string(output))
-			if len(values) > 0 {
+			if len(values) > 0 && values[0] == strconv.FormatInt(m.request.MemoryBytes, 10) {
 				m.evidence.SystemdMemoryMax = values[0]
 			}
-			if len(values) > 1 {
+			if len(values) > 1 && values[1] == strconv.Itoa(m.request.Pids) {
 				m.evidence.SystemdTasksMax = values[1]
 			}
 		}

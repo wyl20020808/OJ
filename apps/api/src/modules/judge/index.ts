@@ -9,8 +9,13 @@ import type { AuthContext } from '../submission/model.js';
 import type {
   JudgeAuthorizationPolicy,
   JudgeAuthorizationUser,
+  JudgeJobReference,
 } from '../authz/judge.js';
-import type { JudgeJob, JudgeJobRepository } from './model.js';
+import type {
+  JudgeJob,
+  JudgeJobRepository,
+  RawExecutionResult,
+} from './model.js';
 
 export type JudgeModuleContext = {
   repository: JudgeJobRepository;
@@ -36,27 +41,72 @@ export function publicJudgeJob(job: JudgeJob) {
     maxAttempts: job.maxAttempts,
     ...(job.failureReason ? { failureReason: job.failureReason } : {}),
     ...(job.syntheticFixtureId ? { synthetic: true } : {}),
+    ...(job.rawExecutionResult
+      ? { rawExecution: publicRawExecutionResult(job.rawExecutionResult) }
+      : {}),
     ...(job.completedAt ? { completedAt: job.completedAt } : {}),
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   };
 }
 
+function publicStage(value: Record<string, unknown> | undefined) {
+  if (!value) return undefined;
+  return {
+    outcome: value.outcome,
+    exitCode: value.exit_code,
+    ...(value.termination_signal
+      ? { terminationSignal: value.termination_signal }
+      : {}),
+    stdout: value.stdout,
+    stderr: value.stderr,
+    stdoutTruncated: value.stdout_truncated,
+    stderrTruncated: value.stderr_truncated,
+    wallTimeMs: value.wall_time_ms,
+    ...(value.diagnostic_code ? { diagnosticCode: value.diagnostic_code } : {}),
+    clean: value.clean,
+  };
+}
+
+function publicRawExecutionResult(result: RawExecutionResult) {
+  return {
+    protocolVersion: result.protocol_version,
+    executionRequestId: result.execution_request_id,
+    pipelineOutcome: result.pipeline_outcome,
+    languageProfileId: result.language_profile_id,
+    snapshotSha256: result.source_sha256,
+    compile: publicStage(result.compile),
+    ...(result.artifact
+      ? {
+          artifact: {
+            sha256: result.artifact.sha256,
+            sizeBytes: result.artifact.size_bytes,
+            languageProfileId: result.artifact.language_profile_id,
+            compilerVersion: result.artifact.compiler_version,
+            compilerRootfsIdentity: result.artifact.compiler_rootfs_identity,
+            commandTemplateSha256: result.artifact.command_template_sha256,
+          },
+        }
+      : {}),
+    ...(result.runtime ? { runtime: publicStage(result.runtime) } : {}),
+    startedAt: result.started_at,
+    completedAt: result.completed_at,
+    clean: result.clean,
+  };
+}
+
 function jobReference(job: JudgeJob) {
+  const state: JudgeJobReference['state'] =
+    job.status === 'RETRYABLE_FAILURE'
+      ? 'FAILED_RETRYABLE'
+      : job.status === 'TERMINAL_FAILURE'
+        ? 'FAILED_TERMINAL'
+        : job.status;
   return {
     id: job.id,
     submissionId: job.submissionId,
     ownerUserId: job.ownerUserId,
-    state:
-      job.status === 'LEASED'
-        ? 'LEASED_FAKE'
-        : job.status === 'COMPLETED'
-          ? 'SUCCEEDED_FAKE'
-          : job.status === 'RETRYABLE_FAILURE'
-            ? 'FAILED_RETRYABLE'
-            : job.status === 'TERMINAL_FAILURE'
-              ? 'FAILED_TERMINAL'
-              : job.status,
+    state,
     attemptNumber: job.attempt,
   };
 }

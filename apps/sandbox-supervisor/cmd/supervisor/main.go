@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -36,6 +39,8 @@ const (
 	crashProbeID         = "SANDBOX_PROBE_ABNORMAL_EXIT"
 	concurrentProbeID    = "SANDBOX_PROBE_CONCURRENT_RESOURCES"
 	cleanupFaultName     = ".qualification-cleanup-failure"
+	maxExecutionRecords  = 1024
+	executionRetention   = 15 * time.Minute
 )
 
 type probeDefinition struct {
@@ -109,15 +114,25 @@ type protocolResult struct {
 }
 
 type protocolServer struct {
-	mu          sync.Mutex
-	root        string
-	runc        string
-	probePath   string
-	probeHash   string
-	definitions map[string]probeDefinition
-	result      protocolResult
-	run         context.CancelFunc
-	activeProbe string
+	mu                   sync.Mutex
+	root                 string
+	runc                 string
+	probePath            string
+	probeHash            string
+	definitions          map[string]probeDefinition
+	result               protocolResult
+	run                  context.CancelFunc
+	activeProbe          string
+	realExecutionEnabled bool
+	compilerRootfs       supervisor.CompilerRootfs
+	executions           map[string]*executionRecord
+}
+
+type executionRecord struct {
+	requestIdentity string
+	result          model.RealExecutionResult
+	run             context.CancelFunc
+	active          bool
 }
 
 func runtimeConfig() (string, string, string) {
@@ -151,6 +166,22 @@ func serve(address string) {
 	server := &protocolServer{
 		root: root, runc: runc, probePath: probePath, probeHash: hash,
 		definitions: definitions(os.Getenv("OJPLATFORM_SANDBOX_QUALIFICATION_FAULTS") == "true"),
+		executions:  make(map[string]*executionRecord),
+	}
+	if os.Getenv("OJPLATFORM_REAL_EXECUTION_ENABLED") == "true" {
+		compilerPath := os.Getenv("OJPLATFORM_CPP20_ROOTFS")
+		compilerIdentity := os.Getenv("OJPLATFORM_CPP20_ROOTFS_IDENTITY")
+		versionBytes, versionErr := os.ReadFile(compilerPath + ".compiler-version.txt")
+		if compilerPath == "" || compilerIdentity == "" || versionErr != nil {
+			panic("real execution compiler rootfs configuration is incomplete")
+		}
+		server.compilerRootfs = supervisor.CompilerRootfs{Path: compilerPath, Identity: compilerIdentity, CompilerVersion: strings.TrimSpace(string(versionBytes))}
+		preflightCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := supervisor.New(root, runc, probePath).PreflightRealExecution(preflightCtx, server.compilerRootfs); err != nil {
+			panic(err)
+		}
+		server.realExecutionEnabled = true
 	}
 	h := http.NewServeMux()
 	h.HandleFunc("/v1/health", server.health)
@@ -160,6 +191,10 @@ func serve(address string) {
 	h.HandleFunc("/v1/probes/cancel", server.cancel)
 	h.HandleFunc("/v1/cleanup/verify", server.cleanup)
 	h.HandleFunc("/v1/cleanup/recover", server.recoverCleanup)
+	h.HandleFunc("/v1/executions/capabilities", server.executionCapabilities)
+	h.HandleFunc("/v1/executions/start", server.startExecution)
+	h.HandleFunc("/v1/executions/status", server.executionStatus)
+	h.HandleFunc("/v1/executions/cancel", server.cancelExecution)
 	httpServer := &http.Server{Addr: address, Handler: h, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second}
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		panic(err)
@@ -184,7 +219,183 @@ func (s *protocolServer) health(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
-	writeJSON(w, map[string]any{"status": "ok", "contract_version": model.ContractVersion, "supervisor_uid": os.Geteuid(), "supervisor_gid": os.Getegid()})
+	writeJSON(w, map[string]any{"status": "ok", "contract_version": model.ContractVersion, "execution_contract_version": model.ExecutionContractVersion, "real_submission_execution": s.realExecutionEnabled, "language_profiles": enabledLanguageProfiles(s.realExecutionEnabled), "supervisor_uid": os.Geteuid(), "supervisor_gid": os.Getegid()})
+}
+
+func enabledLanguageProfiles(enabled bool) []string {
+	if enabled {
+		return []string{supervisor.CPP20ProfileID}
+	}
+	return []string{}
+}
+
+func (s *protocolServer) executionCapabilities(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+	response := map[string]any{
+		"protocol_version":          model.ExecutionContractVersion,
+		"real_submission_execution": s.realExecutionEnabled,
+		"language_profiles":         enabledLanguageProfiles(s.realExecutionEnabled),
+	}
+	if s.realExecutionEnabled {
+		response["compiler_rootfs_identity"] = s.compilerRootfs.Identity
+		response["compiler_version"] = strings.Split(s.compilerRootfs.CompilerVersion, "\n")[0]
+		response["command_template_sha256"] = supervisor.CompilerCommandTemplateSHA256()
+		response["compile_limits"] = supervisor.CompileResourceLimits()
+		response["runtime_limits"] = supervisor.RuntimeResourceLimits()
+	}
+	writeJSON(w, response)
+}
+
+func decodeStrict(w http.ResponseWriter, r *http.Request, target any, maxBytes int64) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.New("multiple request values rejected")
+	}
+	return nil
+}
+
+func (s *protocolServer) startExecution(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+	if !s.realExecutionEnabled {
+		http.Error(w, "real submission execution disabled", http.StatusForbidden)
+		return
+	}
+	var request model.RealExecutionRequest
+	if err := decodeStrict(w, r, &request, 300<<10); err != nil {
+		http.Error(w, "invalid real execution request", http.StatusBadRequest)
+		return
+	}
+	if err := supervisor.ValidateRealExecutionRequest(request); err != nil {
+		http.Error(w, "real execution request rejected", http.StatusBadRequest)
+		return
+	}
+	requestIdentity := realExecutionRequestIdentity(request)
+	s.mu.Lock()
+	s.pruneExecutionRecords(time.Now())
+	if existing := s.executions[request.ExecutionRequestID]; existing != nil {
+		if existing.requestIdentity != requestIdentity {
+			s.mu.Unlock()
+			http.Error(w, "execution request identity conflict", http.StatusConflict)
+			return
+		}
+		active := existing.active
+		s.mu.Unlock()
+		status := http.StatusOK
+		state := "COMPLETED"
+		if active {
+			status = http.StatusAccepted
+			state = "ACTIVE"
+		}
+		w.WriteHeader(status)
+		writeJSON(w, map[string]any{"status": state, "execution_request_id": request.ExecutionRequestID})
+		return
+	}
+	if len(s.executions) >= maxExecutionRecords {
+		s.mu.Unlock()
+		http.Error(w, "execution record capacity reached", http.StatusTooManyRequests)
+		return
+	}
+	active := 0
+	for _, execution := range s.executions {
+		if execution.active {
+			active++
+		}
+	}
+	if active >= 4 {
+		s.mu.Unlock()
+		http.Error(w, "execution concurrency limit", http.StatusTooManyRequests)
+		return
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), request.DeadlineAt)
+	s.executions[request.ExecutionRequestID] = &executionRecord{requestIdentity: requestIdentity, run: cancel, active: true}
+	s.mu.Unlock()
+	go s.executeReal(ctx, request)
+	w.WriteHeader(http.StatusAccepted)
+	writeJSON(w, map[string]any{"status": "ACTIVE", "execution_request_id": request.ExecutionRequestID})
+}
+
+func (s *protocolServer) pruneExecutionRecords(now time.Time) {
+	for id, record := range s.executions {
+		if record.active || record.result.CompletedAt.IsZero() {
+			continue
+		}
+		if now.Sub(record.result.CompletedAt) >= executionRetention {
+			delete(s.executions, id)
+		}
+	}
+}
+
+func realExecutionRequestIdentity(request model.RealExecutionRequest) string {
+	encoded, _ := json.Marshal(request)
+	digest := sha256.Sum256(encoded)
+	return hex.EncodeToString(digest[:])
+}
+
+func (s *protocolServer) executeReal(ctx context.Context, request model.RealExecutionRequest) {
+	runtime := supervisor.New(s.root, s.runc, s.probePath)
+	result, _ := runtime.ExecuteCPP20(ctx, request, s.compilerRootfs)
+	s.mu.Lock()
+	record := s.executions[request.ExecutionRequestID]
+	if record != nil {
+		record.result = result
+		record.run = nil
+		record.active = false
+	}
+	s.mu.Unlock()
+}
+
+func (s *protocolServer) executionStatus(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+	id := r.URL.Query().Get("execution_request_id")
+	s.mu.Lock()
+	record := s.executions[id]
+	if record == nil {
+		s.mu.Unlock()
+		http.Error(w, "execution not found", http.StatusNotFound)
+		return
+	}
+	active := record.active
+	result := record.result
+	s.mu.Unlock()
+	if active {
+		writeJSON(w, map[string]any{"status": "ACTIVE", "execution_request_id": id})
+		return
+	}
+	writeJSON(w, result)
+}
+
+func (s *protocolServer) cancelExecution(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+	var input struct {
+		ExecutionRequestID string `json:"execution_request_id"`
+	}
+	if err := decodeStrict(w, r, &input, 4096); err != nil || input.ExecutionRequestID == "" {
+		http.Error(w, "invalid execution cancellation", http.StatusBadRequest)
+		return
+	}
+	s.mu.Lock()
+	record := s.executions[input.ExecutionRequestID]
+	if record == nil || !record.active || record.run == nil {
+		s.mu.Unlock()
+		http.Error(w, "execution is not active", http.StatusConflict)
+		return
+	}
+	record.run()
+	s.mu.Unlock()
+	writeJSON(w, map[string]any{"status": "CANCELLATION_PENDING", "execution_request_id": input.ExecutionRequestID})
 }
 
 func (s *protocolServer) probes(w http.ResponseWriter, r *http.Request) {
