@@ -222,7 +222,7 @@ func TestRealWorkerCrashRecoveryUsesNewExecutionAttempt(t *testing.T) {
 			_ = redis.Del(context.Background(), key)
 		}
 	}()
-	source := "#include <iostream>\nint main(){std::cout << \"worker-recovered\\n\";}\n"
+	source := "int main(){for(;;){} return 0;}\n"
 	digest := sha256.Sum256([]byte(source))
 	queue := queueadapter.Queue{Redis: redis, Prefix: prefix}
 	job, err := queue.Enqueue(ctx, queueadapter.CreateInput{
@@ -283,6 +283,10 @@ func TestRealWorkerCrashRecoveryUsesNewExecutionAttempt(t *testing.T) {
 		_ = first.Wait()
 		t.Fatalf("first real attempt was not observed active: %s", firstLog.String())
 	}
+	// The fixed source compiles quickly and then remains in runtime until the
+	// Supervisor's two-second wall limit. This delay places the controlled
+	// Worker loss after runtime has started without touching the Supervisor.
+	time.Sleep(time.Second)
 	if err = first.Process.Signal(syscall.SIGKILL); err != nil {
 		t.Fatal(err)
 	}
