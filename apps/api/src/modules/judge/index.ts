@@ -72,6 +72,12 @@ function publicRawExecutionResult(result: RawExecutionResult) {
   return {
     protocolVersion: result.protocol_version,
     executionRequestId: result.execution_request_id,
+    ...(result.execution_attempt_id
+      ? { executionAttemptId: result.execution_attempt_id }
+      : {}),
+    ...(result.result_generation !== undefined
+      ? { resultGeneration: result.result_generation }
+      : {}),
     pipelineOutcome: result.pipeline_outcome,
     languageProfileId: result.language_profile_id,
     snapshotSha256: result.source_sha256,

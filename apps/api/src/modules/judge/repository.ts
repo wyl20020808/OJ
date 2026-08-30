@@ -14,6 +14,20 @@ const safeMode = 'SAFE_FIXTURE_QUALIFICATION' as const;
 const realMode = 'REAL_SANDBOXED_EXECUTION' as const;
 const sha256 = (value: string) =>
   createHash('sha256').update(value, 'utf8').digest('hex');
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`,
+      )
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+const rawDigest = (value: RawExecutionResult) => sha256(stableJson(value));
 const rawPipelineOutcomes = new Set<RawExecutionResult['pipeline_outcome']>([
   'PIPELINE_COMPLETED',
   'PIPELINE_COMPILE_FAILED',
@@ -32,7 +46,10 @@ const validRawExecutionResult = (
   const completedAt = Date.parse(String(value.completed_at));
   return (
     value.protocol_version === '2C.1' &&
-    value.execution_request_id === `${String(job.id)}:${String(job.attempt)}` &&
+    value.execution_request_id ===
+      (typeof job.executionRequestId === 'string'
+        ? job.executionRequestId
+        : `${String(job.id)}:${String(job.attempt)}`) &&
     value.judge_job_id === job.id &&
     value.submission_id === job.submissionId &&
     value.attempt === job.attempt &&
@@ -49,7 +66,16 @@ const validRawExecutionResult = (
     Number.isFinite(startedAt) &&
     Number.isFinite(completedAt) &&
     completedAt >= startedAt &&
-    typeof value.clean === 'boolean'
+    typeof value.clean === 'boolean' &&
+    value.execution_attempt_id ===
+      (typeof job.executionAttemptId === 'string'
+        ? job.executionAttemptId
+        : `${String(job.id)}:${String(job.attempt)}:attempt`) &&
+    value.compile_attempt_id ===
+      `${String(value.execution_request_id)}:compile` &&
+    value.runtime_attempt_id ===
+      `${String(value.execution_request_id)}:runtime` &&
+    value.result_generation === Number(job.resultGeneration ?? job.attempt)
   );
 };
 const normalize = (i: JudgeJobCreateInput): JudgeJob => {
@@ -97,6 +123,7 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
       : {}),
     status: 'QUEUED',
     attempt: 0,
+    cancellationGeneration: 0,
     maxAttempts:
       Number.isInteger(i.maxAttempts) && i.maxAttempts! > 0
         ? i.maxAttempts!
@@ -136,6 +163,9 @@ export function assertPayload(v: unknown): asserts v is JudgeJob {
     Number(j.attempt) < 0 ||
     !Number.isSafeInteger(j.maxAttempts) ||
     Number(j.maxAttempts) < 1 ||
+    (j.cancellationGeneration !== undefined &&
+      (!Number.isSafeInteger(j.cancellationGeneration) ||
+        Number(j.cancellationGeneration) < 0)) ||
     typeof j.createdAt !== 'string' ||
     Number.isNaN(Date.parse(j.createdAt as string)) ||
     typeof j.updatedAt !== 'string' ||
@@ -164,6 +194,12 @@ export function assertPayload(v: unknown): asserts v is JudgeJob {
       Number.isNaN(Date.parse(j.leaseExpiresAt as string)))
   )
     throw new JudgeJobPayloadError('Missing lease metadata');
+  if (
+    j.executionRequestId !== undefined &&
+    (typeof j.executionRequestId !== 'string' ||
+      j.executionRequestId.length === 0)
+  )
+    throw new JudgeJobPayloadError('Invalid execution request identity');
   if (
     (j.status === 'COMPLETED' &&
       !validRawExecutionResult(j.rawExecutionResult, j)) ||
@@ -240,6 +276,13 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
           leaseOwner: worker,
           leaseToken: token,
           leaseExpiresAt: new Date(Date.now() + ms).toISOString(),
+          ...(j.executionMode === realMode
+            ? {
+                executionRequestId: `${j.id}:${j.attempt + 1}`,
+                executionAttemptId: `${j.id}:${j.attempt + 1}:attempt`,
+                resultGeneration: j.attempt + 1,
+              }
+            : {}),
           updatedAt: stamp(),
         };
       this.jobs.set(j.id, leased);
@@ -260,6 +303,13 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
           leaseOwner: worker,
           leaseToken: token,
           leaseExpiresAt: new Date(Date.now() + ms).toISOString(),
+          ...(j.executionMode === realMode
+            ? {
+                executionRequestId: `${j.id}:${j.attempt + 1}`,
+                executionAttemptId: `${j.id}:${j.attempt + 1}:attempt`,
+                resultGeneration: j.attempt + 1,
+              }
+            : {}),
           updatedAt: stamp(),
         };
       this.jobs.set(id, leased);
@@ -286,7 +336,11 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
   async completeReal(id: string, t: string, result: RawExecutionResult) {
     return this.atomic(async () => {
       const j = this.jobs.get(id);
-      if (j?.status === 'COMPLETED') return { ...j };
+      if (j?.status === 'COMPLETED') {
+        if (j.rawResultDigest && j.rawResultDigest === rawDigest(result))
+          return { ...j };
+        throw new JudgeJobConflictError('Conflicting duplicate real result');
+      }
       lease(j, t);
       if (j.executionMode !== realMode || !validRawExecutionResult(result, j))
         throw new JudgeJobConflictError('Real execution result mismatch');
@@ -294,6 +348,8 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         ...j,
         status: 'COMPLETED' as const,
         rawExecutionResult: result,
+        rawResultDigest: rawDigest(result),
+        resultGeneration: j.resultGeneration ?? j.attempt,
         completedAt: stamp(),
         updatedAt: stamp(),
       });
@@ -311,6 +367,10 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
           ? 'FAILED_TERMINAL'
           : 'FAILED_RETRYABLE') as JudgeJob['status'],
         failureReason: reason,
+        executionRequestId: undefined,
+        executionAttemptId: undefined,
+        resultGeneration: undefined,
+        rawResultDigest: undefined,
         updatedAt: stamp(),
       });
       this.jobs.set(id, x);
@@ -333,6 +393,10 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
               ? 'FAILED_TERMINAL'
               : 'FAILED_RETRYABLE') as JudgeJob['status'],
             failureReason: 'lease_expired',
+            executionRequestId: undefined,
+            executionAttemptId: undefined,
+            resultGeneration: undefined,
+            rawResultDigest: undefined,
             updatedAt: stamp(),
           }),
         );
@@ -374,6 +438,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         ...j,
         status: 'CANCELLED' as const,
         failureReason: 'cancelled',
+        cancellationGeneration: (j.cancellationGeneration ?? 0) + 1,
         completedAt: stamp(),
         updatedAt: stamp(),
       });
@@ -491,6 +556,13 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
           leaseOwner: worker,
           leaseToken,
           leaseExpiresAt: new Date(Date.now() + ms).toISOString(),
+          ...(j.executionMode === realMode
+            ? {
+                executionRequestId: `${j.id}:${j.attempt + 1}`,
+                executionAttemptId: `${j.id}:${j.attempt + 1}:attempt`,
+                resultGeneration: j.attempt + 1,
+              }
+            : {}),
           updatedAt: stamp(),
         };
       await this.redis.set(this.jobKey(id), JSON.stringify(x));
@@ -511,6 +583,13 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
           leaseOwner: worker,
           leaseToken,
           leaseExpiresAt: new Date(Date.now() + ms).toISOString(),
+          ...(j.executionMode === realMode
+            ? {
+                executionRequestId: `${j.id}:${j.attempt + 1}`,
+                executionAttemptId: `${j.id}:${j.attempt + 1}:attempt`,
+                resultGeneration: j.attempt + 1,
+              }
+            : {}),
           updatedAt: stamp(),
         };
       await this.redis.set(this.jobKey(id), JSON.stringify(x));
@@ -537,7 +616,11 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
   async completeReal(id: string, t: string, result: RawExecutionResult) {
     return this.exclusive(async () => {
       const j = await this.read(id);
-      if (j?.status === 'COMPLETED') return j;
+      if (j?.status === 'COMPLETED') {
+        if (j.rawResultDigest && j.rawResultDigest === rawDigest(result))
+          return j;
+        throw new JudgeJobConflictError('Conflicting duplicate real result');
+      }
       lease(j, t);
       if (j.executionMode !== realMode || !validRawExecutionResult(result, j))
         throw new JudgeJobConflictError('Real execution result mismatch');
@@ -545,6 +628,8 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
         ...j,
         status: 'COMPLETED' as const,
         rawExecutionResult: result,
+        rawResultDigest: rawDigest(result),
+        resultGeneration: j.resultGeneration ?? j.attempt,
         completedAt: stamp(),
         updatedAt: stamp(),
       });
@@ -562,6 +647,10 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
           ? 'FAILED_TERMINAL'
           : 'FAILED_RETRYABLE') as JudgeJob['status'],
         failureReason: r,
+        rawResultDigest: undefined,
+        executionRequestId: undefined,
+        executionAttemptId: undefined,
+        resultGeneration: undefined,
         updatedAt: stamp(),
       });
       await this.redis.set(this.jobKey(id), JSON.stringify(x));
@@ -587,6 +676,9 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
             ? 'FAILED_TERMINAL'
             : 'FAILED_RETRYABLE') as JudgeJob['status'],
           failureReason: 'lease_expired',
+          executionRequestId: undefined,
+          executionAttemptId: undefined,
+          resultGeneration: undefined,
           updatedAt: stamp(),
         });
         await this.redis.set(k, JSON.stringify(x));
@@ -631,6 +723,7 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
         ...j,
         status: 'CANCELLED' as const,
         failureReason: 'cancelled',
+        cancellationGeneration: (j.cancellationGeneration ?? 0) + 1,
         completedAt: stamp(),
         updatedAt: stamp(),
       });

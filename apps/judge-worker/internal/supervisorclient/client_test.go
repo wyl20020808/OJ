@@ -36,7 +36,7 @@ func TestPreflightAndExecute(t *testing.T) {
 				_, _ = w.Write([]byte(`{"status":"ACTIVE"}`))
 				return
 			}
-			result := map[string]any{"protocol_version": "2C.1", "execution_request_id": "job:1", "judge_job_id": "job", "submission_id": "submission", "attempt": 1, "source_sha256": request.SourceSHA256, "pipeline_outcome": "PIPELINE_COMPLETED", "compile": map[string]any{"outcome": "COMPILE_SUCCEEDED"}, "started_at": time.Now().Add(-time.Second), "completed_at": time.Now(), "clean": true}
+			result := map[string]any{"protocol_version": "2C.1", "execution_request_id": "job:1", "judge_job_id": "job", "submission_id": "submission", "attempt": 1, "execution_attempt_id": "job:1:attempt", "compile_attempt_id": "job:1:compile", "runtime_attempt_id": "job:1:runtime", "result_generation": 1, "source_sha256": request.SourceSHA256, "pipeline_outcome": "PIPELINE_COMPLETED", "compile": map[string]any{"outcome": "COMPILE_SUCCEEDED"}, "started_at": time.Now().Add(-time.Second), "completed_at": time.Now(), "clean": true}
 			_ = json.NewEncoder(w).Encode(result)
 		default:
 			http.NotFound(w, r)

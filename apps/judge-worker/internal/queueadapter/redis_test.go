@@ -12,6 +12,8 @@ func validRawExecutionResult() json.RawMessage {
 		"judge_job_id":"job-1",
 		"submission_id":"submission-1",
 		"attempt":2,
+		"execution_attempt_id":"job-1:2:attempt",
+		"result_generation":2,
 		"language_profile_id":"cpp20-gcc-13-v1",
 		"source_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"pipeline_outcome":"PIPELINE_COMPLETED",
@@ -21,23 +23,32 @@ func validRawExecutionResult() json.RawMessage {
 
 func TestValidateRawExecutionResultBindsAuthoritativeJobIdentity(t *testing.T) {
 	job := Job{
-		ID:                "job-1",
-		SubmissionID:      "submission-1",
-		Attempt:           2,
-		LanguageProfileID: "cpp20-gcc-13-v1",
-		SourceSHA256:      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		ID:                 "job-1",
+		SubmissionID:       "submission-1",
+		Attempt:            2,
+		ExecutionRequestID: "job-1:2",
+		ExecutionAttemptID: "job-1:2:attempt",
+		ResultGeneration:   2,
+		LanguageProfileID:  "cpp20-gcc-13-v1",
+		SourceSHA256:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 	if err := validateRawExecutionResult(validRawExecutionResult(), job); err != nil {
 		t.Fatalf("valid result rejected: %v", err)
 	}
 
 	for name, mutate := range map[string]func(map[string]any){
-		"protocol":   func(v map[string]any) { v["protocol_version"] = "2A.1" },
-		"request":    func(v map[string]any) { v["execution_request_id"] = "job-1:1" },
-		"job":        func(v map[string]any) { v["judge_job_id"] = "job-2" },
-		"submission": func(v map[string]any) { v["submission_id"] = "submission-2" },
-		"attempt":    func(v map[string]any) { v["attempt"] = float64(1) },
-		"profile":    func(v map[string]any) { v["language_profile_id"] = "other" },
+		"protocol":          func(v map[string]any) { v["protocol_version"] = "2A.1" },
+		"request":           func(v map[string]any) { v["execution_request_id"] = "job-1:1" },
+		"job":               func(v map[string]any) { v["judge_job_id"] = "job-2" },
+		"submission":        func(v map[string]any) { v["submission_id"] = "submission-2" },
+		"attempt":           func(v map[string]any) { v["attempt"] = float64(1) },
+		"execution-attempt": func(v map[string]any) { v["execution_attempt_id"] = "job-1:1:attempt" },
+		"missing-attempt":   func(v map[string]any) { delete(v, "execution_attempt_id") },
+		"generation":        func(v map[string]any) { v["result_generation"] = float64(1) },
+		"missing-generation": func(v map[string]any) {
+			delete(v, "result_generation")
+		},
+		"profile": func(v map[string]any) { v["language_profile_id"] = "other" },
 		"source": func(v map[string]any) {
 			v["source_sha256"] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		},

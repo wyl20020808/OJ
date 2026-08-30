@@ -97,7 +97,7 @@ func TestRealExecutionIdempotencyRejectsDifferentSnapshot(t *testing.T) {
 	source := "int main(){}"
 	digest := sha256.Sum256([]byte(source))
 	request := model.RealExecutionRequest{ProtocolVersion: model.ExecutionContractVersion, ExecutionRequestID: "execution-1", JudgeJobID: "job", SubmissionID: "submission", Attempt: 1, CorrelationID: "correlation", ProblemRevisionID: "revision", TestdataVersionRef: "testdata", LanguageProfileID: supervisor.CPP20ProfileID, SourceSnapshotRef: "submission:submission", SourceBytes: source, SourceSHA256: hex.EncodeToString(digest[:]), ControlledInputID: "stdin-empty-v1", DeadlineAt: time.Now().Add(time.Minute)}
-	server := &protocolServer{realExecutionEnabled: true, executions: map[string]*executionRecord{"execution-1": {requestIdentity: realExecutionRequestIdentity(request), active: true}}}
+	server := &protocolServer{realExecutionEnabled: true, executions: map[string]*executionRecord{"execution-1": {RequestIdentity: realExecutionRequestIdentity(request), Active: true}}}
 	request.SourceBytes += " "
 	tamperedDigest := sha256.Sum256([]byte(request.SourceBytes))
 	request.SourceSHA256 = hex.EncodeToString(tamperedDigest[:])
@@ -112,12 +112,12 @@ func TestRealExecutionIdempotencyRejectsDifferentSnapshot(t *testing.T) {
 func TestExecutionRecordsAreBoundedAndExpiredRecordsArePruned(t *testing.T) {
 	now := time.Now().UTC()
 	server := &protocolServer{executions: map[string]*executionRecord{
-		"active": {active: true},
+		"active": {Active: true},
 		"fresh": {
-			result: model.RealExecutionResult{CompletedAt: now.Add(-time.Minute)},
+			Result: model.RealExecutionResult{CompletedAt: now.Add(-time.Minute)},
 		},
 		"expired": {
-			result: model.RealExecutionResult{CompletedAt: now.Add(-executionRetention)},
+			Result: model.RealExecutionResult{CompletedAt: now.Add(-executionRetention)},
 		},
 	}}
 	server.pruneExecutionRecords(now)
@@ -126,5 +126,22 @@ func TestExecutionRecordsAreBoundedAndExpiredRecordsArePruned(t *testing.T) {
 	}
 	if server.executions["expired"] != nil {
 		t.Fatal("expired execution record was retained")
+	}
+}
+
+func TestActiveExecutionRecordRecoversFailClosedAfterSupervisorRestart(t *testing.T) {
+	recordRoot := t.TempDir()
+	request := model.RealExecutionRequest{ExecutionRequestID: "job:1", JudgeJobID: "job", SubmissionID: "submission", Attempt: 1, CorrelationID: "correlation", LanguageProfileID: supervisor.CPP20ProfileID, SourceSHA256: strings.Repeat("a", 64)}
+	first := &protocolServer{executionRecordRoot: recordRoot, executions: map[string]*executionRecord{"job:1": {RequestIdentity: "identity", Result: executionIdentityForRecord(request), Active: true}}}
+	if err := first.persistExecutionRecord("job:1"); err != nil {
+		t.Fatal(err)
+	}
+	restarted := &protocolServer{executionRecordRoot: recordRoot, executions: make(map[string]*executionRecord)}
+	if err := restarted.loadExecutionRecords(); err != nil {
+		t.Fatal(err)
+	}
+	recovered := restarted.executions["job:1"]
+	if recovered == nil || recovered.Active || recovered.Result.PipelineOutcome != supervisor.PipelineInfraFailure || recovered.Result.Compile.DiagnosticCode != "SUPERVISOR_RESTART" || !recovered.Result.Clean {
+		t.Fatalf("active record did not recover fail closed: %+v", recovered)
 	}
 }

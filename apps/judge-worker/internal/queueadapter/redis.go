@@ -2,7 +2,9 @@ package queueadapter
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,33 +18,38 @@ import (
 )
 
 type Job struct {
-	ID                 string          `json:"id"`
-	SubmissionID       string          `json:"submissionId"`
-	IdempotencyKey     string          `json:"idempotencyKey"`
-	OwnerUserID        string          `json:"ownerUserId"`
-	ProblemID          string          `json:"problemId"`
-	ProblemRevisionID  string          `json:"problemRevisionId"`
-	TestdataVersionRef string          `json:"testdataVersionRef"`
-	LanguageID         string          `json:"languageId"`
-	ExecutionMode      string          `json:"executionMode"`
-	LanguageProfileID  string          `json:"languageProfileId"`
-	SourceSnapshotRef  string          `json:"sourceSnapshotRef"`
-	SourceBytes        string          `json:"sourceBytes"`
-	SourceSHA256       string          `json:"sourceSha256"`
-	ControlledInputID  string          `json:"controlledInputId"`
-	RawExecutionResult json.RawMessage `json:"rawExecutionResult,omitempty"`
-	Status             string          `json:"status"`
-	Attempt            int             `json:"attempt"`
-	MaxAttempts        int             `json:"maxAttempts"`
-	LeaseOwner         string          `json:"leaseOwner"`
-	LeaseToken         string          `json:"leaseToken"`
-	LeaseExpiresAt     time.Time       `json:"leaseExpiresAt"`
-	FixtureID          string          `json:"fixtureId"`
-	FailureReason      string          `json:"failureReason"`
-	SyntheticFixtureID string          `json:"syntheticFixtureId"`
-	CompletedAt        string          `json:"completedAt"`
-	CreatedAt          string          `json:"createdAt"`
-	UpdatedAt          string          `json:"updatedAt"`
+	ID                     string          `json:"id"`
+	SubmissionID           string          `json:"submissionId"`
+	IdempotencyKey         string          `json:"idempotencyKey"`
+	OwnerUserID            string          `json:"ownerUserId"`
+	ProblemID              string          `json:"problemId"`
+	ProblemRevisionID      string          `json:"problemRevisionId"`
+	TestdataVersionRef     string          `json:"testdataVersionRef"`
+	LanguageID             string          `json:"languageId"`
+	ExecutionMode          string          `json:"executionMode"`
+	LanguageProfileID      string          `json:"languageProfileId"`
+	SourceSnapshotRef      string          `json:"sourceSnapshotRef"`
+	SourceBytes            string          `json:"sourceBytes"`
+	SourceSHA256           string          `json:"sourceSha256"`
+	ControlledInputID      string          `json:"controlledInputId"`
+	RawExecutionResult     json.RawMessage `json:"rawExecutionResult,omitempty"`
+	Status                 string          `json:"status"`
+	Attempt                int             `json:"attempt"`
+	MaxAttempts            int             `json:"maxAttempts"`
+	LeaseOwner             string          `json:"leaseOwner"`
+	LeaseToken             string          `json:"leaseToken"`
+	LeaseExpiresAt         time.Time       `json:"leaseExpiresAt"`
+	FixtureID              string          `json:"fixtureId"`
+	FailureReason          string          `json:"failureReason"`
+	SyntheticFixtureID     string          `json:"syntheticFixtureId"`
+	CompletedAt            string          `json:"completedAt"`
+	CreatedAt              string          `json:"createdAt"`
+	UpdatedAt              string          `json:"updatedAt"`
+	ExecutionRequestID     string          `json:"executionRequestId"`
+	ExecutionAttemptID     string          `json:"executionAttemptId"`
+	ResultGeneration       int64           `json:"resultGeneration"`
+	ResultDigest           string          `json:"rawResultDigest"`
+	CancellationGeneration int64           `json:"cancellationGeneration"`
 }
 
 type rawExecutionResultIdentity struct {
@@ -51,6 +58,8 @@ type rawExecutionResultIdentity struct {
 	JudgeJobID         string          `json:"judge_job_id"`
 	SubmissionID       string          `json:"submission_id"`
 	Attempt            int             `json:"attempt"`
+	ExecutionAttemptID string          `json:"execution_attempt_id"`
+	ResultGeneration   int64           `json:"result_generation"`
 	LanguageProfileID  string          `json:"language_profile_id"`
 	SourceSHA256       string          `json:"source_sha256"`
 	PipelineOutcome    string          `json:"pipeline_outcome"`
@@ -70,17 +79,35 @@ func validateRawExecutionResult(result json.RawMessage, job Job) error {
 		"PIPELINE_INFRA_FAILURE":  true,
 	}
 	if identity.ProtocolVersion != "2C.1" ||
-		identity.ExecutionRequestID != fmt.Sprintf("%s:%d", job.ID, job.Attempt) ||
+		identity.ExecutionRequestID != executionRequestID(job) ||
 		identity.JudgeJobID != job.ID ||
 		identity.SubmissionID != job.SubmissionID ||
 		identity.Attempt != job.Attempt ||
 		identity.LanguageProfileID != job.LanguageProfileID ||
 		identity.SourceSHA256 != job.SourceSHA256 ||
 		!allowedOutcome[identity.PipelineOutcome] ||
-		len(identity.Compile) == 0 || string(identity.Compile) == "null" {
+		len(identity.Compile) == 0 || string(identity.Compile) == "null" ||
+		identity.ExecutionAttemptID != job.ExecutionAttemptID ||
+		identity.ResultGeneration != job.ResultGeneration {
 		return errors.New("raw execution result identity mismatch")
 	}
 	return nil
+}
+
+func executionRequestID(job Job) string {
+	if job.ExecutionRequestID != "" {
+		return job.ExecutionRequestID
+	}
+	return fmt.Sprintf("%s:%d", job.ID, job.Attempt)
+}
+
+func resultDigest(result json.RawMessage) string {
+	compact := &bytes.Buffer{}
+	if json.Compact(compact, result) != nil {
+		return ""
+	}
+	digest := sha256.Sum256(compact.Bytes())
+	return fmt.Sprintf("%x", digest[:])
 }
 
 type Lease struct {
@@ -357,6 +384,12 @@ func (q Queue) claim(ctx context.Context, worker string, lease time.Duration) (*
 		j.Status = "LEASED_FAKE"
 	}
 	j.Attempt++
+	if j.ExecutionMode == "REAL_SANDBOXED_EXECUTION" {
+		j.ExecutionRequestID = fmt.Sprintf("%s:%d", j.ID, j.Attempt)
+		j.ExecutionAttemptID = j.ExecutionRequestID + ":attempt"
+		j.ResultGeneration = int64(j.Attempt)
+		j.ResultDigest = ""
+	}
 	j.LeaseOwner = worker
 	j.LeaseToken = fmt.Sprintf("%d", time.Now().UnixNano())
 	j.LeaseExpiresAt = time.Now().Add(lease).UTC()
@@ -389,6 +422,8 @@ func (q Queue) recoverStaleLocked(ctx context.Context) error {
 		}
 		j.LeaseOwner, j.LeaseToken = "", ""
 		j.LeaseExpiresAt = time.Time{}
+		j.ExecutionRequestID, j.ExecutionAttemptID, j.ResultDigest = "", "", ""
+		j.ResultGeneration = 0
 		j.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 		if j.Attempt >= j.MaxAttempts {
 			j.Status = "FAILED_TERMINAL"
@@ -424,7 +459,10 @@ func (q Queue) update(ctx context.Context, l Lease, status, reason string, resul
 		return err
 	}
 	if j.Status == "SUCCEEDED_FAKE" || j.Status == "COMPLETED" || j.Status == "FAILED_TERMINAL" || j.Status == "CANCELLED" {
-		return nil
+		if j.Status == status && (status != "COMPLETED" || (j.ResultDigest != "" && j.ResultDigest == resultDigest(result))) {
+			return nil
+		}
+		return errors.New("terminal result conflict")
 	}
 	expectedLease := "LEASED_FAKE"
 	if j.ExecutionMode == "REAL_SANDBOXED_EXECUTION" {
@@ -441,6 +479,9 @@ func (q Queue) update(ctx context.Context, l Lease, status, reason string, resul
 			return err
 		}
 	}
+	if status == "CANCELLED" {
+		j.CancellationGeneration++
+	}
 	j.Status = status
 	if status == "FAILED_RETRYABLE" && j.Attempt >= j.MaxAttempts {
 		j.Status = "FAILED_TERMINAL"
@@ -456,7 +497,12 @@ func (q Queue) update(ctx context.Context, l Lease, status, reason string, resul
 	}
 	if status == "COMPLETED" {
 		j.RawExecutionResult = append(json.RawMessage(nil), result...)
+		j.ResultDigest = resultDigest(result)
 		j.CompletedAt = j.UpdatedAt
+	}
+	if status == "FAILED_RETRYABLE" {
+		j.ExecutionRequestID, j.ExecutionAttemptID, j.ResultDigest = "", "", ""
+		j.ResultGeneration = 0
 	}
 	encoded, _ := json.Marshal(j)
 	if _, err = q.Redis.String(ctx, "SET", q.key("job", j.ID), string(encoded)); err != nil {

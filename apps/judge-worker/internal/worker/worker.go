@@ -233,17 +233,21 @@ func (w *Worker) processReal(ctx, queueCtx context.Context, lease queueadapter.L
 		return
 	}
 	request := supervisorclient.Request{
-		ProtocolVersion: supervisorclient.ProtocolVersion, ExecutionRequestID: fmt.Sprintf("%s:%d", lease.Job.ID, lease.Job.Attempt),
+		ProtocolVersion: supervisorclient.ProtocolVersion, ExecutionRequestID: lease.Job.ExecutionRequestID,
 		JudgeJobID: lease.Job.ID, SubmissionID: lease.Job.SubmissionID, Attempt: lease.Job.Attempt,
 		CorrelationID: lease.Job.ID, ProblemRevisionID: lease.Job.ProblemRevisionID,
 		TestdataVersionRef: lease.Job.TestdataVersionRef, LanguageProfileID: lease.Job.LanguageProfileID,
 		SourceSnapshotRef: lease.Job.SourceSnapshotRef, SourceBytes: lease.Job.SourceBytes,
 		SourceSHA256: lease.Job.SourceSHA256, ControlledInputID: lease.Job.ControlledInputID,
-		DeadlineAt: deadline, CancellationGeneration: 0,
+		DeadlineAt: deadline, CancellationGeneration: lease.Job.CancellationGeneration,
 	}
 	execution, err := w.Supervisor.Execute(ctx, request)
 	if ctx.Err() != nil || execution.Result.PipelineOutcome == "PIPELINE_CANCELLED" {
 		_ = w.Queue.Cancel(queueCtx, lease)
+		return
+	}
+	if execution.Result.PipelineOutcome == "PIPELINE_INFRA_FAILURE" {
+		_ = w.Queue.Retry(queueCtx, lease, "REAL_EXECUTION_INFRA_FAILURE")
 		return
 	}
 	if err != nil {

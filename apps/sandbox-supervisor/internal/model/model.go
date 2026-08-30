@@ -5,6 +5,59 @@ import "time"
 const ContractVersion = "2B.1"
 const ExecutionContractVersion = "2C.1"
 
+// ExecutionState is the lifecycle vocabulary shared by the Supervisor and
+// qualification harness.  It describes what happened, not an OJ verdict.
+type ExecutionState string
+
+const (
+	StateAccepted         ExecutionState = "ACCEPTED"
+	StateQueued           ExecutionState = "QUEUED"
+	StateClaimed          ExecutionState = "CLAIMED"
+	StateCompilePreparing ExecutionState = "COMPILE_PREPARING"
+	StateCompiling        ExecutionState = "COMPILING"
+	StateCompileSucceeded ExecutionState = "COMPILE_SUCCEEDED"
+	StateCompileFailed    ExecutionState = "COMPILE_FAILED"
+	StateRuntimePreparing ExecutionState = "RUNTIME_PREPARING"
+	StateRunning          ExecutionState = "RUNNING"
+	StateCancelRequested  ExecutionState = "CANCEL_REQUESTED"
+	StateCancelled        ExecutionState = "CANCELLED"
+	StateRawCompleted     ExecutionState = "RAW_COMPLETED"
+	StateRawLimitEvent    ExecutionState = "RAW_LIMIT_EVENT"
+	StateInfraFailed      ExecutionState = "INFRA_FAILED"
+	StateCleanupPending   ExecutionState = "CLEANUP_PENDING"
+	StateCleanupVerified  ExecutionState = "CLEANUP_VERIFIED"
+)
+
+// ExecutionIdentity keeps logical-job identity separate from one attempt and
+// from the two sandbox lifecycles used by compilation and runtime.
+type ExecutionIdentity struct {
+	SubmissionID       string `json:"submission_id"`
+	SnapshotID         string `json:"snapshot_id"`
+	JudgeJobID         string `json:"judge_job_id"`
+	ExecutionRequestID string `json:"execution_request_id"`
+	ExecutionAttemptID string `json:"execution_attempt_id"`
+	CompileAttemptID   string `json:"compile_attempt_id"`
+	RuntimeAttemptID   string `json:"runtime_attempt_id"`
+	SandboxID          string `json:"sandbox_id"`
+	ArtifactID         string `json:"artifact_id"`
+	ArtifactSHA256     string `json:"artifact_sha256"`
+	ResultGeneration   int64  `json:"result_generation"`
+}
+
+// ResourceOwnership is persisted beside Supervisor-owned resources so startup
+// recovery can prove exact ownership before removing anything.
+type ResourceOwnership struct {
+	Schema             string `json:"schema"`
+	ResourceKind       string `json:"resource_kind"`
+	SubmissionID       string `json:"submission_id"`
+	JudgeJobID         string `json:"judge_job_id"`
+	ExecutionRequestID string `json:"execution_request_id"`
+	ExecutionAttemptID string `json:"execution_attempt_id"`
+	CompileAttemptID   string `json:"compile_attempt_id,omitempty"`
+	SandboxID          string `json:"sandbox_id"`
+	CreatedAt          string `json:"created_at"`
+}
+
 type Request struct {
 	ContractVersion        string    `json:"contract_version"`
 	SandboxJobID           string    `json:"sandbox_job_id"`
@@ -95,6 +148,9 @@ type RealExecutionRequest struct {
 }
 
 type ArtifactResult struct {
+	ArtifactID         string `json:"artifact_id"`
+	CompileAttemptID   string `json:"compile_attempt_id"`
+	SandboxID          string `json:"sandbox_id"`
 	SHA256             string `json:"sha256"`
 	SizeBytes          int64  `json:"size_bytes"`
 	LanguageProfileID  string `json:"language_profile_id"`
@@ -105,17 +161,34 @@ type ArtifactResult struct {
 }
 
 type StageResult struct {
-	Outcome           string           `json:"outcome"`
-	ExitCode          int              `json:"exit_code"`
-	TerminationSignal string           `json:"termination_signal,omitempty"`
-	Stdout            string           `json:"stdout"`
-	Stderr            string           `json:"stderr"`
-	StdoutTruncated   bool             `json:"stdout_truncated"`
-	StderrTruncated   bool             `json:"stderr_truncated"`
-	WallTimeMS        int64            `json:"wall_time_ms"`
-	DiagnosticCode    string           `json:"diagnostic_code,omitempty"`
-	Clean             bool             `json:"clean"`
-	Evidence          *RuntimeEvidence `json:"resource_evidence,omitempty"`
+	Outcome           string            `json:"outcome"`
+	State             ExecutionState    `json:"state,omitempty"`
+	ExitCode          int               `json:"exit_code"`
+	TerminationSignal string            `json:"termination_signal,omitempty"`
+	Stdout            string            `json:"stdout"`
+	Stderr            string            `json:"stderr"`
+	StdoutTruncated   bool              `json:"stdout_truncated"`
+	StderrTruncated   bool              `json:"stderr_truncated"`
+	WallTimeMS        int64             `json:"wall_time_ms"`
+	DiagnosticCode    string            `json:"diagnostic_code,omitempty"`
+	Clean             bool              `json:"clean"`
+	Evidence          *RuntimeEvidence  `json:"resource_evidence,omitempty"`
+	Facts             RawExecutionFacts `json:"raw_facts"`
+}
+
+type RawExecutionFacts struct {
+	ProcessExited      bool   `json:"process_exited"`
+	ExitCode           int    `json:"exit_code"`
+	TerminationSignal  string `json:"termination_signal,omitempty"`
+	WallLimitReached   bool   `json:"wall_limit_reached"`
+	MemoryLimitEvent   bool   `json:"memory_limit_event"`
+	PidsLimitEvent     bool   `json:"pids_limit_event"`
+	StdoutTruncated    bool   `json:"stdout_truncated"`
+	StderrTruncated    bool   `json:"stderr_truncated"`
+	Cancelled          bool   `json:"cancelled"`
+	SandboxSetupFailed bool   `json:"sandbox_setup_failed"`
+	RuntimeInfraFailed bool   `json:"runtime_infra_failed"`
+	CleanupVerified    bool   `json:"cleanup_verified"`
 }
 
 type RealExecutionResult struct {
@@ -124,6 +197,12 @@ type RealExecutionResult struct {
 	JudgeJobID         string          `json:"judge_job_id"`
 	SubmissionID       string          `json:"submission_id"`
 	Attempt            int             `json:"attempt"`
+	ExecutionAttemptID string          `json:"execution_attempt_id"`
+	CompileAttemptID   string          `json:"compile_attempt_id"`
+	RuntimeAttemptID   string          `json:"runtime_attempt_id"`
+	CompileSandboxID   string          `json:"compile_sandbox_id"`
+	RuntimeSandboxID   string          `json:"runtime_sandbox_id"`
+	ResultGeneration   int64           `json:"result_generation"`
 	CorrelationID      string          `json:"correlation_id"`
 	LanguageProfileID  string          `json:"language_profile_id"`
 	SourceSHA256       string          `json:"source_sha256"`

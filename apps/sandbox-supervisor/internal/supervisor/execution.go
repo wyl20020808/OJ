@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -69,9 +70,12 @@ var runtimeLimits = model.ExecutionLimits{
 }
 
 type CompilerRootfs struct {
-	Path            string
-	Identity        string
-	CompilerVersion string
+	ProfileID          string
+	Path               string
+	Identity           string
+	CompilerVersion    string
+	CommandTemplateSHA string
+	Trusted            bool
 }
 
 type stageRun struct {
@@ -97,6 +101,23 @@ func CompilerCommandTemplateSHA256() string {
 
 func CompileResourceLimits() model.ExecutionLimits { return compileLimits }
 func RuntimeResourceLimits() model.ExecutionLimits { return runtimeLimits }
+
+func executionIdentity(request model.RealExecutionRequest) model.ExecutionIdentity {
+	return model.ExecutionIdentity{
+		SubmissionID: request.SubmissionID, SnapshotID: request.SourceSnapshotRef,
+		JudgeJobID: request.JudgeJobID, ExecutionRequestID: request.ExecutionRequestID,
+		ExecutionAttemptID: request.ExecutionRequestID + ":attempt",
+		CompileAttemptID:   request.ExecutionRequestID + ":compile",
+		RuntimeAttemptID:   request.ExecutionRequestID + ":runtime",
+		SandboxID:          request.ExecutionRequestID + ":sandbox",
+		ResultGeneration:   int64(request.Attempt),
+	}
+}
+
+func sandboxIDFor(value, stage string) string {
+	digest := sha256.Sum256([]byte(value + "\x00" + stage))
+	return "c2c2-" + hex.EncodeToString(digest[:12]) + "-" + stage
+}
 
 func ValidateRealExecutionRequest(request model.RealExecutionRequest) error {
 	if request.ProtocolVersion != model.ExecutionContractVersion {
@@ -147,7 +168,7 @@ func (s *Supervisor) PreflightRealExecution(ctx context.Context, rootfs Compiler
 		return fmt.Errorf("%w: compiler rootfs unavailable", ErrSandboxPreflight)
 	}
 	expected := filepath.Clean("/opt/ojplatform/compiler-rootfs/" + CPP20ProfileID)
-	if resolved != expected || rootfs.Identity == "" || rootfs.CompilerVersion == "" {
+	if resolved != expected || rootfs.ProfileID != CPP20ProfileID || rootfs.Identity == "" || rootfs.CompilerVersion == "" || rootfs.CommandTemplateSHA != CompilerCommandTemplateSHA256() || !rootfs.Trusted {
 		return fmt.Errorf("%w: compiler rootfs identity rejected", ErrSandboxPreflight)
 	}
 	identityBytes, err := os.ReadFile(rootfs.Path + ".identity")
@@ -191,6 +212,11 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 		CorrelationID: request.CorrelationID, LanguageProfileID: request.LanguageProfileID,
 		SourceSHA256: request.SourceSHA256, StartedAt: started,
 	}
+	identity := executionIdentity(request)
+	compileSandboxID := sandboxIDFor(identity.CompileAttemptID, "compile")
+	runtimeSandboxID := sandboxIDFor(identity.RuntimeAttemptID, "runtime")
+	result.ExecutionAttemptID, result.CompileAttemptID, result.RuntimeAttemptID, result.ResultGeneration = identity.ExecutionAttemptID, identity.CompileAttemptID, identity.RuntimeAttemptID, identity.ResultGeneration
+	result.CompileSandboxID, result.RuntimeSandboxID = compileSandboxID, runtimeSandboxID
 	defer func() { result.CompletedAt = time.Now().UTC() }()
 	if err := ValidateRealExecutionRequest(request); err != nil {
 		result.PipelineOutcome = PipelineInfraFailure
@@ -199,20 +225,37 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 		return result, err
 	}
 	if err := s.PreflightRealExecution(ctx, rootfs); err != nil {
+		if ctx.Err() != nil {
+			result.PipelineOutcome = PipelineCancelled
+			result.Compile = model.StageResult{
+				Outcome: CompileCancelled, State: model.StateCancelled, DiagnosticCode: "CANCELLED",
+				Clean: true, Facts: model.RawExecutionFacts{Cancelled: true, CleanupVerified: true},
+			}
+			result.Clean = true
+			return result, ctx.Err()
+		}
 		result.PipelineOutcome = PipelineInfraFailure
 		result.Compile = model.StageResult{Outcome: CompileInfraFailure, DiagnosticCode: "PREFLIGHT_FAILED", Clean: true}
 		result.Clean = true
 		return result, err
 	}
 
-	jobRoot, err := os.MkdirTemp(s.Root, "c2c1-")
+	jobRoot, err := os.MkdirTemp(s.Root, "c2c2-")
 	if err != nil {
 		result.PipelineOutcome = PipelineInfraFailure
 		result.Compile = model.StageResult{Outcome: CompileInfraFailure, DiagnosticCode: "WORKSPACE_SETUP_FAILED"}
 		return result, err
 	}
+	if err := WriteOwnershipMetadata(jobRoot, model.ResourceOwnership{
+		Schema: ownershipSchema, ResourceKind: "execution-attempt", SubmissionID: request.SubmissionID,
+		JudgeJobID: request.JudgeJobID, ExecutionRequestID: request.ExecutionRequestID,
+		ExecutionAttemptID: identity.ExecutionAttemptID, SandboxID: identity.SandboxID,
+	}); err != nil {
+		_ = os.RemoveAll(jobRoot)
+		return result, err
+	}
 	defer func() {
-		removeErr := os.RemoveAll(jobRoot)
+		removeErr := removeOwnedExecutionRoot(jobRoot, identity.ExecutionAttemptID, identity.SandboxID)
 		clean := removeErr == nil && !pathExists(jobRoot)
 		result.Clean = result.Compile.Clean && (result.Runtime == nil || result.Runtime.Clean) && clean
 		if !clean {
@@ -232,8 +275,14 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 	if err := os.MkdirAll(buildDir, 0700); err != nil {
 		return result, err
 	}
-	sourcePath := filepath.Join(inputDir, "main.cpp")
-	if err := os.WriteFile(sourcePath, []byte(request.SourceBytes), 0600); err != nil {
+	sourcePath, err := StageSourceSnapshot(inputDir, []byte(request.SourceBytes), request.SourceSHA256)
+	if err != nil {
+		return result, err
+	}
+	if err := WriteOwnershipMetadata(inputDir, model.ResourceOwnership{Schema: ownershipSchema, ResourceKind: "source-staging", SubmissionID: request.SubmissionID, JudgeJobID: request.JudgeJobID, ExecutionRequestID: request.ExecutionRequestID, ExecutionAttemptID: identity.ExecutionAttemptID, SandboxID: compileSandboxID}); err != nil {
+		return result, err
+	}
+	if err := VerifyStagedSource(sourcePath, request.SourceSHA256, len(request.SourceBytes)); err != nil {
 		return result, err
 	}
 
@@ -243,8 +292,8 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 		Destination: "/workspace", Type: "bind", Source: workspace,
 		Options: []string{"rbind", "rw", "nosuid", "nodev", "noexec"},
 	}
-	compileRun := s.runExecutionStage(ctx, compileBundle, rootfs.Path, true, compilerArgv,
-		"/workspace", []string{"PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C"}, compileMounts, compileLimits, nil, workspace)
+	compileRun := s.runExecutionStageWithID(ctx, compileBundle, rootfs.Path, true, compilerArgv,
+		"/workspace", []string{"PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C"}, compileMounts, compileLimits, nil, workspace, compileSandboxID)
 	result.Compile = classifyCompile(compileRun, rootfs.Path, workspace)
 	if result.Compile.Outcome != CompileSucceeded {
 		result.PipelineOutcome = pipelineForCompile(result.Compile.Outcome)
@@ -264,9 +313,28 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 	artifact.CompilerRootfsID = rootfs.Identity
 	artifact.CommandTemplateSHA = CompilerCommandTemplateSHA256()
 	artifact.SourceSHA256 = request.SourceSHA256
+	artifact.ArtifactID = identity.CompileAttemptID + ":artifact"
+	artifact.CompileAttemptID = identity.CompileAttemptID
+	artifact.SandboxID = compileSandboxID
+	if err := WriteArtifactOwnership(artifactPath, model.ResourceOwnership{Schema: ownershipSchema, ResourceKind: "artifact", SubmissionID: request.SubmissionID, JudgeJobID: request.JudgeJobID, ExecutionRequestID: request.ExecutionRequestID, ExecutionAttemptID: identity.ExecutionAttemptID, CompileAttemptID: identity.CompileAttemptID, SandboxID: compileSandboxID}); err != nil {
+		result.Compile.Outcome = CompileInfraFailure
+		result.Compile.DiagnosticCode = "ARTIFACT_OWNERSHIP_FAILED"
+		result.PipelineOutcome = PipelineInfraFailure
+		return result, err
+	}
+	if _, err := ValidateArtifactHandoff(ArtifactExpectation{Path: artifactPath, WorkspaceRoot: buildDir, ExecutionAttemptID: identity.ExecutionAttemptID, CompileAttemptID: identity.CompileAttemptID, SandboxID: compileSandboxID, SourceSHA256: request.SourceSHA256, ExpectedHash: artifact.SHA256, MaxBytes: maxArtifactBytes}); err != nil {
+		result.Compile.Outcome = CompileInfraFailure
+		result.Compile.DiagnosticCode = "ARTIFACT_HANDOFF_REJECTED"
+		result.PipelineOutcome = PipelineInfraFailure
+		return result, err
+	}
 	result.Artifact = &artifact
 
 	runtimeBundle := filepath.Join(jobRoot, "runtime")
+	if err := os.Mkdir(runtimeBundle, 0o700); err != nil {
+		result.PipelineOutcome = PipelineInfraFailure
+		return result, err
+	}
 	runtimeRootfs := filepath.Join(runtimeBundle, "rootfs")
 	for _, directory := range []string{"dev", "proc", "tmp", "workspace"} {
 		if err := os.MkdirAll(filepath.Join(runtimeRootfs, directory), 0755); err != nil {
@@ -275,6 +343,10 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 		}
 	}
 	programPath := filepath.Join(runtimeRootfs, "program")
+	if _, err := ValidateArtifactHandoff(ArtifactExpectation{Path: artifactPath, WorkspaceRoot: buildDir, ExecutionAttemptID: identity.ExecutionAttemptID, CompileAttemptID: identity.CompileAttemptID, SandboxID: compileSandboxID, SourceSHA256: request.SourceSHA256, ExpectedHash: artifact.SHA256, MaxBytes: maxArtifactBytes}); err != nil {
+		result.PipelineOutcome = PipelineInfraFailure
+		return result, err
+	}
 	if err := copyFile(artifactPath, programPath, 0555); err != nil {
 		result.PipelineOutcome = PipelineInfraFailure
 		return result, err
@@ -287,8 +359,8 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 	if request.ControlledInputID == "stdin-echo-v1" {
 		stdin = []byte("phase2c1-input\n")
 	}
-	runtimeRun := s.runExecutionStage(ctx, runtimeBundle, "rootfs", true, []string{"/program"},
-		"/workspace", []string{"PATH=/", "LANG=C", "LC_ALL=C"}, stageMounts(1<<20), runtimeLimits, stdin, "")
+	runtimeRun := s.runExecutionStageWithID(ctx, runtimeBundle, "rootfs", true, []string{"/program"},
+		"/workspace", []string{"PATH=/", "LANG=C", "LC_ALL=C"}, stageMounts(1<<20), runtimeLimits, stdin, "", runtimeSandboxID)
 	runtimeResult := classifyRuntime(runtimeRun)
 	result.Runtime = &runtimeResult
 	result.PipelineOutcome = pipelineForRuntime(runtimeResult.Outcome)
@@ -305,11 +377,21 @@ func stageMounts(tmpBytes int64) []bundleMount {
 }
 
 func (s *Supervisor) runExecutionStage(ctx context.Context, bundle, rootfs string, readonly bool, args []string, cwd string, env []string, mounts []bundleMount, limits model.ExecutionLimits, stdin []byte, watchedWorkspace string) stageRun {
+	return s.runExecutionStageWithID(ctx, bundle, rootfs, readonly, args, cwd, env, mounts, limits, stdin, watchedWorkspace, "c2c2-"+strings.TrimPrefix(id(), "sbx-"))
+}
+
+func (s *Supervisor) runExecutionStageWithID(ctx context.Context, bundle, rootfs string, readonly bool, args []string, cwd string, env []string, mounts []bundleMount, limits model.ExecutionLimits, stdin []byte, watchedWorkspace, sandboxID string) stageRun {
 	started := time.Now()
 	if err := os.MkdirAll(bundle, 0700); err != nil {
 		return stageRun{Err: err}
 	}
-	sid := "c2c1-" + strings.TrimPrefix(id(), "sbx-")
+	sid := sandboxID
+	if sid == "" || strings.ContainsAny(sid, "/\\\x00") {
+		return stageRun{Err: errors.New("sandbox identity rejected")}
+	}
+	if err := WriteOwnershipMetadata(bundle, model.ResourceOwnership{Schema: ownershipSchema, ResourceKind: "sandbox", ExecutionAttemptID: sid, SandboxID: sid}); err != nil {
+		return stageRun{Err: err}
+	}
 	request := model.Request{CPUMillis: limits.CPUMillis, MemoryBytes: limits.MemoryBytes, Pids: limits.Pids}
 	config := s.ociConfig(sid, "", request, env)
 	config.Process.Args = append([]string(nil), args...)
@@ -372,7 +454,7 @@ func (s *Supervisor) runExecutionStage(ctx context.Context, bundle, rootfs strin
 	evidence := resource.stop()
 	cleanup := exec.Command(s.Runc, "--systemd-cgroup", "delete", "--force", sid)
 	_ = cleanup.Run()
-	removeErr := os.RemoveAll(bundle)
+	removeErr := removeOwnedExecutionRoot(bundle, sid, sid)
 	clean := guestGone(s.Runc, sid) && removeErr == nil && !pathExists(bundle)
 	exitCode, signal := processExit(err)
 	return stageRun{
@@ -408,6 +490,7 @@ func classifyCompile(run stageRun, rootfs, workspace string) model.StageResult {
 	default:
 		result.Outcome = CompileSucceeded
 	}
+	result.State = compileState(result.Outcome)
 	return result
 }
 
@@ -429,6 +512,7 @@ func classifyRuntime(run stageRun) model.StageResult {
 	default:
 		result.Outcome = ExecutionCompleted
 	}
+	result.State = runtimeState(result.Outcome)
 	return result
 }
 
@@ -438,6 +522,35 @@ func stageResult(run stageRun) model.StageResult {
 		Stdout: strings.ToValidUTF8(run.Stdout, "\uFFFD"), Stderr: strings.ToValidUTF8(run.Stderr, "\uFFFD"),
 		StdoutTruncated: run.StdoutTruncated, StderrTruncated: run.StderrTruncated,
 		WallTimeMS: run.WallTimeMS, Clean: run.Clean, Evidence: run.Evidence,
+		Facts: NormalizeRawExecutionFacts(run),
+	}
+}
+
+func compileState(outcome string) model.ExecutionState {
+	switch outcome {
+	case CompileSucceeded:
+		return model.StateCompileSucceeded
+	case CompileFailed:
+		return model.StateCompileFailed
+	case CompileCancelled:
+		return model.StateCancelled
+	case CompileLimitExceeded:
+		return model.StateRawLimitEvent
+	default:
+		return model.StateInfraFailed
+	}
+}
+
+func runtimeState(outcome string) model.ExecutionState {
+	switch outcome {
+	case ExecutionCompleted:
+		return model.StateRawCompleted
+	case ExecutionCancelled:
+		return model.StateCancelled
+	case ExecutionLimitHit:
+		return model.StateRawLimitEvent
+	default:
+		return model.StateInfraFailed
 	}
 }
 
@@ -516,7 +629,16 @@ func ValidateCompiledArtifact(path, expectedHash string) (model.ArtifactResult, 
 	if !artifactOwnerMatches(info) {
 		return model.ArtifactResult{}, errors.New("compiled artifact owner rejected")
 	}
-	binary, err := elf.Open(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return model.ArtifactResult{}, err
+	}
+	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil || !os.SameFile(info, openedInfo) {
+		return model.ArtifactResult{}, errors.New("compiled artifact replaced during validation")
+	}
+	binary, err := elf.NewFile(file)
 	if err != nil {
 		return model.ArtifactResult{}, errors.New("compiled artifact is not ELF")
 	}
@@ -526,12 +648,18 @@ func ValidateCompiledArtifact(path, expectedHash string) (model.ArtifactResult, 
 			return model.ArtifactResult{}, errors.New("compiled artifact must be statically linked")
 		}
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return model.ArtifactResult{}, err
 	}
-	digest := sha256.Sum256(data)
-	hash := hex.EncodeToString(digest[:])
+	digest := sha256.New()
+	if _, err := io.Copy(digest, file); err != nil {
+		return model.ArtifactResult{}, err
+	}
+	hash := hex.EncodeToString(digest.Sum(nil))
+	finalInfo, err := os.Lstat(path)
+	if err != nil || !os.SameFile(info, finalInfo) || finalInfo.Size() != info.Size() {
+		return model.ArtifactResult{}, errors.New("compiled artifact replaced during validation")
+	}
 	if expectedHash != "" && hash != expectedHash {
 		return model.ArtifactResult{}, errors.New("compiled artifact hash mismatch")
 	}

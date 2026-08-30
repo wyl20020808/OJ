@@ -1,9 +1,11 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Redis } from 'ioredis';
 import {
   JudgeQueueService,
   RedisJudgeJobRepository,
+  type JudgeJob,
+  type RawExecutionResult,
 } from '../apps/api/src/modules/judge/index.js';
 
 const enabled = process.env.OJPLATFORM_QUEUE_REDIS_QUALIFICATION === 'true';
@@ -27,6 +29,51 @@ const create = (suffix: string) =>
   new JudgeQueueService(
     new RedisJudgeJobRepository(client, `${keyPrefix}:${suffix}`),
   );
+
+const realInput = (suffix: string) => {
+  const source = `#include <iostream>\nint main(){std::cout << "${suffix}\\n";}\n`;
+  return {
+    ...input(suffix),
+    languageId: 'cpp20',
+    executionMode: 'REAL_SANDBOXED_EXECUTION' as const,
+    languageProfileId: 'cpp20-gcc-13-v1' as const,
+    sourceSnapshotRef: `${namespace}:snapshot:${suffix}`,
+    sourceBytes: source,
+    sourceSha256: createHash('sha256').update(source).digest('hex'),
+    controlledInputId: 'stdin-empty-v1' as const,
+  };
+};
+
+const realResult = (job: JudgeJob): RawExecutionResult => ({
+  protocol_version: '2C.1',
+  execution_request_id: job.executionRequestId!,
+  judge_job_id: job.id,
+  submission_id: job.submissionId,
+  attempt: job.attempt,
+  execution_attempt_id: job.executionAttemptId!,
+  compile_attempt_id: `${job.executionRequestId}:compile`,
+  runtime_attempt_id: `${job.executionRequestId}:runtime`,
+  result_generation: job.resultGeneration!,
+  correlation_id: job.id,
+  language_profile_id: 'cpp20-gcc-13-v1',
+  source_sha256: job.sourceSha256!,
+  pipeline_outcome: 'PIPELINE_COMPLETED',
+  compile: {
+    outcome: 'COMPILE_SUCCEEDED',
+    clean: true,
+    raw_facts: { process_exited: true, exit_code: 0 },
+  },
+  runtime: {
+    outcome: 'EXECUTION_COMPLETED',
+    stdout: 'restart-authority\n',
+    stderr: '',
+    clean: true,
+    raw_facts: { process_exited: true, exit_code: 0 },
+  },
+  started_at: '2026-08-30T00:00:00.000Z',
+  completed_at: '2026-08-30T00:00:01.000Z',
+  clean: true,
+});
 
 describeRedis('real Redis judge queue recovery qualification', () => {
   beforeAll(async () => {
@@ -130,5 +177,50 @@ describeRedis('real Redis judge queue recovery qualification', () => {
     expect(await recoveredQueue.claim('reconnected')).toMatchObject({
       job: { id: initial.job.id, status: 'LEASED_FAKE' },
     });
+  });
+
+  it('LIR-11/16/20 preserves real attempt authority across API repository restart', async () => {
+    const firstApi = create('phase2c2-restart');
+    const { job } = await firstApi.enqueue(realInput('restart'));
+    const first = await firstApi.claim('worker-before-restart', 1);
+    expect(first?.job).toMatchObject({
+      executionRequestId: `${job.id}:1`,
+      executionAttemptId: `${job.id}:1:attempt`,
+      resultGeneration: 1,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const restartedApi = create('phase2c2-restart');
+    expect(await restartedApi.recoverStale()).toBe(1);
+    const second = await restartedApi.claim('worker-after-restart');
+    expect(second?.job).toMatchObject({
+      id: job.id,
+      attempt: 2,
+      executionRequestId: `${job.id}:2`,
+      executionAttemptId: `${job.id}:2:attempt`,
+      resultGeneration: 2,
+    });
+    await expect(
+      restartedApi.completeReal(
+        first!.job.id,
+        first!.leaseToken,
+        realResult(first!.job),
+      ),
+    ).rejects.toThrow('conflict');
+    await expect(
+      restartedApi.completeReal(
+        second!.job.id,
+        second!.leaseToken,
+        realResult(second!.job),
+      ),
+    ).resolves.toMatchObject({ status: 'COMPLETED', resultGeneration: 2 });
+
+    const thirdApi = create('phase2c2-restart');
+    await expect(thirdApi.enqueue(realInput('restart'))).resolves.toMatchObject(
+      {
+        created: false,
+        job: { id: job.id, status: 'COMPLETED', resultGeneration: 2 },
+      },
+    );
   });
 });

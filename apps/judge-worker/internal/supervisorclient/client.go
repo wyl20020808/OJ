@@ -46,6 +46,10 @@ type Result struct {
 	JudgeJobID         string          `json:"judge_job_id"`
 	SubmissionID       string          `json:"submission_id"`
 	Attempt            int             `json:"attempt"`
+	ExecutionAttemptID string          `json:"execution_attempt_id"`
+	CompileAttemptID   string          `json:"compile_attempt_id"`
+	RuntimeAttemptID   string          `json:"runtime_attempt_id"`
+	ResultGeneration   int64           `json:"result_generation"`
 	SourceSHA256       string          `json:"source_sha256"`
 	PipelineOutcome    string          `json:"pipeline_outcome"`
 	Compile            json.RawMessage `json:"compile"`
@@ -168,7 +172,7 @@ func validateRequest(request Request) error {
 
 func validateResult(request Request, result Result) error {
 	allowed := map[string]bool{"PIPELINE_COMPLETED": true, "PIPELINE_COMPILE_FAILED": true, "PIPELINE_LIMIT_HIT": true, "PIPELINE_CANCELLED": true, "PIPELINE_INFRA_FAILURE": true}
-	if result.ProtocolVersion != ProtocolVersion || result.ExecutionRequestID != request.ExecutionRequestID || result.JudgeJobID != request.JudgeJobID || result.SubmissionID != request.SubmissionID || result.Attempt != request.Attempt || result.SourceSHA256 != request.SourceSHA256 || !allowed[result.PipelineOutcome] || len(result.Compile) == 0 || result.StartedAt.IsZero() || result.CompletedAt.Before(result.StartedAt) {
+	if result.ProtocolVersion != ProtocolVersion || result.ExecutionRequestID != request.ExecutionRequestID || result.JudgeJobID != request.JudgeJobID || result.SubmissionID != request.SubmissionID || result.Attempt != request.Attempt || result.ExecutionAttemptID != request.ExecutionRequestID+":attempt" || result.CompileAttemptID != request.ExecutionRequestID+":compile" || result.RuntimeAttemptID != request.ExecutionRequestID+":runtime" || result.ResultGeneration != int64(request.Attempt) || result.SourceSHA256 != request.SourceSHA256 || !allowed[result.PipelineOutcome] || len(result.Compile) == 0 || result.StartedAt.IsZero() || result.CompletedAt.Before(result.StartedAt) {
 		return errors.New("invalid real execution result")
 	}
 	return nil

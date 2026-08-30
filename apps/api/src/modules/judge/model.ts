@@ -17,6 +17,10 @@ export type RawExecutionResult = {
   judge_job_id: string;
   submission_id: string;
   attempt: number;
+  execution_attempt_id?: string;
+  compile_attempt_id?: string;
+  runtime_attempt_id?: string;
+  result_generation?: number;
   correlation_id: string;
   language_profile_id: 'cpp20-gcc-13-v1';
   source_sha256: string;
@@ -60,6 +64,11 @@ export type JudgeJob = {
   completedAt?: string | undefined;
   createdAt: string;
   updatedAt: string;
+  executionRequestId?: string | undefined;
+  executionAttemptId?: string | undefined;
+  resultGeneration?: number | undefined;
+  rawResultDigest?: string | undefined;
+  cancellationGeneration?: number | undefined;
 };
 export type JudgeJobCreateInput = {
   submissionId: string;
