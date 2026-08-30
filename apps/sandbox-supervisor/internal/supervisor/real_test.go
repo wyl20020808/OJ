@@ -715,6 +715,340 @@ func TestRealRuncRootlessModeMemoryScope(t *testing.T) {
 	}
 }
 
+func TestRealRuncTrueNonRootQualification(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("run this qualification as the dedicated non-root user")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	root, err := os.MkdirTemp("/tmp", "ojp-r34-nonroot-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	stateRoot := filepath.Join(root, "runc-state")
+	if err := os.MkdirAll(stateRoot, 0700); err != nil {
+		t.Fatal(err)
+	}
+	wrapper := filepath.Join(root, "runc-wrapper")
+	script := fmt.Sprintf("#!/bin/sh\nexec /usr/bin/runc --root %s \"$@\"\n", stateRoot)
+	if err := os.WriteFile(wrapper, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	probeBinary := filepath.Join(root, "trusted-probe")
+	build := exec.CommandContext(ctx, "go", "build", "-o", probeBinary, "../../cmd/trusted-probe")
+	build.Dir, _ = os.Getwd()
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("probe build: %v %s", err, out)
+	}
+	hash, err := probe.ArtifactHash(probeBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := model.Request{ContractVersion: model.ContractVersion, SandboxJobID: "r34-nonroot", JudgeJobID: "r34-nonroot-judge", WorkerID: "worker", WorkerInstanceID: "instance", TrustedProbeID: probe.ID, ProbeVersion: probe.Version, ProbeHash: hash, PolicyIDs: []string{"default"}, CPUMillis: 100, WallTimeMS: 4000, MemoryBytes: 64 << 20, OutputBytes: 64 << 10, Pids: 16, DeadlineAt: time.Now().Add(time.Minute), CorrelationID: "r34-nonroot", ExecutionMode: "SANDBOX_PROBE_QUALIFICATION"}
+	env := []string{"PATH=/usr/bin:/bin", "LANG=C", "XDG_RUNTIME_DIR=" + os.Getenv("XDG_RUNTIME_DIR"), "DBUS_SESSION_BUS_ADDRESS=" + os.Getenv("DBUS_SESSION_BUS_ADDRESS")}
+	t.Logf("non-root host identity: uid=%d euid=%d gid=%d XDG_RUNTIME_DIR=%s DBUS_SESSION_BUS_ADDRESS=%s", os.Getuid(), os.Geteuid(), os.Getgid(), os.Getenv("XDG_RUNTIME_DIR"), os.Getenv("DBUS_SESSION_BUS_ADDRESS"))
+
+	directBundle := filepath.Join(root, "direct-bundle")
+	if err := makeQualificationBundle(directBundle, probeBinary); err != nil {
+		t.Fatal(err)
+	}
+	directID := fmt.Sprintf("r34-direct-%d", time.Now().UnixNano())
+	directSupervisor := New(root, wrapper, probeBinary)
+	directConfig := directSupervisor.ociConfig(directID, "/workspace", r, []string{"PATH=/usr/bin:/bin", "LANG=C", "OJPLATFORM_TRUSTED_PROFILE=sleep"})
+	directConfig.Linux.UIDMappings[0]["hostID"] = uint32(os.Getuid())
+	directConfig.Linux.GIDMappings[0]["hostID"] = uint32(os.Getgid())
+	directSlice := os.Getenv("OJPLATFORM_R34_DIRECT_SLICE")
+	if directSlice == "" {
+		directSlice = "user.slice"
+	}
+	directConfig.Linux.CgroupsPath = directSlice + ":runc:" + directID
+	if os.Getenv("OJPLATFORM_R34_DIRECT_UNIFIED") == "true" {
+		directConfig.Linux.Resources.Unified = map[string]string{"memory.max": fmt.Sprintf("%d", r.MemoryBytes), "pids.max": fmt.Sprintf("%d", r.Pids)}
+	}
+	encoded, err := json.MarshalIndent(directConfig, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directBundle, "config.json"), encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	rootlessMode := os.Getenv("OJPLATFORM_R34_DIRECT_ROOTLESS")
+	if rootlessMode == "" {
+		rootlessMode = "true"
+	}
+	directArgs := []string{"--debug", "--systemd-cgroup", "--rootless=" + rootlessMode, "run", "--bundle", directBundle, directID}
+	direct := exec.CommandContext(ctx, wrapper, directArgs...)
+	direct.Env = env
+	var directOut, directErr bytes.Buffer
+	direct.Stdout, direct.Stderr = &directOut, &directErr
+	directResult := make(chan error, 1)
+	go func() { directResult <- direct.Run() }()
+	directCgroup := waitForNonRootCgroup(t, directID, 4*time.Second)
+	if directCgroup != "" {
+		t.Logf("direct non-root ControlGroup=%s", directCgroup)
+		if !waitForFiniteResourceFiles(directCgroup, r.MemoryBytes, int64(r.Pids), 4*time.Second) {
+			t.Fatalf("direct non-root cgroup did not receive finite resources: %s", directCgroup)
+		}
+		logR32ScopeProperties(t, directCgroup)
+		logCgroupFiles(t, "direct non-root", directCgroup)
+	} else {
+		t.Fatalf("direct non-root cgroup was not created")
+	}
+	directRunErr := <-directResult
+	t.Logf("direct non-root runc exit=%v stdout=%s stderr=%s", directRunErr, strings.TrimSpace(directOut.String()), strings.TrimSpace(directErr.String()))
+	cleanup := exec.CommandContext(ctx, wrapper, "--systemd-cgroup", "delete", "--force", directID)
+	cleanup.Env = env
+	_ = cleanup.Run()
+
+	s := newWithNonRootUserBusProfile(root, wrapper, probeBinary, "sleep", uint32(os.Getuid()))
+	resultCh := make(chan model.Result, 1)
+	go func() {
+		result, _ := s.Run(ctx, r)
+		resultCh <- result
+	}()
+	supervisorCgroup := waitForNonRootCgroup(t, "phase2b", 4*time.Second)
+	if supervisorCgroup != "" {
+		t.Logf("non-root Supervisor ControlGroup=%s", supervisorCgroup)
+		if !waitForFiniteResourceFiles(supervisorCgroup, r.MemoryBytes, int64(r.Pids), 4*time.Second) {
+			t.Fatalf("non-root Supervisor cgroup did not receive finite resources: %s", supervisorCgroup)
+		}
+		logR32ScopeProperties(t, supervisorCgroup)
+		logCgroupFiles(t, "non-root Supervisor", supervisorCgroup)
+	} else {
+		t.Fatalf("non-root Supervisor cgroup was not created")
+	}
+	supervisorResult := <-resultCh
+	t.Logf("non-root Supervisor result: outcome=%s clean=%t diagnostic=%s", supervisorResult.Outcome, supervisorResult.Clean, supervisorResult.Diagnostic)
+}
+
+func makeQualificationBundle(bundle, probeBinary string) error {
+	rootfs := filepath.Join(bundle, "rootfs")
+	for _, path := range []string{filepath.Join(rootfs, "dev"), filepath.Join(rootfs, "proc"), filepath.Join(rootfs, "tmp"), filepath.Join(rootfs, "workspace")} {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return err
+		}
+	}
+	return copyFile(probeBinary, filepath.Join(rootfs, "probe"), 0755)
+}
+
+func waitForNonRootCgroup(t *testing.T, marker string, timeout time.Duration) string {
+	t.Helper()
+	var current string
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) && current == "" {
+		_ = filepath.WalkDir("/sys/fs/cgroup", func(path string, entry os.DirEntry, err error) error {
+			if err == nil && entry.IsDir() && strings.Contains(entry.Name(), marker) && strings.HasSuffix(entry.Name(), ".scope") {
+				current = path
+				return filepath.SkipDir
+			}
+			return nil
+		})
+		if current == "" {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	return current
+}
+
+func waitForFiniteResourceFiles(path string, memory, pids int64, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		memoryData, memoryErr := os.ReadFile(filepath.Join(path, "memory.max"))
+		pidsData, pidsErr := os.ReadFile(filepath.Join(path, "pids.max"))
+		if memoryErr == nil && pidsErr == nil && strings.TrimSpace(string(memoryData)) == fmt.Sprintf("%d", memory) && strings.TrimSpace(string(pidsData)) == fmt.Sprintf("%d", pids) {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return false
+}
+
+func nonRootRuntimeEnv() []string {
+	return []string{"HOME=/home/oj-sandbox", "PATH=/usr/bin:/bin", "LANG=C", "XDG_RUNTIME_DIR=" + os.Getenv("XDG_RUNTIME_DIR"), "DBUS_SESSION_BUS_ADDRESS=" + os.Getenv("DBUS_SESSION_BUS_ADDRESS")}
+}
+
+func eventValue(text, key string) int64 {
+	for _, line := range strings.Split(text, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == key {
+			value, _ := strconv.ParseInt(fields[1], 10, 64)
+			return value
+		}
+	}
+	return 0
+}
+
+func runDirectNonRootPressure(t *testing.T, profile string, memory int64, pids int) (string, string, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root, err := os.MkdirTemp("/tmp", "ojp-r34-pressure-")
+	if err != nil {
+		return "", "", err
+	}
+	defer os.RemoveAll(root)
+	stateRoot := filepath.Join(root, "runc-state")
+	if err := os.MkdirAll(stateRoot, 0700); err != nil {
+		return "", "", err
+	}
+	wrapper := filepath.Join(root, "runc-wrapper")
+	if err := os.WriteFile(wrapper, []byte(fmt.Sprintf("#!/bin/sh\nexec /usr/bin/runc --root %s \"$@\"\n", stateRoot)), 0700); err != nil {
+		return "", "", err
+	}
+	probeBinary := filepath.Join(root, "trusted-probe")
+	build := exec.CommandContext(ctx, "go", "build", "-o", probeBinary, "../../cmd/trusted-probe")
+	build.Dir, _ = os.Getwd()
+	if out, err := build.CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("probe build: %v %s", err, out)
+	}
+	bundle := filepath.Join(root, "bundle")
+	if err := makeQualificationBundle(bundle, probeBinary); err != nil {
+		return "", "", err
+	}
+	id := fmt.Sprintf("r34-pressure-%d", time.Now().UnixNano())
+	s := New(root, wrapper, probeBinary)
+	r := model.Request{CPUMillis: 100, MemoryBytes: memory, Pids: pids}
+	config := s.ociConfig(id, "/workspace", r, []string{"PATH=/usr/bin:/bin", "LANG=C", "OJPLATFORM_TRUSTED_PROFILE=" + profile})
+	config.Linux.UIDMappings[0]["hostID"] = uint32(os.Getuid())
+	config.Linux.GIDMappings[0]["hostID"] = uint32(os.Getgid())
+	config.Linux.CgroupsPath = "user.slice:runc:" + id
+	encoded, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return "", "", err
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "config.json"), encoded, 0600); err != nil {
+		return "", "", err
+	}
+	cmd := exec.CommandContext(ctx, wrapper, "--debug", "--systemd-cgroup", "--rootless=true", "run", "--bundle", bundle, id)
+	cmd.Env = nonRootRuntimeEnv()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	done := make(chan error, 1)
+	go func() { done <- cmd.Run() }()
+	cgroup := waitForNonRootCgroup(t, id, 4*time.Second)
+	if cgroup == "" || !waitForFiniteResourceFiles(cgroup, memory, int64(pids), 4*time.Second) {
+		return "", "", fmt.Errorf("pressure cgroup did not become finite: %s", cgroup)
+	}
+	t.Logf("direct pressure profile=%s ControlGroup=%s memory.max=%d pids.max=%d", profile, cgroup, memory, pids)
+	var memoryEvents, pidsEvents string
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if data, readErr := os.ReadFile(filepath.Join(cgroup, "memory.events")); readErr == nil {
+			memoryEvents = strings.TrimSpace(string(data))
+		}
+		if data, readErr := os.ReadFile(filepath.Join(cgroup, "pids.events")); readErr == nil {
+			pidsEvents = strings.TrimSpace(string(data))
+		}
+		if (profile == "memory" && (eventValue(memoryEvents, "oom") > 0 || eventValue(memoryEvents, "oom_kill") > 0 || eventValue(memoryEvents, "max") > 0)) || (profile == "pids" && eventValue(pidsEvents, "max") > 0) {
+			break
+		}
+		select {
+		case <-done:
+			goto cleanup
+		default:
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+cleanup:
+	runErr := <-done
+	cleanupCmd := exec.CommandContext(ctx, wrapper, "--systemd-cgroup", "delete", "--force", id)
+	cleanupCmd.Env = nonRootRuntimeEnv()
+	_ = cleanupCmd.Run()
+	return memoryEvents, pidsEvents, runErr
+}
+
+func TestRealR34NonRootKernelEnforcement(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true for real runc qualification")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("run this qualification as the dedicated non-root user")
+	}
+	memoryEvents, _, memoryErr := runDirectNonRootPressure(t, "memory", 32<<20, 16)
+	t.Logf("direct memory pressure: err=%v memory.events=%s", memoryErr, memoryEvents)
+	if eventValue(memoryEvents, "max") == 0 && eventValue(memoryEvents, "oom") == 0 && eventValue(memoryEvents, "oom_kill") == 0 {
+		t.Fatalf("memory pressure produced no kernel memory.events evidence: %q", memoryEvents)
+	}
+	_, pidsEvents, pidsErr := runDirectNonRootPressure(t, "pids", 64<<20, 16)
+	t.Logf("direct pids pressure: err=%v pids.events=%s", pidsErr, pidsEvents)
+	if eventValue(pidsEvents, "max") == 0 {
+		t.Fatalf("pids pressure produced no kernel pids.events max evidence: %q", pidsEvents)
+	}
+}
+
+func TestRealR34NonRootThreePressureCycles(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" || os.Getuid() == 0 {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true and run as the dedicated non-root user")
+	}
+	for cycle := 1; cycle <= 3; cycle++ {
+		memoryEvents, _, memoryErr := runDirectNonRootPressure(t, "memory", 32<<20, 16)
+		_, pidsEvents, pidsErr := runDirectNonRootPressure(t, "pids", 64<<20, 16)
+		t.Logf("cycle=%d memory err=%v events=%s; pids err=%v events=%s", cycle, memoryErr, memoryEvents, pidsErr, pidsEvents)
+		if eventValue(memoryEvents, "max") == 0 && eventValue(memoryEvents, "oom") == 0 && eventValue(memoryEvents, "oom_kill") == 0 {
+			t.Fatalf("cycle %d memory enforcement missing: %q", cycle, memoryEvents)
+		}
+		if eventValue(pidsEvents, "max") == 0 {
+			t.Fatalf("cycle %d pids enforcement missing: %q", cycle, pidsEvents)
+		}
+	}
+}
+
+func TestRealR34NonRootConcurrentLimits(t *testing.T) {
+	if os.Getenv("OJPLATFORM_SANDBOX_REAL_TEST") != "true" || os.Getuid() == 0 {
+		t.Skip("set OJPLATFORM_SANDBOX_REAL_TEST=true and run as the dedicated non-root user")
+	}
+	type result struct {
+		profile      string
+		memoryEvents string
+		pidsEvents   string
+		err          error
+	}
+	results := make(chan result, 2)
+	go func() {
+		memoryEvents, pidsEvents, err := runDirectNonRootPressure(t, "memory", 32<<20, 16)
+		results <- result{profile: "memory", memoryEvents: memoryEvents, pidsEvents: pidsEvents, err: err}
+	}()
+	go func() {
+		memoryEvents, pidsEvents, err := runDirectNonRootPressure(t, "pids", 64<<20, 8)
+		results <- result{profile: "pids", memoryEvents: memoryEvents, pidsEvents: pidsEvents, err: err}
+	}()
+	first, second := <-results, <-results
+	for _, got := range []result{first, second} {
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+	}
+	t.Logf("concurrent limit results: first memory.events=%s pids.events=%s; second memory.events=%s pids.events=%s", first.memoryEvents, first.pidsEvents, second.memoryEvents, second.pidsEvents)
+	memoryHit := func(events string) bool {
+		return eventValue(events, "max") > 0 || eventValue(events, "oom") > 0 || eventValue(events, "oom_kill") > 0
+	}
+	pidsHit := func(events string) bool { return eventValue(events, "max") > 0 }
+	for _, got := range []result{first, second} {
+		if got.profile == "memory" && !memoryHit(got.memoryEvents) {
+			t.Fatalf("concurrent memory sandbox missing memory.events evidence: %q", got.memoryEvents)
+		}
+		if got.profile == "pids" && !pidsHit(got.pidsEvents) {
+			t.Fatalf("concurrent pids sandbox missing pids.events evidence: %q", got.pidsEvents)
+		}
+	}
+}
+
+func logCgroupFiles(t *testing.T, label, path string) {
+	t.Helper()
+	for _, name := range []string{"memory.max", "memory.current", "memory.events", "pids.max", "pids.current", "pids.events", "cgroup.controllers", "cgroup.subtree_control", "cgroup.type", "cgroup.procs"} {
+		data, err := os.ReadFile(filepath.Join(path, name))
+		if err != nil {
+			t.Logf("%s %s unavailable: %v", label, name, err)
+			continue
+		}
+		t.Logf("%s %s=%s", label, name, strings.TrimSpace(string(data)))
+	}
+}
+
 func runCgroupfsMode(t *testing.T, profile, mode string) model.Result {
 	return runCgroupfsModeLimits(t, profile, mode, 8<<20, 4)
 }
