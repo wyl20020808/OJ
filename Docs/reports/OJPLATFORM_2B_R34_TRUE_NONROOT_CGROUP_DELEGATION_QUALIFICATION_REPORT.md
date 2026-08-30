@@ -6,7 +6,7 @@
 - Worktree: `D:\OJPlatform-worktrees\phase1b-problem-authoring`
 - Branch: `codex/phase2b-sandbox-runtime`
 - Starting HEAD: `7bb522918b73369bf5c621efc027174930b4c7aa`
-- Final HEAD: filled after the scoped commit below
+- Final HEAD at qualification commit: `e1ea0fc` (report finalization is the immediately following documentation commit)
 - Result: `PASS` for this qualification; production service migration remains a follow-up recommendation.
 
 ## Host Identity and Changes
@@ -142,10 +142,11 @@ The focused tests were run as `oj-sandbox` with `OJPLATFORM_SANDBOX_REAL_TEST=tr
 
 ## Commit and Final State
 
-- Commit: filled after commit
+- Qualification commit: `e1ea0fc` (`test: qualify true non-root cgroup delegation`)
+- Report finalization commit: recorded by `git log` after this file update
 - `PROJECT_STATUS` was intentionally not modified.
 - No merge, R4, Lead Integration, Phase 2C, or production Supervisor migration was started.
-- Final worktree status: filled after commit; must be clean.
+- Final worktree status: clean after the report finalization commit.
 
 ## Completion
 
