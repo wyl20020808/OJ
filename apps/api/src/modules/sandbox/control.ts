@@ -12,17 +12,38 @@ const PROBE_ID = 'SANDBOX_PROBE_QUALIFICATION';
 const PROBE_VERSION = '1';
 const POLICY_VERSION = 'policy-2b.1';
 const RESOURCE_ID = 'sandbox-primary';
+const TRUSTED_PROBE_IDS = new Set([
+  PROBE_ID,
+  'SANDBOX_PROBE_CANCELLATION',
+  'SANDBOX_PROBE_CLEANUP_FAILURE',
+  'SANDBOX_PROBE_CPU_LIMIT',
+  'SANDBOX_PROBE_MEMORY_LIMIT',
+  'SANDBOX_PROBE_PIDS_LIMIT',
+  'SANDBOX_PROBE_OUTPUT_LIMIT',
+  'SANDBOX_PROBE_WORKSPACE_LIMIT',
+  'SANDBOX_PROBE_WALL_TIMEOUT',
+  'SANDBOX_PROBE_ABNORMAL_EXIT',
+  'SANDBOX_PROBE_CONCURRENT_RESOURCES',
+]);
+
+type SandboxRuntimeStatus = SandboxStatusReference & {
+  lastProbeId?: string;
+  lastProbeOutcome?: string;
+  lastProbePass?: boolean;
+  lastProbeKind?: string;
+};
 
 export type SandboxRuntime = {
-  resource(): Promise<SandboxStatusReference>;
+  resource(): Promise<SandboxRuntimeStatus>;
   probes(): readonly TrustedProbe[];
   start(
     probe: TrustedProbe,
     correlationId: string,
-  ): Promise<SandboxStatusReference>;
-  status(probeId: string): Promise<SandboxStatusReference>;
-  cancel(probeId: string): Promise<SandboxStatusReference>;
-  verifyCleanup(): Promise<SandboxStatusReference>;
+  ): Promise<SandboxRuntimeStatus>;
+  status(probeId: string): Promise<SandboxRuntimeStatus>;
+  cancel(probeId: string): Promise<SandboxRuntimeStatus>;
+  verifyCleanup(): Promise<SandboxRuntimeStatus>;
+  recoverCleanup(): Promise<SandboxRuntimeStatus>;
   close(): Promise<void>;
 };
 
@@ -37,6 +58,22 @@ const baseResource = (configured: boolean): SandboxStatusReference => ({
   cleanupStatus: 'NOT_REQUIRED',
   ...(configured ? {} : { safeFailureCategory: 'SUPERVISOR_NOT_CONFIGURED' }),
 });
+
+const clearFailure = (status: SandboxRuntimeStatus): SandboxRuntimeStatus => {
+  const next = { ...status };
+  delete next.safeFailureCategory;
+  return next;
+};
+
+const clearProbeResult = (
+  status: SandboxRuntimeStatus,
+): SandboxRuntimeStatus => {
+  const next = { ...status };
+  delete next.lastProbeOutcome;
+  delete next.lastProbePass;
+  delete next.lastProbeKind;
+  return next;
+};
 
 function unavailableRuntime(): SandboxRuntime {
   const current = baseResource(false);
@@ -57,6 +94,9 @@ function unavailableRuntime(): SandboxRuntime {
       throw new Error('SUPERVISOR_NOT_CONFIGURED');
     },
     async verifyCleanup() {
+      throw new Error('SUPERVISOR_NOT_CONFIGURED');
+    },
+    async recoverCleanup() {
       throw new Error('SUPERVISOR_NOT_CONFIGURED');
     },
     async close() {},
@@ -109,7 +149,7 @@ async function createSupervisorProtocolRuntime(
   const catalog = listed.items
     .filter(
       (item) =>
-        item.probe_id === PROBE_ID &&
+        TRUSTED_PROBE_IDS.has(item.probe_id) &&
         item.version === PROBE_VERSION &&
         /^[a-f0-9]{64}$/.test(item.sha256),
     )
@@ -121,50 +161,150 @@ async function createSupervisorProtocolRuntime(
       immutableArtifactRef: 'sandbox-supervisor/trusted-probe',
       timeoutMs: item.timeout_ms,
     }));
-  let current = baseResource(catalog.length === 1);
+  let current: SandboxRuntimeStatus = baseResource(
+    catalog.some((item) => item.probeId === PROBE_ID),
+  );
   let activeProbe: string | undefined;
+  let availabilityLost = false;
+  let cleanupUncertain = false;
   const project = (result: {
     outcome?: string;
     clean?: boolean;
     completed_at?: string;
-  }): SandboxStatusReference => {
-    const passed =
-      result.outcome === 'SANDBOX_PROBE_SUCCEEDED' && result.clean === true;
+    qualification_pass?: boolean;
+    qualifies_sandbox?: boolean;
+    qualification_kind?: string;
+    trusted_probe_id?: string;
+  }): SandboxRuntimeStatus => {
+    const cleanupFailed = result.clean === false;
+    const passed = result.qualification_pass === true && !cleanupFailed;
+    const qualifiesSandbox = passed && result.qualifies_sandbox === true;
+    if (cleanupFailed) {
+      return {
+        ...current,
+        state: 'FAILED',
+        lifecycleState: 'CLEANUP_FAILURE',
+        qualificationStatus: 'FAIL',
+        backendStatus: 'DEGRADED',
+        degraded: true,
+        cleanupStatus: 'FAILED',
+        safeFailureCategory: 'QUALIFICATION_CLEANUP_FAILURE',
+        ...(result.completed_at
+          ? { lastQualificationAt: result.completed_at }
+          : {}),
+        ...(result.trusted_probe_id
+          ? { lastProbeId: result.trusted_probe_id }
+          : {}),
+        ...(result.outcome ? { lastProbeOutcome: result.outcome } : {}),
+        lastProbePass: false,
+        ...(result.qualification_kind
+          ? { lastProbeKind: result.qualification_kind }
+          : {}),
+      };
+    }
+    if (passed) {
+      return {
+        ...clearFailure(current),
+        state: 'READY',
+        lifecycleState: 'CLOSED',
+        qualificationStatus: qualifiesSandbox
+          ? 'PASS'
+          : current.qualificationStatus,
+        backendStatus: qualifiesSandbox ? 'QUALIFIED' : current.backendStatus,
+        degraded: false,
+        cleanupStatus: 'VERIFIED',
+        ...(result.completed_at && qualifiesSandbox
+          ? { lastQualificationAt: result.completed_at }
+          : {}),
+        ...(result.trusted_probe_id
+          ? { lastProbeId: result.trusted_probe_id }
+          : {}),
+        ...(result.outcome ? { lastProbeOutcome: result.outcome } : {}),
+        lastProbePass: true,
+        ...(result.qualification_kind
+          ? { lastProbeKind: result.qualification_kind }
+          : {}),
+      };
+    }
     return {
       ...current,
-      state: passed ? 'READY' : 'FAILED',
-      lifecycleState: passed ? 'CLOSED' : 'CLEANUP_FAILURE',
-      qualificationStatus: passed ? 'PASS' : 'FAIL',
-      backendStatus: passed ? 'QUALIFIED' : 'DEGRADED',
-      degraded: !passed,
+      state: 'FAILED',
+      lifecycleState: 'EXIT',
+      qualificationStatus: 'FAIL',
+      backendStatus: 'DEGRADED',
+      degraded: true,
       cleanupStatus: result.clean ? 'VERIFIED' : 'FAILED',
       ...(result.completed_at
         ? { lastQualificationAt: result.completed_at }
         : {}),
-      ...(passed ? {} : { safeFailureCategory: 'PROBE_OR_CLEANUP_FAILURE' }),
+      safeFailureCategory: 'PROBE_QUALIFICATION_FAILED',
+      ...(result.trusted_probe_id
+        ? { lastProbeId: result.trusted_probe_id }
+        : {}),
+      ...(result.outcome ? { lastProbeOutcome: result.outcome } : {}),
+      lastProbePass: false,
+      ...(result.qualification_kind
+        ? { lastProbeKind: result.qualification_kind }
+        : {}),
+    };
+  };
+  const unavailable = (lostActiveProbe: boolean) => {
+    cleanupUncertain ||= lostActiveProbe;
+    availabilityLost = true;
+    activeProbe = undefined;
+    current = {
+      ...current,
+      state: 'DEGRADED',
+      lifecycleState: cleanupUncertain ? 'CLEANUP_FAILURE' : 'EXIT',
+      qualificationStatus: 'PENDING',
+      backendStatus: 'DEGRADED',
+      degraded: true,
+      cleanupStatus: cleanupUncertain ? 'FAILED' : current.cleanupStatus,
+      safeFailureCategory: cleanupUncertain
+        ? 'SUPERVISOR_LOST_DURING_PROBE'
+        : 'SUPERVISOR_UNAVAILABLE',
+    };
+  };
+  const reconnect = () => {
+    availabilityLost = false;
+    current = {
+      ...(cleanupUncertain ? current : clearFailure(current)),
+      state: cleanupUncertain ? 'FAILED' : 'READY',
+      lifecycleState: cleanupUncertain ? 'CLEANUP_FAILURE' : 'VERIFY_CLEAN',
+      qualificationStatus: 'PENDING',
+      backendStatus: 'IMPLEMENTED',
+      degraded: cleanupUncertain,
+      cleanupStatus: cleanupUncertain ? 'FAILED' : 'NOT_REQUIRED',
     };
   };
   const refresh = async () => {
     if (activeProbe) {
+      const requestedProbe = activeProbe;
       try {
         const result = await response<{
           outcome?: string;
           clean?: boolean;
           completed_at?: string;
+          qualification_pass?: boolean;
+          qualifies_sandbox?: boolean;
+          qualification_kind?: string;
+          trusted_probe_id?: string;
         }>(`/v1/probes/status?probe_id=${encodeURIComponent(activeProbe)}`);
         if (result.outcome && result.outcome !== 'SANDBOX_PROBE_RUNNING') {
           activeProbe = undefined;
           current = project(result);
         }
       } catch {
-        current = {
-          ...current,
-          state: 'DEGRADED',
-          backendStatus: 'DEGRADED',
-          degraded: true,
-          safeFailureCategory: 'SUPERVISOR_UNAVAILABLE',
-        };
+        unavailable(requestedProbe !== undefined);
       }
+      return current;
+    }
+    try {
+      const health = await response<{ status?: string }>('/v1/health');
+      if (health.status !== 'ok') throw new Error('SUPERVISOR_UNHEALTHY');
+      if (availabilityLost) reconnect();
+    } catch {
+      unavailable(false);
     }
     return current;
   };
@@ -186,28 +326,29 @@ async function createSupervisorProtocolRuntime(
       await response('/v1/probes/start', {
         method: 'POST',
         body: JSON.stringify({
-          ProbeID: selected.probeId,
-          Version: selected.version,
-          Hash: selected.sha256,
-          CorrelationID: correlationId,
+          probe_id: selected.probeId,
+          version: selected.version,
+          hash: selected.sha256,
+          correlation_id: correlationId,
         }),
       });
       activeProbe = selected.probeId;
       return (current = {
-        ...current,
+        ...clearProbeResult(current),
         state: 'PROBE_ACTIVE',
         lifecycleState: 'RUNNING',
         degraded: false,
         cleanupStatus: 'PENDING',
+        lastProbeId: selected.probeId,
       });
     },
     async status(probeId) {
-      if (probeId !== PROBE_ID) throw new Error('UNKNOWN_PROBE');
+      if (!TRUSTED_PROBE_IDS.has(probeId)) throw new Error('UNKNOWN_PROBE');
       await refresh();
       return current;
     },
     async cancel(probeId) {
-      if (probeId !== PROBE_ID || !activeProbe)
+      if (probeId !== activeProbe || !activeProbe)
         throw new Error('INVALID_STATE');
       await response('/v1/probes/cancel', {
         method: 'POST',
@@ -221,12 +362,44 @@ async function createSupervisorProtocolRuntime(
       });
     },
     async verifyCleanup() {
-      await response('/v1/cleanup/verify', { method: 'POST', body: '{}' });
+      const result = await response<{
+        status: string;
+        clean: boolean;
+        failure_category?: string;
+      }>('/v1/cleanup/verify', { method: 'POST', body: '{}' });
+      if (!result.clean) {
+        return (current = {
+          ...current,
+          state: 'FAILED',
+          lifecycleState: 'CLEANUP_FAILURE',
+          qualificationStatus: 'FAIL',
+          backendStatus: 'DEGRADED',
+          cleanupStatus: 'FAILED',
+          degraded: true,
+          safeFailureCategory:
+            result.failure_category ?? 'QUALIFICATION_CLEANUP_FAILURE',
+        });
+      }
       activeProbe = undefined;
+      cleanupUncertain = false;
+      availabilityLost = false;
       return (current = {
-        ...current,
+        ...clearFailure(current),
         state: 'READY',
         lifecycleState: 'VERIFY_CLEAN',
+        cleanupStatus: 'VERIFIED',
+        degraded: false,
+      });
+    },
+    async recoverCleanup() {
+      await response('/v1/cleanup/recover', { method: 'POST', body: '{}' });
+      activeProbe = undefined;
+      return (current = {
+        ...clearFailure(current),
+        state: 'READY',
+        lifecycleState: 'VERIFY_CLEAN',
+        qualificationStatus: 'PENDING',
+        backendStatus: 'IMPLEMENTED',
         cleanupStatus: 'VERIFIED',
         degraded: false,
       });
@@ -337,13 +510,16 @@ export async function registerSandboxControlRoutes(
       resourceId: resource.resourceId,
       backendType: 'DEDICATED_SUPERVISOR_OCI_RUNC',
       qualificationState:
-        resource.state === 'PROBE_ACTIVE'
+        resource.state === 'PROBE_ACTIVE' ||
+        resource.state === 'CLEANUP_PENDING'
           ? 'QUALIFYING'
-          : resource.qualificationStatus === 'PASS'
-            ? 'QUALIFIED'
-            : resource.degraded
-              ? 'DEGRADED'
-              : 'QUALIFICATION_PENDING',
+          : resource.cleanupStatus === 'FAILED'
+            ? 'CLEANUP_FAILED'
+            : resource.qualificationStatus === 'PASS'
+              ? 'QUALIFIED'
+              : resource.degraded
+                ? 'DEGRADED'
+                : 'QUALIFICATION_PENDING',
       policyVersion: resource.policyVersion,
       probeSuiteVersion: resource.probeSuiteVersion,
       lastQualificationAt: resource.lastQualificationAt ?? null,
@@ -365,6 +541,15 @@ export async function registerSandboxControlRoutes(
       })),
       failureCategory: resource.safeFailureCategory ?? null,
       realSubmissionExecution: 'DISABLED',
+      activeProbeId:
+        resource.state === 'PROBE_ACTIVE'
+          ? (resource.lastProbeId ?? null)
+          : null,
+      lastProbeId: resource.lastProbeId ?? null,
+      lastProbeOutcome: resource.lastProbeOutcome ?? null,
+      lastProbePass: resource.lastProbePass ?? null,
+      lastProbeKind: resource.lastProbeKind ?? null,
+      cleanupStatus: resource.cleanupStatus,
     });
   });
   app.get('/api/operations/sandbox/capabilities', async (request, reply) => {
@@ -524,6 +709,35 @@ export async function registerSandboxControlRoutes(
       );
     }
   });
+  app.post(
+    '/api/operations/sandbox/cleanup/recover',
+    async (request, reply) => {
+      const { decision } = await guard(request, 'VERIFY_SANDBOX_CLEANUP');
+      if (!decision.allowed)
+        return error(
+          reply,
+          request.id,
+          decision.code === 'UNAUTHENTICATED'
+            ? 401
+            : decision.code === 'INVALID_STATE'
+              ? 409
+              : 403,
+          decision.code,
+          'Sandbox cleanup recovery was rejected.',
+        );
+      try {
+        return reply.send(await runtime.recoverCleanup());
+      } catch {
+        return error(
+          reply,
+          request.id,
+          409,
+          'CONFLICT',
+          'Sandbox cleanup recovery was rejected.',
+        );
+      }
+    },
+  );
   app.get('/api/operations/sandbox/diagnostics', async (request, reply) => {
     const { decision } = await guard(request, 'INSPECT_SANDBOX_STATUS');
     if (!decision.allowed)

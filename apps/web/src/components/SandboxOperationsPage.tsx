@@ -4,7 +4,15 @@ import {
   useSandboxQualification,
   type SandboxProjection,
 } from './SandboxQualification.js';
-import type { ApiClient, SandboxOverview } from '../services/api.js';
+import type {
+  ApiClient,
+  SandboxOverview,
+  SandboxProbe,
+} from '../services/api.js';
+
+const qualificationProbe = 'SANDBOX_PROBE_QUALIFICATION';
+const cancellationProbe = 'SANDBOX_PROBE_CANCELLATION';
+const cleanupFailureProbe = 'SANDBOX_PROBE_CLEANUP_FAILURE';
 
 const projection = (value: SandboxOverview): SandboxProjection => ({
   backendType: value.backendType,
@@ -22,6 +30,12 @@ const projection = (value: SandboxOverview): SandboxProjection => ({
     ? { failureCategory: value.failureCategory }
     : {}),
   realSubmissionExecution: value.realSubmissionExecution,
+  activeProbeId: value.activeProbeId,
+  lastProbeId: value.lastProbeId,
+  lastProbeOutcome: value.lastProbeOutcome,
+  lastProbePass: value.lastProbePass,
+  lastProbeKind: value.lastProbeKind,
+  cleanupStatus: value.cleanupStatus,
 });
 
 export function SandboxOperationsPage({
@@ -39,21 +53,41 @@ export function SandboxOperationsPage({
   const error = useMemo(() => state.error, [state.error]);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(false);
-  const active = state.projection?.qualificationState === 'QUALIFYING';
+  const [probes, setProbes] = useState<readonly SandboxProbe[]>([]);
+  const polling = state.projection?.qualificationState === 'QUALIFYING';
+  const overview = state.projection;
+  const hasProbe = (probeId: string) =>
+    probes.some((item) => item.probeId === probeId);
   useEffect(() => {
-    if (!active) return;
+    if (!authorized) {
+      setProbes([]);
+      return;
+    }
+    let current = true;
+    void api
+      .sandboxProbes()
+      .then((catalog) => {
+        if (current) setProbes(catalog.items);
+      })
+      .catch(() => {
+        if (current) setProbes([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [api, authorized]);
+  useEffect(() => {
+    if (!polling) return;
     const timer = window.setInterval(state.refresh, 500);
     return () => window.clearInterval(timer);
-  }, [active, state.refresh]);
-  const start = async () => {
+  }, [polling, state.refresh]);
+  const start = async (probeId: string) => {
     setBusy(true);
     setActionError(false);
     try {
-      const catalog = await api.sandboxProbes();
-      const first = catalog.items[0];
-      if (!first) throw new Error('No approved probe');
-      await api.startSandboxProbe(first.probeId);
-      state.refresh();
+      if (!hasProbe(probeId)) throw new Error('No approved probe');
+      await api.startSandboxProbe(probeId);
+      await state.refresh();
     } catch {
       setActionError(true);
     } finally {
@@ -64,8 +98,10 @@ export function SandboxOperationsPage({
     setBusy(true);
     setActionError(false);
     try {
-      await api.cancelSandboxProbe('SANDBOX_PROBE_QUALIFICATION');
-      state.refresh();
+      const activeProbeId = overview?.activeProbeId;
+      if (!activeProbeId) throw new Error('No active probe');
+      await api.cancelSandboxProbe(activeProbeId);
+      await state.refresh();
     } catch {
       setActionError(true);
     } finally {
@@ -77,7 +113,19 @@ export function SandboxOperationsPage({
     setActionError(false);
     try {
       await api.verifySandboxCleanup();
-      state.refresh();
+      await state.refresh();
+    } catch {
+      setActionError(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const recover = async () => {
+    setBusy(true);
+    setActionError(false);
+    try {
+      await api.recoverSandboxCleanup();
+      await state.refresh();
     } catch {
       setActionError(true);
     } finally {
@@ -97,11 +145,37 @@ export function SandboxOperationsPage({
         <div className="sandbox-actions">
           {(state.projection.qualificationState === 'QUALIFICATION_PENDING' ||
             state.projection.qualificationState === 'QUALIFIED') && (
-            <button type="button" onClick={() => void start()} disabled={busy}>
+            <button
+              type="button"
+              onClick={() => void start(qualificationProbe)}
+              disabled={busy || !hasProbe(qualificationProbe)}
+            >
               Start trusted qualification probe
             </button>
           )}
-          {active && (
+          {(state.projection.qualificationState === 'QUALIFICATION_PENDING' ||
+            state.projection.qualificationState === 'QUALIFIED') &&
+            hasProbe(cancellationProbe) && (
+              <button
+                type="button"
+                onClick={() => void start(cancellationProbe)}
+                disabled={busy}
+              >
+                Start cancellation probe
+              </button>
+            )}
+          {(state.projection.qualificationState === 'QUALIFICATION_PENDING' ||
+            state.projection.qualificationState === 'QUALIFIED') &&
+            hasProbe(cleanupFailureProbe) && (
+              <button
+                type="button"
+                onClick={() => void start(cleanupFailureProbe)}
+                disabled={busy}
+              >
+                Run cleanup failure fixture
+              </button>
+            )}
+          {polling && overview?.activeProbeId && (
             <button type="button" onClick={() => void cancel()} disabled={busy}>
               Cancel trusted probe
             </button>
@@ -115,6 +189,20 @@ export function SandboxOperationsPage({
             >
               Verify Sandbox cleanup
             </button>
+          )}
+          {state.projection.qualificationState === 'CLEANUP_FAILED' && (
+            <button
+              type="button"
+              onClick={() => void recover()}
+              disabled={busy}
+            >
+              Recover qualification cleanup
+            </button>
+          )}
+          {overview?.lastProbeId && overview.lastProbePass !== null && (
+            <p role="status" aria-label="Last trusted probe result">
+              Last trusted probe: {overview.lastProbePass ? 'Passed' : 'Failed'}
+            </p>
           )}
           {actionError && (
             <p className="error" role="alert">

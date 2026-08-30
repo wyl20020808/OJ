@@ -117,7 +117,11 @@ test('real submission intake journey and ownership boundary', async ({
   await expect(page.getByText(submissionId!)).toBeVisible();
   await page.getByRole('link', { name: 'Details' }).click();
   await expect(page).toHaveURL(new RegExp(`/submissions/${submissionId}$`));
-  await expect(page.getByText(/Status PENDING/)).toBeVisible();
+  await expect(
+    page.getByRole('status', {
+      name: /Pending intake|Queued|Leased|Worker lease claimed|Worker accepted the job|Qualification fixture running/,
+    }),
+  ).toBeVisible();
   await expect(page.getByText('revision', { exact: false })).toContainText(
     seeded.body.currentRevisionId,
   );

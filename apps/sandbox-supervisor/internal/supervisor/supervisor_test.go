@@ -71,6 +71,13 @@ func TestOCIConfigCarriesFiniteResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	linux := raw["linux"].(map[string]any)
+	process := raw["process"].(map[string]any)
+	if _, found := process["seccomp"]; found {
+		t.Fatal("seccomp policy was serialized under process instead of linux")
+	}
+	if _, found := linux["seccomp"]; !found {
+		t.Fatal("linux.seccomp policy is missing")
+	}
 	resources := linux["resources"].(map[string]any)
 	if resources["memory"].(map[string]any)["limit"] != float64(8<<20) || resources["pids"].(map[string]any)["limit"] != float64(4) {
 		t.Fatalf("serialized finite resources lost: %s", encoded)

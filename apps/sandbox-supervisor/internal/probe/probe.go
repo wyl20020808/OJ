@@ -2,6 +2,7 @@ package probe
 
 import (
 	"crypto/sha256"
+	"debug/elf"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -32,6 +33,16 @@ func Verify(id, version, expected, path string) error {
 	}
 	if expected != actual {
 		return fmt.Errorf("trusted probe hash mismatch")
+	}
+	binary, err := elf.Open(path)
+	if err != nil {
+		return fmt.Errorf("trusted probe is not an ELF executable: %w", err)
+	}
+	defer binary.Close()
+	for _, program := range binary.Progs {
+		if program.Type == elf.PT_INTERP {
+			return errors.New("trusted probe must be statically linked")
+		}
 	}
 	return nil
 }

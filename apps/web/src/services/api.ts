@@ -124,6 +124,12 @@ export type SandboxOverview = {
   capabilities: Array<{ id: string; label: string; state: string }>;
   failureCategory?: string | null;
   realSubmissionExecution: 'DISABLED';
+  activeProbeId: string | null;
+  lastProbeId: string | null;
+  lastProbeOutcome: string | null;
+  lastProbePass: boolean | null;
+  lastProbeKind: string | null;
+  cleanupStatus: 'NOT_REQUIRED' | 'PENDING' | 'VERIFIED' | 'FAILED';
 };
 export type SandboxProbe = {
   probeId: string;
@@ -347,6 +353,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<unknown>(
         baseUrl,
         '/api/operations/sandbox/cleanup/verify',
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    recoverSandboxCleanup: () =>
+      request<unknown>(
+        baseUrl,
+        '/api/operations/sandbox/cleanup/recover',
         { method: 'POST', body: '{}' },
         fetcher,
       ),

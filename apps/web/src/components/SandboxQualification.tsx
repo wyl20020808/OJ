@@ -43,6 +43,12 @@ export type SandboxProjection = {
   capabilities: SandboxCapability[];
   failureCategory?: string | null;
   realSubmissionExecution: 'DISABLED' | 'UNQUALIFIED';
+  activeProbeId?: string | null;
+  lastProbeId?: string | null;
+  lastProbeOutcome?: string | null;
+  lastProbePass?: boolean | null;
+  lastProbeKind?: string | null;
+  cleanupStatus?: 'NOT_REQUIRED' | 'PENDING' | 'VERIFIED' | 'FAILED';
 };
 
 export type SandboxTransportError = {

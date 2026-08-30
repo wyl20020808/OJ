@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ojplatform/sandbox-supervisor/internal/model"
@@ -79,7 +80,7 @@ func (s *Supervisor) ociConfig(sid, workspace string, r model.Request, env []str
 		mappingHostID = uint32(os.Geteuid())
 		mappingHostGID = uint32(os.Getgid())
 	}
-	return bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: env, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostID, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostGID, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: cgroupPath, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
+	return bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: env, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostID, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostGID, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: cgroupPath, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
 }
 
 func (s *Supervisor) effectiveCgroupSlice() string {
@@ -106,7 +107,7 @@ type bundleProcess struct {
 	NoNewPrivileges bool                `json:"noNewPrivileges"`
 	User            bundleUser          `json:"user"`
 	Capabilities    map[string][]string `json:"capabilities"`
-	Seccomp         bundleSeccomp       `json:"seccomp"`
+	Seccomp         bundleSeccomp       `json:"-"`
 }
 type bundleUser struct {
 	UID uint32 `json:"uid"`
@@ -129,6 +130,7 @@ type bundleLinux struct {
 	RootfsPropagation string              `json:"rootfsPropagation"`
 	CgroupsPath       string              `json:"cgroupsPath"`
 	Resources         bundleResources     `json:"resources"`
+	Seccomp           bundleSeccomp       `json:"seccomp"`
 	MaskedPaths       []string            `json:"maskedPaths"`
 	ReadonlyPaths     []string            `json:"readonlyPaths"`
 }
@@ -159,7 +161,25 @@ type bundleSyscall struct {
 }
 
 func New(root, runc, probeBinary string) *Supervisor {
-	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, systemdCgroup: true, rootlessMode: "auto", cgroupSlice: "system.slice", systemdUserBus: true, identityGate: true}
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, systemdCgroup: true, rootlessMode: "true", cgroupSlice: "system.slice", systemdUserBus: true, identityGate: true}
+}
+
+// NewWithTrustedProfile selects one immutable qualification profile. The
+// profile never comes from a Submission or an arbitrary command request.
+func NewWithTrustedProfile(root, runc, probeBinary, profile string) (*Supervisor, error) {
+	if !isTrustedProfile(profile) {
+		return nil, errors.New("unknown trusted qualification profile")
+	}
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "true", cgroupSlice: "system.slice", systemdUserBus: true, identityGate: true}, nil
+}
+
+func isTrustedProfile(profile string) bool {
+	switch profile {
+	case "", "sleep", "cpu", "memory", "pids", "pids-child", "output", "workspace", "crash":
+		return true
+	default:
+		return false
+	}
 }
 func newWithProfile(root, runc, probeBinary, profile string) *Supervisor {
 	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "auto", cgroupSlice: "system.slice", runcDebug: true}
@@ -378,13 +398,11 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 		return result, err
 	}
 	guestEnv := []string{"PATH=/usr/bin:/bin", "LANG=C"}
+	if !isTrustedProfile(s.qualificationProfile) {
+		return result, errors.New("unknown trusted qualification profile")
+	}
 	if s.qualificationProfile != "" {
-		switch s.qualificationProfile {
-		case "sleep", "cpu", "memory", "pids", "pids-child", "output", "workspace":
-			guestEnv = append(guestEnv, "OJPLATFORM_TRUSTED_PROFILE="+s.qualificationProfile)
-		default:
-			return result, errors.New("unknown trusted qualification profile")
-		}
+		guestEnv = append(guestEnv, "OJPLATFORM_TRUSTED_PROFILE="+s.qualificationProfile)
 	}
 	config := bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: guestEnv, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "noexec", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: "phase2b/" + sid, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
 	config = s.ociConfig(sid, workspace, r, guestEnv)
@@ -418,17 +436,15 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 		}
 	}
 	if s.qualificationProfile != "" {
-		switch s.qualificationProfile {
-		case "sleep", "cpu", "memory", "pids", "pids-child", "output", "workspace":
-			create.Env = append(create.Env, "OJPLATFORM_TRUSTED_PROFILE="+s.qualificationProfile)
-		default:
-			return result, errors.New("unknown trusted qualification profile")
-		}
+		create.Env = append(create.Env, "OJPLATFORM_TRUSTED_PROFILE="+s.qualificationProfile)
 	}
 	var stdout, stderr = boundedWriter{limit: r.OutputBytes}, boundedWriter{limit: r.OutputBytes}
 	create.Stdout = &stdout
 	create.Stderr = &stderr
+	monitor := newResourceMonitor(sid, r)
+	go monitor.run()
 	err := create.Run()
+	result.Evidence = monitor.stop()
 	output := stdout.String()
 	if stderr.Len() > 0 {
 		output += stderr.String()
@@ -514,4 +530,110 @@ func guestGone(runcPath, id string) bool { return exec.Command(runcPath, "state"
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+type resourceMonitor struct {
+	sid      string
+	request  model.Request
+	stopOnce sync.Once
+	stopCh   chan struct{}
+	doneCh   chan struct{}
+	mu       sync.Mutex
+	evidence model.RuntimeEvidence
+}
+
+func newResourceMonitor(sid string, request model.Request) *resourceMonitor {
+	return &resourceMonitor{
+		sid:     sid,
+		request: request,
+		stopCh:  make(chan struct{}),
+		doneCh:  make(chan struct{}),
+		evidence: model.RuntimeEvidence{
+			SupervisorUID: os.Geteuid(), SupervisorGID: os.Getegid(),
+			RequestedMemory: request.MemoryBytes, OCIMemory: request.MemoryBytes,
+			RequestedPids: request.Pids, OCIPids: int64(request.Pids),
+		},
+	}
+}
+
+func (m *resourceMonitor) run() {
+	defer close(m.doneCh)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		m.capture()
+		select {
+		case <-m.stopCh:
+			m.capture()
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (m *resourceMonitor) stop() *model.RuntimeEvidence {
+	m.stopOnce.Do(func() { close(m.stopCh) })
+	<-m.doneCh
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	copy := m.evidence
+	return &copy
+}
+
+func (m *resourceMonitor) capture() {
+	m.mu.Lock()
+	path := m.evidence.ControlGroup
+	m.mu.Unlock()
+	if path == "" {
+		path = findScope(m.sid)
+		if path == "" {
+			return
+		}
+	}
+	read := func(name string) string {
+		data, err := os.ReadFile(filepath.Join(path, name))
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(data))
+	}
+	m.mu.Lock()
+	m.evidence.ControlGroup = path
+	for target, value := range map[*string]string{
+		&m.evidence.MemoryMax: read("memory.max"), &m.evidence.MemoryCurrent: read("memory.current"),
+		&m.evidence.MemoryEvents: read("memory.events"), &m.evidence.PidsMax: read("pids.max"),
+		&m.evidence.PidsCurrent: read("pids.current"), &m.evidence.PidsEvents: read("pids.events"),
+		&m.evidence.CPUMax: read("cpu.max"), &m.evidence.CPUStat: read("cpu.stat"),
+	} {
+		if value != "" {
+			*target = value
+		}
+	}
+	if m.evidence.SystemdMemoryMax != strconv.FormatInt(m.request.MemoryBytes, 10) || m.evidence.SystemdTasksMax != strconv.Itoa(m.request.Pids) {
+		unit := filepath.Base(path)
+		show := exec.Command("systemctl", "--user", "show", unit, "--property=MemoryMax", "--property=TasksMax", "--value")
+		if output, err := show.Output(); err == nil {
+			values := strings.Fields(string(output))
+			if len(values) > 0 {
+				m.evidence.SystemdMemoryMax = values[0]
+			}
+			if len(values) > 1 {
+				m.evidence.SystemdTasksMax = values[1]
+			}
+		}
+	}
+	m.mu.Unlock()
+}
+
+func findScope(sid string) string {
+	target := "phase2b-" + sid + ".scope"
+	found := ""
+	_ = filepath.WalkDir("/sys/fs/cgroup", func(path string, entry os.DirEntry, err error) error {
+		if err == nil && entry.IsDir() && entry.Name() == target {
+			found = path
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
 }
