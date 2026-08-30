@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,9 +20,17 @@ import (
 )
 
 const (
-	ProbeOutcome          = "SANDBOX_PROBE_SUCCEEDED"
-	RejectedOutcome       = "SANDBOX_REQUEST_REJECTED"
-	CleanupFailureOutcome = "SANDBOX_CLEANUP_FAILURE"
+	ProbeOutcome            = "SANDBOX_PROBE_SUCCEEDED"
+	RejectedOutcome         = "SANDBOX_REQUEST_REJECTED"
+	CleanupFailureOutcome   = "SANDBOX_CLEANUP_FAILURE"
+	UnqualifiedOutcome      = "SANDBOX_UNQUALIFIED"
+	PreflightFailureOutcome = "SANDBOX_PREFLIGHT_FAILED"
+	CancelledOutcome        = "SANDBOX_CANCELLED"
+)
+
+var (
+	ErrSupervisorUnqualified = errors.New("sandbox supervisor is not running as a dedicated non-root identity")
+	ErrSandboxPreflight      = errors.New("sandbox execution preflight failed")
 )
 
 type Supervisor struct {
@@ -38,16 +47,16 @@ type Supervisor struct {
 	runcDebug            bool
 	mappingHostID        uint32
 	mappingHostIDSet     bool
+	mappingHostGID       uint32
+	mappingHostGIDSet    bool
+	identityGate         bool
 }
 
 // ociConfig constructs the immutable server-owned OCI policy for one sandbox.
 // Keeping this separate permits forensic tests to inspect the exact finite
 // resource values before invoking runc.
 func (s *Supervisor) ociConfig(sid, workspace string, r model.Request, env []string) bundleConfig {
-	slice := s.cgroupSlice
-	if slice == "" {
-		slice = "system.slice"
-	}
+	slice := s.effectiveCgroupSlice()
 	cgroupPath := "phase2b/" + sid
 	if !s.systemdCgroup && s.cgroupfsParent != "" {
 		cgroupPath = strings.TrimSuffix(s.cgroupfsParent, "/") + "/phase2b/" + sid
@@ -59,10 +68,28 @@ func (s *Supervisor) ociConfig(sid, workspace string, r model.Request, env []str
 		cgroupPath = slice + ":phase2b:" + sid
 	}
 	mappingHostID := uint32(65534)
+	mappingHostGID := uint32(65534)
 	if s.mappingHostIDSet {
 		mappingHostID = s.mappingHostID
 	}
-	return bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: env, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostID, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostID, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: cgroupPath, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
+	if s.mappingHostGIDSet {
+		mappingHostGID = s.mappingHostGID
+	}
+	if s.identityGate && os.Geteuid() != 0 {
+		mappingHostID = uint32(os.Geteuid())
+		mappingHostGID = uint32(os.Getgid())
+	}
+	return bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: env, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostID, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostGID, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: cgroupPath, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
+}
+
+func (s *Supervisor) effectiveCgroupSlice() string {
+	if s.identityGate && os.Geteuid() != 0 {
+		return "user.slice"
+	}
+	if s.cgroupSlice == "" {
+		return "system.slice"
+	}
+	return s.cgroupSlice
 }
 
 type bundleConfig struct {
@@ -132,7 +159,7 @@ type bundleSyscall struct {
 }
 
 func New(root, runc, probeBinary string) *Supervisor {
-	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, systemdCgroup: true, rootlessMode: "auto", cgroupSlice: "system.slice"}
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, systemdCgroup: true, rootlessMode: "auto", cgroupSlice: "system.slice", systemdUserBus: true, identityGate: true}
 }
 func newWithProfile(root, runc, probeBinary, profile string) *Supervisor {
 	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "auto", cgroupSlice: "system.slice", runcDebug: true}
@@ -162,7 +189,107 @@ func newWithRootlessDefaultProfile(root, runc, probeBinary, profile string) *Sup
 	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "true", omitCgroupPath: true, systemdUserBus: true, runcDebug: true}
 }
 func newWithNonRootUserBusProfile(root, runc, probeBinary, profile string, hostID uint32) *Supervisor {
-	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "true", cgroupSlice: "user.slice", systemdUserBus: true, runcDebug: true, mappingHostID: hostID, mappingHostIDSet: true}
+	return &Supervisor{Root: root, Runc: runc, ProbeBinary: probeBinary, qualificationProfile: profile, systemdCgroup: true, rootlessMode: "true", cgroupSlice: "user.slice", systemdUserBus: true, runcDebug: true, mappingHostID: hostID, mappingHostIDSet: true, mappingHostGID: hostID, mappingHostGIDSet: true, identityGate: true}
+}
+
+// Preflight verifies the host contract required for a production-intent
+// qualification. It intentionally fails before runc when the Supervisor is
+// root or when the delegated user-manager environment is unavailable.
+func (s *Supervisor) Preflight(ctx context.Context) error {
+	if os.Geteuid() == 0 {
+		return fmt.Errorf("%w: euid=0", ErrSupervisorUnqualified)
+	}
+	if !s.systemdCgroup {
+		return fmt.Errorf("%w: systemd cgroup driver is required", ErrSandboxPreflight)
+	}
+	if s.rootlessMode == "false" {
+		return fmt.Errorf("%w: rootless mode is disabled", ErrSandboxPreflight)
+	}
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		return fmt.Errorf("%w: XDG_RUNTIME_DIR is missing", ErrSandboxPreflight)
+	}
+	if info, err := os.Stat(runtimeDir); err != nil || !info.IsDir() {
+		return fmt.Errorf("%w: XDG_RUNTIME_DIR is unavailable", ErrSandboxPreflight)
+	}
+	dbusAddress := os.Getenv("DBUS_SESSION_BUS_ADDRESS")
+	if dbusAddress == "" {
+		return fmt.Errorf("%w: DBUS_SESSION_BUS_ADDRESS is missing", ErrSandboxPreflight)
+	}
+	if strings.HasPrefix(dbusAddress, "unix:path=") {
+		busPath := strings.TrimPrefix(dbusAddress, "unix:path=")
+		if _, err := os.Stat(busPath); err != nil {
+			return fmt.Errorf("%w: user bus is unavailable: %v", ErrSandboxPreflight, err)
+		}
+	}
+	if err := runUserManagerCheck(ctx); err != nil {
+		return err
+	}
+	controllers, err := os.ReadFile("/sys/fs/cgroup/cgroup.controllers")
+	if err != nil {
+		return fmt.Errorf("%w: cgroup v2 controllers unavailable: %v", ErrSandboxPreflight, err)
+	}
+	managerPath, err := delegatedManagerPath()
+	if err != nil {
+		return err
+	}
+	managerControllers, err := os.ReadFile(filepath.Join("/sys/fs/cgroup", managerPath, "cgroup.controllers"))
+	if err != nil || !hasController(string(managerControllers), "memory") || !hasController(string(managerControllers), "pids") {
+		return fmt.Errorf("%w: user manager does not expose memory/pids", ErrSandboxPreflight)
+	}
+	managerSubtree, err := os.ReadFile(filepath.Join("/sys/fs/cgroup", managerPath, "cgroup.subtree_control"))
+	if err != nil {
+		return fmt.Errorf("%w: user manager delegation is unavailable: %v", ErrSandboxPreflight, err)
+	}
+	if err := validateControllerDelegation(string(controllers), string(managerControllers), string(managerSubtree)); err != nil {
+		return err
+	}
+	if _, err := exec.LookPath(s.Runc); err != nil {
+		return fmt.Errorf("%w: runc unavailable: %v", ErrSandboxPreflight, err)
+	}
+	return nil
+}
+
+func runUserManagerCheck(ctx context.Context) error {
+	check := exec.CommandContext(ctx, "systemctl", "--user", "is-system-running")
+	output, err := check.CombinedOutput()
+	if err != nil || strings.TrimSpace(string(output)) != "running" {
+		return fmt.Errorf("%w: systemd user manager is not running: %s", ErrSandboxPreflight, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func hasController(value, controller string) bool {
+	for _, item := range strings.Fields(value) {
+		if item == controller {
+			return true
+		}
+	}
+	return false
+}
+
+func validateControllerDelegation(root, manager, subtree string) error {
+	for _, value := range []string{root, manager, subtree} {
+		if !hasController(value, "memory") || !hasController(value, "pids") {
+			return fmt.Errorf("%w: cgroup v2 memory/pids controllers are unavailable or not delegated", ErrSandboxPreflight)
+		}
+	}
+	return nil
+}
+
+func delegatedManagerPath() (string, error) {
+	uid := strconv.Itoa(os.Getuid())
+	marker := "/user.slice/user-" + uid + ".slice/user@" + uid + ".service"
+	show := exec.Command("systemctl", "--user", "show", "--no-page", "-p", "ControlGroup", "--value")
+	output, err := show.Output()
+	if err != nil {
+		return "", fmt.Errorf("%w: cannot inspect user manager cgroup: %v", ErrSandboxPreflight, err)
+	}
+	path := strings.TrimSpace(string(output))
+	if strings.HasPrefix(path, marker) {
+		return strings.TrimPrefix(path[:len(marker)], "/"), nil
+	}
+	return "", fmt.Errorf("%w: user manager is outside user@%s.service hierarchy", ErrSandboxPreflight, uid)
 }
 func Validate(r model.Request) error {
 	if r.ContractVersion != model.ContractVersion || r.ExecutionMode != "SANDBOX_PROBE_QUALIFICATION" {
@@ -197,6 +324,19 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 		result.Outcome = RejectedOutcome
 		result.Diagnostic = err.Error()
 		return result, err
+	}
+	if s.identityGate {
+		if err := s.Preflight(ctx); err != nil {
+			if errors.Is(err, ErrSupervisorUnqualified) {
+				result.Outcome = UnqualifiedOutcome
+			} else {
+				result.Outcome = PreflightFailureOutcome
+			}
+			result.Diagnostic = err.Error()
+			result.Clean = true
+			result.CompletedAt = time.Now().UTC()
+			return result, err
+		}
 	}
 	if err := probe.Verify(r.TrustedProbeID, r.ProbeVersion, r.ProbeHash, s.ProbeBinary); err != nil {
 		result.Outcome = RejectedOutcome
@@ -240,7 +380,7 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	guestEnv := []string{"PATH=/usr/bin:/bin", "LANG=C"}
 	if s.qualificationProfile != "" {
 		switch s.qualificationProfile {
-		case "sleep", "cpu", "memory", "pids", "pids-child", "output":
+		case "sleep", "cpu", "memory", "pids", "pids-child", "output", "workspace":
 			guestEnv = append(guestEnv, "OJPLATFORM_TRUSTED_PROFILE="+s.qualificationProfile)
 		default:
 			return result, errors.New("unknown trusted qualification profile")
@@ -250,11 +390,7 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	config = s.ociConfig(sid, workspace, r, guestEnv)
 	config.Linux.Resources.Unified = map[string]string{"memory.max": fmt.Sprintf("%d", r.MemoryBytes), "pids.max": fmt.Sprintf("%d", r.Pids)}
 	if s.systemdCgroup && !s.omitCgroupPath {
-		slice := s.cgroupSlice
-		if slice == "" {
-			slice = "system.slice"
-		}
-		config.Linux.CgroupsPath = slice + ":phase2b:" + sid
+		config.Linux.CgroupsPath = s.effectiveCgroupSlice() + ":phase2b:" + sid
 	}
 	encoded, _ := json.MarshalIndent(config, "", "  ")
 	if err := os.WriteFile(filepath.Join(bundle, "config.json"), encoded, 0600); err != nil {
@@ -283,7 +419,7 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	}
 	if s.qualificationProfile != "" {
 		switch s.qualificationProfile {
-		case "sleep", "cpu", "memory", "pids", "pids-child", "output":
+		case "sleep", "cpu", "memory", "pids", "pids-child", "output", "workspace":
 			create.Env = append(create.Env, "OJPLATFORM_TRUSTED_PROFILE="+s.qualificationProfile)
 		default:
 			return result, errors.New("unknown trusted qualification profile")
@@ -297,7 +433,10 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	if stderr.Len() > 0 {
 		output += stderr.String()
 	}
-	if commandCtx.Err() != nil {
+	if ctx.Err() != nil && errors.Is(ctx.Err(), context.Canceled) {
+		result.Outcome = CancelledOutcome
+		result.Diagnostic = "sandbox context cancelled"
+	} else if commandCtx.Err() != nil {
 		result.Outcome = "SANDBOX_WALL_LIMIT"
 		result.Diagnostic = "bounded wall-time termination"
 	} else if err != nil {

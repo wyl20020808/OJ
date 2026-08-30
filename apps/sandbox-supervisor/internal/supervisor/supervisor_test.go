@@ -1,9 +1,11 @@
 package supervisor
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"github.com/ojplatform/sandbox-supervisor/internal/model"
 	"github.com/ojplatform/sandbox-supervisor/internal/probe"
 	"os"
@@ -31,6 +33,23 @@ func TestValidationRejectsRealAndInjection(t *testing.T) {
 	r.SandboxJobID = "../host"
 	if err := Validate(r); err == nil {
 		t.Fatal("path traversal accepted")
+	}
+}
+
+func TestValidationRejectsSBMatrixInputs(t *testing.T) {
+	for name, mutate := range map[string]func(*model.Request){
+		"policy-version":   func(r *model.Request) { r.PolicyIDs = []string{"unknown-policy-v2"} },
+		"unknown-probe":    func(r *model.Request) { r.TrustedProbeID = "UNKNOWN_PROBE" },
+		"malformed-memory": func(r *model.Request) { r.MemoryBytes = 1024 },
+		"malformed-pids":   func(r *model.Request) { r.Pids = 0 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := valid(t)
+			mutate(&r)
+			if err := Validate(r); err == nil {
+				t.Fatal("malformed SB request was accepted")
+			}
+		})
 	}
 }
 
@@ -71,5 +90,29 @@ func TestRootlessSystemdPathDiagnostics(t *testing.T) {
 	}
 	if len(cfg.Linux.UIDMappings) != 1 || cfg.Linux.UIDMappings[0]["hostID"] != 65534 || len(cfg.Linux.GIDMappings) != 1 || cfg.Linux.GIDMappings[0]["hostID"] != 65534 || cfg.Process.User.UID != 0 || cfg.Process.User.GID != 0 {
 		t.Fatalf("rootless user namespace mapping changed: %+v process=%+v", cfg.Linux, cfg.Process.User)
+	}
+}
+
+func TestProductionSupervisorRejectsRootQualification(t *testing.T) {
+	r := valid(t)
+	s := New(t.TempDir(), "/usr/bin/runc", "/trusted/probe")
+	result, err := s.Run(context.Background(), r)
+	if err == nil || result.Outcome != UnqualifiedOutcome || result.Clean == false {
+		t.Fatalf("expected UID0 qualification gate: result=%+v err=%v", result, err)
+	}
+}
+
+func TestHasController(t *testing.T) {
+	if !hasController("cpu memory pids", "memory") || !hasController("cpu memory pids", "pids") || hasController("cpu io", "pids") {
+		t.Fatal("controller token matching is incorrect")
+	}
+}
+
+func TestControllerDelegationFailsClosed(t *testing.T) {
+	if err := validateControllerDelegation("cpu memory pids", "cpu memory pids", "memory"); err == nil || !errors.Is(err, ErrSandboxPreflight) {
+		t.Fatalf("missing delegated pids controller must fail closed: %v", err)
+	}
+	if err := validateControllerDelegation("cpu memory pids", "cpu io", "memory pids"); err == nil || !errors.Is(err, ErrSandboxPreflight) {
+		t.Fatalf("missing manager memory controller must fail closed: %v", err)
 	}
 }
