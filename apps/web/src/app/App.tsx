@@ -21,6 +21,7 @@ import {
 import './app.css';
 import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
+import { AuthExperience } from '../components/AuthExperience.js';
 
 type Route = {
   name:
@@ -267,122 +268,6 @@ export function JudgeStatus({ submission }: { submission: Submission }) {
         </span>
       )}
     </div>
-  );
-}
-function AuthForm({
-  mode,
-  api,
-  onUser,
-}: {
-  mode: 'login' | 'register';
-  api: ApiClient;
-  onUser: (u: AuthenticatedUser) => void;
-}) {
-  const [v, setV] = useState({
-    identity: '',
-    username: '',
-    email: '',
-    displayName: '',
-    password: '',
-  });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (
-      v.password.length < 8 ||
-      (mode === 'register' && (!v.username || !v.email || !v.displayName))
-    ) {
-      setError(
-        'Please complete all fields. Password must be at least 8 characters.',
-      );
-      return;
-    }
-    setLoading(true);
-    try {
-      const u =
-        mode === 'login'
-          ? await api.login(v.identity, v.password)
-          : await api.register(v.username, v.email, v.password, v.displayName);
-      if (mode === 'login') {
-        onUser(u);
-        navigate('/problems');
-      } else {
-        navigate('/login');
-      }
-    } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : 'Unable to reach the service.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-  return (
-    <section className="auth-panel">
-      <h1>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
-      <p className="muted">
-        {mode === 'login'
-          ? 'Sign in to continue to OJPlatform.'
-          : 'Join OJPlatform to practice and improve.'}
-      </p>
-      <form onSubmit={submit} noValidate>
-        {mode === 'login' ? (
-          <Field
-            label="Email or username"
-            value={v.identity}
-            onChange={(e) => setV({ ...v, identity: e.target.value })}
-            required
-          />
-        ) : (
-          <>
-            <Field
-              label="Username"
-              value={v.username}
-              onChange={(e) => setV({ ...v, username: e.target.value })}
-              required
-            />
-            <Field
-              label="Email"
-              type="email"
-              value={v.email}
-              onChange={(e) => setV({ ...v, email: e.target.value })}
-              required
-            />
-            <Field
-              label="Display name"
-              value={v.displayName}
-              onChange={(e) => setV({ ...v, displayName: e.target.value })}
-              required
-            />
-          </>
-        )}
-        <Field
-          label="Password"
-          type="password"
-          value={v.password}
-          onChange={(e) => setV({ ...v, password: e.target.value })}
-          minLength={8}
-          required
-        />
-        <FormMessage error={error} />
-        <button disabled={loading}>
-          {loading ? 'Working…' : mode === 'login' ? 'Sign in' : 'Register'}
-        </button>
-      </form>
-      <p className="switch">
-        {mode === 'login' ? (
-          <>
-            New here? <Link to="/register">Create an account</Link>
-          </>
-        ) : (
-          <>
-            Already registered? <Link to="/login">Sign in</Link>
-          </>
-        )}
-      </p>
-    </section>
   );
 }
 function Home({
@@ -1610,13 +1495,14 @@ export function App() {
     current.name === 'home' ? (
       <Home api={api} user={user} />
     ) : current.name === 'login' || current.name === 'register' ? (
-      <AuthForm
+      <AuthExperience
         mode={current.name}
         api={api}
         onUser={(value) => {
           setUser(value);
           setAuthState('authenticated');
         }}
+        onNavigate={navigate}
       />
     ) : current.name === 'forbidden' ? (
       <Forbidden />

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import type {
   Account,
+  AccountIdentifier,
   ApiClient,
   AuthenticatedUser,
+  AuthProvider,
+  ConnectedIdentity,
   Session,
 } from '../services/api.js';
 import { ApiError } from '../services/api.js';
@@ -21,6 +24,12 @@ export function AccountSettings({
 }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [sessions, setSessions] = useState<Session[] | null>(null);
+  const [identifiers, setIdentifiers] = useState<AccountIdentifier[] | null>(
+    null,
+  );
+  const [identities, setIdentities] = useState<ConnectedIdentity[] | null>(
+    null,
+  );
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   useEffect(() => {
@@ -41,6 +50,33 @@ export function AccountSettings({
               : 'Account security is temporarily unavailable.'
             : 'Account security could not be reached.',
         );
+      });
+    return () => {
+      active = false;
+    };
+  }, [api]);
+  useEffect(() => {
+    let active = true;
+    if (
+      typeof api.accountIdentifiers !== 'function' ||
+      typeof api.connectedIdentities !== 'function'
+    ) {
+      setIdentifiers([]);
+      setIdentities([]);
+      return () => {
+        active = false;
+      };
+    }
+    void Promise.all([api.accountIdentifiers(), api.connectedIdentities()])
+      .then(([nextIdentifiers, nextIdentities]) => {
+        if (!active) return;
+        setIdentifiers(Array.isArray(nextIdentifiers) ? nextIdentifiers : []);
+        setIdentities(Array.isArray(nextIdentities) ? nextIdentities : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setIdentifiers([]);
+        setIdentities([]);
       });
     return () => {
       active = false;
@@ -165,6 +201,97 @@ export function AccountSettings({
           </ul>
           <p className="muted settings-footnote">
             Session metadata is shown without tokens or secret credentials.
+          </p>
+        </article>
+        <article className="settings-panel settings-wide">
+          <div className="panel-row">
+            <div>
+              <p className="panel-label">IDENTITY</p>
+              <h2>Login methods</h2>
+            </div>
+            <span className="muted">Verified identifiers and providers</span>
+          </div>
+          {identifiers === null || identities === null ? (
+            <p className="muted" role="status">
+              Loading connected identities...
+            </p>
+          ) : identifiers.length === 0 && identities.length === 0 ? (
+            <p className="unavailable-note">
+              Connected identity management is awaiting Auth V2 capability
+              discovery.
+            </p>
+          ) : (
+            <div className="identity-list">
+              {identifiers.map((identifier) => (
+                <div className="identity-row" key={identifier.id}>
+                  <div>
+                    <strong>
+                      {identifier.type === 'EMAIL' ? 'Email' : 'Phone'}
+                    </strong>
+                    <span className="muted">{identifier.maskedValue}</span>
+                  </div>
+                  <span className="status status-active">
+                    {identifier.primary ? 'Primary' : 'Verified'}
+                  </span>
+                </div>
+              ))}
+              {identities.map((identity) => {
+                const canUnlink =
+                  identifiers.some((item) => item.loginCapable) ||
+                  identities.length > 1;
+                return (
+                  <div className="identity-row" key={identity.provider}>
+                    <div>
+                      <strong>{identity.provider}</strong>
+                      <span className="muted">
+                        {identity.subjectLabel || 'Connected provider'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={!canUnlink || busy !== null}
+                      onClick={() =>
+                        void (async () => {
+                          if (!window.confirm(`Unlink ${identity.provider}?`))
+                            return;
+                          setBusy(identity.provider);
+                          try {
+                            await api.unlinkIdentity(
+                              identity.provider as AuthProvider,
+                            );
+                            setIdentities(
+                              (items) =>
+                                items?.filter(
+                                  (item) => item.provider !== identity.provider,
+                                ) ?? [],
+                            );
+                          } catch (reason) {
+                            setError(
+                              reason instanceof ApiError
+                                ? 'The provider could not be unlinked.'
+                                : 'The identity service could not be reached.',
+                            );
+                          } finally {
+                            setBusy(null);
+                          }
+                        })()
+                      }
+                    >
+                      {canUnlink
+                        ? busy === identity.provider
+                          ? 'Unlinking...'
+                          : 'Unlink'
+                        : 'Required login method'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <p className="muted settings-footnote">
+            Adding or linking a new identifier/provider requires a server-issued
+            verification or OAuth transaction.
           </p>
         </article>
       </div>

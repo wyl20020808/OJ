@@ -24,6 +24,45 @@ export type Session = {
   lastSeenAt?: string;
   deviceLabel?: string;
 };
+export type AuthProvider = 'wechat' | 'qq' | 'google' | 'github';
+export type AuthMethods = {
+  registration: { email: boolean; phone: boolean };
+  login: {
+    emailPassword: boolean;
+    phonePassword: boolean;
+    emailCode: boolean;
+    phoneCode: boolean;
+  };
+  providers: Record<AuthProvider, 'enabled' | 'disabled' | 'not_configured'>;
+  passwordPolicy: { minLength: number };
+};
+export type VerificationChallenge = {
+  challengeId: string;
+  channel: 'EMAIL' | 'SMS';
+  destination: string;
+  expiresAt: string;
+  resendAt: string;
+  attemptsRemaining: number;
+};
+export type VerificationGrant = {
+  grantId: string;
+  purpose: 'REGISTER' | 'LOGIN_CODE' | 'ADD_IDENTIFIER';
+  destination: string;
+  expiresAt: string;
+};
+export type ConnectedIdentity = {
+  provider: AuthProvider;
+  subjectLabel?: string;
+  linkedAt: string;
+};
+export type AccountIdentifier = {
+  id: string;
+  type: 'EMAIL' | 'PHONE';
+  maskedValue: string;
+  verifiedAt: string;
+  primary: boolean;
+  loginCapable: boolean;
+};
 export type Example = { input: string; output: string; note?: string };
 export type Problem = {
   id: string;
@@ -205,6 +244,22 @@ async function request<T>(
   return (await response.json()) as T;
 }
 export type ApiClient = ReturnType<typeof createApiClient>;
+const defaultAuthMethods: AuthMethods = {
+  registration: { email: false, phone: false },
+  login: {
+    emailPassword: false,
+    phonePassword: false,
+    emailCode: false,
+    phoneCode: false,
+  },
+  providers: {
+    wechat: 'not_configured',
+    qq: 'not_configured',
+    google: 'not_configured',
+    github: 'not_configured',
+  },
+  passwordPolicy: { minLength: 8 },
+};
 export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
   return {
     me: () =>
@@ -254,6 +309,105 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         baseUrl,
         '/api/auth/sessions/revoke-all',
         { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    authMethods: () =>
+      request<AuthMethods>(
+        baseUrl,
+        '/api/auth/methods',
+        undefined,
+        fetcher,
+      ).catch((error) => {
+        if (error instanceof ApiError && [404, 501].includes(error.status))
+          return defaultAuthMethods;
+        throw error;
+      }),
+    requestVerification: (input: {
+      channel: 'EMAIL' | 'SMS';
+      purpose: 'REGISTER' | 'LOGIN_CODE' | 'ADD_IDENTIFIER';
+      destination: string;
+    }) =>
+      request<VerificationChallenge>(
+        baseUrl,
+        '/api/auth/verification/challenges',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    verifyVerification: (challengeId: string, code: string) =>
+      request<VerificationGrant>(
+        baseUrl,
+        `/api/auth/verification/challenges/${encodeURIComponent(challengeId)}/verify`,
+        { method: 'POST', body: JSON.stringify({ code }) },
+        fetcher,
+      ),
+    registerVerified: (input: {
+      grantId: string;
+      identifierType: 'EMAIL' | 'PHONE';
+      username: string;
+      displayName: string;
+      password: string;
+    }) =>
+      request<AuthenticatedUser>(
+        baseUrl,
+        '/api/auth/register/verified',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    loginPassword: (input: {
+      identifierType: 'EMAIL' | 'PHONE';
+      identifier: string;
+      password: string;
+    }) =>
+      request<AuthenticatedUser>(
+        baseUrl,
+        '/api/auth/login/password',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    loginCode: (input: { grantId: string }) =>
+      request<AuthenticatedUser>(
+        baseUrl,
+        '/api/auth/login/code',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    oauthStart: (provider: AuthProvider, returnTo = '/') =>
+      request<{ authorizationUrl: string }>(
+        baseUrl,
+        `/api/auth/oauth/${provider}/start`,
+        { method: 'POST', body: JSON.stringify({ returnTo }) },
+        fetcher,
+      ),
+    completeSocialOnboarding: (input: {
+      transactionId: string;
+      username: string;
+      displayName: string;
+    }) =>
+      request<AuthenticatedUser>(
+        baseUrl,
+        '/api/auth/oauth/onboarding',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    accountIdentifiers: () =>
+      request<AccountIdentifier[]>(
+        baseUrl,
+        '/api/auth/account/identifiers',
+        undefined,
+        fetcher,
+      ),
+    connectedIdentities: () =>
+      request<ConnectedIdentity[]>(
+        baseUrl,
+        '/api/auth/account/identities',
+        undefined,
+        fetcher,
+      ),
+    unlinkIdentity: (provider: AuthProvider) =>
+      request<void>(
+        baseUrl,
+        `/api/auth/account/identities/${provider}`,
+        { method: 'DELETE' },
         fetcher,
       ),
     problems: (offset = 0, limit = 20) =>
