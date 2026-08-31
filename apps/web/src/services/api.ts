@@ -81,6 +81,13 @@ export type Problem = {
   testdataVersion: string | null;
   authorId: string | null;
   currentRevisionId?: string;
+  difficulty?: string;
+  tags?: string[];
+  source?: string;
+  statistics?: {
+    submissionCount: number;
+    acceptedCount: number;
+  };
   createdAt: string;
   updatedAt: string;
 };

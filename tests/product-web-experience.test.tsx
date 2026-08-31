@@ -132,9 +132,10 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     vi.stubGlobal('fetch', appFetch());
     render(<App />);
     expect(
-      await screen.findByRole('heading', {
-        name: '把每一次练习，做得更扎实。',
-      }),
+      await screen.findByRole('heading', { name: '公告' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '每日一题' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/online users|leaderboard|accepted count/i),
@@ -144,7 +145,7 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     vi.stubGlobal('fetch', appFetch());
     window.history.pushState({}, '', '/problems');
     render(<App />);
-    expect(await screen.findByLabelText('搜索题目')).toBeInTheDocument();
+    expect(await screen.findByLabelText('关键词')).toBeInTheDocument();
   });
   it('WEB-PROD-07 problem list exposes an empty state', async () => {
     vi.stubGlobal('fetch', appFetch());
@@ -199,8 +200,9 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     window.history.pushState({}, '', '/profile');
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: '我的资料' }),
+      await screen.findByRole('heading', { name: user.displayName }),
     ).toBeInTheDocument();
+    expect(screen.getByText(`@${user.username}`)).toBeInTheDocument();
   });
   it('WEB-PROD-16 settings route is available to signed-in users', async () => {
     vi.stubGlobal('fetch', appFetch({ me: user }));

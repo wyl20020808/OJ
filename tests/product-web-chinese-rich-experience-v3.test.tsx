@@ -100,13 +100,15 @@ afterEach(() => {
 describe('Product Web Chinese Rich Experience V3', () => {
   it('WEB-V3-01 global nav zh-CN', () => {
     renderApp();
-    expect(screen.getByText('首页')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveTextContent(
+      '首页',
+    );
     expect(document.documentElement.lang || 'zh-CN').toBe('zh-CN');
   });
   it('WEB-V3-02 home zh-CN', async () => {
     renderApp();
     expect(
-      await screen.findByText('把每一次练习，做得更扎实。'),
+      await screen.findByRole('heading', { name: '公告' }),
     ).toBeInTheDocument();
   });
   it('WEB-V3-03 login zh-CN', () => {
@@ -142,40 +144,44 @@ describe('Product Web Chinese Rich Experience V3', () => {
     ['WEB-V3-10', '/forbidden', '无权访问'],
   ])('%s localized route shell', async (_id, path, text) => {
     renderApp(path);
-    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: text }),
+    ).toBeInTheDocument();
   });
   it('WEB-V3-11 compact welcome/actions', async () => {
     renderApp();
-    expect(await screen.findByText('找到下一道题')).toBeInTheDocument();
-    expect(screen.getByText('进入题库')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: '每日一题' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '我的作业' }),
+    ).toBeInTheDocument();
   });
-  it('WEB-V3-12 quick problem jump', async () => {
+  it('WEB-V3-12 quick problem jump is removed by V4', async () => {
     renderApp();
-    const input = await screen.findByRole('textbox', { name: '题目快速跳转' });
-    fireEvent.change(input, { target: { value: 'two-sum' } });
-    fireEvent.click(screen.getByRole('button', { name: '跳转' }));
-    expect(window.location.pathname).toBe('/problems/two-sum');
+    await screen.findByRole('heading', { name: '公告' });
+    expect(
+      screen.queryByRole('textbox', { name: '题目快速跳转' }),
+    ).not.toBeInTheDocument();
   });
-  it('WEB-V3-13 enter-to-jump', async () => {
+  it('WEB-V3-13 old quick-start UI is absent', async () => {
     renderApp();
-    const input = await screen.findByRole('textbox', { name: '题目快速跳转' });
-    fireEvent.change(input, { target: { value: '两数' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    expect(window.location.pathname).toBe('/problems/two-sum');
+    await screen.findByRole('heading', { name: '公告' });
+    expect(screen.queryByText('找到下一道题')).not.toBeInTheDocument();
   });
-  it('WEB-V3-14 invalid problem feedback', async () => {
-    renderApp();
-    const input = await screen.findByRole('textbox', { name: '题目快速跳转' });
+  it('WEB-V3-14 problem search remains on the problem list', async () => {
+    renderApp('/problems');
+    const input = await screen.findByRole('textbox', { name: '关键词' });
     fireEvent.change(input, { target: { value: '不存在' } });
-    fireEvent.click(screen.getByRole('button', { name: '跳转' }));
-    expect(screen.getByText('没有找到匹配的题目。')).toBeInTheDocument();
+    expect(screen.getByText('当前筛选无结果')).toBeInTheDocument();
   });
-  it('WEB-V3-15 random problem uses real data', async () => {
+  it('WEB-V3-15 daily problem uses real data', async () => {
     renderApp();
-    fireEvent.click(await screen.findByRole('button', { name: '随机跳题' }));
-    expect(window.location.pathname).toBe('/problems/two-sum');
+    expect(
+      await screen.findByRole('link', { name: /开始练习/ }),
+    ).toHaveAttribute('href', '/problems/two-sum');
   });
-  it('WEB-V3-16 random unavailable safe state', async () => {
+  it('WEB-V3-16 daily problem unavailable safe state', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
@@ -187,16 +193,21 @@ describe('Product Web Chinese Rich Experience V3', () => {
       }),
     );
     render(<App />);
-    expect(await screen.findByText('暂无可用题目')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '随机跳题' })).toBeDisabled();
+    expect(await screen.findByText('题库数据暂不可用。')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '随机跳题' }),
+    ).not.toBeInTheDocument();
   });
   it('WEB-V3-17 daily fortune deterministic per day', () => {
     const date = new Date('2026-08-31T12:00:00Z');
     expect(getDailyFortune(date, 'u1')).toEqual(getDailyFortune(date, 'u1'));
   });
-  it('WEB-V3-18 daily fortune marked entertainment', async () => {
+  it('WEB-V3-18 fortune follows V4 reveal contract', async () => {
     renderApp();
-    expect(await screen.findByText('仅供娱乐')).toBeInTheDocument();
+    const button = await screen.findByRole('button', { name: '获取今日运势' });
+    expect(screen.queryByText('仅供娱乐')).not.toBeInTheDocument();
+    fireEvent.click(button);
+    expect(screen.getByText('幸运算法')).toBeInTheDocument();
   });
   it('WEB-V3-19 fortune uses no sensitive seed', () => {
     const result = getDailyFortune(new Date('2026-08-31'), 'public-seed');
@@ -208,20 +219,20 @@ describe('Product Web Chinese Rich Experience V3', () => {
   });
   it('WEB-V3-21 announcements truthful source', async () => {
     renderApp();
-    expect(await screen.findByText('站点公告')).toBeInTheDocument();
-    expect(screen.getByText(/版本控制的静态公告/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: '公告' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/版本控制的真实静态公告/)).toBeInTheDocument();
     expect(staticAnnouncements).toHaveLength(2);
   });
-  it.each([
-    ['WEB-V3-22', true],
-    ['WEB-V3-23', false],
-  ])(
+  it.each(['WEB-V3-22', 'WEB-V3-23'])(
     '%s personal activity does not invent stats',
-    async (_id, authenticated) => {
+    async () => {
       renderApp();
-      if (!authenticated)
-        expect(await screen.findByText('登录查看提交')).toBeInTheDocument();
-      else expect(await screen.findByText('登录查看提交')).toBeInTheDocument();
+      await screen.findByRole('heading', { name: '公告' });
+      expect(
+        screen.queryByText(/在线人数|通过题数|accepted count/i),
+      ).not.toBeInTheDocument();
     },
   );
   it.each([
@@ -230,11 +241,18 @@ describe('Product Web Chinese Rich Experience V3', () => {
     ['WEB-V3-26', '讨论'],
   ])('%s optional capability is not fabricated', (_id, value) => {
     renderApp();
-    expect(screen.queryByText(value)).not.toBeInTheDocument();
+    if (value === '比赛') {
+      expect(
+        screen.getByRole('heading', { name: '比赛与排名' }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/不展示虚构赛程或名次/)).toBeInTheDocument();
+    } else expect(screen.queryByText(value)).not.toBeInTheDocument();
   });
   it('WEB-V3-27 list compact desktop', async () => {
     renderApp('/problems');
-    expect(await screen.findByText('题库')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: '题库' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('list')).toBeInTheDocument();
   });
   it('WEB-V3-28 list mobile usable', async () => {
@@ -243,7 +261,7 @@ describe('Product Web Chinese Rich Experience V3', () => {
   });
   it('WEB-V3-29 search', async () => {
     renderApp('/problems');
-    const input = await screen.findByRole('textbox', { name: '搜索题目' });
+    const input = await screen.findByRole('textbox', { name: '关键词' });
     fireEvent.change(input, { target: { value: '不存在' } });
     expect(screen.getByText('当前筛选无结果')).toBeInTheDocument();
   });

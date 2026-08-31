@@ -23,6 +23,15 @@ import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
 import {
+  ContestExperience,
+  HomeworkPage,
+  MessagesExperience,
+  NotificationBell,
+  NotificationsPage,
+  ProfileExperience,
+  WrongBookPage,
+} from '../components/PortalExperience.js';
+import {
   chooseDailyProblem,
   getDailyFortune,
   staticAnnouncements,
@@ -48,6 +57,19 @@ type Route = {
     | 'submission'
     | 'profile'
     | 'settings'
+    | 'contests'
+    | 'contest-new'
+    | 'contest-detail'
+    | 'contest-problems'
+    | 'contest-submissions'
+    | 'contest-standings'
+    | 'contest-settings'
+    | 'my-contests'
+    | 'homework'
+    | 'homework-detail'
+    | 'wrong-book'
+    | 'notifications'
+    | 'messages'
     | 'author'
     | 'author-new'
     | 'author-edit'
@@ -66,6 +88,25 @@ function route(path = window.location.pathname): Route {
   if (path === '/profile' || path === '/account') return { name: 'profile' };
   if (path === '/settings' || path === '/account/settings')
     return { name: 'settings' };
+  if (path === '/contests' || path === '/contests/')
+    return { name: 'contests' };
+  if (path === '/contests/new') return { name: 'contest-new' };
+  if (path === '/me/contests') return { name: 'my-contests' };
+  if (path.startsWith('/contests/')) {
+    const parts = path.split('/').filter(Boolean);
+    const id = decodeURIComponent(parts[1] ?? '');
+    if (parts[2] === 'problems') return { name: 'contest-problems', id };
+    if (parts[2] === 'submissions') return { name: 'contest-submissions', id };
+    if (parts[2] === 'standings') return { name: 'contest-standings', id };
+    if (parts[2] === 'settings') return { name: 'contest-settings', id };
+    return { name: 'contest-detail', id };
+  }
+  if (path === '/homework') return { name: 'homework' };
+  if (path.startsWith('/homework/'))
+    return { name: 'homework-detail', id: decodeURIComponent(path.slice(10)) };
+  if (path === '/wrong-book') return { name: 'wrong-book' };
+  if (path === '/notifications') return { name: 'notifications' };
+  if (path === '/messages') return { name: 'messages' };
   if (path === '/operations/sandbox') return { name: 'sandbox' };
   if (path === '/problems' || path === '/problems/')
     return { name: 'problems' };
@@ -110,6 +151,93 @@ function Link({
     >
       {children}
     </a>
+  );
+}
+
+function Breadcrumbs({ current }: { current: Route }) {
+  const leaf: Record<Route['name'], string> = {
+    home: '首页',
+    login: '登录',
+    register: '注册',
+    problems: '题库',
+    problem: current.id ?? '题目',
+    submit: '提交代码',
+    submissions: '提交记录',
+    submission: '提交详情',
+    profile: '个人主页',
+    settings: '账户与安全',
+    contests: '比赛',
+    'contest-new': '新建比赛',
+    'contest-detail': current.id ?? '比赛详情',
+    'contest-problems': '比赛题目',
+    'contest-submissions': '比赛提交',
+    'contest-standings': '比赛排名',
+    'contest-settings': '比赛管理',
+    'my-contests': '我的比赛',
+    homework: '我的作业',
+    'homework-detail': current.id ?? '作业详情',
+    'wrong-book': '错题集',
+    notifications: '通知',
+    messages: '通讯中心',
+    author: '出题工作台',
+    'author-new': '创建题目',
+    'author-edit': '编辑题目',
+    sandbox: 'Sandbox 运维',
+    forbidden: '无权访问',
+    error: '页面加载失败',
+    'not-found': '页面不存在',
+  };
+  const parents: Array<{ label: string; to: string }> = [];
+  if (['problem', 'submit'].includes(current.name))
+    parents.push({ label: '题库', to: '/problems' });
+  if (
+    [
+      'contest-new',
+      'contest-detail',
+      'contest-problems',
+      'contest-submissions',
+      'contest-standings',
+      'contest-settings',
+      'my-contests',
+    ].includes(current.name)
+  )
+    parents.push({ label: '比赛', to: '/contests' });
+  if (
+    [
+      'contest-problems',
+      'contest-submissions',
+      'contest-standings',
+      'contest-settings',
+    ].includes(current.name)
+  )
+    parents.push({
+      label: current.id ?? '比赛详情',
+      to: `/contests/${encodeURIComponent(current.id ?? '')}`,
+    });
+  if (current.name === 'homework-detail')
+    parents.push({ label: '我的作业', to: '/homework' });
+  if (['submission'].includes(current.name))
+    parents.push({ label: '提交记录', to: '/submissions' });
+  return (
+    <nav className="breadcrumbs" aria-label="面包屑">
+      {current.name === 'home' ? (
+        <span aria-current="page">首页</span>
+      ) : (
+        <>
+          <Link to="/">首页</Link>
+          {parents.map((item) => (
+            <span key={`${item.to}-${item.label}`}>
+              <span aria-hidden="true">/</span>
+              <Link to={item.to}>{item.label}</Link>
+            </span>
+          ))}
+          <span aria-hidden="true">/</span>
+          <span aria-current="page" title={leaf[current.name]}>
+            {leaf[current.name]}
+          </span>
+        </>
+      )}
+    </nav>
   );
 }
 export class ErrorBoundary extends Component<
@@ -298,8 +426,7 @@ function Home({
 }) {
   const [recentProblems, setRecentProblems] = useState<Problem[] | null>(null);
   const [error, setError] = useState(false);
-  const [jumpQuery, setJumpQuery] = useState('');
-  const [jumpError, setJumpError] = useState('');
+  const [fortuneVisible, setFortuneVisible] = useState(false);
   const fortune = useMemo(() => {
     const seed =
       user?.id ??
@@ -326,240 +453,145 @@ function Home({
       )
       .catch(() => setError(true));
   }, [api]);
-  const jump = () => {
-    const value = jumpQuery.trim().toLowerCase();
-    if (!value) {
-      setJumpError('请输入题号或题目关键词。');
-      return;
-    }
-    const match = recentProblems?.find((problem) =>
-      [problem.id, problem.slug, problem.title].some((field) =>
-        field.toLowerCase().includes(value),
-      ),
-    );
-    if (match) {
-      setJumpError('');
-      navigate(`/problems/${match.slug || match.id}`);
-    } else {
-      setJumpError(
-        recentProblems === null || error
-          ? '题库数据暂不可用，请稍后重试。'
-          : '没有找到匹配的题目。',
-      );
-    }
-  };
   const dailyProblem = chooseDailyProblem(recentProblems ?? []);
-  const randomProblem = () => {
-    if (!recentProblems?.length) {
-      setJumpError('随机跳题需要先加载题库数据。');
-      return;
-    }
-    const item =
-      recentProblems[Math.floor(Math.random() * recentProblems.length)];
-    if (!item) return;
-    navigate(`/problems/${item.slug || item.id}`);
-  };
   return (
-    <section className="home-page">
-      <header className="home-intro">
-        <div>
-          <p className="eyebrow">OJPLATFORM / 在线评测工作台</p>
-          <h1>
-            {user
-              ? `欢迎回来，${user.displayName}`
-              : '把每一次练习，做得更扎实。'}
-          </h1>
-          <p className="home-lede">
-            从一道真实题目开始，阅读、提交、复盘，所有过程都和明确的题目版本保持关联。
-          </p>
-        </div>
-        <div className="home-actions" aria-label="常用操作">
-          <Link to="/problems">
-            <button type="button">进入题库</button>
-          </Link>
-          <Link to={user ? '/submissions' : '/login'}>
-            <button className="secondary" type="button">
-              {user ? '查看我的提交' : '登录后继续'}
-            </button>
-          </Link>
-        </div>
-      </header>
-
-      <section className="home-workbench" aria-labelledby="quick-jump-title">
-        <div className="workbench-main">
-          <div className="section-heading-inline">
-            <div>
-              <p className="eyebrow">快速开始</p>
-              <h2 id="quick-jump-title">找到下一道题</h2>
-            </div>
-            <span className="muted">题号、slug 或标题关键词</span>
-          </div>
-          <div className="jump-form">
-            <input
-              aria-label="题目快速跳转"
-              value={jumpQuery}
-              onChange={(event) => setJumpQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') jump();
-              }}
-              placeholder="例如：two-sum 或 二分"
-            />
-            <button type="button" onClick={jump}>
-              跳转
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={randomProblem}
-              disabled={!recentProblems?.length}
-            >
-              随机跳题
-            </button>
-          </div>
-          {jumpError && (
-            <p className="error" role="alert">
-              {jumpError}
-            </p>
-          )}
-          {error && (
-            <p className="unavailable-note" role="status">
-              题库数据暂不可用，快速跳转和随机跳题将在服务恢复后启用。
-            </p>
-          )}
-        </div>
-        <div className="workbench-side">
-          <span className="panel-label">今日挑战</span>
-          {dailyProblem ? (
-            <>
-              <strong>
-                <Link to={`/problems/${dailyProblem.slug || dailyProblem.id}`}>
-                  {dailyProblem.title}
-                </Link>
-              </strong>
-              <span className="muted">
-                {dailyProblem.slug || dailyProblem.id}
-              </span>
-              <Link to={`/problems/${dailyProblem.slug || dailyProblem.id}`}>
-                开始练习 →
-              </Link>
-            </>
-          ) : (
-            <>
-              <strong>暂无可用题目</strong>
-              <p className="muted">
-                题库服务恢复后，这里会按日期展示真实题目。
-              </p>
-            </>
-          )}
-        </div>
-      </section>
-
-      <section className="home-columns">
+    <section className="home-page home-v4">
+      <section className="home-columns home-v4-columns">
         <div className="home-column-main">
-          <div className="section-heading-inline">
-            <div>
-              <p className="eyebrow">题库动态</p>
-              <h2>最近更新</h2>
-            </div>
-            <Link to="/problems">查看全部</Link>
-          </div>
-          {recentProblems === null ? (
-            <p className="muted">正在加载题库…</p>
-          ) : recentProblems.length ? (
-            <div className="problem-table" role="list">
-              {recentProblems.slice(0, 6).map((problem) => (
-                <Link
-                  key={problem.id}
-                  to={`/problems/${problem.slug || problem.id}`}
-                >
-                  <article role="listitem">
-                    <span className="problem-id">
-                      {problem.slug || problem.id}
-                    </span>
-                    <div>
-                      <h3>{problem.title}</h3>
-                      <p>
-                        {problem.statement.slice(0, 100)}
-                        {problem.statement.length > 100 ? '…' : ''}
-                      </p>
-                    </div>
-                    <span aria-hidden="true">→</span>
-                  </article>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <State title="暂无题目" text="公开题目将在服务恢复后显示。" />
-          )}
-          <div className="home-links">
-            <Link to={user ? '/submissions' : '/login'}>
-              <strong>{user ? '我的提交' : '登录查看提交'}</strong>
-              <span>
-                {user ? '查看真实的提交接收记录' : '登录后查看个人练习记录'} →
-              </span>
-            </Link>
-            {user && (
-              <Link to="/author">
-                <strong>出题工作台</strong>
-                <span>管理你的题目草稿 →</span>
-              </Link>
-            )}
-          </div>
-        </div>
-        <aside className="home-column-side">
-          <section className="fortune-panel">
-            <div className="section-heading-inline">
-              <div>
-                <p className="eyebrow">每日小工具</p>
-                <h2>今日运势</h2>
-              </div>
-              <span className="status status-active">仅供娱乐</span>
-            </div>
-            <p className="fortune-state">{fortune.state}</p>
-            <dl>
-              <div>
-                <dt>宜</dt>
-                <dd>{fortune.should}</dd>
-              </div>
-              <div>
-                <dt>忌</dt>
-                <dd>{fortune.avoid}</dd>
-              </div>
-              <div>
-                <dt>幸运算法</dt>
-                <dd>
-                  {fortune.algorithm} · {fortune.complexity}
-                </dd>
-              </div>
-            </dl>
-            <p className="field-help">
-              每天对同一浏览器保持一致，不使用密码、令牌、邮箱、手机号或 IP。
-            </p>
-          </section>
-          <section className="announcement-panel">
+          <section className="announcement-panel home-section">
             <div className="section-heading-inline">
               <div>
                 <p className="eyebrow">站点信息</p>
-                <h2>站点公告</h2>
+                <h1>公告</h1>
               </div>
             </div>
             <ul className="announcement-list">
               {staticAnnouncements.map((item) => (
                 <li key={item.id}>
-                  <div>
-                    <span className="announcement-meta">
-                      {item.importance} · {item.date}
-                    </span>
-                    <strong>
-                      <Link to={item.href}>{item.title}</Link>
-                    </strong>
-                    <p>{item.text}</p>
-                  </div>
+                  <span className="announcement-meta">
+                    {item.importance} · {item.date}
+                  </span>
+                  <strong>
+                    <Link to={item.href}>{item.title}</Link>
+                  </strong>
+                  <p>{item.text}</p>
                 </li>
               ))}
             </ul>
             <p className="field-help">
-              以上为 Web 版本控制的静态公告；公告后端接入待后续集成。
+              当前为 Web 版本控制的真实静态公告；公告后端尚未接入。
+            </p>
+          </section>
+          <section className="home-section homework-panel">
+            <div className="section-heading-inline">
+              <div>
+                <p className="eyebrow">学习任务</p>
+                <h2>我的作业</h2>
+              </div>
+              <Link to="/homework">查看作业</Link>
+            </div>
+            <p className="unavailable-note" role="note">
+              作业功能正在接入。当前不会显示虚构的作业、截止时间或完成进度。
+            </p>
+          </section>
+          <section className="home-section wrong-book-panel">
+            <div className="section-heading-inline">
+              <div>
+                <p className="eyebrow">复盘</p>
+                <h2>错题集</h2>
+              </div>
+              <Link to="/wrong-book">打开错题集</Link>
+            </div>
+            <p className="unavailable-note" role="note">
+              错题集数据暂不可用。Verdict Engine
+              接入前不会把原始执行状态解释为错题。
+            </p>
+          </section>
+        </div>
+        <aside className="home-column-side">
+          <section className="daily-problem-panel home-section">
+            <div className="section-heading-inline">
+              <div>
+                <p className="eyebrow">按日期稳定选取</p>
+                <h2>每日一题</h2>
+              </div>
+            </div>
+            {dailyProblem ? (
+              <div className="daily-problem">
+                <span className="problem-id">
+                  {dailyProblem.slug || dailyProblem.id}
+                </span>
+                <strong>{dailyProblem.title}</strong>
+                <div className="tag-row">
+                  {dailyProblem.difficulty && (
+                    <span>{dailyProblem.difficulty}</span>
+                  )}
+                  {dailyProblem.tags?.map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
+                </div>
+                <Link to={`/problems/${dailyProblem.slug || dailyProblem.id}`}>
+                  开始练习 →
+                </Link>
+              </div>
+            ) : (
+              <p className="unavailable-note" role="note">
+                {error
+                  ? '题库数据暂不可用。'
+                  : '暂无可用于每日一题的真实题目。'}
+              </p>
+            )}
+          </section>
+          <section className="fortune-panel home-section">
+            <div className="section-heading-inline">
+              <div>
+                <p className="eyebrow">刷题手气</p>
+                <h2>今日运势</h2>
+              </div>
+            </div>
+            {!fortuneVisible ? (
+              <div className="fortune-entry">
+                <p>看看今天适合怎样开始练习。</p>
+                <button type="button" onClick={() => setFortuneVisible(true)}>
+                  获取今日运势
+                </button>
+              </div>
+            ) : (
+              <div aria-live="polite">
+                <p className="fortune-state">{fortune.state}</p>
+                <dl>
+                  <div>
+                    <dt>宜</dt>
+                    <dd>{fortune.should}</dd>
+                  </div>
+                  <div>
+                    <dt>忌</dt>
+                    <dd>{fortune.avoid}</dd>
+                  </div>
+                  <div>
+                    <dt>幸运算法</dt>
+                    <dd>
+                      {fortune.algorithm} · {fortune.complexity}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="field-help">
+                  同一浏览器同一天结果一致，种子不使用邮箱、手机号、令牌、密码或
+                  IP。
+                </p>
+              </div>
+            )}
+          </section>
+          <section className="home-section contest-home-panel">
+            <div className="section-heading-inline">
+              <div>
+                <p className="eyebrow">竞赛中心</p>
+                <h2>比赛与排名</h2>
+              </div>
+              <Link to="/contests">全部比赛</Link>
+            </div>
+            <p className="unavailable-note" role="note">
+              比赛和排行榜后端尚未接入；当前不展示虚构赛程或名次。
             </p>
           </section>
         </aside>
@@ -591,7 +623,18 @@ function ProblemList({ api }: { api: ApiClient }) {
   } | null>(null);
   const [error, setError] = useState(false);
   const [offset, setOffset] = useState(0);
-  const [query, setQuery] = useState('');
+  const initialFilters = useMemo(
+    () => new URLSearchParams(window.location.search),
+    [],
+  );
+  const [query, setQuery] = useState(() => initialFilters.get('q') ?? '');
+  const [difficulty, setDifficulty] = useState(
+    () => initialFilters.get('difficulty') ?? '',
+  );
+  const [tag, setTag] = useState(() => initialFilters.get('tag') ?? '');
+  const [source, setSource] = useState(
+    () => initialFilters.get('source') ?? '',
+  );
   const load = () => {
     setError(false);
     setData(null);
@@ -610,51 +653,158 @@ function ProblemList({ api }: { api: ApiClient }) {
       />
     );
   if (!data) return <State title="正在加载题库" text="正在获取最新题目列表…" />;
+  const difficulties = [
+    ...new Set(data.items.map((problem) => problem.difficulty).filter(Boolean)),
+  ] as string[];
+  const tags = [
+    ...new Set(data.items.flatMap((problem) => problem.tags ?? [])),
+  ];
+  const sources = [
+    ...new Set(data.items.map((problem) => problem.source).filter(Boolean)),
+  ] as string[];
+  const filtered = data.items.filter(
+    (problem) =>
+      `${problem.title} ${problem.slug}`
+        .toLowerCase()
+        .includes(query.toLowerCase()) &&
+      (!difficulty || problem.difficulty === difficulty) &&
+      (!tag || problem.tags?.includes(tag)) &&
+      (!source || problem.source === source),
+  );
+  const writeFilters = (next: {
+    q?: string;
+    difficulty?: string;
+    tag?: string;
+    source?: string;
+  }) => {
+    const values = {
+      q: next.q ?? query,
+      difficulty: next.difficulty ?? difficulty,
+      tag: next.tag ?? tag,
+      source: next.source ?? source,
+    };
+    const params = new URLSearchParams();
+    Object.entries(values).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    window.history.replaceState(
+      {},
+      '',
+      `/problems${params.size ? `?${params.toString()}` : ''}`,
+    );
+  };
+  const clearFilters = () => {
+    setQuery('');
+    setDifficulty('');
+    setTag('');
+    setSource('');
+    window.history.replaceState({}, '', '/problems');
+  };
   return (
-    <section>
+    <section className="problem-list-v4">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">题目资源</p>
           <h1>题库</h1>
         </div>
         <span className="muted">共 {data.page.total} 题</span>
       </div>
-      <div className="toolbar">
+      <div className="problem-filters" aria-label="题库筛选">
         <label className="search-field">
-          搜索题目
+          关键词
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              writeFilters({ q: event.target.value });
+            }}
             placeholder="按题目标题或题号筛选"
           />
         </label>
-        <span className="muted">
-          {
-            data.items.filter((p) =>
-              `${p.title} ${p.slug}`
-                .toLowerCase()
-                .includes(query.toLowerCase()),
-            ).length
-          }{' '}
-          条结果
-        </span>
+        <label>
+          难度
+          <select
+            value={difficulty}
+            disabled={!difficulties.length}
+            onChange={(event) => {
+              setDifficulty(event.target.value);
+              writeFilters({ difficulty: event.target.value });
+            }}
+          >
+            <option value="">
+              {difficulties.length ? '全部难度' : '后端暂未提供'}
+            </option>
+            {difficulties.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          标签
+          <select
+            value={tag}
+            disabled={!tags.length}
+            onChange={(event) => {
+              setTag(event.target.value);
+              writeFilters({ tag: event.target.value });
+            }}
+          >
+            <option value="">
+              {tags.length ? '全部标签' : '后端暂未提供'}
+            </option>
+            {tags.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          来源
+          <select
+            value={source}
+            disabled={!sources.length}
+            onChange={(event) => {
+              setSource(event.target.value);
+              writeFilters({ source: event.target.value });
+            }}
+          >
+            <option value="">
+              {sources.length ? '全部来源' : '后端暂未提供'}
+            </option>
+            {sources.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="secondary"
+          disabled={!query && !difficulty && !tag && !source}
+          onClick={clearFilters}
+        >
+          清除筛选
+        </button>
       </div>
-      {data.items.filter((p) =>
-        `${p.title} ${p.slug}`.toLowerCase().includes(query.toLowerCase()),
-      ).length === 0 ? (
+      <div className="filter-summary" aria-live="polite">
+        <span>{filtered.length} 条结果</span>
+        {!difficulties.length && !tags.length && (
+          <span>难度与标签筛选将在后端提供字段后启用</span>
+        )}
+      </div>
+      {filtered.length === 0 ? (
         <State
-          title={query ? '当前筛选无结果' : '暂无题目'}
+          title={
+            query || difficulty || tag || source ? '当前筛选无结果' : '暂无题目'
+          }
           text={
-            query
+            query || difficulty || tag || source
               ? '请尝试其他关键词，或清除筛选条件。'
               : '已发布题目会显示在这里。'
           }
           action={
-            query ? (
+            query || difficulty || tag || source ? (
               <button
                 type="button"
                 className="secondary"
-                onClick={() => setQuery('')}
+                onClick={clearFilters}
               >
                 清除筛选
               </button>
@@ -663,31 +813,27 @@ function ProblemList({ api }: { api: ApiClient }) {
         />
       ) : (
         <div className="problem-table" role="list">
-          {data.items
-            .filter((p) =>
-              `${p.title} ${p.slug}`
-                .toLowerCase()
-                .includes(query.toLowerCase()),
-            )
-            .map((p) => (
-              <Link key={p.id} to={`/problems/${p.slug || p.id}`}>
-                <article role="listitem">
-                  <span className="problem-id">{p.slug || p.id}</span>
-                  <div>
-                    <h2>{p.title}</h2>
-                    <p>
-                      {p.statement.slice(0, 110)}
-                      {p.statement.length > 110 ? '…' : ''}
-                    </p>
+          {filtered.map((p) => (
+            <Link key={p.id} to={`/problems/${p.slug || p.id}`}>
+              <article role="listitem">
+                <span className="problem-id">{p.slug || p.id}</span>
+                <div className="problem-title-cell">
+                  <h2>{p.title}</h2>
+                  <div className="tag-row">
+                    {p.tags?.length ? (
+                      p.tags.map((item) => <span key={item}>{item}</span>)
+                    ) : (
+                      <span>暂无标签</span>
+                    )}
                   </div>
-                  <span className="problem-meta">
-                    {p.timeLimitMs} ms ·{' '}
-                    {Math.round(p.memoryLimitBytes / 1024 / 1024)} MB
-                  </span>
-                  <span aria-hidden="true">→</span>
-                </article>
-              </Link>
-            ))}
+                </div>
+                <span className="difficulty-label">
+                  {p.difficulty ?? '难度未提供'}
+                </span>
+                <span aria-hidden="true">→</span>
+              </article>
+            </Link>
+          ))}
         </div>
       )}
       <div className="pagination">
@@ -714,6 +860,12 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <div>{children}</div>
     </section>
   );
+}
+
+function formatMemoryLimit(bytes: number) {
+  return bytes < 1024 * 1024
+    ? `${Math.round(bytes / 1024)} KB`
+    : `${Math.round(bytes / 1024 / 1024)} MB`;
 }
 
 type Draft = {
@@ -1134,6 +1286,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
 function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  const [copyMessage, setCopyMessage] = useState('');
   useEffect(() => {
     void api
       .problem(id)
@@ -1161,40 +1314,106 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
     );
   if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
   return (
-    <article className="detail">
-      <Link to="/problems">← 返回题库</Link>
-      <h1>{problem.title}</h1>
-      <div className="submit-cta">
-        <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
-          <button type="button">提交代码</button>
-        </Link>
+    <article className="problem-detail-v4">
+      <div className="problem-main">
+        <header className="problem-heading">
+          <span className="problem-id">{problem.slug || problem.id}</span>
+          <h1>{problem.title}</h1>
+          <p className="muted">
+            {problem.currentRevisionId
+              ? `版本 ${problem.currentRevisionId}`
+              : '版本信息暂不可用'}
+            {problem.testdataVersion
+              ? ` · 测试数据 ${problem.testdataVersion}`
+              : ''}
+          </p>
+        </header>
+        <Section title="题目描述">{problem.statement}</Section>
+        <Section title="输入格式">{problem.inputDescription}</Section>
+        <Section title="输出格式">{problem.outputDescription}</Section>
+        <Section title="数据范围">{problem.constraints}</Section>
+        {problem.examples.length > 0 && (
+          <Section title="样例">
+            {problem.examples.map((example, index) => (
+              <div className="sample-block" key={index}>
+                <button
+                  type="button"
+                  className="secondary sample-copy"
+                  onClick={() => {
+                    if (!navigator.clipboard) {
+                      setCopyMessage('当前浏览器不支持复制样例。');
+                      return;
+                    }
+                    void navigator.clipboard
+                      .writeText(
+                        `输入\n${example.input}\n\n输出\n${example.output}`,
+                      )
+                      .then(() => setCopyMessage('样例已复制。'))
+                      .catch(() =>
+                        setCopyMessage('复制失败，请手动选择样例。'),
+                      );
+                  }}
+                >
+                  复制样例
+                </button>
+                <pre>{`输入\n${example.input}\n\n输出\n${example.output}`}</pre>
+              </div>
+            ))}
+            {copyMessage && <p role="status">{copyMessage}</p>}
+          </Section>
+        )}
+        {problem.notes && <Section title="说明与提示">{problem.notes}</Section>}
       </div>
-      <div className="limits">
-        <span>时间限制 {problem.timeLimitMs} ms</span>
-        <span>
-          内存限制 {Math.round(problem.memoryLimitBytes / 1024 / 1024)} MB
-        </span>
-      </div>
-      <p className="muted">
-        {problem.currentRevisionId
-          ? `版本 ${problem.currentRevisionId}`
-          : '版本信息暂不可用'}
-        {problem.testdataVersion
-          ? ` · 测试数据 ${problem.testdataVersion}`
-          : ''}
-      </p>
-      <Section title="题面">{problem.statement}</Section>
-      <Section title="输入">{problem.inputDescription}</Section>
-      <Section title="输出">{problem.outputDescription}</Section>
-      <Section title="数据范围">{problem.constraints}</Section>
-      {problem.examples.length > 0 && (
-        <Section title="样例">
-          {problem.examples.map((e, i) => (
-            <pre key={i}>{`输入\n${e.input}\n\n输出\n${e.output}`}</pre>
-          ))}
-        </Section>
-      )}
-      {problem.notes && <Section title="补充说明">{problem.notes}</Section>}
+      <aside className="problem-aside" aria-label="题目信息">
+        <div className="problem-aside-actions">
+          <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
+            <button type="button">提交代码</button>
+          </Link>
+          <button type="button" className="secondary" disabled>
+            收藏
+          </button>
+        </div>
+        <dl className="problem-facts">
+          <div>
+            <dt>难度</dt>
+            <dd>{problem.difficulty ?? '后端暂未提供'}</dd>
+          </div>
+          <div>
+            <dt>标签</dt>
+            <dd>
+              <span className="tag-row">
+                {problem.tags?.length
+                  ? problem.tags.map((tag) => <span key={tag}>{tag}</span>)
+                  : '后端暂未提供'}
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt>来源</dt>
+            <dd>{problem.source ?? '后端暂未提供'}</dd>
+          </div>
+          <div>
+            <dt>时间限制</dt>
+            <dd>{problem.timeLimitMs} ms</dd>
+          </div>
+          <div>
+            <dt>内存限制</dt>
+            <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
+          </div>
+          {problem.statistics && (
+            <div>
+              <dt>真实提交统计</dt>
+              <dd>
+                {problem.statistics.acceptedCount} /{' '}
+                {problem.statistics.submissionCount}
+              </dd>
+            </div>
+          )}
+        </dl>
+        <p className="field-help">
+          收藏、题单、最近尝试与通过统计仅在后端提供真实 contract 后启用。
+        </p>
+      </aside>
     </article>
   );
 }
@@ -1552,45 +1771,7 @@ function SubmissionDetail({
 }
 
 function Profile({ user }: { user: AuthenticatedUser | null }) {
-  if (!user)
-    return (
-      <State
-        title="请先登录"
-        text="登录后才能查看个人主页。"
-        action={<Link to="/login">登录</Link>}
-      />
-    );
-  return (
-    <section className="profile-page">
-      <p className="eyebrow">个人主页</p>
-      <h1>我的资料</h1>
-      <div className="profile-grid">
-        <article className="profile-card profile-main">
-          <div className="avatar" aria-hidden="true">
-            {user.displayName.slice(0, 1).toUpperCase()}
-          </div>
-          <div>
-            <h2>{user.displayName}</h2>
-            <p className="muted">@{user.username}</p>
-            <p>{user.email}</p>
-            <span className="status status-active">{user.status}</span>
-          </div>
-        </article>
-        <article className="profile-card">
-          <p className="panel-label">快捷入口</p>
-          <Link to="/submissions">我的提交</Link>
-          <Link to="/author">出题工作台</Link>
-          <Link to="/settings">账户与安全</Link>
-        </article>
-      </div>
-      <div className="profile-note">
-        <h2>账户信息</h2>
-        <p className="muted">
-          身份与会话由平台统一管理。当前公开接口尚未提供活动统计，因此页面不会展示虚构数据。
-        </p>
-      </div>
-    </section>
-  );
+  return <ProfileExperience user={user} navigate={navigate} />;
 }
 export function App() {
   const api = useMemo(
@@ -1647,6 +1828,50 @@ export function App() {
       <GenericError />
     ) : current.name === 'problems' ? (
       <ProblemList api={api} />
+    ) : current.name === 'contests' ? (
+      <ContestExperience view="list" navigate={navigate} />
+    ) : current.name === 'my-contests' ? (
+      <ContestExperience view="mine" navigate={navigate} />
+    ) : current.name === 'contest-new' ? (
+      <ContestExperience view="create" navigate={navigate} />
+    ) : current.name === 'contest-detail' ? (
+      <ContestExperience
+        view="detail"
+        contestId={current.id ?? ''}
+        navigate={navigate}
+      />
+    ) : current.name === 'contest-problems' ? (
+      <ContestExperience
+        view="problems"
+        contestId={current.id ?? ''}
+        navigate={navigate}
+      />
+    ) : current.name === 'contest-submissions' ? (
+      <ContestExperience
+        view="submissions"
+        contestId={current.id ?? ''}
+        navigate={navigate}
+      />
+    ) : current.name === 'contest-standings' ? (
+      <ContestExperience
+        view="standings"
+        contestId={current.id ?? ''}
+        navigate={navigate}
+      />
+    ) : current.name === 'contest-settings' ? (
+      <ContestExperience
+        view="settings"
+        contestId={current.id ?? ''}
+        navigate={navigate}
+      />
+    ) : current.name === 'homework' || current.name === 'homework-detail' ? (
+      <HomeworkPage navigate={navigate} />
+    ) : current.name === 'wrong-book' ? (
+      <WrongBookPage navigate={navigate} />
+    ) : current.name === 'notifications' ? (
+      <NotificationsPage />
+    ) : current.name === 'messages' ? (
+      <MessagesExperience />
     ) : current.name === 'submit' ? (
       <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
     ) : current.name === 'submissions' ? (
@@ -1771,6 +1996,30 @@ export function App() {
           >
             题库
           </Link>
+          <Link
+            to="/contests"
+            className={current.name.includes('contest') ? 'active' : ''}
+          >
+            比赛
+          </Link>
+          <Link
+            to="/submissions"
+            ariaLabel="Submissions"
+            className={
+              current.name === 'submissions' || current.name === 'submission'
+                ? 'active'
+                : ''
+            }
+          >
+            提交记录
+          </Link>
+          <Link
+            to="/messages"
+            className={current.name === 'messages' ? 'active' : ''}
+          >
+            通讯
+          </Link>
+          <NotificationBell navigate={navigate} />
           {user ? (
             <>
               <Link
@@ -1788,18 +2037,6 @@ export function App() {
               </Link>
               <Link to="/author" ariaLabel="Authoring">
                 出题工作台
-              </Link>
-              <Link
-                to="/submissions"
-                ariaLabel="Submissions"
-                className={
-                  current.name === 'submissions' ||
-                  current.name === 'submission'
-                    ? 'active'
-                    : ''
-                }
-              >
-                提交记录
               </Link>
               <button
                 className="link-button"
@@ -1826,6 +2063,7 @@ export function App() {
           )}
         </nav>
       </header>
+      <Breadcrumbs current={current} />
       <div className="readiness" aria-live="polite">
         {readiness === 'loading' && (
           <span role="status">{zhCN.platform.checking}</span>
