@@ -398,8 +398,7 @@ function LoginExperience({
       ? methods.login.emailPassword
       : methods.login.phonePassword;
   const sendCode = async () => {
-    if (!identifier.trim())
-      return setError('Enter your email or phone number first.');
+    if (!identifier.trim()) return setError('请先填写邮箱或手机号。');
     setBusy(true);
     setError('');
     try {
@@ -451,9 +450,7 @@ function LoginExperience({
       );
       onNavigate('/problems');
     } catch (reason) {
-      setError(
-        messageFor(reason, 'Sign-in failed. Check your details and try again.'),
-      );
+      setError(messageFor(reason, '登录失败，请检查填写的信息后重试。'));
     } finally {
       setBusy(false);
     }
@@ -639,8 +636,7 @@ function RegisterExperience({
       ? `${country}${destination.replace(/\D/g, '')}`
       : destination.trim();
   const requestCode = async () => {
-    if (!destination.trim())
-      return setError('Enter the destination you want to verify.');
+    if (!destination.trim()) return setError('请输入要验证的邮箱或手机号。');
     setBusy(true);
     setError('');
     try {
@@ -685,7 +681,7 @@ function RegisterExperience({
       details.password !== details.confirm
     )
       return setError(
-        `Use a matching password of at least ${methods.passwordPolicy.minLength} characters.`,
+        `请使用不少于 ${methods.passwordPolicy.minLength} 个字符且两次输入一致的密码。`,
       );
     setBusy(true);
     try {
@@ -698,7 +694,7 @@ function RegisterExperience({
       });
       onNavigate('/login');
     } catch (reason) {
-      setError(messageFor(reason, 'Registration could not be completed.'));
+      setError(messageFor(reason, '注册未完成，请稍后重试。'));
     } finally {
       setBusy(false);
     }

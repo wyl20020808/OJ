@@ -2,7 +2,7 @@
 
 ## Result
 
-`PARTIAL` for the Web/Product Worker scope. The V3 Web experience is implemented and its dedicated matrix passes. Full repository tests retain failures because legacy Web and Worker UI tests assert the previous English product copy; backend dependencies were unavailable during runtime verification.
+`PASS` for the Web/Product Worker scope. The V3 Web experience is implemented, the dedicated matrix passes, all legacy test contracts have been reconciled, the full repository suite passes, and current runtime/browser evidence is complete.
 
 ## Git
 
@@ -12,6 +12,7 @@
 - Final implementation HEAD: `38736f1`; report/evidence commits continue through `189e42f` (the enclosing report commit cannot self-reference its own hash).
 - Worktree: clean after the follow-up evidence commit (no unrelated files changed)
 - Lead Integration: not started; merge not performed
+- Final requalification: `codex/product-web-v3-test-contract-requalification`, starting at `cf72deb4bea8c75f398344e10bdeb81862e6d9f7`; see `OJPLATFORM_PRODUCT_WEB_V3_TEST_CONTRACT_REQUALIFICATION_REPORT.md` and the final `test(web): reconcile legacy contracts for Chinese web v3` commit.
 
 ## Implemented
 
@@ -37,23 +38,22 @@ Daily challenge and random jump select only loaded API problems. Fortune uses a 
 - `pnpm build`: passed.
 - `pnpm test:architecture`: passed.
 - `git diff --check`: passed.
-- Full `pnpm test`: 346 passed, 116 failed, 4 skipped. Failures are legacy exact-text expectations for English UI across `web.test.tsx`, `web-recovery.test.tsx`, `phase2a-worker-ops-ui.test.tsx`, `phase2b-sandbox-ops-ui.test.tsx`, `product-web-experience.test.tsx`, and `product-web-modern-experience-v2.test.tsx`; these require coordinated test-contract updates for the intentional Chinese product copy.
+- Full `pnpm test`: 462 passed, 0 failed, 4 pre-existing skipped.
+- Historical note: this Goal was previously `PARTIAL / BLOCKED` because 116 legacy Web V1/V2, Phase 2A Worker UI, and Phase 2B Sandbox UI assertions expected the former English UI. The dedicated requalification reconciled all 116 contracts, retained their behavior/security intent, and fixed Web-owned Auth fallback copy. Tests were not deleted or newly skipped, and visible English aliases were not restored.
 
 ## Runtime verification
 
-Web was available at `http://127.0.0.1:5176/`; API was available at `http://127.0.0.1:3011/`. A later runtime check returned `GET /ready = 200` with `postgres=ok`, `redis=ok`, and `storage=ok`. Earlier degraded behavior was observed while those dependencies were unavailable and remains covered by the designed same-origin `/api` proxy UX; no browser CORS dependency was introduced.
+Web was freshly verified at `http://127.0.0.1:5176/`; API was available at `http://127.0.0.1:3011/`. `GET /health = 200` and `GET /ready = 200` with `postgres=ok`, `redis=ok`, and `storage=ok`. `GET http://127.0.0.1:5176/api/problems?offset=0&limit=1 = 200 JSON` verified the same-origin proxy. Earlier degraded behavior remains covered by the designed UX; no browser CORS dependency was introduced.
 
 ## Browser review status
 
-`RUNTIME VERIFIED` for the local browser review. At 1440, 1024 and 390 pixel widths, Home was checked for horizontal overflow, responsive navigation and readable controls. Core routes `/`, `/problems`, a real problem detail, `/login`, `/register` and `/submissions` were opened and checked for stable Chinese shell content and no horizontal overflow. The 390px view exposes the mobile navigation toggle and keeps the quick-jump controls within the viewport.
+`RUNTIME VERIFIED` for the local browser review. At exact 1440x900, 1024x768 and 390x844 viewports, `/`, `/problems`, a real problem detail, `/login`, `/register`, `/submissions`, `/settings`, and `/sandbox` were opened and checked for stable Chinese shell content and no horizontal overflow. The 390px mobile navigation opened successfully and kept the quick-jump and Auth controls within the viewport. `/sandbox` is not an available route and truthfully rendered the Chinese 404 state.
 
-Console-error capture was not retained after the browser tab lifecycle ended, so console cleanliness is `NOT VERIFIED` rather than asserted.
+Browser console evidence: 0 errors and 0 warnings across the review.
 
 ## Integration requests and risks
 
 - `ANNOUNCEMENT_BACKEND_INTEGRATION_REQUEST`: provide a versioned public announcement capability before replacing the static notices.
-- Update legacy Web-owned UI test expectations to Chinese while retaining behavior and security assertions; do not add visible English aliases.
-- `LEGACY_TEST_CONTRACT_UPDATE_REQUEST`: coordinate owners of Phase 2A Worker and Sandbox/Phase 2B UI tests before changing their English copy assertions; this Web/Product Worker did not rewrite another worker's acceptance contracts.
-- Re-run runtime and browser review after PostgreSQL/Redis are available.
+- The historical legacy test contract integration request is closed by the dedicated, explicitly authorized requalification task.
 
-`READY FOR LEAD INTEGRATION = NO` (full repository regression and runtime dependency evidence remain outstanding).
+`READY FOR LEAD INTEGRATION = YES`. This report records readiness only; Lead Integration was not started and no merge was performed.

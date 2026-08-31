@@ -95,15 +95,15 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-01 exposes a shared auth primitive vocabulary', async () => {
     login();
-    expect(await screen.findByText('Verified identity')).toBeInTheDocument();
+    expect(await screen.findByText('已验证身份')).toBeInTheDocument();
     expect(
-      screen.getByRole('group', { name: 'Identifier type' }),
+      screen.getByRole('group', { name: '登录身份类型' }),
     ).toBeInTheDocument();
   });
   it('WEB-V2-02 renders the polished desktop auth composition', async () => {
     login();
     expect(
-      (await screen.findByRole('heading', { name: 'Welcome back' })).closest(
+      (await screen.findByRole('heading', { name: '欢迎回来' })).closest(
         '.auth-experience',
       ),
     ).toBeInTheDocument();
@@ -111,59 +111,63 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-03 keeps the mobile composition semantic', async () => {
     login();
     expect(
-      await screen.findByRole('heading', { name: 'Practice with intent.' }),
+      await screen.findByRole('heading', { name: '专注练习，稳步进步。' }),
     ).toBeInTheDocument();
   });
   it('WEB-V2-04 gives anonymous users a clear sign-in focal point', async () => {
     login();
     expect(
-      await screen.findByRole('button', { name: 'Sign in' }),
+      await screen.findByRole('button', { name: '登录' }),
     ).toBeInTheDocument();
   });
   it('WEB-V2-05 provides authenticated continuation callback', async () => {
     const api = apiMock();
     login({ loginPassword: api.loginPassword });
-    fireEvent.change(await screen.findByLabelText('Email address'), {
+    fireEvent.change(await screen.findByLabelText('邮箱地址'), {
       target: { value: 'ada@example.com' },
     });
-    fireEvent.change(screen.getByLabelText('Password'), {
+    fireEvent.change(screen.getByLabelText('密码'), {
       target: { value: 'correct-password' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '登录' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '登录' }));
     await waitFor(() => expect(onUser).toHaveBeenCalledWith(user));
   });
   it('WEB-V2-06 does not render fabricated metrics', async () => {
     login();
     expect(
-      (await screen.findByText('Practice with intent.')).closest('section'),
+      (await screen.findByText('专注练习，稳步进步。')).closest('section'),
     ).not.toHaveTextContent(/online|ranking|accepted count/i);
   });
   it('WEB-V2-07 renders a modern login layout', async () => {
     login();
     expect(
-      await screen.findByText(
-        'Choose a verified way into your practice workspace.',
-      ),
+      await screen.findByText('选择一种已验证的方式进入练习工作台。'),
     ).toBeInTheDocument();
   });
   it('WEB-V2-08 keeps login controls grouped for narrow viewports', async () => {
     login();
     expect(
       (
-        await screen.findByRole('group', { name: 'Identifier type' })
+        await screen.findByRole('group', { name: '登录身份类型' })
       ).querySelectorAll('button'),
     ).toHaveLength(2);
   });
   it('WEB-V2-09 supports email password mode', async () => {
     const api = apiMock();
     login({ loginPassword: api.loginPassword });
-    fireEvent.change(await screen.findByLabelText('Email address'), {
+    fireEvent.change(await screen.findByLabelText('邮箱地址'), {
       target: { value: 'a@example.com' },
     });
-    fireEvent.change(screen.getByLabelText('Password'), {
+    fireEvent.change(screen.getByLabelText('密码'), {
       target: { value: 'password123456' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '登录' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '登录' }));
     await waitFor(() =>
       expect(api.loginPassword).toHaveBeenCalledWith({
         identifierType: 'EMAIL',
@@ -175,14 +179,17 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-10 supports phone password mode', async () => {
     const api = apiMock();
     login({ loginPassword: api.loginPassword });
-    fireEvent.click(await screen.findByRole('button', { name: 'Phone' }));
-    fireEvent.change(screen.getByLabelText('Phone number'), {
+    fireEvent.click(await screen.findByRole('button', { name: '手机号' }));
+    fireEvent.change(screen.getByLabelText('手机号'), {
       target: { value: '+8613800138000' },
     });
-    fireEvent.change(screen.getByLabelText('Password'), {
+    fireEvent.change(screen.getByLabelText('密码'), {
       target: { value: 'password123456' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '登录' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '登录' }));
     await waitFor(() =>
       expect(api.loginPassword).toHaveBeenCalledWith(
         expect.objectContaining({ identifierType: 'PHONE' }),
@@ -192,13 +199,11 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-11 supports email code mode', async () => {
     const api = apiMock();
     login({ requestVerification: api.requestVerification });
-    fireEvent.click(await screen.findByRole('tab', { name: 'One-time code' }));
-    fireEvent.change(screen.getByLabelText('Email address'), {
+    fireEvent.click(await screen.findByRole('tab', { name: '验证码登录' }));
+    fireEvent.change(screen.getByLabelText('邮箱地址'), {
       target: { value: 'a@example.com' },
     });
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Send verification code' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: '发送验证码' }));
     await waitFor(() =>
       expect(api.requestVerification).toHaveBeenCalledWith(
         expect.objectContaining({ channel: 'EMAIL', purpose: 'LOGIN_CODE' }),
@@ -208,14 +213,12 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-12 supports phone code mode', async () => {
     const api = apiMock();
     login({ requestVerification: api.requestVerification });
-    fireEvent.click(await screen.findByRole('button', { name: 'Phone' }));
-    fireEvent.click(screen.getByRole('tab', { name: 'One-time code' }));
-    fireEvent.change(screen.getByLabelText('Phone number'), {
+    fireEvent.click(await screen.findByRole('button', { name: '手机号' }));
+    fireEvent.click(screen.getByRole('tab', { name: '验证码登录' }));
+    fireEvent.change(screen.getByLabelText('手机号'), {
       target: { value: '+8613800138000' },
     });
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Send verification code' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: '发送验证码' }));
     await waitFor(() =>
       expect(api.requestVerification).toHaveBeenCalledWith(
         expect.objectContaining({ channel: 'SMS' }),
@@ -224,112 +227,100 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-13 shows a resend cooldown', async () => {
     login();
-    fireEvent.click(await screen.findByRole('tab', { name: 'One-time code' }));
-    fireEvent.change(screen.getByLabelText('Email address'), {
+    fireEvent.click(await screen.findByRole('tab', { name: '验证码登录' }));
+    fireEvent.change(screen.getByLabelText('邮箱地址'), {
       target: { value: 'a@example.com' },
     });
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Send verification code' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: '发送验证码' }));
     expect(
-      await screen.findByRole('button', { name: /Resend in/ }),
+      await screen.findByRole('button', { name: /秒后重发/ }),
     ).toBeDisabled();
   });
   it('WEB-V2-14 exposes bounded code attempt and expiry information', async () => {
     register();
-    fireEvent.change(await screen.findByLabelText('Email address'), {
+    fireEvent.change(await screen.findByLabelText('邮箱地址'), {
       target: { value: 'a@example.com' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Send email code' }));
-    expect(await screen.findByText(/attempts remaining/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '发送邮箱验证码' }));
+    expect(await screen.findByText(/次尝试/)).toBeInTheDocument();
   });
   it('WEB-V2-15 renders provider availability state', async () => {
     login();
-    expect(
-      await screen.findByRole('button', { name: /WeChat sign in/ }),
-    ).toBeEnabled();
+    expect(await screen.findByRole('button', { name: '微信' })).toBeEnabled();
   });
   it('WEB-V2-16 includes WeChat', async () => {
     login();
     expect(
-      await screen.findByRole('button', { name: 'WeChat sign in' }),
+      await screen.findByRole('button', { name: '微信' }),
     ).toBeInTheDocument();
   });
   it('WEB-V2-17 includes QQ', async () => {
     login();
     expect(
-      await screen.findByRole('button', { name: 'QQ sign in' }),
+      await screen.findByRole('button', { name: 'QQ' }),
     ).toBeInTheDocument();
   });
   it('WEB-V2-18 includes Google', async () => {
     login();
     expect(
-      await screen.findByRole('button', { name: 'Google sign in' }),
+      await screen.findByRole('button', { name: 'Google' }),
     ).toBeInTheDocument();
   });
   it('WEB-V2-19 includes GitHub', async () => {
     login();
     expect(
-      await screen.findByRole('button', { name: 'GitHub sign in' }),
+      await screen.findByRole('button', { name: 'GitHub' }),
     ).toBeInTheDocument();
   });
   it('WEB-V2-20 reports OAuth failures without token exposure', async () => {
     window.history.replaceState({}, '', '/login?oauth=error');
     login();
-    expect(
-      await screen.findByText(/could not complete sign-in/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/未能完成登录/)).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/access_token|refresh_token/i);
   });
   it('WEB-V2-21 starts email registration in an explicit mode', async () => {
     register();
-    expect(
-      await screen.findByRole('button', { name: 'Email registration' }),
-    ).toHaveClass('selected');
+    expect(await screen.findByRole('button', { name: '邮箱注册' })).toHaveClass(
+      'selected',
+    );
   });
   it('WEB-V2-22 starts phone registration in an explicit mode', async () => {
     register();
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Phone registration' }),
-    );
-    expect(screen.getByLabelText('Phone number')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: '手机号注册' }));
+    expect(screen.getByLabelText('手机号')).toBeInTheDocument();
   });
   it('WEB-V2-23 exposes country code selection', async () => {
     register();
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Phone registration' }),
-    );
-    expect(screen.getByLabelText('Country code')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: '手机号注册' }));
+    expect(screen.getByLabelText('国家/地区代码')).toBeInTheDocument();
   });
   it('WEB-V2-24 requires a verification grant before account creation', async () => {
     register();
     expect(
-      await screen.findByRole('button', { name: 'Send email code' }),
+      await screen.findByRole('button', { name: '发送邮箱验证码' }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Create account' }),
+      screen.queryByRole('button', { name: '创建账户' }),
     ).not.toBeInTheDocument();
   });
   it('WEB-V2-25 validates registration destination', async () => {
     register();
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Send email code' }),
+      await screen.findByRole('button', { name: '发送邮箱验证码' }),
     );
-    expect(await screen.findByRole('alert')).toHaveTextContent('destination');
+    expect(await screen.findByRole('alert')).toHaveTextContent('请输入要验证');
   });
   it('WEB-V2-26 displays server password policy', async () => {
     register();
-    fireEvent.change(await screen.findByLabelText('Email address'), {
+    fireEvent.change(await screen.findByLabelText('邮箱地址'), {
       target: { value: 'a@example.com' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Send email code' }));
-    fireEvent.change(await screen.findByLabelText('Verification code'), {
+    fireEvent.click(screen.getByRole('button', { name: '发送邮箱验证码' }));
+    fireEvent.change(await screen.findByLabelText('验证码'), {
       target: { value: '123456' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Verify code' }));
-    expect(
-      await screen.findByText(/At least 12 characters/),
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '验证验证码' }));
+    expect(await screen.findByText(/至少 12 个字符/)).toBeInTheDocument();
   });
   it('WEB-V2-27 renders social first-login onboarding', async () => {
     window.history.replaceState(
@@ -339,29 +330,30 @@ describe('Product Web Modern Experience V2', () => {
     );
     login();
     expect(
-      await screen.findByRole('heading', { name: 'Make this account yours' }),
+      await screen.findByRole('heading', { name: '完善你的账户' }),
     ).toBeInTheDocument();
   });
   it('WEB-V2-28 keeps connected identity language explicit', async () => {
     register();
-    expect(await screen.findByText(/verified identity/)).toBeInTheDocument();
+    expect(await screen.findByText(/已验证身份/)).toBeInTheDocument();
   });
   it('WEB-V2-29 never implies silent account merging', async () => {
     window.history.replaceState({}, '', '/login?oauth=link_required');
     login();
-    expect(
-      await screen.findByText(/explicit account linking/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/明确绑定账户/)).toBeInTheDocument();
   });
   it('WEB-V2-30 preserves a sign-in link from registration', async () => {
     register();
-    expect(
-      await screen.findByRole('link', { name: 'Sign in' }),
-    ).toHaveAttribute('href', '/login');
+    expect(await screen.findByRole('link', { name: '登录' })).toHaveAttribute(
+      'href',
+      '/login',
+    );
   });
   it('WEB-V2-31 keeps password mode available when configured', async () => {
     login();
-    expect(await screen.findByRole('tab', { name: 'Password' })).toBeEnabled();
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: '密码登录' })).toBeEnabled(),
+    );
   });
   it('WEB-V2-32 keeps problem routes outside auth redesign', async () => {
     login();
@@ -369,12 +361,12 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-33 uses label semantics for fields', async () => {
     login();
-    expect(await screen.findByLabelText('Email address')).toBeInTheDocument();
+    expect(await screen.findByLabelText('邮箱地址')).toBeInTheDocument();
   });
   it('WEB-V2-34 exposes provider buttons as buttons', async () => {
     login();
     expect(
-      (await screen.findByRole('button', { name: 'GitHub sign in' })).tagName,
+      (await screen.findByRole('button', { name: 'GitHub' })).tagName,
     ).toBe('BUTTON');
   });
   it('WEB-V2-35 renders provider disabled state honestly', async () => {
@@ -385,7 +377,7 @@ describe('Product Web Modern Experience V2', () => {
       }),
     });
     expect(
-      await screen.findByRole('button', { name: 'Google sign in unavailable' }),
+      await screen.findByRole('button', { name: 'Google 暂不可用' }),
     ).toBeDisabled();
   });
   it('WEB-V2-36 renders loading discovery state', async () => {
@@ -393,32 +385,28 @@ describe('Product Web Modern Experience V2', () => {
       authMethods: vi.fn().mockReturnValue(new Promise(() => undefined)),
     });
     expect(
-      await screen.findByText('Checking available sign-in methods...'),
+      await screen.findByText('正在检查可用登录方式…'),
     ).toBeInTheDocument();
   });
   it('WEB-V2-37 renders empty verification progress before code request', async () => {
     register();
-    expect(
-      await screen.findByText('Start with a verified identity'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('从验证身份开始')).toBeInTheDocument();
   });
   it('WEB-V2-38 renders request errors accessibly', async () => {
     register({
       requestVerification: vi.fn().mockRejectedValue(new Error('offline')),
     });
-    fireEvent.change(await screen.findByLabelText('Email address'), {
+    fireEvent.change(await screen.findByLabelText('邮箱地址'), {
       target: { value: 'a@example.com' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Send email code' }));
+    fireEvent.click(screen.getByRole('button', { name: '发送邮箱验证码' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Verification service unavailable',
+      '验证服务暂不可用',
     );
   });
   it('WEB-V2-39 renders capability discovery failure honestly', async () => {
     login({ authMethods: vi.fn().mockRejectedValue(new Error('offline')) });
-    expect(
-      await screen.findByText(/could not be discovered/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/暂时无法获取登录方式/)).toBeInTheDocument();
   });
   it('WEB-V2-40 never labels protocol auth as a verdict', async () => {
     login();
@@ -426,13 +414,13 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-41 supports keyboard focusable mode controls', async () => {
     login();
-    const phone = await screen.findByRole('button', { name: 'Phone' });
+    const phone = await screen.findByRole('button', { name: '手机号' });
     phone.focus();
     expect(document.activeElement).toBe(phone);
   });
   it('WEB-V2-42 uses visible focus classes through native controls', async () => {
     login();
-    const email = await screen.findByLabelText('Email address');
+    const email = await screen.findByLabelText('邮箱地址');
     email.focus();
     expect(document.activeElement).toBe(email);
   });
@@ -443,7 +431,7 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-44 keeps desktop content constrained', async () => {
     login();
     expect(
-      (await screen.findByRole('heading', { name: 'Welcome back' })).closest(
+      (await screen.findByRole('heading', { name: '欢迎回来' })).closest(
         '.auth-experience',
       ),
     ).toHaveClass('auth-experience');
@@ -453,20 +441,15 @@ describe('Product Web Modern Experience V2', () => {
     expect(
       (
         await screen.findByRole('heading', {
-          name: 'Start with a verified identity',
+          name: '从验证身份开始',
         })
       ).closest('.auth-experience'),
     ).toBeInTheDocument();
   });
   it('WEB-V2-46 supports narrow phone input type', async () => {
     register();
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Phone registration' }),
-    );
-    expect(screen.getByLabelText('Phone number')).toHaveAttribute(
-      'type',
-      'tel',
-    );
+    fireEvent.click(await screen.findByRole('button', { name: '手机号注册' }));
+    expect(screen.getByLabelText('手机号')).toHaveAttribute('type', 'tel');
   });
   it('WEB-V2-47 does not log provider errors by default', async () => {
     const errorSpy = vi
@@ -489,7 +472,7 @@ describe('Product Web Modern Experience V2', () => {
       authMethods: vi.fn().mockRejectedValue(new Error('not integrated')),
     });
     expect(
-      await screen.findByText(/Unsupported actions stay disabled/),
+      await screen.findByText(/不支持的操作会保持禁用/),
     ).toBeInTheDocument();
   });
 });

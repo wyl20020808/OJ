@@ -88,7 +88,7 @@ afterEach(() => {
 describe('PHASE 2A Worker operations UI matrix', () => {
   it('W2A-01 renders queued state from the public submission projection', () => {
     render(<JudgeStatus submission={submission('QUEUED')} />);
-    expect(screen.getByText('Queued')).toBeInTheDocument();
+    expect(screen.getByText('排队中')).toBeInTheDocument();
   });
   it('W2A-02 renders claimed and leased states without execution language', () => {
     expect(presentJudgeStatus('CLAIMED').label).toBe('Worker lease claimed');
@@ -96,9 +96,7 @@ describe('PHASE 2A Worker operations UI matrix', () => {
   });
   it('W2A-03 labels a safe fixture stage honestly', () => {
     render(<JudgeStatus submission={submission('SAFE_FIXTURE_RUNNING')} />);
-    expect(
-      screen.getByText('Qualification fixture running'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('资格测试执行中')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('not executed');
   });
   it('W2A-04 distinguishes retryable worker failure', () => {
@@ -112,10 +110,8 @@ describe('PHASE 2A Worker operations UI matrix', () => {
         submission={submission('REQUEUED', { attempt: 2, maxAttempts: 3 })}
       />,
     );
-    expect(
-      screen.getByText('Retrying infrastructure step'),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Attempt 2 / 3')).toBeInTheDocument();
+    expect(screen.getByText('基础设施步骤重试中')).toBeInTheDocument();
+    expect(screen.getByText('第 2 次尝试 / 3')).toBeInTheDocument();
   });
   it('W2A-06 maps terminal protocol failure safely', () => {
     expect(presentJudgeStatus('FAILED_TERMINAL').label).toBe(
@@ -164,11 +160,9 @@ describe('PHASE 2A Worker operations UI matrix', () => {
       return submission(calls === 1 ? 'QUEUED' : 'SAFE_FIXTURE_SUCCEEDED');
     });
     render(<App />);
-    expect(await screen.findByText('Queued')).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Refresh qualification status' }),
-    );
-    expect(await screen.findByText('Synthetic completion')).toBeInTheDocument();
+    expect(await screen.findByText('排队中')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '刷新执行状态' }));
+    expect(await screen.findByText('模拟流程完成')).toBeInTheDocument();
   });
   it('W2A-12 uses one status projection for history and detail', () => {
     const item = submission('WORKER_ACCEPTED');
@@ -190,17 +184,13 @@ describe('PHASE 2A Worker operations UI matrix', () => {
         }),
     );
     render(<App />);
-    expect(await screen.findByText('Queued')).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Refresh qualification status' }),
-    );
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Refresh qualification status' }),
-    );
-    expect(await screen.findByText('Synthetic completion')).toBeInTheDocument();
+    expect(await screen.findByText('排队中')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '刷新执行状态' }));
+    fireEvent.click(screen.getByRole('button', { name: '刷新执行状态' }));
+    expect(await screen.findByText('模拟流程完成')).toBeInTheDocument();
     staleResolve?.(submission('SAFE_FIXTURE_RUNNING'));
     await Promise.resolve();
-    expect(screen.getByText('Synthetic completion')).toBeInTheDocument();
+    expect(screen.getByText('模拟流程完成')).toBeInTheDocument();
   });
   it('W2A-14 does not introduce polling after a terminal state', () => {
     expect(String(App)).not.toMatch(/setInterval/);
@@ -234,7 +224,7 @@ describe('PHASE 2A Worker operations UI matrix', () => {
     vi.stubGlobal('fetch', fetcher);
     render(<App />);
     expect(await screen.findByText('phase2a-submission')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
     await waitFor(() =>
       expect(screen.queryByText('phase2a-submission')).not.toBeInTheDocument(),
     );
@@ -257,7 +247,7 @@ describe('PHASE 2A Worker operations UI matrix', () => {
     );
     render(<App />);
     expect(await screen.findByText('Session expired')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '登录' })).toBeInTheDocument();
     expect(screen.queryByText(sourceMarker)).not.toBeInTheDocument();
   });
   it('W2A-18 renders a 403 without source or diagnostics', async () => {
@@ -278,7 +268,7 @@ describe('PHASE 2A Worker operations UI matrix', () => {
     );
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Submission forbidden' }),
+      await screen.findByRole('heading', { name: '无权查看提交' }),
     ).toBeInTheDocument();
     expect(screen.queryByText(sourceMarker)).not.toBeInTheDocument();
   });
@@ -300,7 +290,7 @@ describe('PHASE 2A Worker operations UI matrix', () => {
     );
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Submission not found' }),
+      await screen.findByRole('heading', { name: '提交不存在' }),
     ).toBeInTheDocument();
   });
   it('W2A-20 renders a 409 as a state race with refresh', async () => {
@@ -321,9 +311,9 @@ describe('PHASE 2A Worker operations UI matrix', () => {
     );
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Submission state changed' }),
+      await screen.findByRole('heading', { name: '提交状态已变化' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '重试' })).toBeEnabled();
   });
   it('W2A-21 renders a 5xx as service failure', async () => {
     window.history.pushState({}, '', '/submissions/phase2a-submission');
@@ -343,7 +333,7 @@ describe('PHASE 2A Worker operations UI matrix', () => {
     );
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Submission unavailable' }),
+      await screen.findByRole('heading', { name: '提交暂不可用' }),
     ).toBeInTheDocument();
   });
   it('W2A-22 renders a network failure as transport failure', async () => {
@@ -359,9 +349,7 @@ describe('PHASE 2A Worker operations UI matrix', () => {
       }),
     );
     render(<App />);
-    expect(
-      await screen.findByText('The service could not be reached.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('暂时无法连接服务。')).toBeInTheDocument();
   });
   it('W2A-23 renders worker offline and degraded as operational states', () => {
     expect(presentJudgeStatus('WORKER_DEGRADED').label).toBe(
@@ -442,13 +430,13 @@ describe('PHASE 2A Worker operations UI matrix', () => {
   it('W2A-36 preserves desktop status card structure', () => {
     render(<JudgeStatus submission={submission('QUEUED')} />);
     expect(screen.getByRole('status')).toContainElement(
-      screen.getByText('Queued'),
+      screen.getByText('排队中'),
     );
   });
   it('W2A-37 exposes a keyboard-reachable refresh action', async () => {
     renderDetail(submission('QUEUED'));
     const refresh = await screen.findByRole('button', {
-      name: 'Refresh qualification status',
+      name: '刷新执行状态',
     });
     refresh.focus();
     expect(refresh).toHaveFocus();
@@ -456,7 +444,7 @@ describe('PHASE 2A Worker operations UI matrix', () => {
   it('W2A-38 keeps focus on a named refresh control', async () => {
     renderDetail(submission('QUEUED'));
     const refresh = await screen.findByRole('button', {
-      name: 'Refresh qualification status',
+      name: '刷新执行状态',
     });
     refresh.focus();
     expect(refresh).toHaveFocus();

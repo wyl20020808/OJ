@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -42,7 +43,7 @@ function appFetch(overrides: Record<string, unknown> = {}) {
             overrides.me ? 200 : 401,
             overrides.me || {
               code: 'UNAUTHENTICATED',
-              message: 'Sign in required',
+              message: '请先登录',
               requestId: 'r',
             },
           );
@@ -110,7 +111,7 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     vi.stubGlobal('fetch', appFetch());
     render(<App />);
     expect(
-      screen.getByRole('button', { name: 'Open navigation' }),
+      screen.getByRole('button', { name: '打开导航' }),
     ).toBeInTheDocument();
   });
   it('WEB-PROD-03 renders logged-out actions', () => {
@@ -132,7 +133,7 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     render(<App />);
     expect(
       await screen.findByRole('heading', {
-        name: 'Build solutions that hold up.',
+        name: '把每一次练习，做得更扎实。',
       }),
     ).toBeInTheDocument();
     expect(
@@ -143,13 +144,13 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     vi.stubGlobal('fetch', appFetch());
     window.history.pushState({}, '', '/problems');
     render(<App />);
-    expect(await screen.findByLabelText('Search problems')).toBeInTheDocument();
+    expect(await screen.findByLabelText('搜索题目')).toBeInTheDocument();
   });
   it('WEB-PROD-07 problem list exposes an empty state', async () => {
     vi.stubGlobal('fetch', appFetch());
     window.history.pushState({}, '', '/problems');
     render(<App />);
-    expect(await screen.findByText('No problems yet')).toBeInTheDocument();
+    expect(await screen.findByText('暂无题目')).toBeInTheDocument();
   });
   it('WEB-PROD-08 problem detail keeps a semantic heading', () => {
     vi.stubGlobal('fetch', appFetch());
@@ -167,11 +168,11 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     window.history.pushState({}, '', '/problems/demo/submit');
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Submit solution' }),
+      await screen.findByRole('heading', { name: '提交代码' }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Submit source' }));
+    fireEvent.click(screen.getByRole('button', { name: '提交源代码' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      /source code is required|choose a language/i,
+      /请输入源代码|请选择编程语言/i,
     );
   });
   it('WEB-PROD-11 submission errors use an accessible alert', () => {
@@ -182,7 +183,7 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     window.history.pushState({}, '', '/submissions');
     render(<App />);
     expect(
-      screen.getByRole('heading', { name: 'Sign in required' }),
+      screen.getByRole('heading', { name: '请先登录' }),
     ).toBeInTheDocument();
   });
   it('WEB-PROD-13 lifecycle status is rendered through one presentation', () => {
@@ -198,7 +199,7 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     window.history.pushState({}, '', '/profile');
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Your profile' }),
+      await screen.findByRole('heading', { name: '我的资料' }),
     ).toBeInTheDocument();
   });
   it('WEB-PROD-16 settings route is available to signed-in users', async () => {
@@ -206,7 +207,7 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     window.history.pushState({}, '', '/settings');
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Settings & security' }),
+      await screen.findByRole('heading', { name: '账户设置' }),
     ).toBeInTheDocument();
   });
   it('WEB-PROD-17 missing account backend is honest', async () => {
@@ -223,7 +224,7 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     );
     expect(
       await screen.findByRole('heading', {
-        name: 'Account settings unavailable',
+        name: '账户设置暂不可用',
       }),
     ).toBeInTheDocument();
   });
@@ -232,14 +233,14 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     window.history.pushState({}, '', '/author');
     render(<App />);
     expect(
-      screen.getByRole('heading', { name: /authoring|sign in required/i }),
+      screen.getByRole('heading', { name: /出题工作台|请先登录/i }),
     ).toBeInTheDocument();
   });
   it('WEB-PROD-19 authoring form has unsaved protection support', async () => {
     vi.stubGlobal('fetch', appFetch({ me: user }));
     window.history.pushState({}, '', '/author/problems/new');
     render(<App />);
-    const title = await screen.findByLabelText('Title');
+    const title = await screen.findByLabelText('题目标题');
     fireEvent.change(title, { target: { value: 'Unsaved draft' } });
     const event = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event);
@@ -250,30 +251,37 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     window.history.pushState({}, '', '/forbidden');
     render(<App />);
     expect(
-      screen.getByRole('heading', { name: 'Access not available' }),
+      screen.getByRole('heading', { name: '无权访问' }),
     ).toBeInTheDocument();
   });
   it('WEB-PROD-21 app supports loading semantics', () => {
-    expect(String(App)).toContain('Checking platform readiness');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockReturnValue(new Promise(() => undefined)),
+    );
+    render(<App />);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '正在检查平台服务状态',
+    );
   });
   it('WEB-PROD-22 app supports empty states', async () => {
     vi.stubGlobal('fetch', appFetch());
     window.history.pushState({}, '', '/problems');
     render(<App />);
-    expect(await screen.findByText('No problems yet')).toBeInTheDocument();
+    expect(await screen.findByText('暂无题目')).toBeInTheDocument();
   });
   it('WEB-PROD-23 app supports error states', () => {
     vi.stubGlobal('fetch', appFetch());
     window.history.pushState({}, '', '/error');
     render(<App />);
     expect(
-      screen.getByRole('heading', { name: 'Something went wrong' }),
+      screen.getByRole('heading', { name: '页面加载失败' }),
     ).toBeInTheDocument();
   });
   it('WEB-PROD-24 navigation control is keyboard focusable', () => {
     vi.stubGlobal('fetch', appFetch());
     render(<App />);
-    const button = screen.getByRole('button', { name: 'Open navigation' });
+    const button = screen.getByRole('button', { name: '打开导航' });
     button.focus();
     expect(button).toHaveFocus();
   });
@@ -300,7 +308,10 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     expect(screen.getByRole('link', { name: 'Problems' })).toBeInTheDocument();
   });
   it('WEB-PROD-29 does not modify judge or sandbox modules', () => {
-    expect(true).toBe(true);
+    const webEntry = readFileSync('apps/web/src/app/App.tsx', 'utf8');
+    expect(webEntry).not.toMatch(
+      /apps\/(judge-worker|api)|packages\/(judge-protocol|core)|sandbox-runtime|queue-runtime/,
+    );
   });
   it('WEB-PROD-30 account settings uses real session controls', async () => {
     const api = {
@@ -311,7 +322,7 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     } as never;
     render(<AccountSettings api={api} user={user} />);
     expect(
-      await screen.findByRole('button', { name: 'Sign out all' }),
+      await screen.findByRole('button', { name: '退出全部会话' }),
     ).toBeEnabled();
   });
 });

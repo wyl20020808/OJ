@@ -46,7 +46,7 @@ afterEach(() => {
 describe('PHASE 1E-R Web recovery matrix', () => {
   it('W01 renders queued from the public state', () => {
     render(<JudgeStatus submission={submission('QUEUED')} />);
-    expect(screen.getByText('Queued')).toBeInTheDocument();
+    expect(screen.getByText('排队中')).toBeInTheDocument();
   });
   it('W02 labels leased as synthetic and non-executing', () => {
     const result = presentJudgeStatus('LEASED');
@@ -54,22 +54,20 @@ describe('PHASE 1E-R Web recovery matrix', () => {
   });
   it('W03 renders retryable protocol failure', () => {
     render(<JudgeStatus submission={submission('RETRYABLE_FAILURE')} />);
-    expect(screen.getByText(/Retryable protocol failure/)).toBeInTheDocument();
+    expect(screen.getByText(/协议失败，可重试/)).toBeInTheDocument();
     expect(screen.queryByText(/WA|RE|TLE/)).not.toBeInTheDocument();
   });
   it('W04 renders terminal protocol failure without a verdict', () => {
     render(<JudgeStatus submission={submission('PROTOCOL_FAILURE')} />);
-    expect(screen.getByText(/Terminal protocol failure/)).toBeInTheDocument();
-    expect(screen.getByText(/Intake stopped/)).toBeInTheDocument();
+    expect(screen.getByText(/协议失败，已终止/)).toBeInTheDocument();
+    expect(screen.getByText(/题目接收在执行前停止/)).toBeInTheDocument();
   });
   it('W05 exposes all synthetic completion qualifiers', () => {
     render(<JudgeStatus submission={submission('SYNTHETIC_COMPLETED')} />);
-    expect(screen.getByText(/SYNTHETIC/)).toHaveTextContent(
-      'QUALIFICATION ONLY',
-    );
-    expect(screen.getByText(/SYNTHETIC/)).toHaveTextContent(
-      'NOT A REAL EXECUTION VERDICT',
-    );
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('SYNTHETIC');
+    expect(status).toHaveTextContent('QUALIFICATION ONLY');
+    expect(status).toHaveTextContent('NOT A REAL EXECUTION VERDICT');
   });
   it('W06 keeps a server state suitable for refresh', () => {
     expect(presentJudgeStatus('QUEUED').label).toBe('Queued');
@@ -90,13 +88,13 @@ describe('PHASE 1E-R Web recovery matrix', () => {
         status: 401,
         json: async () => ({
           code: 'UNAUTHENTICATED',
-          message: 'Sign in required',
+          message: '请先登录',
         }),
       }),
     );
     render(<App />);
     expect(
-      screen.getByRole('heading', { name: 'Access not available' }),
+      screen.getByRole('heading', { name: '无权访问' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/eval|rm -rf|judgeJobId/i),
@@ -104,7 +102,7 @@ describe('PHASE 1E-R Web recovery matrix', () => {
   });
   it('W09 safely falls back for unknown states', () => {
     render(<JudgeStatus submission={submission('FUTURE_STATE')} />);
-    expect(screen.getByText('Unknown protocol state')).toBeInTheDocument();
+    expect(screen.getByText('未知协议状态')).toBeInTheDocument();
   });
   it('W10 has no real verdict wording', () => {
     const text = [
@@ -176,7 +174,7 @@ describe('PHASE 1E-R Web recovery matrix', () => {
     vi.stubGlobal('fetch', fetcher);
     render(<App />);
     return screen.findByText('s-recovery').then(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+      fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
       await waitFor(() =>
         expect(screen.queryByText('s-recovery')).not.toBeInTheDocument(),
       );
@@ -239,7 +237,7 @@ describe('PHASE 1E-R Web recovery matrix', () => {
         submission={submission('QUEUED', { attempt: 2, maxAttempts: 3 })}
       />,
     );
-    expect(screen.getByText('Attempt 2 / 3')).toBeInTheDocument();
+    expect(screen.getByText('第 2 次尝试 / 3')).toBeInTheDocument();
   });
   it('W23 wraps status content instead of requiring a wide viewport', () => {
     const status = presentJudgeStatus('SYNTHETIC_COMPLETED');

@@ -58,14 +58,14 @@ describe('Web platform shell', () => {
     );
     render(<App />);
     expect(screen.getByRole('status')).toHaveTextContent(
-      'Checking platform readiness',
+      '正在检查平台服务状态',
     );
-    expect(await screen.findByText('Platform is ready.')).toBeInTheDocument();
+    expect(await screen.findByText('平台服务正常')).toBeInTheDocument();
   });
   it('renders an accessible error state', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     render(<App />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('unavailable');
+    expect(await screen.findByRole('alert')).toHaveTextContent('不可用');
   });
   it('renders a controlled degraded readiness state', async () => {
     vi.stubGlobal(
@@ -74,16 +74,16 @@ describe('Web platform shell', () => {
         status: 503,
         json: async () => ({
           status: 'not_ready',
-          dependencies: { redis: 'unavailable' },
+          dependencies: { redis: '不可用' },
         }),
       }),
     );
     render(<App />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('not ready');
+    expect(await screen.findByRole('alert')).toHaveTextContent('尚未完全就绪');
   });
   it('renders controlled not-found UI', () => {
     render(<NotFound />);
-    expect(screen.getByRole('heading')).toHaveTextContent('Page not found');
+    expect(screen.getByRole('heading')).toHaveTextContent('页面不存在');
   });
   it('renders stable forbidden and generic error states', () => {
     render(
@@ -93,10 +93,10 @@ describe('Web platform shell', () => {
       </>,
     );
     expect(
-      screen.getByRole('heading', { name: 'Access not available' }),
+      screen.getByRole('heading', { name: '无权访问' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Something went wrong' }),
+      screen.getByRole('heading', { name: '页面加载失败' }),
     ).toBeInTheDocument();
   });
   it('catches render failures at the application boundary', () => {
@@ -108,7 +108,7 @@ describe('Web platform shell', () => {
         <Broken />
       </ErrorBoundary>,
     );
-    expect(screen.getByRole('alert')).toHaveTextContent('could not render');
+    expect(screen.getByRole('alert')).toHaveTextContent('应用未能正常渲染');
   });
   it('protects the authoring workspace when unauthenticated', async () => {
     vi.stubGlobal(
@@ -120,7 +120,7 @@ describe('Web platform shell', () => {
             status: 401,
             json: async () => ({
               code: 'UNAUTHENTICATED',
-              message: 'Sign in required',
+              message: '请先登录',
               requestId: 'r1',
             }),
           };
@@ -133,9 +133,9 @@ describe('Web platform shell', () => {
     window.history.pushState({}, '', '/author');
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Sign in required' }),
+      await screen.findByRole('heading', { name: '请先登录' }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'Sign in' })[1]).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '登录' })).toHaveAttribute(
       'href',
       '/login',
     );
@@ -198,33 +198,33 @@ describe('Web platform shell', () => {
     window.history.pushState({}, '', '/author/problems/new');
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Create problem' }),
+      await screen.findByRole('heading', { name: '创建题目' }),
     ).toBeInTheDocument();
     fireEvent.submit(
-      screen.getByRole('button', { name: 'Save draft' }).closest('form')!,
+      screen.getByRole('button', { name: '保存草稿' }).closest('form')!,
     );
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Complete all required fields',
+      '请先填写所有必填字段',
     );
-    fireEvent.change(screen.getByLabelText('Title'), {
+    fireEvent.change(screen.getByLabelText('题目标题'), {
       target: { value: 'Hello World' },
     });
-    fireEvent.change(screen.getByLabelText('Slug'), {
+    fireEvent.change(screen.getByLabelText('题目标识'), {
       target: { value: 'hello-world' },
     });
-    fireEvent.change(screen.getByLabelText('Statement'), {
+    fireEvent.change(screen.getByLabelText('题面'), {
       target: { value: 's' },
     });
-    fireEvent.change(screen.getByLabelText('Input description'), {
+    fireEvent.change(screen.getByLabelText('输入说明'), {
       target: { value: 'i' },
     });
-    fireEvent.change(screen.getByLabelText('Output description'), {
+    fireEvent.change(screen.getByLabelText('输出说明'), {
       target: { value: 'o' },
     });
-    fireEvent.change(screen.getByLabelText('Constraints'), {
+    fireEvent.change(screen.getByLabelText('数据范围'), {
       target: { value: 'c' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     await waitFor(() =>
       expect(fetcher).toHaveBeenCalledWith(
         '/api/problems',
@@ -316,14 +316,14 @@ describe('Web platform shell', () => {
     window.history.pushState({}, '', '/problems/demo/submit');
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'Submit solution' }),
+      await screen.findByRole('heading', { name: '提交代码' }),
     ).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Source code'), {
+    fireEvent.change(screen.getByLabelText('源代码'), {
       target: { value: 'print(1)' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Submit source' }));
+    fireEvent.click(screen.getByRole('button', { name: '提交源代码' }));
     expect(
-      await screen.findByRole('heading', { name: 'Submission received' }),
+      await screen.findByRole('heading', { name: '提交已接收' }),
     ).toBeInTheDocument();
     expect(screen.getByText(/PENDING/)).toBeInTheDocument();
     expect(
@@ -375,7 +375,7 @@ describe('Web platform shell', () => {
     window.history.pushState({}, '', '/submissions');
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: 'My submissions' }),
+      await screen.findByRole('heading', { name: '我的提交' }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: 'sub-x' }));
     expect(
