@@ -1,27 +1,50 @@
 import type { AuthRepository } from './types.js';
+import { createPostgresAuthV2Repository } from './postgres-v2-repository.js';
 type Row = Record<string, unknown>;
-export function createPostgresAuthRepository(pool: {
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Row[] }>;
-}): AuthRepository {
-  return {
+type Queryable = {
+  query: (
+    sql: string,
+    params?: unknown[],
+  ) => Promise<{ rows: Row[]; rowCount?: number | null }>;
+};
+export function createPostgresAuthRepository(
+  pool: Queryable & {
+    connect?: () => Promise<Queryable & { release(): void }>;
+  },
+): AuthRepository {
+  const repository: AuthRepository = {
     async createUser(i) {
-      const r = await pool.query(
-        "INSERT INTO users (username,email,display_name,status) VALUES ($1,$2,$3,'active') RETURNING id,username,email,display_name,status,created_at,updated_at",
-        [i.username, i.email, i.displayName],
-      );
-      await pool.query(
-        'INSERT INTO user_credentials (user_id,password_hash) VALUES ($1,$2)',
-        [r.rows[0]!.id, i.passwordHash],
-      );
-      return map(r.rows[0]!);
+      const client = pool.connect ? await pool.connect() : pool;
+      try {
+        if ('release' in client) await client.query('BEGIN');
+        const r = await client.query(
+          "INSERT INTO users (username,email,display_name,status) VALUES ($1,$2,$3,'active') RETURNING id,username,email,display_name,status,created_at,updated_at",
+          [i.username, i.email, i.displayName],
+        );
+        await client.query(
+          'INSERT INTO user_credentials (user_id,password_hash) VALUES ($1,$2)',
+          [r.rows[0]!.id, i.passwordHash],
+        );
+        if ('release' in client) await client.query('COMMIT');
+        return map(r.rows[0]!);
+      } catch (error) {
+        if ('release' in client) await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        if ('release' in client) client.release();
+      }
     },
     async findByIdentity(v) {
       const r = await pool.query(
-        'SELECT u.id,u.username,u.email,u.display_name,u.status,u.created_at,u.updated_at,c.password_hash FROM users u JOIN user_credentials c ON c.user_id=u.id WHERE lower(u.username)=lower($1) OR lower(u.email)=lower($1)',
+        'SELECT u.id,u.username,u.email,u.display_name,u.status,u.created_at,u.updated_at,c.password_hash,c.password_login_enabled FROM users u JOIN user_credentials c ON c.user_id=u.id WHERE lower(u.username)=lower($1) OR lower(u.email)=lower($1)',
         [v],
       );
       return r.rows[0]
-        ? { ...map(r.rows[0]!), passwordHash: String(r.rows[0]!.password_hash) }
+        ? {
+            ...map(r.rows[0]!),
+            passwordHash: String(r.rows[0]!.password_hash),
+            passwordLoginEnabled: r.rows[0]!.password_login_enabled !== false,
+          }
         : null;
     },
     async findById(id) {
@@ -37,6 +60,22 @@ export function createPostgresAuthRepository(pool: {
         [i.userId, i.tokenHash, i.expiresAt],
       );
       return { id: String(r.rows[0]!.id) };
+    },
+    async updateProfile(id, patch) {
+      const r = await pool.query(
+        "UPDATE users SET display_name=$2, updated_at=now() WHERE id=$1 AND status='active' RETURNING id,username,email,display_name,status,created_at,updated_at",
+        [id, patch.displayName],
+      );
+      return r.rows[0] ? map(r.rows[0]) : null;
+    },
+    async updatePasswordHash(id, passwordHash) {
+      const r = await pool.query(
+        'UPDATE user_credentials SET password_hash=$2 WHERE user_id=$1',
+        [id, passwordHash],
+      );
+      return (
+        (r as { rowCount?: number }).rowCount === 1 || Boolean(r.rows.length)
+      );
     },
     async findSession(h) {
       const r = await pool.query(
@@ -90,6 +129,12 @@ export function createPostgresAuthRepository(pool: {
         [userId],
       );
     },
+    async revokeOtherSessions(userId, keepSessionId) {
+      await pool.query(
+        'UPDATE auth_sessions SET revoked_at=now() WHERE user_id=$1 AND id<>$2 AND revoked_at IS NULL',
+        [userId, keepSessionId],
+      );
+    },
     async findSessionOwner(id) {
       const r = await pool.query(
         'SELECT user_id FROM auth_sessions WHERE id=$1',
@@ -98,6 +143,8 @@ export function createPostgresAuthRepository(pool: {
       return r.rows[0] ? String(r.rows[0].user_id) : null;
     },
   };
+  repository.v2 = createPostgresAuthV2Repository(pool);
+  return repository;
 }
 const map = (r: Row) => ({
   id: String(r.id),
