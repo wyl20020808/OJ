@@ -9,7 +9,7 @@
 - Starting HEAD: `88fe7528ff7ef273231e991e94337500e873bf05`
 - Branch: `codex/product-web-chinese-rich-experience-v3`
 - Commit: recorded by the final Goal commit
-- Worktree: clean after commit (no unrelated files changed)
+- Worktree: clean after the follow-up evidence commit (no unrelated files changed)
 - Lead Integration: not started; merge not performed
 
 ## Implemented
@@ -38,11 +38,11 @@ Daily challenge and random jump select only loaded API problems. Fortune uses a 
 
 ## Runtime verification
 
-Web was available at `http://127.0.0.1:5176/`; API was available at `http://127.0.0.1:3011/`. The API readiness endpoint did not report healthy readiness and problem/home requests were unavailable because PostgreSQL and Redis were not reachable in the runtime environment. The Web same-origin `/api` proxy therefore showed the designed degraded state without a browser CORS dependency.
+Web was available at `http://127.0.0.1:5176/`; API was available at `http://127.0.0.1:3011/`. A later runtime check returned `GET /ready = 200` with `postgres=ok`, `redis=ok`, and `storage=ok`. Earlier degraded behavior was observed while those dependencies were unavailable and remains covered by the designed same-origin `/api` proxy UX; no browser CORS dependency was introduced.
 
 ## Browser review status
 
-The implementation includes desktop/tablet/mobile responsive rules and keyboard-visible controls. Full 1440/1024/390 browser review remains `NOT VERIFIED` in this run because the runtime dependency blocker prevented trustworthy data-backed page review.
+`RUNTIME VERIFIED` for the local browser review. At 1440, 1024 and 390 pixel widths, Home was checked for horizontal overflow, responsive navigation and readable controls. Core routes `/`, `/problems`, a real problem detail, `/login`, `/register` and `/submissions` were opened and checked for stable Chinese shell content and no horizontal overflow. The 390px view exposes the mobile navigation toggle and keeps the quick-jump controls within the viewport.
 
 ## Integration requests and risks
 
