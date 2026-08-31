@@ -96,7 +96,7 @@ func TestRealExecutionIsDisabledByDefault(t *testing.T) {
 func TestRealExecutionIdempotencyRejectsDifferentSnapshot(t *testing.T) {
 	source := "int main(){}"
 	digest := sha256.Sum256([]byte(source))
-	request := model.RealExecutionRequest{ProtocolVersion: model.ExecutionContractVersion, ExecutionRequestID: "execution-1", JudgeJobID: "job", SubmissionID: "submission", Attempt: 1, CorrelationID: "correlation", ProblemRevisionID: "revision", TestdataVersionRef: "testdata", LanguageProfileID: supervisor.CPP20ProfileID, SourceSnapshotRef: "submission:submission", SourceBytes: source, SourceSHA256: hex.EncodeToString(digest[:]), ControlledInputID: "stdin-empty-v1", DeadlineAt: time.Now().Add(time.Minute)}
+	request := model.RealExecutionRequest{ProtocolVersion: model.LegacyExecutionContractVersion, ExecutionRequestID: "execution-1", JudgeJobID: "job", SubmissionID: "submission", Attempt: 1, CorrelationID: "correlation", ProblemRevisionID: "revision", TestdataVersionRef: "testdata", LanguageProfileID: supervisor.CPP20ProfileID, SourceSnapshotRef: "submission:submission", SourceBytes: source, SourceSHA256: hex.EncodeToString(digest[:]), ControlledInputID: "stdin-empty-v1", DeadlineAt: time.Now().Add(time.Minute)}
 	server := &protocolServer{realExecutionEnabled: true, executions: map[string]*executionRecord{"execution-1": {RequestIdentity: realExecutionRequestIdentity(request), Active: true}}}
 	request.SourceBytes += " "
 	tamperedDigest := sha256.Sum256([]byte(request.SourceBytes))

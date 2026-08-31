@@ -12,7 +12,7 @@ import (
 
 func validRequest() Request {
 	return Request{
-		ProtocolVersion: ProtocolVersion, ExecutionRequestID: "job:1", JudgeJobID: "job", SubmissionID: "submission", Attempt: 1,
+		ProtocolVersion: LegacyProtocolVersion, ExecutionRequestID: "job:1", JudgeJobID: "job", SubmissionID: "submission", Attempt: 1,
 		CorrelationID: "job", ProblemRevisionID: "revision", TestdataVersionRef: "testdata", LanguageProfileID: CPP20ProfileID,
 		SourceSnapshotRef: "submission:submission", SourceBytes: "int main(){}", SourceSHA256: "7febc7bf845d25c8185cd640117a8470ebe91a4e791b6064cd594404fb67bc39",
 		ControlledInputID: "stdin-empty-v1", DeadlineAt: time.Now().Add(time.Minute),
@@ -69,5 +69,28 @@ func TestPreflightFailsClosedAndResultIdentityIsBound(t *testing.T) {
 	result := Result{ProtocolVersion: ProtocolVersion, ExecutionRequestID: request.ExecutionRequestID, JudgeJobID: "other", SubmissionID: request.SubmissionID, Attempt: request.Attempt, SourceSHA256: request.SourceSHA256, PipelineOutcome: "PIPELINE_COMPLETED", Compile: json.RawMessage(`{}`), StartedAt: time.Now(), CompletedAt: time.Now()}
 	if validateResult(request, result) == nil {
 		t.Fatal("cross-job result accepted")
+	}
+}
+
+func TestTwoCThreeRequestRequiresExactTestcaseContract(t *testing.T) {
+	request := validRequest()
+	request.ProtocolVersion = ProtocolVersion
+	if err := validateRequest(request); err == nil {
+		t.Fatal("2C.3 request without testcase identity accepted")
+	}
+	request.ProblemID = "problem"
+	request.TestcaseID = "case-1"
+	request.TestcaseInput = []byte("111\n")
+	request.TestcaseInputSHA256 = "c" + "0" // deliberately malformed
+	request.ExecutionProfileID = CPP20ProfileID
+	if err := validateRequest(request); err == nil {
+		t.Fatal("malformed testcase hash accepted")
+	}
+	request.TestcaseInputSHA256 = ""
+	// An empty input is valid when its exact empty hash is supplied.
+	request.TestcaseInput = nil
+	request.TestcaseInputSHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	if err := validateRequest(request); err != nil {
+		t.Fatalf("valid empty testcase rejected: %v", err)
 	}
 }
