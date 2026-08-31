@@ -9,7 +9,7 @@
 - Starting HEAD: `88fe7528ff7ef273231e991e94337500e873bf05`
 - Branch: `codex/product-web-chinese-rich-experience-v3`
 - Commits: `38736f1` implementation, `e81b474` runtime/report evidence, `79be226` matrix, `efaa964` browser evidence
-- Final HEAD: `efaa964`
+- Final implementation HEAD: `38736f1`; report/evidence commits continue through `189e42f` (the enclosing report commit cannot self-reference its own hash).
 - Worktree: clean after the follow-up evidence commit (no unrelated files changed)
 - Lead Integration: not started; merge not performed
 
@@ -53,6 +53,7 @@ Console-error capture was not retained after the browser tab lifecycle ended, so
 
 - `ANNOUNCEMENT_BACKEND_INTEGRATION_REQUEST`: provide a versioned public announcement capability before replacing the static notices.
 - Update legacy Web-owned UI test expectations to Chinese while retaining behavior and security assertions; do not add visible English aliases.
+- `LEGACY_TEST_CONTRACT_UPDATE_REQUEST`: coordinate owners of Phase 2A Worker and Sandbox/Phase 2B UI tests before changing their English copy assertions; this Web/Product Worker did not rewrite another worker's acceptance contracts.
 - Re-run runtime and browser review after PostgreSQL/Redis are available.
 
 `READY FOR LEAD INTEGRATION = NO` (full repository regression and runtime dependency evidence remain outstanding).
