@@ -113,3 +113,50 @@ func TestValidateRawExecutionResultBindsTestcaseProvenanceAndRecord(t *testing.T
 		})
 	}
 }
+
+func TestValidateRawExecutionSetResultUsesSetAttemptIdentity(t *testing.T) {
+	inputHash := digest([]byte("one\n"))
+	manifest := TestcaseSetManifest{
+		ProblemID: "problem-v1", ProblemRevisionID: "revision-v1", TestdataVersionID: "testdata-v1",
+		TestcaseSetID: "set-v1", ExecutionProfileID: "cpp20-gcc-13-v1",
+		Entries: []TestcaseSetEntry{{Index: 0, TestcaseID: "case-1", TestdataVersionID: "testdata-v1", Input: "one\n", InputSHA256: inputHash, ExecutionProfileID: "cpp20-gcc-13-v1"}},
+	}
+	manifest.ManifestHash = testcaseSetManifestHash(manifest)
+	job := Job{
+		ID: "job-set", SubmissionID: "submission-set", ProblemID: "problem-v1", ProblemRevisionID: "revision-v1",
+		TestdataVersionRef: "testdata-v1", TestcaseSet: &manifest, ExecutionSetPolicy: "RUN_ALL",
+		Attempt: 2, ExecutionRequestID: "job-set:2", ExecutionAttemptID: "job-set:2:attempt", ResultGeneration: 2,
+		LanguageProfileID: "cpp20-gcc-13-v1", SourceSHA256: strings.Repeat("a", 64),
+	}
+	record := map[string]any{
+		"record_version": "2C.3", "record_id": "job-set:2:testcase:0:case-1", "digest": strings.Repeat("b", 64),
+		"identity":                 map[string]any{"problem_id": "problem-v1", "problem_revision_id": "revision-v1", "testdata_version_id": "testdata-v1", "testcase_id": "case-1", "input_sha256": inputHash, "execution_profile_id": "cpp20-gcc-13-v1", "execution_attempt_id": "job-set:2:attempt:testcase:0"},
+		"execution_set_attempt_id": "job-set:2:attempt", "testcase_index": 0, "testcase_set_manifest_hash": manifest.ManifestHash,
+	}
+	aggregate := map[string]any{
+		"record_version": "2C.4", "record_id": "job-set:2:record", "submission_id": "submission-set", "source_sha256": strings.Repeat("a", 64),
+		"problem_id": "problem-v1", "problem_revision_id": "revision-v1", "testdata_version_id": "testdata-v1", "testcase_set_id": "set-v1",
+		"manifest_hash": manifest.ManifestHash, "execution_set_request_id": "job-set:2", "execution_set_attempt_id": "job-set:2:attempt",
+		"execution_profile_id": "cpp20-gcc-13-v1", "execution_policy": "RUN_ALL", "total_testcase_count": 1, "started_testcase_count": 1, "completed_testcase_count": 1,
+		"testcases":     []any{map[string]any{"index": 0, "testcase_id": "case-1", "input_sha256": inputHash, "testdata_version_id": "testdata-v1", "execution_profile_id": "cpp20-gcc-13-v1", "status": "RAW_COMPLETED", "record": record}},
+		"set_cancelled": false, "set_infrastructure_failure": false, "stop_reason": "COMPLETED", "cleanup_verified": true, "digest": strings.Repeat("c", 64),
+	}
+	result := map[string]any{
+		"protocol_version": "2C.4", "execution_set_request_id": "job-set:2", "execution_set_attempt_id": "job-set:2:attempt",
+		"judge_job_id": "job-set", "submission_id": "submission-set", "attempt": 2, "result_generation": 2,
+		"language_profile_id": "cpp20-gcc-13-v1", "source_sha256": strings.Repeat("a", 64),
+		"problem_id": "problem-v1", "problem_revision_id": "revision-v1", "testdata_version_id": "testdata-v1", "testcase_set_id": "set-v1",
+		"testcase_set_manifest_hash": manifest.ManifestHash, "execution_profile_id": "cpp20-gcc-13-v1", "execution_set_policy": "RUN_ALL",
+		"pipeline_outcome": "PIPELINE_COMPLETED", "compile": map[string]any{"stdout": "", "stderr": "", "stdout_bytes": 0, "stderr_bytes": 0, "stdout_sha256": digest(nil), "stderr_sha256": digest(nil), "stdout_truncated": false, "stderr_truncated": false},
+		"aggregate_execution_set_record": aggregate,
+	}
+	raw, _ := json.Marshal(result)
+	if err := validateRawExecutionResult(raw, job); err != nil {
+		t.Fatalf("valid testcase-set result rejected: %v", err)
+	}
+	result["execution_set_attempt_id"] = "job-set:1:attempt"
+	raw, _ = json.Marshal(result)
+	if validateRawExecutionResult(raw, job) == nil {
+		t.Fatal("stale testcase-set attempt accepted")
+	}
+}
