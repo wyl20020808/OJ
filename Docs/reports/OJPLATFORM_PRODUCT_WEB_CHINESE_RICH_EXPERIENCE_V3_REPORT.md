@@ -8,7 +8,8 @@
 
 - Starting HEAD: `88fe7528ff7ef273231e991e94337500e873bf05`
 - Branch: `codex/product-web-chinese-rich-experience-v3`
-- Commit: recorded by the final Goal commit
+- Commits: `38736f1` implementation, `e81b474` runtime/report evidence
+- Final HEAD: `e81b474`
 - Worktree: clean after the follow-up evidence commit (no unrelated files changed)
 - Lead Integration: not started; merge not performed
 
