@@ -34,7 +34,7 @@ const fallbackMethods: AuthMethods = {
 };
 
 const providerLabels: Record<AuthProvider, string> = {
-  wechat: 'WeChat',
+  wechat: '微信',
   qq: 'QQ',
   google: 'Google',
   github: 'GitHub',
@@ -86,20 +86,17 @@ function AuthFrame({
     <section className="auth-experience" data-auth-mode={mode}>
       <aside className="auth-context">
         <p className="eyebrow">OJPLATFORM / {eyebrow}</p>
-        <h1>Practice with intent.</h1>
-        <p>
-          Keep every problem version, source submission, and identity under one
-          clear account.
-        </p>
-        <div className="auth-context-list" aria-label="Account principles">
+        <h1>专注练习，稳步进步。</h1>
+        <p>每个题目版本、源代码提交和登录身份，都清晰归属于同一个账户。</p>
+        <div className="auth-context-list" aria-label="账户原则">
           <span>
-            01 <b>Verified identity</b>
+            01 <b>已验证身份</b>
           </span>
           <span>
-            02 <b>Versioned work</b>
+            02 <b>版本化作品</b>
           </span>
           <span>
-            03 <b>Honest outcomes</b>
+            03 <b>真实结果</b>
           </span>
         </div>
       </aside>
@@ -123,14 +120,13 @@ function MethodNotice({
   if (loading)
     return (
       <p className="inline-notice" role="status" aria-busy="true">
-        Checking available sign-in methods...
+        正在检查可用登录方式…
       </p>
     );
   if (error)
     return (
       <p className="inline-notice notice-warning" role="status">
-        Authentication methods could not be discovered. Unsupported actions stay
-        disabled until the Auth service is available.
+        暂时无法获取登录方式。认证服务恢复前，不支持的操作会保持禁用。
       </p>
     );
   return null;
@@ -157,15 +153,15 @@ function ProviderButtons({
         target.origin !== window.location.origin &&
         !target.protocol.startsWith('https')
       )
-        throw new Error('OAuth destination is not allowed.');
+        throw new Error('OAuth 跳转地址不被允许。');
       window.location.assign(target.toString());
     } catch (error) {
-      onError(messageFor(error, 'This provider could not start securely.'));
+      onError(messageFor(error, '该登录方式暂时无法安全启动。'));
       setPending(null);
     }
   };
   return (
-    <div className="provider-grid" aria-label="Social sign-in providers">
+    <div className="provider-grid" aria-label="社交登录方式">
       {providers.map((provider) => {
         const state = methods.providers[provider];
         const enabled = state === 'enabled';
@@ -176,7 +172,7 @@ function ProviderButtons({
             className="provider-button"
             disabled={!enabled || pending !== null}
             onClick={() => void start(provider)}
-            aria-label={`${providerLabels[provider]} sign in${enabled ? '' : ' unavailable'}`}
+            aria-label={`${providerLabels[provider]}${enabled ? '' : ' 暂不可用'}`}
           >
             <span
               className={`provider-mark provider-${provider}`}
@@ -187,12 +183,10 @@ function ProviderButtons({
                 : provider.slice(0, 1).toUpperCase()}
             </span>
             <span>
-              {pending === provider ? 'Opening...' : providerLabels[provider]}
+              {pending === provider ? '正在打开…' : providerLabels[provider]}
             </span>
             {!enabled && (
-              <small>
-                {state === 'disabled' ? 'Disabled' : 'Not configured'}
-              </small>
+              <small>{state === 'disabled' ? '已禁用' : '暂未配置'}</small>
             )}
           </button>
         );
@@ -208,18 +202,14 @@ function OAuthStateNotice() {
   );
   if (!state) return null;
   const copy: Record<string, string> = {
-    cancelled: 'Social sign-in was cancelled. No account changes were made.',
-    error:
-      'The social provider could not complete sign-in. Try another method.',
-    link_required:
-      'This provider needs explicit account linking before it can continue.',
-    onboarding:
-      'Finish your local profile to complete first-time social sign-in.',
+    cancelled: '社交登录已取消，账户未发生变化。',
+    error: '社交服务未能完成登录，请尝试其他方式。',
+    link_required: '该登录方式需要先明确绑定账户才能继续。',
+    onboarding: '请完善本地资料，以完成首次社交登录。',
   };
   return (
     <p className="inline-notice notice-warning" role="alert">
-      {copy[state] ??
-        'The sign-in transaction is no longer valid. Start again.'}
+      {copy[state] ?? '登录事务已失效，请重新开始。'}
     </p>
   );
 }
@@ -242,7 +232,7 @@ function SocialOnboarding({
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!transactionId || !username.trim() || !displayName.trim())
-      return setError('Complete the profile fields to continue.');
+      return setError('请填写完整资料后继续。');
     setBusy(true);
     setError('');
     try {
@@ -255,12 +245,7 @@ function SocialOnboarding({
       );
       onNavigate('/');
     } catch (reason) {
-      setError(
-        messageFor(
-          reason,
-          'Onboarding could not be completed. The transaction may have expired.',
-        ),
-      );
+      setError(messageFor(reason, '资料完善未完成，登录事务可能已经过期。'));
     } finally {
       setBusy(false);
     }
@@ -269,12 +254,12 @@ function SocialOnboarding({
     <AuthFrame
       mode="login"
       eyebrow="FINISH PROFILE"
-      title="Make this account yours"
-      description="Social sign-in never silently merges accounts. Choose the local profile details to finish onboarding."
+      title="完善你的账户"
+      description="社交登录不会静默合并账户。请填写本地资料以完成首次登录。"
     >
       <form onSubmit={submit} noValidate>
         <label>
-          Username
+          用户名
           <input
             value={username}
             onChange={(event) => setUsername(event.target.value)}
@@ -283,7 +268,7 @@ function SocialOnboarding({
           />
         </label>
         <label>
-          Display name
+          显示名称
           <input
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
@@ -296,12 +281,11 @@ function SocialOnboarding({
           </p>
         )}
         <button type="submit" disabled={busy}>
-          {busy ? 'Finishing...' : 'Continue onboarding'}
+          {busy ? '完成中…' : '继续完善资料'}
         </button>
       </form>
       <p className="field-help">
-        Transaction state is server-bound and expires; no provider token is
-        stored in the browser.
+        登录事务由服务端绑定并会过期；浏览器不会保存 provider token。
       </p>
     </AuthFrame>
   );
@@ -327,7 +311,7 @@ function CodeStep({
   return (
     <div className="verification-step">
       <label>
-        Verification code
+        验证码
         <input
           inputMode="numeric"
           autoComplete="one-time-code"
@@ -335,14 +319,14 @@ function CodeStep({
           onChange={(event) =>
             setCode(event.target.value.replace(/\D/g, '').slice(0, 8))
           }
-          placeholder="6-digit code"
+          placeholder="输入验证码"
           aria-describedby="verification-help"
         />
       </label>
       <p id="verification-help" className="field-help">
-        Code sent to {challenge.destination}. Expires{' '}
-        {new Date(challenge.expiresAt).toLocaleTimeString()}.{' '}
-        {challenge.attemptsRemaining} attempts remaining.
+        验证码已发送至 {challenge.destination}，将于{' '}
+        {new Date(challenge.expiresAt).toLocaleTimeString('zh-CN')} 失效，剩余{' '}
+        {challenge.attemptsRemaining} 次尝试。
       </p>
       <div className="verification-actions">
         <button
@@ -350,7 +334,7 @@ function CodeStep({
           onClick={onVerify}
           disabled={busy || code.length < 4}
         >
-          {busy ? 'Verifying...' : 'Verify code'}
+          {busy ? '验证中…' : '验证验证码'}
         </button>
         <button
           type="button"
@@ -358,7 +342,7 @@ function CodeStep({
           onClick={onResend}
           disabled={busy || resendIn > 0}
         >
-          {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
+          {resendIn > 0 ? `${resendIn} 秒后重发` : '重新发送验证码'}
         </button>
       </div>
     </div>
@@ -434,7 +418,7 @@ function LoginExperience({
         ),
       );
     } catch (reason) {
-      setError(messageFor(reason, 'Verification service unavailable.'));
+      setError(messageFor(reason, '验证服务暂不可用。'));
     } finally {
       setBusy(false);
     }
@@ -443,22 +427,19 @@ function LoginExperience({
     event.preventDefault();
     setError('');
     if (authMode === 'code') {
-      if (!grant) return setError('Verify the code before signing in.');
+      if (!grant) return setError('请先验证验证码，再登录。');
       setBusy(true);
       try {
         onUser(await api.loginCode({ grantId: grant.grantId }));
         onNavigate('/problems');
       } catch (reason) {
-        setError(
-          messageFor(reason, 'The sign-in code was rejected or expired.'),
-        );
+        setError(messageFor(reason, '验证码被拒绝或已过期。'));
       } finally {
         setBusy(false);
       }
       return;
     }
-    if (!passwordEnabled)
-      return setError('Password sign-in for this identifier is unavailable.');
+    if (!passwordEnabled) return setError('该身份类型暂不支持密码登录。');
     setBusy(true);
     try {
       onUser(
@@ -484,7 +465,7 @@ function LoginExperience({
     try {
       setGrant(await api.verifyVerification(challenge.challengeId, code));
     } catch (reason) {
-      setError(messageFor(reason, 'That code is invalid, expired, or locked.'));
+      setError(messageFor(reason, '验证码无效、已过期或已锁定。'));
     } finally {
       setBusy(false);
     }
@@ -492,17 +473,13 @@ function LoginExperience({
   return (
     <AuthFrame
       mode="login"
-      eyebrow="SIGN IN"
-      title="Welcome back"
-      description="Choose a verified way into your practice workspace."
+      eyebrow="登录"
+      title="欢迎回来"
+      description="选择一种已验证的方式进入练习工作台。"
     >
       <MethodNotice loading={methodsLoading} error={methodsError} />
       <OAuthStateNotice />
-      <div
-        className="segmented-control"
-        role="group"
-        aria-label="Identifier type"
-      >
+      <div className="segmented-control" role="group" aria-label="登录身份类型">
         <button
           type="button"
           className={identifierType === 'EMAIL' ? 'selected' : ''}
@@ -512,7 +489,7 @@ function LoginExperience({
             setGrant(null);
           }}
         >
-          Email
+          邮箱
         </button>
         <button
           type="button"
@@ -523,10 +500,10 @@ function LoginExperience({
             setGrant(null);
           }}
         >
-          Phone
+          手机号
         </button>
       </div>
-      <div className="mode-tabs" role="tablist" aria-label="Sign-in method">
+      <div className="mode-tabs" role="tablist" aria-label="登录方式">
         <button
           type="button"
           role="tab"
@@ -535,7 +512,7 @@ function LoginExperience({
           disabled={!passwordEnabled}
           onClick={() => setAuthMode('password')}
         >
-          Password
+          密码登录
         </button>
         <button
           type="button"
@@ -545,12 +522,12 @@ function LoginExperience({
           disabled={!codeEnabled}
           onClick={() => setAuthMode('code')}
         >
-          One-time code
+          验证码登录
         </button>
       </div>
       <form onSubmit={submit} noValidate>
         <label>
-          {identifierType === 'EMAIL' ? 'Email address' : 'Phone number'}
+          {identifierType === 'EMAIL' ? '邮箱地址' : '手机号'}
           <input
             type={identifierType === 'EMAIL' ? 'email' : 'tel'}
             value={identifier}
@@ -561,7 +538,7 @@ function LoginExperience({
         </label>
         {authMode === 'password' ? (
           <label>
-            Password
+            密码
             <input
               type="password"
               value={password}
@@ -577,7 +554,7 @@ function LoginExperience({
             onClick={() => void sendCode()}
             disabled={busy || !codeEnabled}
           >
-            {busy ? 'Sending...' : 'Send verification code'}
+            {busy ? '发送中…' : '发送验证码'}
           </button>
         ) : (
           <CodeStep
@@ -597,21 +574,21 @@ function LoginExperience({
         )}
         {authMode === 'password' && (
           <button type="submit" disabled={busy || !passwordEnabled}>
-            {busy ? 'Signing in...' : 'Sign in'}
+            {busy ? '登录中…' : '登录'}
           </button>
         )}
         {authMode === 'code' && grant && (
           <button type="submit" disabled={busy}>
-            {busy ? 'Signing in...' : 'Continue with verified code'}
+            {busy ? '登录中…' : '使用已验证验证码继续'}
           </button>
         )}
       </form>
       <div className="social-divider">
-        <span>or continue with</span>
+        <span>或使用以下方式继续</span>
       </div>
       <ProviderButtons methods={methods} api={api} onError={setError} />
       <p className="switch">
-        New here? <a href="/register">Create an account</a>
+        还没有账户？<a href="/register">注册账户</a>
       </p>
     </AuthFrame>
   );
@@ -682,7 +659,7 @@ function RegisterExperience({
         ),
       );
     } catch (reason) {
-      setError(messageFor(reason, 'Verification service unavailable.'));
+      setError(messageFor(reason, '验证服务暂不可用。'));
     } finally {
       setBusy(false);
     }
@@ -694,7 +671,7 @@ function RegisterExperience({
     try {
       setGrant(await api.verifyVerification(challenge.challengeId, code));
     } catch (reason) {
-      setError(messageFor(reason, 'That code is invalid, expired, or locked.'));
+      setError(messageFor(reason, '验证码无效、已过期或已锁定。'));
     } finally {
       setBusy(false);
     }
@@ -702,10 +679,7 @@ function RegisterExperience({
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
-    if (!grant)
-      return setError(
-        'Verify your email or phone before creating the account.',
-      );
+    if (!grant) return setError('创建账户前，请先验证邮箱或手机号。');
     if (
       details.password.length < methods.passwordPolicy.minLength ||
       details.password !== details.confirm
@@ -732,16 +706,12 @@ function RegisterExperience({
   return (
     <AuthFrame
       mode="register"
-      eyebrow="CREATE ACCOUNT"
-      title="Start with a verified identity"
-      description="Verify possession first, then create the account that owns your work."
+      eyebrow="注册"
+      title="从验证身份开始"
+      description="先验证你对邮箱或手机号的控制权，再创建属于你的账户。"
     >
       <MethodNotice loading={methodsLoading} error={methodsError} />
-      <div
-        className="segmented-control"
-        role="group"
-        aria-label="Registration type"
-      >
+      <div className="segmented-control" role="group" aria-label="注册方式">
         <button
           type="button"
           className={identifierType === 'EMAIL' ? 'selected' : ''}
@@ -751,7 +721,7 @@ function RegisterExperience({
             setGrant(null);
           }}
         >
-          Email registration
+          邮箱注册
         </button>
         <button
           type="button"
@@ -762,26 +732,26 @@ function RegisterExperience({
             setGrant(null);
           }}
         >
-          Phone registration
+          手机号注册
         </button>
       </div>
       <form onSubmit={submit} noValidate>
         {identifierType === 'PHONE' && (
           <label>
-            Country code
+            国家/地区代码
             <select
               value={country}
               onChange={(event) => setCountry(event.target.value)}
             >
-              <option value="+1">+1 · US/Canada</option>
-              <option value="+44">+44 · UK</option>
-              <option value="+86">+86 · China</option>
-              <option value="+81">+81 · Japan</option>
+              <option value="+1">+1 · 美国/加拿大</option>
+              <option value="+44">+44 · 英国</option>
+              <option value="+86">+86 · 中国</option>
+              <option value="+81">+81 · 日本</option>
             </select>
           </label>
         )}
         <label>
-          {identifierType === 'EMAIL' ? 'Email address' : 'Phone number'}
+          {identifierType === 'EMAIL' ? '邮箱地址' : '手机号'}
           <input
             type={identifierType === 'EMAIL' ? 'email' : 'tel'}
             value={destination}
@@ -797,8 +767,8 @@ function RegisterExperience({
             disabled={busy || !registrationEnabled}
           >
             {busy
-              ? 'Sending...'
-              : `Send ${identifierType === 'EMAIL' ? 'email' : 'SMS'} code`}
+              ? '发送中…'
+              : `发送${identifierType === 'EMAIL' ? '邮箱' : '短信'}验证码`}
           </button>
         )}
         {challenge && !grant && (
@@ -814,14 +784,14 @@ function RegisterExperience({
         )}
         {grant && (
           <div className="verified-grant" role="status">
-            Verified {identifierType === 'EMAIL' ? 'email' : 'phone'} · ready to
-            create account
+            {identifierType === 'EMAIL' ? '邮箱' : '手机号'}已验证 ·
+            可以创建账户
           </div>
         )}
         {grant && (
           <>
             <label>
-              Username
+              用户名
               <input
                 value={details.username}
                 onChange={(event) =>
@@ -831,7 +801,7 @@ function RegisterExperience({
               />
             </label>
             <label>
-              Display name
+              显示名称
               <input
                 value={details.displayName}
                 onChange={(event) =>
@@ -841,7 +811,7 @@ function RegisterExperience({
               />
             </label>
             <label>
-              Password
+              密码
               <input
                 type="password"
                 value={details.password}
@@ -853,7 +823,7 @@ function RegisterExperience({
               />
             </label>
             <label>
-              Confirm password
+              确认密码
               <input
                 type="password"
                 value={details.confirm}
@@ -865,11 +835,11 @@ function RegisterExperience({
               />
             </label>
             <p className="field-help">
-              At least {methods.passwordPolicy.minLength} characters, following
-              the server policy.
+              至少 {methods.passwordPolicy.minLength}{' '}
+              个字符，遵循服务端密码策略。
             </p>
             <button type="submit" disabled={busy}>
-              {busy ? 'Creating account...' : 'Create account'}
+              {busy ? '创建中…' : '创建账户'}
             </button>
           </>
         )}
@@ -880,7 +850,7 @@ function RegisterExperience({
         )}
       </form>
       <p className="switch">
-        Already registered? <a href="/login">Sign in</a>
+        已有账户？<a href="/login">登录</a>
       </p>
     </AuthFrame>
   );

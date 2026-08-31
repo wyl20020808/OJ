@@ -12,7 +12,9 @@ import { ApiError } from '../services/api.js';
 
 function safeDate(value: string) {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Unavailable' : date.toLocaleString();
+  return Number.isNaN(date.getTime())
+    ? '时间未知'
+    : date.toLocaleString('zh-CN');
 }
 
 export function AccountSettings({
@@ -46,9 +48,9 @@ export function AccountSettings({
         setError(
           reason instanceof ApiError
             ? reason.status === 401
-              ? 'Your session has expired. Sign in again to view account security.'
-              : 'Account security is temporarily unavailable.'
-            : 'Account security could not be reached.',
+              ? '登录状态已过期，请重新登录后查看账户安全。'
+              : '账户安全服务暂时不可用。'
+            : '暂时无法连接账户安全服务。',
         );
       });
     return () => {
@@ -85,22 +87,22 @@ export function AccountSettings({
   if (!user)
     return (
       <div className="state">
-        <h2>Sign in required</h2>
-        <p>Sign in to manage your account security.</p>
+        <h2>请先登录</h2>
+        <p>登录后才能管理账户安全。</p>
       </div>
     );
   if (error)
     return (
       <div className="state">
-        <h2>Account settings unavailable</h2>
+        <h2>账户设置暂不可用</h2>
         <p role="alert">{error}</p>
       </div>
     );
   if (!account || !sessions)
     return (
       <div className="state" aria-busy="true">
-        <h2>Loading account settings</h2>
-        <p>Fetching your account and active sessions...</p>
+        <h2>正在加载账户设置</h2>
+        <p>正在获取账户信息和活跃会话…</p>
       </div>
     );
   const revoke = async (id?: string) => {
@@ -114,8 +116,8 @@ export function AccountSettings({
     } catch (reason: unknown) {
       setError(
         reason instanceof ApiError
-          ? 'The session change was rejected. Refresh and try again.'
-          : 'The session service could not be reached.',
+          ? '会话变更被拒绝，请刷新后重试。'
+          : '暂时无法连接会话服务。',
       );
     } finally {
       setBusy(null);
@@ -125,10 +127,10 @@ export function AccountSettings({
     <section className="settings-page">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">ACCOUNT</p>
-          <h1>Settings &amp; security</h1>
+          <p className="eyebrow">账户与安全</p>
+          <h1>账户设置</h1>
         </div>
-        <span className="status status-active">Session protected</span>
+        <span className="status status-active">会话受保护</span>
       </div>
       {error && (
         <p className="error" role="alert">
@@ -137,29 +139,28 @@ export function AccountSettings({
       )}
       <div className="settings-grid">
         <article className="settings-panel">
-          <p className="panel-label">PROFILE</p>
+          <p className="panel-label">基本资料</p>
           <h2>{account.displayName}</h2>
           <p className="muted">@{account.username}</p>
           <dl className="settings-facts">
             <div>
-              <dt>Email</dt>
+              <dt>邮箱</dt>
               <dd>{account.email}</dd>
             </div>
             <div>
-              <dt>Member since</dt>
+              <dt>注册时间</dt>
               <dd>{safeDate(account.createdAt)}</dd>
             </div>
           </dl>
           <div className="unavailable-note">
-            Profile editing and password changes are not available in the
-            current public API.
+            当前公开接口暂不支持编辑资料和修改密码。
           </div>
         </article>
         <article className="settings-panel">
           <div className="panel-row">
             <div>
-              <p className="panel-label">SESSIONS</p>
-              <h2>Signed-in devices</h2>
+              <p className="panel-label">登录会话</p>
+              <h2>登录设备</h2>
             </div>
             <button
               type="button"
@@ -169,19 +170,19 @@ export function AccountSettings({
                 busy !== null || !account.capabilities.canManageSessions
               }
             >
-              {busy === 'all' ? 'Signing out...' : 'Sign out all'}
+              {busy === 'all' ? '退出中…' : '退出全部会话'}
             </button>
           </div>
           <ul className="session-list">
             {sessions.length === 0 ? (
-              <li className="muted">No active sessions.</li>
+              <li className="muted">暂无活跃会话。</li>
             ) : (
               sessions.map((session) => (
                 <li key={session.id}>
                   <div>
-                    <strong>{session.deviceLabel || 'Browser session'}</strong>
+                    <strong>{session.deviceLabel || '浏览器会话'}</strong>
                     <span className="muted">
-                      Last seen{' '}
+                      最近活动：
                       {safeDate(session.lastSeenAt || session.createdAt)}
                     </span>
                   </div>
@@ -192,7 +193,7 @@ export function AccountSettings({
                       onClick={() => void revoke(session.id)}
                       disabled={busy !== null}
                     >
-                      {busy === session.id ? 'Signing out...' : 'Sign out'}
+                      {busy === session.id ? '退出中…' : '退出'}
                     </button>
                   )}
                 </li>
@@ -200,25 +201,24 @@ export function AccountSettings({
             )}
           </ul>
           <p className="muted settings-footnote">
-            Session metadata is shown without tokens or secret credentials.
+            页面只展示会话元数据，不展示令牌或其他机密凭据。
           </p>
         </article>
         <article className="settings-panel settings-wide">
           <div className="panel-row">
             <div>
-              <p className="panel-label">IDENTITY</p>
-              <h2>Login methods</h2>
+              <p className="panel-label">登录与验证方式</p>
+              <h2>登录方式</h2>
             </div>
-            <span className="muted">Verified identifiers and providers</span>
+            <span className="muted">已验证身份与登录 provider</span>
           </div>
           {identifiers === null || identities === null ? (
             <p className="muted" role="status">
-              Loading connected identities...
+              正在加载已连接的登录方式…
             </p>
           ) : identifiers.length === 0 && identities.length === 0 ? (
             <p className="unavailable-note">
-              Connected identity management is awaiting Auth V2 capability
-              discovery.
+              已连接登录方式的管理功能正在等待 Auth V2 能力发现。
             </p>
           ) : (
             <div className="identity-list">
@@ -226,12 +226,14 @@ export function AccountSettings({
                 <div className="identity-row" key={identifier.id}>
                   <div>
                     <strong>
-                      {identifier.type === 'EMAIL' ? 'Email' : 'Phone'}
+                      {identifier.type === 'EMAIL'
+                        ? '已验证邮箱'
+                        : '已验证手机号'}
                     </strong>
                     <span className="muted">{identifier.maskedValue}</span>
                   </div>
                   <span className="status status-active">
-                    {identifier.primary ? 'Primary' : 'Verified'}
+                    {identifier.primary ? '主登录方式' : '已验证'}
                   </span>
                 </div>
               ))}
@@ -244,7 +246,7 @@ export function AccountSettings({
                     <div>
                       <strong>{identity.provider}</strong>
                       <span className="muted">
-                        {identity.subjectLabel || 'Connected provider'}
+                        {identity.subjectLabel || '已连接 provider'}
                       </span>
                     </div>
                     <button
@@ -253,7 +255,11 @@ export function AccountSettings({
                       disabled={!canUnlink || busy !== null}
                       onClick={() =>
                         void (async () => {
-                          if (!window.confirm(`Unlink ${identity.provider}?`))
+                          if (
+                            !window.confirm(
+                              `确定要解绑 ${identity.provider} 吗？`,
+                            )
+                          )
                             return;
                           setBusy(identity.provider);
                           try {
@@ -269,8 +275,8 @@ export function AccountSettings({
                           } catch (reason) {
                             setError(
                               reason instanceof ApiError
-                                ? 'The provider could not be unlinked.'
-                                : 'The identity service could not be reached.',
+                                ? '无法解绑该登录方式。'
+                                : '暂时无法连接身份服务。',
                             );
                           } finally {
                             setBusy(null);
@@ -280,9 +286,9 @@ export function AccountSettings({
                     >
                       {canUnlink
                         ? busy === identity.provider
-                          ? 'Unlinking...'
-                          : 'Unlink'
-                        : 'Required login method'}
+                          ? '解绑中…'
+                          : '解绑'
+                        : '必要登录方式'}
                     </button>
                   </div>
                 );
@@ -290,8 +296,7 @@ export function AccountSettings({
             </div>
           )}
           <p className="muted settings-footnote">
-            Adding or linking a new identifier/provider requires a server-issued
-            verification or OAuth transaction.
+            添加或绑定新的身份需要服务端签发的验证凭据或 OAuth 事务。
           </p>
         </article>
       </div>

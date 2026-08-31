@@ -22,6 +22,19 @@ import './app.css';
 import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
+import {
+  chooseDailyProblem,
+  getDailyFortune,
+  staticAnnouncements,
+} from './homeContent.js';
+import {
+  formatDate,
+  translateJudgeLabel,
+  translateJudgeNote,
+  translateProblemStatus,
+  translateVisibility,
+  zhCN,
+} from './locale.js';
 
 type Route = {
   name:
@@ -78,15 +91,18 @@ function Link({
   to,
   children,
   className,
+  ariaLabel,
 }: {
   to: string;
   children: ReactNode;
   className?: string;
+  ariaLabel?: string;
 }) {
   return (
     <a
       href={to}
       className={className}
+      aria-label={ariaLabel}
       onClick={(e) => {
         e.preventDefault();
         navigate(to);
@@ -113,8 +129,8 @@ export class ErrorBoundary extends Component<
   override render() {
     return this.state.hasError ? (
       <main className="shell">
-        <h1>Something went wrong</h1>
-        <p role="alert">The application could not render this page.</p>
+        <h1>页面暂时无法显示</h1>
+        <p role="alert">应用未能正常渲染此页面，请稍后重试。</p>
       </main>
     ) : (
       this.props.children
@@ -249,23 +265,26 @@ export function JudgeStatus({ submission }: { submission: Submission }) {
       role="status"
       aria-label={`${presentation.label}. ${presentation.note}`}
     >
-      <span className="status">{presentation.label}</span>
-      <span className="judge-note">{presentation.note}</span>
+      <span className="status">{translateJudgeLabel(presentation.label)}</span>
+      <span className="judge-note">
+        {translateJudgeNote(presentation.note)}
+      </span>
+      <span className="sr-only">
+        {presentation.label} {presentation.note}
+      </span>
       {submission.attempt !== undefined && (
         <span className="judge-meta">
-          Attempt {submission.attempt}
+          第 {submission.attempt} 次尝试
           {submission.maxAttempts ? ` / ${submission.maxAttempts}` : ''}
         </span>
       )}
       {submission.retryAt && (
         <span className="judge-meta">
-          Retry after {new Date(submission.retryAt).toLocaleString()}
+          重试时间：{formatDate(submission.retryAt)}
         </span>
       )}
       {submission.failureCode && (
-        <span className="judge-meta">
-          Protocol code: {submission.failureCode}
-        </span>
+        <span className="judge-meta">协议代码：{submission.failureCode}</span>
       )}
     </div>
   );
@@ -279,6 +298,24 @@ function Home({
 }) {
   const [recentProblems, setRecentProblems] = useState<Problem[] | null>(null);
   const [error, setError] = useState(false);
+  const [jumpQuery, setJumpQuery] = useState('');
+  const [jumpError, setJumpError] = useState('');
+  const fortune = useMemo(() => {
+    const seed =
+      user?.id ??
+      (() => {
+        const key = 'ojplatform-fortune-seed';
+        const existing = window.localStorage.getItem(key);
+        if (existing) return existing;
+        const next =
+          typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random()}`;
+        window.localStorage.setItem(key, next);
+        return next;
+      })();
+    return getDailyFortune(new Date(), seed);
+  }, [user?.id]);
   useEffect(() => {
     void api
       .home()
@@ -289,106 +326,244 @@ function Home({
       )
       .catch(() => setError(true));
   }, [api]);
+  const jump = () => {
+    const value = jumpQuery.trim().toLowerCase();
+    if (!value) {
+      setJumpError('请输入题号或题目关键词。');
+      return;
+    }
+    const match = recentProblems?.find((problem) =>
+      [problem.id, problem.slug, problem.title].some((field) =>
+        field.toLowerCase().includes(value),
+      ),
+    );
+    if (match) {
+      setJumpError('');
+      navigate(`/problems/${match.slug || match.id}`);
+    } else {
+      setJumpError(
+        recentProblems === null || error
+          ? '题库数据暂不可用，请稍后重试。'
+          : '没有找到匹配的题目。',
+      );
+    }
+  };
+  const dailyProblem = chooseDailyProblem(recentProblems ?? []);
+  const randomProblem = () => {
+    if (!recentProblems?.length) {
+      setJumpError('随机跳题需要先加载题库数据。');
+      return;
+    }
+    const item =
+      recentProblems[Math.floor(Math.random() * recentProblems.length)];
+    if (!item) return;
+    navigate(`/problems/${item.slug || item.id}`);
+  };
   return (
     <section className="home-page">
-      <div className="hero">
-        <div className="hero-copy">
-          <p className="eyebrow">OJPLATFORM / PRACTICE ARENA</p>
-          <h1>Build solutions that hold up.</h1>
-          <p>
-            Read carefully, submit confidently, and keep every attempt tied to
-            the exact problem version.
-          </p>
-          <div className="hero-actions">
-            <Link to="/problems">
-              <button type="button">Browse problems</button>
-            </Link>
-            <Link to={user ? '/submissions' : '/login'}>
-              <button className="secondary" type="button">
-                {user ? 'My submissions' : 'Sign in to continue'}
-              </button>
-            </Link>
-          </div>
-        </div>
-        <div className="hero-panel">
-          <span className="panel-label">YOUR WORKSPACE</span>
-          <strong>
+      <header className="home-intro">
+        <div>
+          <p className="eyebrow">OJPLATFORM / 在线评测工作台</p>
+          <h1>
             {user
-              ? `Welcome back, ${user.displayName}`
-              : 'A focused place to practice'}
-          </strong>
-          <p>
-            {user
-              ? 'Pick up where you left off with your submissions and drafts.'
-              : 'Start with a public problem, then keep your source and intake history in one place.'}
+              ? `欢迎回来，${user.displayName}`
+              : '把每一次练习，做得更扎实。'}
+          </h1>
+          <p className="home-lede">
+            从一道真实题目开始，阅读、提交、复盘，所有过程都和明确的题目版本保持关联。
           </p>
         </div>
-      </div>
-      {error ? (
-        <State
-          title="Problems unavailable"
-          text="The public problem feed could not be loaded."
-        />
-      ) : recentProblems === null ? (
-        <p className="muted">Loading recent problems...</p>
-      ) : recentProblems.length > 0 ? (
-        <section className="section-block">
-          <div className="page-heading">
-            <h2>Recent problems</h2>
-          </div>
-          <div className="problem-table" role="list">
-            {recentProblems.map((problem) => (
-              <Link
-                key={problem.id}
-                to={`/problems/${problem.slug || problem.id}`}
-              >
-                <article role="listitem">
-                  <span className="problem-id">{problem.slug}</span>
-                  <h2>{problem.title}</h2>
-                </article>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      <div className="quick-grid">
-        <Link to="/problems">
-          <article className="quick-card">
-            <span className="quick-icon">01</span>
-            <div>
-              <h2>Problems</h2>
-              <p>Browse the published problem set.</p>
-            </div>
-            <span>→</span>
-          </article>
-        </Link>
-        <Link to={user ? '/submissions' : '/login'}>
-          <article className="quick-card">
-            <span className="quick-icon">02</span>
-            <div>
-              <h2>Submissions</h2>
-              <p>
-                {user
-                  ? 'Review your intake history.'
-                  : 'Sign in to view your submissions.'}
-              </p>
-            </div>
-            <span>→</span>
-          </article>
-        </Link>
-        {user && (
-          <Link to="/author">
-            <article className="quick-card">
-              <span className="quick-icon">03</span>
-              <div>
-                <h2>Authoring</h2>
-                <p>Manage your problem drafts.</p>
-              </div>
-              <span>→</span>
-            </article>
+        <div className="home-actions" aria-label="常用操作">
+          <Link to="/problems">
+            <button type="button">进入题库</button>
           </Link>
-        )}
-      </div>
+          <Link to={user ? '/submissions' : '/login'}>
+            <button className="secondary" type="button">
+              {user ? '查看我的提交' : '登录后继续'}
+            </button>
+          </Link>
+        </div>
+      </header>
+
+      <section className="home-workbench" aria-labelledby="quick-jump-title">
+        <div className="workbench-main">
+          <div className="section-heading-inline">
+            <div>
+              <p className="eyebrow">快速开始</p>
+              <h2 id="quick-jump-title">找到下一道题</h2>
+            </div>
+            <span className="muted">题号、slug 或标题关键词</span>
+          </div>
+          <div className="jump-form">
+            <input
+              aria-label="题目快速跳转"
+              value={jumpQuery}
+              onChange={(event) => setJumpQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') jump();
+              }}
+              placeholder="例如：two-sum 或 二分"
+            />
+            <button type="button" onClick={jump}>
+              跳转
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={randomProblem}
+              disabled={!recentProblems?.length}
+            >
+              随机跳题
+            </button>
+          </div>
+          {jumpError && (
+            <p className="error" role="alert">
+              {jumpError}
+            </p>
+          )}
+          {error && (
+            <p className="unavailable-note" role="status">
+              题库数据暂不可用，快速跳转和随机跳题将在服务恢复后启用。
+            </p>
+          )}
+        </div>
+        <div className="workbench-side">
+          <span className="panel-label">今日挑战</span>
+          {dailyProblem ? (
+            <>
+              <strong>
+                <Link to={`/problems/${dailyProblem.slug || dailyProblem.id}`}>
+                  {dailyProblem.title}
+                </Link>
+              </strong>
+              <span className="muted">
+                {dailyProblem.slug || dailyProblem.id}
+              </span>
+              <Link to={`/problems/${dailyProblem.slug || dailyProblem.id}`}>
+                开始练习 →
+              </Link>
+            </>
+          ) : (
+            <>
+              <strong>暂无可用题目</strong>
+              <p className="muted">
+                题库服务恢复后，这里会按日期展示真实题目。
+              </p>
+            </>
+          )}
+        </div>
+      </section>
+
+      <section className="home-columns">
+        <div className="home-column-main">
+          <div className="section-heading-inline">
+            <div>
+              <p className="eyebrow">题库动态</p>
+              <h2>最近更新</h2>
+            </div>
+            <Link to="/problems">查看全部</Link>
+          </div>
+          {recentProblems === null ? (
+            <p className="muted">正在加载题库…</p>
+          ) : recentProblems.length ? (
+            <div className="problem-table" role="list">
+              {recentProblems.slice(0, 6).map((problem) => (
+                <Link
+                  key={problem.id}
+                  to={`/problems/${problem.slug || problem.id}`}
+                >
+                  <article role="listitem">
+                    <span className="problem-id">
+                      {problem.slug || problem.id}
+                    </span>
+                    <div>
+                      <h3>{problem.title}</h3>
+                      <p>
+                        {problem.statement.slice(0, 100)}
+                        {problem.statement.length > 100 ? '…' : ''}
+                      </p>
+                    </div>
+                    <span aria-hidden="true">→</span>
+                  </article>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <State title="暂无题目" text="公开题目将在服务恢复后显示。" />
+          )}
+          <div className="home-links">
+            <Link to={user ? '/submissions' : '/login'}>
+              <strong>{user ? '我的提交' : '登录查看提交'}</strong>
+              <span>
+                {user ? '查看真实的提交接收记录' : '登录后查看个人练习记录'} →
+              </span>
+            </Link>
+            {user && (
+              <Link to="/author">
+                <strong>出题工作台</strong>
+                <span>管理你的题目草稿 →</span>
+              </Link>
+            )}
+          </div>
+        </div>
+        <aside className="home-column-side">
+          <section className="fortune-panel">
+            <div className="section-heading-inline">
+              <div>
+                <p className="eyebrow">每日小工具</p>
+                <h2>今日运势</h2>
+              </div>
+              <span className="status status-active">仅供娱乐</span>
+            </div>
+            <p className="fortune-state">{fortune.state}</p>
+            <dl>
+              <div>
+                <dt>宜</dt>
+                <dd>{fortune.should}</dd>
+              </div>
+              <div>
+                <dt>忌</dt>
+                <dd>{fortune.avoid}</dd>
+              </div>
+              <div>
+                <dt>幸运算法</dt>
+                <dd>
+                  {fortune.algorithm} · {fortune.complexity}
+                </dd>
+              </div>
+            </dl>
+            <p className="field-help">
+              每天对同一浏览器保持一致，不使用密码、令牌、邮箱、手机号或 IP。
+            </p>
+          </section>
+          <section className="announcement-panel">
+            <div className="section-heading-inline">
+              <div>
+                <p className="eyebrow">站点信息</p>
+                <h2>站点公告</h2>
+              </div>
+            </div>
+            <ul className="announcement-list">
+              {staticAnnouncements.map((item) => (
+                <li key={item.id}>
+                  <div>
+                    <span className="announcement-meta">
+                      {item.importance} · {item.date}
+                    </span>
+                    <strong>
+                      <Link to={item.href}>{item.title}</Link>
+                    </strong>
+                    <p>{item.text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="field-help">
+              以上为 Web 版本控制的静态公告；公告后端接入待后续集成。
+            </p>
+          </section>
+        </aside>
+      </section>
     </section>
   );
 }
@@ -403,7 +578,7 @@ function State({
 }) {
   return (
     <div className="state">
-      <h2>{title}</h2>
+      <h2 aria-label={title}>{title}</h2>
       <p>{text}</p>
       {action}
     </div>
@@ -429,31 +604,28 @@ function ProblemList({ api }: { api: ApiClient }) {
   if (error)
     return (
       <State
-        title="Problems unavailable"
-        text="We could not load problems right now."
-        action={<button onClick={load}>Retry</button>}
+        title="题库暂不可用"
+        text="暂时无法加载题目，请稍后重试。"
+        action={<button onClick={load}>重试</button>}
       />
     );
-  if (!data)
-    return (
-      <State title="Loading problems" text="Fetching the latest problem set…" />
-    );
+  if (!data) return <State title="正在加载题库" text="正在获取最新题目列表…" />;
   return (
     <section>
       <div className="page-heading">
         <div>
-          <p className="eyebrow">LIBRARY</p>
-          <h1>Problems</h1>
+          <p className="eyebrow">题目资源</p>
+          <h1>题库</h1>
         </div>
-        <span className="muted">{data.page.total} total</span>
+        <span className="muted">共 {data.page.total} 题</span>
       </div>
       <div className="toolbar">
         <label className="search-field">
-          Search problems
+          搜索题目
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter by title or slug"
+            placeholder="按题目标题或题号筛选"
           />
         </label>
         <span className="muted">
@@ -464,15 +636,30 @@ function ProblemList({ api }: { api: ApiClient }) {
                 .includes(query.toLowerCase()),
             ).length
           }{' '}
-          shown
+          条结果
         </span>
       </div>
       {data.items.filter((p) =>
         `${p.title} ${p.slug}`.toLowerCase().includes(query.toLowerCase()),
       ).length === 0 ? (
         <State
-          title="No problems yet"
-          text="Published problems will appear here."
+          title={query ? '当前筛选无结果' : '暂无题目'}
+          text={
+            query
+              ? '请尝试其他关键词，或清除筛选条件。'
+              : '已发布题目会显示在这里。'
+          }
+          action={
+            query ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setQuery('')}
+              >
+                清除筛选
+              </button>
+            ) : undefined
+          }
         />
       ) : (
         <div className="problem-table" role="list">
@@ -508,13 +695,13 @@ function ProblemList({ api }: { api: ApiClient }) {
           disabled={offset === 0}
           onClick={() => setOffset(Math.max(0, offset - data.page.limit))}
         >
-          Previous
+          上一页
         </button>
         <button
           disabled={offset + data.page.limit >= data.page.total}
           onClick={() => setOffset(offset + data.page.limit)}
         >
-          Next
+          下一页
         </button>
       </div>
     </section>
@@ -579,7 +766,7 @@ function AuthorDashboard({ api }: { api: ApiClient }) {
             : new ApiError(
                 {
                   code: 'NETWORK_ERROR',
-                  message: 'Unable to load drafts.',
+                  message: '无法加载题目草稿。',
                   requestId: 'unknown',
                 },
                 0,
@@ -593,36 +780,31 @@ function AuthorDashboard({ api }: { api: ApiClient }) {
       <State
         title={
           error.code === 'FORBIDDEN'
-            ? 'Authoring forbidden'
-            : 'Authoring unavailable'
+            ? '无权访问出题工作台'
+            : '出题工作台暂不可用'
         }
         text={error.message}
-        action={<button onClick={load}>Retry</button>}
+        action={<button onClick={load}>重试</button>}
       />
     );
   if (!data)
-    return (
-      <State
-        title="Loading authoring workspace"
-        text="Fetching your problem drafts..."
-      />
-    );
+    return <State title="正在加载出题工作台" text="正在获取你的题目草稿…" />;
   return (
     <section>
       <div className="page-heading">
         <div>
-          <p className="eyebrow">AUTHORING</p>
-          <h1>My problems</h1>
+          <p className="eyebrow">出题工作台</p>
+          <h1>我的题目</h1>
         </div>
         <Link to="/author/problems/new">
-          <button type="button">New problem</button>
+          <button type="button">新建题目</button>
         </Link>
       </div>
       {data.items.length === 0 ? (
         <State
-          title="No drafts yet"
-          text="Create your first problem draft to begin authoring."
-          action={<Link to="/author/problems/new">Create a draft</Link>}
+          title="暂无草稿"
+          text="创建第一道题目草稿，开始出题。"
+          action={<Link to="/author/problems/new">创建草稿</Link>}
         />
       ) : (
         <div className="problem-list">
@@ -632,12 +814,12 @@ function AuthorDashboard({ api }: { api: ApiClient }) {
                 <h2>{p.title}</h2>
                 <p>
                   <span className={`status status-${p.status}`}>
-                    {p.status}
+                    {translateProblemStatus(p.status)}
                   </span>{' '}
-                  · {p.visibility}
+                  · {translateVisibility(p.visibility)}
                 </p>
               </div>
-              <Link to={`/author/problems/${p.slug || p.id}/edit`}>Edit</Link>
+              <Link to={`/author/problems/${p.slug || p.id}/edit`}>编辑</Link>
             </article>
           ))}
         </div>
@@ -692,7 +874,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       !form.outputDescription ||
       !form.constraints
     ) {
-      setMessage('Complete all required fields before saving.');
+      setMessage('请先填写所有必填字段。');
       return;
     }
     setSaving(true);
@@ -717,7 +899,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
             visibility: form.visibility,
             status: form.status,
           });
-      setMessage('Draft saved.');
+      setMessage('草稿已保存。');
       setDirty(false);
       if (!id) navigate(`/author/problems/${result.slug || result.id}/edit`);
     } catch (e) {
@@ -727,7 +909,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
           : new ApiError(
               {
                 code: 'NETWORK_ERROR',
-                message: 'Unable to save draft.',
+                message: '无法保存草稿。',
                 requestId: 'unknown',
               },
               0,
@@ -739,7 +921,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
   };
   const transition = async (status: Problem['status']) => {
     if (!id) return;
-    if (status === 'archived' && !window.confirm('Archive this problem?'))
+    if (status === 'archived' && !window.confirm('确定要归档这道题吗？'))
       return;
     setSaving(true);
     try {
@@ -751,59 +933,58 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       });
       setForm((f) => ({ ...f, status }));
       setDirty(false);
-      setMessage(`Problem ${status}.`);
+      setMessage(status === 'published' ? '题目已发布。' : '题目已归档。');
     } catch (e) {
       setError(e instanceof ApiError ? e : null);
     } finally {
       setSaving(false);
     }
   };
-  if (loading)
-    return (
-      <State title="Loading draft" text="Fetching the current revision..." />
-    );
+  if (loading) return <State title="正在加载草稿" text="正在获取当前版本…" />;
   if (error && !form.title)
     return (
       <State
         title={
           error.code === 'FORBIDDEN'
-            ? 'Authoring forbidden'
+            ? '无权访问出题工作台'
             : error.code === 'NOT_FOUND'
-              ? 'Draft not found'
-              : 'Draft unavailable'
+              ? '草稿不存在'
+              : '草稿暂不可用'
         }
         text={error.message}
       />
     );
   return (
     <section className="editor">
-      <Link to="/author">← Back to my problems</Link>
+      <Link to="/author">← 返回我的题目</Link>
       <div className="page-heading">
         <div>
-          <p className="eyebrow">{id ? 'EDIT DRAFT' : 'NEW DRAFT'}</p>
-          <h1>{id ? 'Edit problem' : 'Create problem'}</h1>
+          <p className="eyebrow">{id ? '编辑草稿' : '新建草稿'}</p>
+          <h1>{id ? '编辑题目' : '创建题目'}</h1>
         </div>
         {id && (
-          <span className={`status status-${form.status}`}>{form.status}</span>
+          <span className={`status status-${form.status}`}>
+            {translateProblemStatus(form.status)}
+          </span>
         )}
       </div>
       <form onSubmit={submit} noValidate>
         <div className="form-grid">
           <Field
-            label="Title"
+            label="题目标题"
             value={form.title}
             onChange={(e) => update('title', e.target.value)}
             required
           />
           <Field
-            label="Slug"
+            label="题目标识"
             value={form.slug}
             onChange={(e) => update('slug', e.target.value)}
             required
           />
         </div>
         <label>
-          Statement
+          题面
           <textarea
             value={form.statement}
             onChange={(e) => update('statement', e.target.value)}
@@ -813,7 +994,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
         </label>
         <div className="form-grid">
           <label>
-            Input description
+            输入说明
             <textarea
               value={form.inputDescription}
               onChange={(e) => update('inputDescription', e.target.value)}
@@ -822,7 +1003,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
             />
           </label>
           <label>
-            Output description
+            输出说明
             <textarea
               value={form.outputDescription}
               onChange={(e) => update('outputDescription', e.target.value)}
@@ -832,7 +1013,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
           </label>
         </div>
         <label>
-          Constraints
+          数据范围
           <textarea
             value={form.constraints}
             onChange={(e) => update('constraints', e.target.value)}
@@ -841,7 +1022,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
           />
         </label>
         <label>
-          Notes
+          补充说明
           <textarea
             value={form.notes}
             onChange={(e) => update('notes', e.target.value)}
@@ -850,7 +1031,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
         </label>
         <div className="form-grid">
           <Field
-            label="Time limit (ms)"
+            label="时间限制（毫秒）"
             type="number"
             min={1}
             value={form.timeLimitMs}
@@ -858,7 +1039,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
             required
           />
           <Field
-            label="Memory limit (bytes)"
+            label="内存限制（字节）"
             type="number"
             min={1}
             value={form.memoryLimitBytes}
@@ -867,10 +1048,10 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
           />
         </div>
         <fieldset>
-          <legend>Example</legend>
+          <legend>样例</legend>
           <div className="form-grid">
             <label>
-              Input
+              输入
               <textarea
                 value={form.examples[0]?.input ?? ''}
                 onChange={(e) =>
@@ -886,7 +1067,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
               />
             </label>
             <label>
-              Output
+              输出
               <textarea
                 value={form.examples[0]?.output ?? ''}
                 onChange={(e) =>
@@ -911,22 +1092,20 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
               update('visibility', e.target.checked ? 'public' : 'private')
             }
           />{' '}
-          Public visibility
+          对外公开
         </label>
         {(message || error) && (
           <FormMessage error={message || error?.message || ''} />
         )}
         <div className="actions">
-          <button disabled={saving}>
-            {saving ? 'Saving...' : 'Save draft'}
-          </button>
+          <button disabled={saving}>{saving ? '保存中…' : '保存草稿'}</button>
           {id && form.status === 'draft' && (
             <button
               type="button"
               onClick={() => void transition('published')}
               disabled={saving}
             >
-              Publish
+              发布题目
             </button>
           )}
           {id && form.status === 'published' && (
@@ -935,21 +1114,17 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
               onClick={() => void transition('archived')}
               disabled={saving}
             >
-              Archive
+              归档题目
             </button>
           )}
         </div>
       </form>
       {id && (
         <aside className="history">
-          <h2>Revision history</h2>
-          <p className="muted">
-            Current revision is tracked by the server. Published revisions
-            remain immutable.
-          </p>
+          <h2>版本历史</h2>
+          <p className="muted">当前版本由服务端追踪，已发布版本保持不可变。</p>
           <p>
-            Last updated{' '}
-            {new Date(form.updatedAt ?? Date.now()).toLocaleString()}
+            最近更新：{formatDate(form.updatedAt ?? new Date().toISOString())}
           </p>
         </aside>
       )}
@@ -970,7 +1145,7 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
             : new ApiError(
                 {
                   code: 'NETWORK_ERROR',
-                  message: 'Problem unavailable.',
+                  message: '题目暂不可用。',
                   requestId: 'unknown',
                 },
                 0,
@@ -980,50 +1155,46 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
   }, [api, id]);
   if (error)
     return error.code === 'NOT_FOUND' ? (
-      <State
-        title="Problem not found"
-        text="This problem does not exist or is unavailable."
-      />
+      <State title="题目不存在" text="该题目不存在或当前不可用。" />
     ) : (
-      <State title="Problem unavailable" text={error.message} />
+      <State title="题目暂不可用" text={error.message} />
     );
-  if (!problem)
-    return <State title="Loading problem" text="Fetching problem details…" />;
+  if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
   return (
     <article className="detail">
-      <Link to="/problems">← Back to problems</Link>
+      <Link to="/problems">← 返回题库</Link>
       <h1>{problem.title}</h1>
       <div className="submit-cta">
         <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
-          <button type="button">Submit solution</button>
+          <button type="button">提交代码</button>
         </Link>
       </div>
       <div className="limits">
-        <span>Time {problem.timeLimitMs} ms</span>
+        <span>时间限制 {problem.timeLimitMs} ms</span>
         <span>
-          Memory {Math.round(problem.memoryLimitBytes / 1024 / 1024)} MB
+          内存限制 {Math.round(problem.memoryLimitBytes / 1024 / 1024)} MB
         </span>
       </div>
       <p className="muted">
         {problem.currentRevisionId
-          ? `Revision ${problem.currentRevisionId}`
-          : 'Revision metadata unavailable'}
+          ? `版本 ${problem.currentRevisionId}`
+          : '版本信息暂不可用'}
         {problem.testdataVersion
-          ? ` · Testdata ${problem.testdataVersion}`
+          ? ` · 测试数据 ${problem.testdataVersion}`
           : ''}
       </p>
-      <Section title="Statement">{problem.statement}</Section>
-      <Section title="Input">{problem.inputDescription}</Section>
-      <Section title="Output">{problem.outputDescription}</Section>
-      <Section title="Constraints">{problem.constraints}</Section>
+      <Section title="题面">{problem.statement}</Section>
+      <Section title="输入">{problem.inputDescription}</Section>
+      <Section title="输出">{problem.outputDescription}</Section>
+      <Section title="数据范围">{problem.constraints}</Section>
       {problem.examples.length > 0 && (
-        <Section title="Examples">
+        <Section title="样例">
           {problem.examples.map((e, i) => (
-            <pre key={i}>{`Input\n${e.input}\n\nOutput\n${e.output}`}</pre>
+            <pre key={i}>{`输入\n${e.input}\n\n输出\n${e.output}`}</pre>
           ))}
         </Section>
       )}
-      {problem.notes && <Section title="Notes">{problem.notes}</Section>}
+      {problem.notes && <Section title="补充说明">{problem.notes}</Section>}
     </article>
   );
 }
@@ -1058,39 +1229,31 @@ function SubmissionForm({
         setState('ready');
       })
       .catch((e) => {
-        setError(
-          e instanceof ApiError ? e.message : 'Unable to load submission form.',
-        );
+        setError(e instanceof ApiError ? e.message : '无法加载提交表单。');
         setState('error');
       });
   }, [api, problemId, user]);
   if (!user)
     return (
       <State
-        title="Sign in required"
-        text="Sign in before submitting a solution."
-        action={<Link to="/login">Sign in</Link>}
+        title="请先登录"
+        text="登录后才能提交代码。"
+        action={<Link to="/login">登录</Link>}
       />
     );
   if (state === 'loading')
-    return (
-      <State
-        title="Loading submission form"
-        text="Preparing the language catalog..."
-      />
-    );
-  if (state === 'error')
-    return <State title="Submission unavailable" text={error} />;
+    return <State title="正在加载提交表单" text="正在准备语言列表…" />;
+  if (state === 'error') return <State title="提交服务暂不可用" text={error} />;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     const effectiveLanguageId = languageId || languages[0]?.id || '';
     if (!effectiveLanguageId) {
-      setError('Choose a language.');
+      setError('请选择编程语言。');
       return;
     }
     if (!source.trim()) {
-      setError('Source code is required.');
+      setError('请输入源代码。');
       return;
     }
     const selected = languages.find((l) => l.id === effectiveLanguageId);
@@ -1098,7 +1261,7 @@ function SubmissionForm({
       selected &&
       new TextEncoder().encode(source).byteLength > selected.maxSourceBytes
     ) {
-      setError(`Source exceeds the ${selected.maxSourceBytes}-byte limit.`);
+      setError(`源代码超过 ${selected.maxSourceBytes} 字节限制。`);
       return;
     }
     setState('saving');
@@ -1111,38 +1274,34 @@ function SubmissionForm({
         source,
       });
       setState('success');
-      setError(
-        `Submission ${result.id} was recorded for intake and is ${result.status}.`,
-      );
+      setError(`提交 ${result.id} 已接收，当前原始状态为 ${result.status}。`);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Unable to submit source.');
+      setError(e instanceof ApiError ? e.message : '无法提交源代码。');
       setState('ready');
     }
   };
   if (state === 'success')
     return (
       <State
-        title="Submission received"
+        title="提交已接收"
         text={error}
-        action={<Link to="/submissions">View submission history</Link>}
+        action={<Link to="/submissions">查看提交记录</Link>}
       />
     );
   return (
     <section className="editor">
-      <Link to={`/problems/${encodeURIComponent(problemId)}`}>
-        ← Back to problem
-      </Link>
-      <p className="eyebrow">SUBMISSION INTAKE</p>
-      <h1>Submit solution</h1>
+      <Link to={`/problems/${encodeURIComponent(problemId)}`}>← 返回题目</Link>
+      <p className="eyebrow">提交接收</p>
+      <h1>提交代码</h1>
       <form onSubmit={submit} noValidate>
         <label>
-          Language
+          编程语言
           <select
             value={languageId}
             onChange={(e) => setLanguageId(e.target.value)}
             required
           >
-            <option value="">Choose a language</option>
+            <option value="">请选择语言</option>
             {languages.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name} ({l.extension})
@@ -1151,7 +1310,7 @@ function SubmissionForm({
           </select>
         </label>
         <label>
-          Source code
+          源代码
           <textarea
             value={source}
             onChange={(e) => setSource(e.target.value)}
@@ -1161,12 +1320,11 @@ function SubmissionForm({
           />
         </label>
         <p className="muted">
-          Source is stored as text for intake only. No execution result is
-          available at this stage.
+          源代码目前只作为提交接收文本保存，当前阶段没有执行结果。
         </p>
         {error && <FormMessage error={error} />}
         <button disabled={state === 'saving'}>
-          {state === 'saving' ? 'Submitting...' : 'Submit source'}
+          {state === 'saving' ? '提交中…' : '提交源代码'}
         </button>
       </form>
     </section>
@@ -1198,9 +1356,7 @@ function SubmissionHistory({
       })
       .catch((e) => {
         if (version !== requestVersion.current) return;
-        setError(
-          e instanceof ApiError ? e.message : 'Unable to load submissions.',
-        );
+        setError(e instanceof ApiError ? e.message : '无法加载提交记录。');
       });
   };
   useEffect(load, [api, cursor]);
@@ -1213,39 +1369,31 @@ function SubmissionHistory({
   if (!user)
     return (
       <State
-        title="Sign in required"
-        text="Sign in to view your submission history."
-        action={<Link to="/login">Sign in</Link>}
+        title="请先登录"
+        text="登录后才能查看提交记录。"
+        action={<Link to="/login">登录</Link>}
       />
     );
   if (error)
     return (
       <State
-        title="Submission history unavailable"
+        title="提交记录暂不可用"
         text={error}
-        action={<button onClick={load}>Retry</button>}
+        action={<button onClick={load}>重试</button>}
       />
     );
   if (!items)
-    return (
-      <State
-        title="Loading submissions"
-        text="Fetching your intake history..."
-      />
-    );
+    return <State title="正在加载提交记录" text="正在获取你的提交接收记录…" />;
   return (
     <section>
       <div className="page-heading">
         <div>
-          <p className="eyebrow">SUBMISSIONS</p>
-          <h1>My submissions</h1>
+          <p className="eyebrow">提交记录</p>
+          <h1>我的提交</h1>
         </div>
       </div>
       {items.length === 0 ? (
-        <State
-          title="No submissions yet"
-          text="Your submitted sources will appear here."
-        />
+        <State title="暂无提交" text="你提交的源代码会显示在这里。" />
       ) : (
         <div className="problem-list">
           {items.map((s) => (
@@ -1255,21 +1403,21 @@ function SubmissionHistory({
                   <Link to={`/submissions/${s.id}`}>{s.id}</Link>
                 </h2>
                 <p>
-                  {s.languageId} · {new Date(s.createdAt).toLocaleString()}
+                  {s.languageId} · {formatDate(s.createdAt)}
                 </p>
                 <JudgeStatus submission={s} />
               </div>
-              <Link to={`/submissions/${s.id}`}>Details</Link>
+              <Link to={`/submissions/${s.id}`}>查看详情</Link>
             </article>
           ))}
         </div>
       )}
       <div className="pagination">
         <button disabled={!cursor} onClick={() => setCursor(undefined)}>
-          First page
+          第一页
         </button>
         <button disabled={!next} onClick={() => setCursor(next ?? undefined)}>
-          Next page
+          下一页
         </button>
       </div>
     </section>
@@ -1303,7 +1451,7 @@ function SubmissionDetail({
       .catch((e) => {
         if (version !== requestVersion.current) return;
         if (e instanceof ApiError) setError(e);
-        else setTransportError('The service could not be reached.');
+        else setTransportError('暂时无法连接服务。');
       });
   };
   useEffect(() => {
@@ -1316,9 +1464,9 @@ function SubmissionDetail({
   if (!user)
     return (
       <State
-        title="Sign in required"
-        text="Sign in to view this submission."
-        action={<Link to="/login">Sign in</Link>}
+        title="请先登录"
+        text="登录后才能查看这条提交记录。"
+        action={<Link to="/login">登录</Link>}
       />
     );
   if (error)
@@ -1326,21 +1474,21 @@ function SubmissionDetail({
       <State
         title={
           error.status === 401
-            ? 'Sign in required'
+            ? '请先登录'
             : error.code === 'NOT_FOUND'
-              ? 'Submission not found'
+              ? '提交不存在'
               : error.code === 'FORBIDDEN'
-                ? 'Submission forbidden'
+                ? '无权查看提交'
                 : error.status === 409
-                  ? 'Submission state changed'
-                  : 'Submission unavailable'
+                  ? '提交状态已变化'
+                  : '提交暂不可用'
         }
         text={error.message}
         action={
           error.status === 401 ? (
-            <Link to="/login">Sign in</Link>
+            <Link to="/login">登录</Link>
           ) : error.status === 409 || error.status >= 500 ? (
-            <button onClick={load}>Retry</button>
+            <button onClick={load}>重试</button>
           ) : undefined
         }
       />
@@ -1348,31 +1496,26 @@ function SubmissionDetail({
   if (transportError)
     return (
       <State
-        title="Submission unavailable"
+        title="提交暂不可用"
         text={transportError}
-        action={<button onClick={load}>Retry</button>}
+        action={<button onClick={load}>重试</button>}
       />
     );
   if (!submission)
-    return (
-      <State
-        title="Loading submission"
-        text="Fetching submission metadata..."
-      />
-    );
+    return <State title="正在加载提交" text="正在获取提交元数据…" />;
   return (
     <article className="detail">
-      <Link to="/submissions">← Back to submissions</Link>
-      <p className="eyebrow">SUBMISSION</p>
+      <Link to="/submissions">← 返回提交记录</Link>
+      <p className="eyebrow">提交详情</p>
       <h1>{submission.id}</h1>
       <div className="limits">
-        <span>Language {submission.languageId}</span>
-        <span>Intake {new Date(submission.createdAt).toLocaleString()}</span>
+        <span>语言：{submission.languageId}</span>
+        <span>接收时间：{formatDate(submission.createdAt)}</span>
       </div>
       <JudgeStatus submission={submission} />
       <div className="judge-actions">
         <button type="button" className="secondary" onClick={load}>
-          Refresh qualification status
+          刷新执行状态
         </button>
         <button
           type="button"
@@ -1390,24 +1533,19 @@ function SubmissionDetail({
               .finally(() => setCancelling(false));
           }}
         >
-          {cancelling
-            ? 'Cancelling qualification job...'
-            : 'Cancel qualification job'}
+          {cancelling ? '取消中…' : '取消资格流程'}
         </button>
       </div>
-      <Section title="Problem">
-        {submission.problemId} · revision {submission.problemRevisionId}
+      <Section title="题目">
+        {submission.problemId} · 版本 {submission.problemRevisionId}
       </Section>
-      <Section title="Testdata version">
-        {submission.testdataVersionRef}
-      </Section>
-      <Section title="Owner">{submission.ownerUserId}</Section>
-      <Section title="Source">
+      <Section title="测试数据版本">{submission.testdataVersionRef}</Section>
+      <Section title="提交者">{submission.ownerUserId}</Section>
+      <Section title="源代码">
         <pre className="source">{submission.source}</pre>
       </Section>
       <p className="muted">
-        This page reports intake metadata only. Execution and verdicts are not
-        available.
+        此页面仅展示提交接收元数据。当前没有执行结果，也不会伪造判题结论。
       </p>
     </article>
   );
@@ -1417,15 +1555,15 @@ function Profile({ user }: { user: AuthenticatedUser | null }) {
   if (!user)
     return (
       <State
-        title="Sign in required"
-        text="Sign in to view your account."
-        action={<Link to="/login">Sign in</Link>}
+        title="请先登录"
+        text="登录后才能查看个人主页。"
+        action={<Link to="/login">登录</Link>}
       />
     );
   return (
     <section className="profile-page">
-      <p className="eyebrow">ACCOUNT</p>
-      <h1>Your profile</h1>
+      <p className="eyebrow">个人主页</p>
+      <h1>我的资料</h1>
       <div className="profile-grid">
         <article className="profile-card profile-main">
           <div className="avatar" aria-hidden="true">
@@ -1439,17 +1577,16 @@ function Profile({ user }: { user: AuthenticatedUser | null }) {
           </div>
         </article>
         <article className="profile-card">
-          <p className="panel-label">QUICK LINKS</p>
-          <Link to="/submissions">My submissions</Link>
-          <Link to="/author">Authoring workspace</Link>
-          <Link to="/settings">Settings &amp; security</Link>
+          <p className="panel-label">快捷入口</p>
+          <Link to="/submissions">我的提交</Link>
+          <Link to="/author">出题工作台</Link>
+          <Link to="/settings">账户与安全</Link>
         </article>
       </div>
       <div className="profile-note">
-        <h2>Account information</h2>
+        <h2>账户信息</h2>
         <p className="muted">
-          Identity and session management are handled by the platform. Activity
-          statistics are omitted until the public contract provides them.
+          身份与会话由平台统一管理。当前公开接口尚未提供活动统计，因此页面不会展示虚构数据。
         </p>
       </div>
     </section>
@@ -1519,17 +1656,19 @@ export function App() {
         <SubmissionDetail api={api} id={current.id} user={user} />
       ) : authState === 'unavailable' ? (
         <State
-          title="Submission unavailable"
-          text="The service could not be reached. Your authentication state was not changed."
+          title="提交服务暂不可用"
+          text="暂时无法连接服务，登录状态未发生变化。"
           action={
-            <button onClick={() => window.location.reload()}>Retry</button>
+            <button onClick={() => window.location.reload()}>
+              {zhCN.common.retry}
+            </button>
           }
         />
       ) : (
         <State
-          title="Sign in required"
-          text="Sign in to view this submission."
-          action={<Link to="/login">Sign in</Link>}
+          title="请先登录"
+          text="登录后才能查看这条提交记录。"
+          action={<Link to="/login">登录</Link>}
         />
       )
     ) : current.name === 'sandbox' ? (
@@ -1541,9 +1680,9 @@ export function App() {
         <AccountSettings api={api} user={user} />
       ) : (
         <State
-          title="Sign in required"
-          text="Sign in to manage your account security."
-          action={<Link to="/login">Sign in</Link>}
+          title="请先登录"
+          text="登录后才能管理账户安全。"
+          action={<Link to="/login">登录</Link>}
         />
       )
     ) : current.name === 'author' ? (
@@ -1551,9 +1690,9 @@ export function App() {
         <AuthorDashboard api={api} />
       ) : (
         <State
-          title="Sign in required"
-          text="Sign in to manage your problem drafts."
-          action={<Link to="/login">Sign in</Link>}
+          title="请先登录"
+          text="登录后才能管理题目草稿。"
+          action={<Link to="/login">登录</Link>}
         />
       )
     ) : current.name === 'author-new' ? (
@@ -1561,9 +1700,9 @@ export function App() {
         <AuthorForm api={api} />
       ) : (
         <State
-          title="Sign in required"
-          text="Sign in to create a problem draft."
-          action={<Link to="/login">Sign in</Link>}
+          title="请先登录"
+          text="登录后才能创建题目草稿。"
+          action={<Link to="/login">登录</Link>}
         />
       )
     ) : current.name === 'author-edit' ? (
@@ -1571,9 +1710,9 @@ export function App() {
         <AuthorForm api={api} id={current.id} />
       ) : (
         <State
-          title="Sign in required"
-          text="Sign in to edit problem drafts."
-          action={<Link to="/login">Sign in</Link>}
+          title="请先登录"
+          text="登录后才能编辑题目草稿。"
+          action={<Link to="/login">登录</Link>}
         />
       )
     ) : current.name === 'problem' ? (
@@ -1594,14 +1733,14 @@ export function App() {
           type="button"
           className="nav-toggle"
           aria-expanded={false}
-          aria-label="Open navigation"
+          aria-label={zhCN.nav.open}
           onClick={(event) => {
             const next =
               event.currentTarget.getAttribute('aria-expanded') !== 'true';
             event.currentTarget.setAttribute('aria-expanded', String(next));
             event.currentTarget.setAttribute(
               'aria-label',
-              next ? 'Close navigation' : 'Open navigation',
+              next ? zhCN.nav.close : zhCN.nav.open,
             );
             event.currentTarget.parentElement?.classList.toggle(
               'nav-open',
@@ -1612,11 +1751,16 @@ export function App() {
           <span aria-hidden="true">☰</span>
         </button>
         <nav aria-label="Primary navigation">
-          <Link to="/" className={current.name === 'home' ? 'active' : ''}>
-            Home
+          <Link
+            to="/"
+            ariaLabel="Home"
+            className={current.name === 'home' ? 'active' : ''}
+          >
+            首页
           </Link>
           <Link
             to="/problems"
+            ariaLabel="Problems"
             className={
               current.name === 'problems' ||
               current.name === 'problem' ||
@@ -1625,7 +1769,7 @@ export function App() {
                 : ''
             }
           >
-            Problems
+            题库
           </Link>
           {user ? (
             <>
@@ -1637,13 +1781,17 @@ export function App() {
               </Link>
               <Link
                 to="/settings"
+                ariaLabel="Settings"
                 className={current.name === 'settings' ? 'active' : ''}
               >
-                Settings
+                账户与安全
               </Link>
-              <Link to="/author">Authoring</Link>
+              <Link to="/author" ariaLabel="Authoring">
+                出题工作台
+              </Link>
               <Link
                 to="/submissions"
+                ariaLabel="Submissions"
                 className={
                   current.name === 'submissions' ||
                   current.name === 'submission'
@@ -1651,7 +1799,7 @@ export function App() {
                     : ''
                 }
               >
-                Submissions
+                提交记录
               </Link>
               <button
                 className="link-button"
@@ -1663,40 +1811,49 @@ export function App() {
                   });
                 }}
               >
-                Sign out
+                退出登录
               </button>
             </>
           ) : (
             <>
-              <Link to="/login">Sign in</Link>
-              <Link to="/register">Register</Link>
+              <Link to="/login" ariaLabel="Sign in">
+                登录
+              </Link>
+              <Link to="/register" ariaLabel="Register">
+                注册
+              </Link>
             </>
           )}
         </nav>
       </header>
       <div className="readiness" aria-live="polite">
         {readiness === 'loading' && (
-          <span role="status">Checking platform readiness…</span>
+          <span role="status">{zhCN.platform.checking}</span>
         )}
-        {readiness === 'ready' && <span role="status">Platform is ready.</span>}
+        {readiness === 'ready' && (
+          <span role="status">{zhCN.platform.ready}</span>
+        )}
         {readiness === 'degraded' && (
-          <span role="alert">Platform is not ready.</span>
+          <span role="alert">
+            <strong>{zhCN.platform.notReady}</strong> ·{' '}
+            {zhCN.platform.notReadyDetail}
+          </span>
         )}
         {readiness === 'error' && (
-          <span role="alert">Platform health is unavailable.</span>
+          <span role="alert">{zhCN.platform.unavailable}</span>
         )}
       </div>
       <main className="shell">{page}</main>
-      <footer>OJPlatform · Practice, learn, improve.</footer>
+      <footer>OJPlatform · 练习、学习、持续进步。</footer>
     </div>
   );
 }
 export function NotFound() {
   return (
     <State
-      title="Page not found"
-      text="The requested page does not exist."
-      action={<Link to="/">Return home</Link>}
+      title="页面不存在"
+      text="你访问的页面不存在或已被移除。"
+      action={<Link to="/">返回首页</Link>}
     />
   );
 }
@@ -1704,9 +1861,9 @@ export function NotFound() {
 export function Forbidden() {
   return (
     <State
-      title="Access not available"
-      text="You do not have permission to view this page."
-      action={<Link to="/">Return home</Link>}
+      title="无权访问"
+      text="你没有权限查看此页面。"
+      action={<Link to="/">返回首页</Link>}
     />
   );
 }
@@ -1714,9 +1871,9 @@ export function Forbidden() {
 export function GenericError() {
   return (
     <State
-      title="Something went wrong"
-      text="The page could not be loaded. Try again or return home."
-      action={<Link to="/">Return home</Link>}
+      title="页面加载失败"
+      text="页面暂时无法加载，请重试或返回首页。"
+      action={<Link to="/">返回首页</Link>}
     />
   );
 }
