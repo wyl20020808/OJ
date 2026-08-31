@@ -46,6 +46,8 @@ Web was available at `http://127.0.0.1:5176/`; API was available at `http://127.
 
 `RUNTIME VERIFIED` for the local browser review. At 1440, 1024 and 390 pixel widths, Home was checked for horizontal overflow, responsive navigation and readable controls. Core routes `/`, `/problems`, a real problem detail, `/login`, `/register` and `/submissions` were opened and checked for stable Chinese shell content and no horizontal overflow. The 390px view exposes the mobile navigation toggle and keeps the quick-jump controls within the viewport.
 
+Console-error capture was not retained after the browser tab lifecycle ended, so console cleanliness is `NOT VERIFIED` rather than asserted.
+
 ## Integration requests and risks
 
 - `ANNOUNCEMENT_BACKEND_INTEGRATION_REQUEST`: provide a versioned public announcement capability before replacing the static notices.
