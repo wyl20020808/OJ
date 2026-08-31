@@ -8,8 +8,8 @@
 
 - Starting HEAD: `88fe7528ff7ef273231e991e94337500e873bf05`
 - Branch: `codex/product-web-chinese-rich-experience-v3`
-- Commits: `38736f1` implementation, `e81b474` runtime/report evidence
-- Final HEAD: `e81b474`
+- Commits: `38736f1` implementation, `e81b474` runtime/report evidence, `79be226` matrix, `efaa964` browser evidence
+- Final HEAD: `efaa964`
 - Worktree: clean after the follow-up evidence commit (no unrelated files changed)
 - Lead Integration: not started; merge not performed
 
@@ -21,6 +21,7 @@
 - Login, registration, social onboarding, verification, account, identity and session settings Chinese UX. Unconfigured providers remain explicitly marked `暂未配置`.
 - Sandbox qualification and operations copy is Chinese; qualification state, security projection, authorization and API behavior are unchanged.
 - No backend, database, migration, shared infrastructure, Auth Worker or Judge Worker changes.
+- Goal package audit: all 26 Markdown files in the supplied ZIP were enumerated and read during baseline review.
 
 ## Truthfulness and scope decisions
 
