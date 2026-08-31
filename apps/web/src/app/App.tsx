@@ -20,6 +20,7 @@ import {
 } from '../services/api.js';
 import './app.css';
 import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
+import { AccountSettings } from '../components/AccountSettings.js';
 
 type Route = {
   name:
@@ -32,6 +33,7 @@ type Route = {
     | 'submissions'
     | 'submission'
     | 'profile'
+    | 'settings'
     | 'author'
     | 'author-new'
     | 'author-edit'
@@ -48,6 +50,8 @@ function route(path = window.location.pathname): Route {
   if (path === '/403' || path === '/forbidden') return { name: 'forbidden' };
   if (path === '/error') return { name: 'error' };
   if (path === '/profile' || path === '/account') return { name: 'profile' };
+  if (path === '/settings' || path === '/account/settings')
+    return { name: 'settings' };
   if (path === '/operations/sandbox') return { name: 'sandbox' };
   if (path === '/problems' || path === '/problems/')
     return { name: 'problems' };
@@ -761,6 +765,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
   const [form, setForm] = useState<Draft>(emptyDraft);
   const [loading, setLoading] = useState(Boolean(id));
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
   useEffect(() => {
@@ -777,8 +782,19 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       .catch((e) => setError(e instanceof ApiError ? e : null))
       .finally(() => setLoading(false));
   }, [api, id]);
-  const update = (key: keyof typeof emptyDraft, value: unknown) =>
+  useEffect(() => {
+    if (!dirty) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [dirty]);
+  const update = (key: keyof typeof emptyDraft, value: unknown) => {
+    setDirty(true);
     setForm((f) => ({ ...f, [key]: value }));
+  };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setMessage('');
@@ -817,6 +833,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
             status: form.status,
           });
       setMessage('Draft saved.');
+      setDirty(false);
       if (!id) navigate(`/author/problems/${result.slug || result.id}/edit`);
     } catch (e) {
       setError(
@@ -837,6 +854,8 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
   };
   const transition = async (status: Problem['status']) => {
     if (!id) return;
+    if (status === 'archived' && !window.confirm('Archive this problem?'))
+      return;
     setSaving(true);
     try {
       await api.transitionProblem(id, {
@@ -846,6 +865,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
           : {}),
       });
       setForm((f) => ({ ...f, status }));
+      setDirty(false);
       setMessage(`Problem ${status}.`);
     } catch (e) {
       setError(e instanceof ApiError ? e : null);
@@ -1537,6 +1557,7 @@ function Profile({ user }: { user: AuthenticatedUser | null }) {
           <p className="panel-label">QUICK LINKS</p>
           <Link to="/submissions">My submissions</Link>
           <Link to="/author">Authoring workspace</Link>
+          <Link to="/settings">Settings &amp; security</Link>
         </article>
       </div>
       <div className="profile-note">
@@ -1629,6 +1650,16 @@ export function App() {
       <SandboxOperationsPage api={api} authorized={Boolean(user)} />
     ) : current.name === 'profile' ? (
       <Profile user={user} />
+    ) : current.name === 'settings' ? (
+      user ? (
+        <AccountSettings api={api} user={user} />
+      ) : (
+        <State
+          title="Sign in required"
+          text="Sign in to manage your account security."
+          action={<Link to="/login">Sign in</Link>}
+        />
+      )
     ) : current.name === 'author' ? (
       user ? (
         <AuthorDashboard api={api} />
@@ -1673,7 +1704,28 @@ export function App() {
           </span>
           <strong>OJPlatform</strong>
         </Link>
-        <nav>
+        <button
+          type="button"
+          className="nav-toggle"
+          aria-expanded={false}
+          aria-label="Open navigation"
+          onClick={(event) => {
+            const next =
+              event.currentTarget.getAttribute('aria-expanded') !== 'true';
+            event.currentTarget.setAttribute('aria-expanded', String(next));
+            event.currentTarget.setAttribute(
+              'aria-label',
+              next ? 'Close navigation' : 'Open navigation',
+            );
+            event.currentTarget.parentElement?.classList.toggle(
+              'nav-open',
+              next,
+            );
+          }}
+        >
+          <span aria-hidden="true">☰</span>
+        </button>
+        <nav aria-label="Primary navigation">
           <Link to="/" className={current.name === 'home' ? 'active' : ''}>
             Home
           </Link>
@@ -1696,6 +1748,12 @@ export function App() {
                 className={current.name === 'profile' ? 'active' : ''}
               >
                 {user.displayName}
+              </Link>
+              <Link
+                to="/settings"
+                className={current.name === 'settings' ? 'active' : ''}
+              >
+                Settings
               </Link>
               <Link to="/author">Authoring</Link>
               <Link

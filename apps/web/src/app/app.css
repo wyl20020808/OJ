@@ -87,6 +87,13 @@ select:focus-visible {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
+.nav-toggle {
+  display: none;
+  padding: 0.45rem 0.7rem;
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+}
 .nav strong {
   font-size: 1.08rem;
 }
@@ -665,6 +672,86 @@ pre {
 .profile-note p {
   max-width: 680px;
 }
+.settings-page {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 1rem;
+}
+.settings-panel {
+  min-width: 0;
+  padding: 1.35rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(23, 32, 42, 0.03);
+}
+.settings-panel h2 {
+  margin: 0.25rem 0 0.15rem;
+}
+.settings-facts {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.4rem 0;
+}
+.settings-facts div {
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+.settings-facts dt {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.settings-facts dd {
+  margin: 0.2rem 0 0;
+  overflow-wrap: anywhere;
+}
+.unavailable-note {
+  padding: 0.8rem;
+  border-left: 3px solid var(--warning);
+  background: #fffaf0;
+  color: #5f4a00;
+  overflow-wrap: anywhere;
+}
+.panel-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.session-list {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 1.2rem 0 0;
+  list-style: none;
+}
+.session-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.session-list li > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.session-list span {
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+.settings-footnote {
+  margin-bottom: 0;
+  font-size: 0.82rem;
+}
 footer {
   padding: 1.25rem max(1.25rem, calc((100vw - 1180px) / 2));
   border-top: 1px solid var(--line);
@@ -693,9 +780,19 @@ footer {
     flex-direction: column;
     padding: 0.8rem 1rem;
   }
+  .nav-toggle {
+    display: inline-flex;
+    align-self: flex-end;
+  }
   nav {
     width: 100%;
-    overflow-x: auto;
+    display: none;
+    align-items: stretch;
+    flex-direction: column;
+    padding-top: 0.5rem;
+  }
+  .nav.nav-open nav {
+    display: flex;
   }
   nav a,
   .link-button {
@@ -731,6 +828,14 @@ footer {
   }
   .profile-grid {
     grid-template-columns: 1fr;
+  }
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .panel-row,
+  .session-list li {
+    align-items: stretch;
+    flex-direction: column;
   }
   .sandbox-heading {
     display: block;

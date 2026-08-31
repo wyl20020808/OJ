@@ -11,6 +11,19 @@ export type AuthenticatedUser = {
   displayName: string;
   status: 'active';
 };
+export type Account = AuthenticatedUser & {
+  createdAt: string;
+  updatedAt: string;
+  capabilities: { canManageSessions: boolean };
+};
+export type Session = {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastSeenAt?: string;
+  deviceLabel?: string;
+};
 export type Example = { input: string; output: string; note?: string };
 export type Problem = {
   id: string;
@@ -222,6 +235,24 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<void>(
         baseUrl,
         '/api/auth/logout',
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    account: () =>
+      request<Account>(baseUrl, '/api/auth/account', undefined, fetcher),
+    sessions: () =>
+      request<Session[]>(baseUrl, '/api/auth/sessions', undefined, fetcher),
+    revokeSession: (id: string) =>
+      request<void>(
+        baseUrl,
+        `/api/auth/sessions/${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
+    revokeAllSessions: () =>
+      request<void>(
+        baseUrl,
+        '/api/auth/sessions/revoke-all',
         { method: 'POST', body: '{}' },
         fetcher,
       ),
