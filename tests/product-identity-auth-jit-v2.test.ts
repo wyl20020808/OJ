@@ -255,6 +255,26 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
       },
     });
     expect(login.statusCode).toBe(200);
+    const otpChallenge = await requestCode(
+      server,
+      'SMS',
+      '+14155550199',
+      'LOGIN_CODE',
+    );
+    const otpGrant = await verifyCode(
+      server,
+      otpChallenge.challengeId,
+      smsCodes.at(-1)!,
+    );
+    expect(
+      (
+        await server.inject({
+          method: 'POST',
+          url: '/api/auth/login/code',
+          payload: { grantId: otpGrant.grantId },
+        })
+      ).statusCode,
+    ).toBe(200);
     const duplicateChallenge = await requestCode(server, 'SMS', '+14155550199');
     const duplicateGrant = await verifyCode(
       server,
