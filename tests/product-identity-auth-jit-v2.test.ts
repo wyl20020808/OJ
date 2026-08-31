@@ -787,22 +787,44 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
         })
       ).statusCode,
     ).toBe(400);
-    const cancelledStart = await server.inject({
+    for (const provider of ['qq', 'wechat'] as const) {
+      const cancelledStart = await server.inject({
+        method: 'POST',
+        url: `/api/auth/oauth/${provider}/start`,
+        payload: {},
+      });
+      const cancelledState = new URL(
+        cancelledStart.json().authorizationUrl,
+      ).searchParams.get('state')!;
+      expect(
+        (
+          await server.inject({
+            method: 'GET',
+            url: `/api/auth/oauth/${provider}/callback?state=${cancelledState}&error=access_denied`,
+          })
+        ).json(),
+      ).toMatchObject({ status: 'CANCELLED' });
+    }
+
+    const expiredSetup = await setup({ oauthTtlMs: 5 });
+    const expiredStart = await expiredSetup.server.inject({
       method: 'POST',
-      url: '/api/auth/oauth/qq/start',
+      url: '/api/auth/oauth/google/start',
       payload: {},
     });
-    const cancelledState = new URL(
-      cancelledStart.json().authorizationUrl,
+    const expiredState = new URL(
+      expiredStart.json().authorizationUrl,
     ).searchParams.get('state')!;
+    await new Promise((resolve) => setTimeout(resolve, 15));
     expect(
       (
-        await server.inject({
+        await expiredSetup.server.inject({
           method: 'GET',
-          url: `/api/auth/oauth/qq/callback?state=${cancelledState}&error=access_denied`,
+          url: `/api/auth/oauth/google/callback?state=${expiredState}&code=x`,
         })
-      ).json(),
-    ).toMatchObject({ status: 'CANCELLED' });
+      ).statusCode,
+    ).toBe(400);
+    await expiredSetup.server.close();
 
     const collisionSetup = await setup();
     await collisionSetup.server.inject({
