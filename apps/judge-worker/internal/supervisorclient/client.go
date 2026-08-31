@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	ProtocolVersion = "2C.1"
-	CPP20ProfileID  = "cpp20-gcc-13-v1"
-	maxResponseSize = 1 << 20
+	ProtocolVersion       = "2C.3"
+	LegacyProtocolVersion = "2C.1"
+	CPP20ProfileID        = "cpp20-gcc-13-v1"
+	maxResponseSize       = 1 << 20
 )
 
 type Request struct {
@@ -31,6 +32,11 @@ type Request struct {
 	CorrelationID          string    `json:"correlation_id"`
 	ProblemRevisionID      string    `json:"problem_revision_id"`
 	TestdataVersionRef     string    `json:"testdata_version_ref"`
+	ProblemID              string    `json:"problem_id,omitempty"`
+	TestcaseID             string    `json:"testcase_id,omitempty"`
+	TestcaseInput          []byte    `json:"testcase_input,omitempty"`
+	TestcaseInputSHA256    string    `json:"testcase_input_sha256,omitempty"`
+	ExecutionProfileID     string    `json:"execution_profile_id,omitempty"`
 	LanguageProfileID      string    `json:"language_profile_id"`
 	SourceSnapshotRef      string    `json:"source_snapshot_ref"`
 	SourceBytes            string    `json:"source_bytes"`
@@ -41,21 +47,28 @@ type Request struct {
 }
 
 type Result struct {
-	ProtocolVersion    string          `json:"protocol_version"`
-	ExecutionRequestID string          `json:"execution_request_id"`
-	JudgeJobID         string          `json:"judge_job_id"`
-	SubmissionID       string          `json:"submission_id"`
-	Attempt            int             `json:"attempt"`
-	ExecutionAttemptID string          `json:"execution_attempt_id"`
-	CompileAttemptID   string          `json:"compile_attempt_id"`
-	RuntimeAttemptID   string          `json:"runtime_attempt_id"`
-	ResultGeneration   int64           `json:"result_generation"`
-	SourceSHA256       string          `json:"source_sha256"`
-	PipelineOutcome    string          `json:"pipeline_outcome"`
-	Compile            json.RawMessage `json:"compile"`
-	StartedAt          time.Time       `json:"started_at"`
-	CompletedAt        time.Time       `json:"completed_at"`
-	Clean              bool            `json:"clean"`
+	ProtocolVersion     string          `json:"protocol_version"`
+	ExecutionRequestID  string          `json:"execution_request_id"`
+	JudgeJobID          string          `json:"judge_job_id"`
+	SubmissionID        string          `json:"submission_id"`
+	Attempt             int             `json:"attempt"`
+	ExecutionAttemptID  string          `json:"execution_attempt_id"`
+	CompileAttemptID    string          `json:"compile_attempt_id"`
+	RuntimeAttemptID    string          `json:"runtime_attempt_id"`
+	ResultGeneration    int64           `json:"result_generation"`
+	SourceSHA256        string          `json:"source_sha256"`
+	ProblemID           string          `json:"problem_id,omitempty"`
+	ProblemRevisionID   string          `json:"problem_revision_id,omitempty"`
+	TestdataVersionID   string          `json:"testdata_version_id,omitempty"`
+	TestcaseID          string          `json:"testcase_id,omitempty"`
+	TestcaseInputSHA256 string          `json:"testcase_input_sha256,omitempty"`
+	ExecutionProfileID  string          `json:"execution_profile_id,omitempty"`
+	ExecutionRecord     json.RawMessage `json:"single_testcase_record,omitempty"`
+	PipelineOutcome     string          `json:"pipeline_outcome"`
+	Compile             json.RawMessage `json:"compile"`
+	StartedAt           time.Time       `json:"started_at"`
+	CompletedAt         time.Time       `json:"completed_at"`
+	Clean               bool            `json:"clean"`
 }
 
 type Execution struct {
@@ -85,7 +98,7 @@ func (c *Client) Preflight(ctx context.Context) error {
 	if err := c.do(ctx, http.MethodGet, "/v1/health", nil, &health); err != nil {
 		return fmt.Errorf("Supervisor health preflight: %w", err)
 	}
-	if health.ExecutionContractVersion != ProtocolVersion || !health.RealSubmissionExecution || health.SupervisorUID == 0 {
+	if health.ExecutionContractVersion != ProtocolVersion && health.ExecutionContractVersion != LegacyProtocolVersion || !health.RealSubmissionExecution || health.SupervisorUID == 0 {
 		return errors.New("Supervisor real execution capability rejected")
 	}
 	var capabilities struct {
@@ -99,7 +112,7 @@ func (c *Client) Preflight(ctx context.Context) error {
 	if err := c.do(ctx, http.MethodGet, "/v1/executions/capabilities", nil, &capabilities); err != nil {
 		return fmt.Errorf("Supervisor capability preflight: %w", err)
 	}
-	if capabilities.ProtocolVersion != ProtocolVersion || !capabilities.RealSubmissionExecution || len(capabilities.LanguageProfiles) != 1 || capabilities.LanguageProfiles[0] != CPP20ProfileID || capabilities.CompilerRootfsIdentity == "" || capabilities.CompilerVersion == "" || capabilities.CommandTemplateSHA256 == "" {
+	if capabilities.ProtocolVersion != ProtocolVersion && capabilities.ProtocolVersion != LegacyProtocolVersion || !capabilities.RealSubmissionExecution || len(capabilities.LanguageProfiles) != 1 || capabilities.LanguageProfiles[0] != CPP20ProfileID || capabilities.CompilerRootfsIdentity == "" || capabilities.CompilerVersion == "" || capabilities.CommandTemplateSHA256 == "" {
 		return errors.New("Supervisor compiler capability rejected")
 	}
 	return nil
@@ -164,16 +177,48 @@ func (c *Client) Execute(ctx context.Context, request Request) (Execution, error
 func validateRequest(request Request) error {
 	source := []byte(request.SourceBytes)
 	digest := sha256.Sum256(source)
-	if request.ProtocolVersion != ProtocolVersion || request.ExecutionRequestID == "" || request.JudgeJobID == "" || request.SubmissionID == "" || request.Attempt < 1 || request.LanguageProfileID != CPP20ProfileID || len(source) == 0 || len(source) > 256<<10 || !utf8.Valid(source) || request.SourceSHA256 != hex.EncodeToString(digest[:]) || request.DeadlineAt.IsZero() || !request.DeadlineAt.After(time.Now()) {
+	if request.ProtocolVersion != ProtocolVersion && request.ProtocolVersion != LegacyProtocolVersion || request.ExecutionRequestID == "" || request.JudgeJobID == "" || request.SubmissionID == "" || request.CorrelationID == "" || request.ProblemRevisionID == "" || request.TestdataVersionRef == "" || strings.EqualFold(request.TestdataVersionRef, "latest") || request.Attempt < 1 || request.LanguageProfileID != CPP20ProfileID || len(source) == 0 || len(source) > 256<<10 || !utf8.Valid(source) || request.SourceSHA256 != hex.EncodeToString(digest[:]) || request.DeadlineAt.IsZero() || !request.DeadlineAt.After(time.Now()) {
 		return errors.New("invalid real execution request")
+	}
+	hasTestcase := request.TestcaseID != "" || len(request.TestcaseInput) > 0 || request.TestcaseInputSHA256 != "" || request.ExecutionProfileID != ""
+	if request.ProtocolVersion == ProtocolVersion && !hasTestcase {
+		return errors.New("2C.3 testcase identity is required")
+	}
+	if hasTestcase {
+		h := sha256.Sum256(request.TestcaseInput)
+		if request.ProblemID == "" || request.TestcaseID == "" || len(request.TestcaseID) > 128 || strings.ContainsAny(request.TestcaseID, "/\\\x00") || request.ExecutionProfileID != CPP20ProfileID || request.TestcaseInputSHA256 != hex.EncodeToString(h[:]) || len(request.TestcaseInput) > 64<<10 {
+			return errors.New("invalid testcase input contract")
+		}
 	}
 	return nil
 }
 
 func validateResult(request Request, result Result) error {
 	allowed := map[string]bool{"PIPELINE_COMPLETED": true, "PIPELINE_COMPILE_FAILED": true, "PIPELINE_LIMIT_HIT": true, "PIPELINE_CANCELLED": true, "PIPELINE_INFRA_FAILURE": true}
-	if result.ProtocolVersion != ProtocolVersion || result.ExecutionRequestID != request.ExecutionRequestID || result.JudgeJobID != request.JudgeJobID || result.SubmissionID != request.SubmissionID || result.Attempt != request.Attempt || result.ExecutionAttemptID != request.ExecutionRequestID+":attempt" || result.CompileAttemptID != request.ExecutionRequestID+":compile" || result.RuntimeAttemptID != request.ExecutionRequestID+":runtime" || result.ResultGeneration != int64(request.Attempt) || result.SourceSHA256 != request.SourceSHA256 || !allowed[result.PipelineOutcome] || len(result.Compile) == 0 || result.StartedAt.IsZero() || result.CompletedAt.Before(result.StartedAt) {
+	if result.ProtocolVersion != ProtocolVersion && result.ProtocolVersion != LegacyProtocolVersion || result.ExecutionRequestID != request.ExecutionRequestID || result.JudgeJobID != request.JudgeJobID || result.SubmissionID != request.SubmissionID || result.Attempt != request.Attempt || result.ExecutionAttemptID != request.ExecutionRequestID+":attempt" || result.CompileAttemptID != request.ExecutionRequestID+":compile" || result.RuntimeAttemptID != request.ExecutionRequestID+":runtime" || result.ResultGeneration != int64(request.Attempt) || result.SourceSHA256 != request.SourceSHA256 || !allowed[result.PipelineOutcome] || len(result.Compile) == 0 || result.StartedAt.IsZero() || result.CompletedAt.Before(result.StartedAt) {
 		return errors.New("invalid real execution result")
+	}
+	if request.TestcaseID != "" && (result.TestcaseID != request.TestcaseID || result.TestcaseInputSHA256 != request.TestcaseInputSHA256 || result.ExecutionProfileID != request.ExecutionProfileID) {
+		return errors.New("invalid testcase result identity")
+	}
+	if request.ProtocolVersion == ProtocolVersion {
+		var record struct {
+			RecordVersion string `json:"record_version"`
+			RecordID      string `json:"record_id"`
+			Digest        string `json:"digest"`
+			Identity      struct {
+				ProblemID          string `json:"problem_id"`
+				ProblemRevisionID  string `json:"problem_revision_id"`
+				TestdataVersionID  string `json:"testdata_version_id"`
+				TestcaseID         string `json:"testcase_id"`
+				InputSHA256        string `json:"input_sha256"`
+				ExecutionProfileID string `json:"execution_profile_id"`
+				ExecutionAttemptID string `json:"execution_attempt_id"`
+			} `json:"identity"`
+		}
+		if json.Unmarshal(result.ExecutionRecord, &record) != nil || record.RecordVersion != ProtocolVersion || record.RecordID != request.ExecutionRequestID+":"+request.TestcaseID || len(record.Digest) != 64 || record.Identity.ProblemID != request.ProblemID || record.Identity.ProblemRevisionID != request.ProblemRevisionID || record.Identity.TestdataVersionID != request.TestdataVersionRef || record.Identity.TestcaseID != request.TestcaseID || record.Identity.InputSHA256 != request.TestcaseInputSHA256 || record.Identity.ExecutionProfileID != request.ExecutionProfileID || record.Identity.ExecutionAttemptID != result.ExecutionAttemptID {
+			return errors.New("invalid immutable testcase execution record")
+		}
 	}
 	return nil
 }

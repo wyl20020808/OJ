@@ -187,17 +187,19 @@ const safeManifest = (
   protocolVersion:
     manifest.realSandboxedExecution &&
     manifest.sandboxCapability &&
-    manifest.protocolVersion === '2C.1' &&
+    (manifest.protocolVersion === '2C.1' ||
+      manifest.protocolVersion === '2C.3') &&
     manifest.executionModes.includes('REAL_SANDBOXED_EXECUTION') &&
     manifest.languageCapabilities.length === 1 &&
     manifest.languageCapabilities[0] === 'cpp20-gcc-13-v1'
-      ? '2C.1'
+      ? '2C.3'
       : '2A.1',
   buildVersion: manifest.buildVersion,
   executionModes:
     manifest.realSandboxedExecution &&
     manifest.sandboxCapability &&
-    manifest.protocolVersion === '2C.1' &&
+    (manifest.protocolVersion === '2C.1' ||
+      manifest.protocolVersion === '2C.3') &&
     manifest.executionModes.includes('REAL_SANDBOXED_EXECUTION') &&
     manifest.languageCapabilities.length === 1 &&
     manifest.languageCapabilities[0] === 'cpp20-gcc-13-v1'
@@ -207,14 +209,16 @@ const safeManifest = (
   realSandboxedExecution:
     manifest.realSandboxedExecution &&
     manifest.sandboxCapability &&
-    manifest.protocolVersion === '2C.1' &&
+    (manifest.protocolVersion === '2C.1' ||
+      manifest.protocolVersion === '2C.3') &&
     manifest.executionModes.includes('REAL_SANDBOXED_EXECUTION') &&
     manifest.languageCapabilities.length === 1 &&
     manifest.languageCapabilities[0] === 'cpp20-gcc-13-v1',
   sandboxCapability:
     manifest.realSandboxedExecution &&
     manifest.sandboxCapability &&
-    manifest.protocolVersion === '2C.1' &&
+    (manifest.protocolVersion === '2C.1' ||
+      manifest.protocolVersion === '2C.3') &&
     manifest.executionModes.includes('REAL_SANDBOXED_EXECUTION') &&
     manifest.languageCapabilities.length === 1 &&
     manifest.languageCapabilities[0] === 'cpp20-gcc-13-v1',
@@ -223,7 +227,8 @@ const safeManifest = (
   languageCapabilities:
     manifest.realSandboxedExecution &&
     manifest.sandboxCapability &&
-    manifest.protocolVersion === '2C.1' &&
+    (manifest.protocolVersion === '2C.1' ||
+      manifest.protocolVersion === '2C.3') &&
     manifest.executionModes.includes('REAL_SANDBOXED_EXECUTION') &&
     manifest.languageCapabilities.length === 1 &&
     manifest.languageCapabilities[0] === 'cpp20-gcc-13-v1'

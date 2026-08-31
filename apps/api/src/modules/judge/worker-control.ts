@@ -66,12 +66,13 @@ const safeManifest = (record: HeartbeatRecord): WorkerCapabilityManifest => {
   const real =
     record.real_sandboxed_execution === true &&
     record.sandbox_qualified === true &&
-    record.real_execution_protocol_version === '2C.1' &&
+    (record.real_execution_protocol_version === '2C.1' ||
+      record.real_execution_protocol_version === '2C.3') &&
     record.execution_modes?.includes('REAL_SANDBOXED_EXECUTION') &&
     record.language_capabilities?.length === 1 &&
     record.language_capabilities[0] === 'cpp20-gcc-13-v1';
   return {
-    protocolVersion: real ? '2C.1' : '2A.1',
+    protocolVersion: real ? '2C.3' : '2A.1',
     buildVersion: record.build_version,
     executionModes: real
       ? ['SAFE_FIXTURE_QUALIFICATION', 'REAL_SANDBOXED_EXECUTION']

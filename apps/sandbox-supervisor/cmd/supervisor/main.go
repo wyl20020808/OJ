@@ -40,6 +40,7 @@ const (
 	concurrentProbeID    = "SANDBOX_PROBE_CONCURRENT_RESOURCES"
 	cleanupFaultName     = ".qualification-cleanup-failure"
 	maxExecutionRecords  = 1024
+	maxRealExecutions    = 20
 	executionRetention   = 15 * time.Minute
 )
 
@@ -325,7 +326,7 @@ func (s *protocolServer) startExecution(w http.ResponseWriter, r *http.Request) 
 			active++
 		}
 	}
-	if active >= 4 {
+	if active >= maxRealExecutions {
 		s.mu.Unlock()
 		http.Error(w, "execution concurrency limit", http.StatusTooManyRequests)
 		return
@@ -400,6 +401,12 @@ func (s *protocolServer) persistExecutionRecord(id string) error {
 		return err
 	}
 	target := s.executionRecordPath(id)
+	if existing, readErr := os.ReadFile(target); readErr == nil {
+		var prior executionRecord
+		if json.Unmarshal(existing, &prior) == nil && !prior.Active && !record.Active && prior.Result.ExecutionRecord != nil && record.Result.ExecutionRecord != nil && prior.Result.ExecutionRecord.Digest != record.Result.ExecutionRecord.Digest {
+			return errors.New("immutable execution record conflict")
+		}
+	}
 	temporary, err := os.CreateTemp(s.executionRecordRoot, ".record-")
 	if err != nil {
 		return err
@@ -464,7 +471,7 @@ func (s *protocolServer) executeReal(ctx context.Context, request model.RealExec
 	result, _ := runtime.ExecuteCPP20(ctx, request, s.compilerRootfs)
 	s.mu.Lock()
 	record := s.executions[request.ExecutionRequestID]
-	if record != nil {
+	if record != nil && record.Active {
 		record.Result = result
 		record.run = nil
 		record.Active = false

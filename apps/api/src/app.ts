@@ -591,5 +591,9 @@ function judgeInputForSubmission(
       .update(submission.source, 'utf8')
       .digest('hex'),
     controlledInputId: 'stdin-empty-v1' as const,
+    testcaseId: 'sample-1',
+    testcaseInput: '',
+    testcaseInputSha256: createHash('sha256').update('', 'utf8').digest('hex'),
+    executionProfileId: 'cpp20-gcc-13-v1' as const,
   };
 }

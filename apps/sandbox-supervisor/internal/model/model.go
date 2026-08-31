@@ -3,7 +3,9 @@ package model
 import "time"
 
 const ContractVersion = "2B.1"
-const ExecutionContractVersion = "2C.1"
+const ExecutionContractVersion = "2C.3"
+const LegacyExecutionContractVersion = "2C.1"
+const TestcaseContractVersion = "2C.3"
 
 // ExecutionState is the lifecycle vocabulary shared by the Supervisor and
 // qualification harness.  It describes what happened, not an OJ verdict.
@@ -117,6 +119,10 @@ type RuntimeEvidence struct {
 	PidsEvents       string `json:"pids_events"`
 	CPUMax           string `json:"cpu_max"`
 	CPUStat          string `json:"cpu_stat"`
+	CPUUsageUsec     int64  `json:"cpu_usage_usec"`
+	CPUUsageSource   string `json:"cpu_usage_source"`
+	MemoryPeak       string `json:"memory_peak"`
+	MemoryPeakSource string `json:"memory_peak_source"`
 	ControlGroup     string `json:"control_group"`
 }
 
@@ -129,6 +135,89 @@ type ExecutionLimits struct {
 	WorkspaceBytes int64 `json:"workspace_bytes"`
 }
 
+// TestcaseIdentity is immutable for the logical testcase. Retries may change
+// ExecutionAttemptID, but must never change the other bindings.
+type TestcaseIdentity struct {
+	ProblemID          string `json:"problem_id"`
+	ProblemRevisionID  string `json:"problem_revision_id"`
+	TestdataVersionID  string `json:"testdata_version_id"`
+	TestcaseID         string `json:"testcase_id"`
+	InputSHA256        string `json:"input_sha256"`
+	ExecutionProfileID string `json:"execution_profile_id"`
+	ExecutionAttemptID string `json:"execution_attempt_id"`
+}
+
+type TestcaseInput struct {
+	TestcaseID        string `json:"testcase_id"`
+	TestdataVersionID string `json:"testdata_version_id"`
+	Bytes             []byte `json:"bytes"`
+	SHA256            string `json:"sha256"`
+}
+
+type ExecutionProfile struct {
+	ID                     string          `json:"id"`
+	LanguageRuntime        string          `json:"language_runtime"`
+	ArtifactSHA256         string          `json:"artifact_sha256"`
+	Limits                 ExecutionLimits `json:"limits"`
+	FilesystemPolicyID     string          `json:"filesystem_policy_id"`
+	NetworkPolicyID        string          `json:"network_policy_id"`
+	SeccompPolicyID        string          `json:"seccomp_policy_id"`
+	EnvironmentAllowlistID string          `json:"environment_allowlist_id"`
+	StdinLimitBytes        int             `json:"stdin_limit_bytes"`
+}
+
+type Measurement struct {
+	Available bool   `json:"available"`
+	Value     int64  `json:"value,omitempty"`
+	Source    string `json:"source"`
+	Units     string `json:"units"`
+	Semantics string `json:"semantics"`
+}
+
+type MemoryMeasurement struct {
+	Max       Measurement `json:"max"`
+	Current   Measurement `json:"current"`
+	Peak      Measurement `json:"peak"`
+	EventsRaw string      `json:"events_raw"`
+}
+
+type PidsMeasurement struct {
+	Max       Measurement `json:"max"`
+	Current   Measurement `json:"current"`
+	EventsRaw string      `json:"events_raw"`
+}
+
+type OutputCapture struct {
+	SHA256    string `json:"sha256"`
+	ByteCount int    `json:"byte_count"`
+	Truncated bool   `json:"truncated"`
+}
+
+// SingleTestcaseExecutionRecord is the immutable "what happened" record
+// consumed by a future verdict engine. It intentionally contains no verdict.
+type SingleTestcaseExecutionRecord struct {
+	RecordVersion   string            `json:"record_version"`
+	RecordID        string            `json:"record_id"`
+	SubmissionID    string            `json:"submission_id"`
+	SnapshotID      string            `json:"snapshot_id"`
+	ArtifactSHA256  string            `json:"artifact_sha256"`
+	Identity        TestcaseIdentity  `json:"identity"`
+	Input           TestcaseInput     `json:"input"`
+	Profile         ExecutionProfile  `json:"profile"`
+	Stdin           OutputCapture     `json:"stdin"`
+	Wall            Measurement       `json:"wall"`
+	CPU             Measurement       `json:"cpu"`
+	Memory          MemoryMeasurement `json:"memory"`
+	Pids            PidsMeasurement   `json:"pids"`
+	Stdout          OutputCapture     `json:"stdout"`
+	Stderr          OutputCapture     `json:"stderr"`
+	Facts           RawExecutionFacts `json:"facts"`
+	PipelineOutcome string            `json:"pipeline_outcome"`
+	CleanupVerified bool              `json:"cleanup_verified"`
+	PublishedAt     time.Time         `json:"published_at"`
+	Digest          string            `json:"digest"`
+}
+
 type RealExecutionRequest struct {
 	ProtocolVersion        string    `json:"protocol_version"`
 	ExecutionRequestID     string    `json:"execution_request_id"`
@@ -138,6 +227,11 @@ type RealExecutionRequest struct {
 	CorrelationID          string    `json:"correlation_id"`
 	ProblemRevisionID      string    `json:"problem_revision_id"`
 	TestdataVersionRef     string    `json:"testdata_version_ref"`
+	ProblemID              string    `json:"problem_id,omitempty"`
+	TestcaseID             string    `json:"testcase_id,omitempty"`
+	TestcaseInput          []byte    `json:"testcase_input,omitempty"`
+	TestcaseInputSHA256    string    `json:"testcase_input_sha256,omitempty"`
+	ExecutionProfileID     string    `json:"execution_profile_id,omitempty"`
 	LanguageProfileID      string    `json:"language_profile_id"`
 	SourceSnapshotRef      string    `json:"source_snapshot_ref"`
 	SourceBytes            string    `json:"source_bytes"`
@@ -167,9 +261,18 @@ type StageResult struct {
 	TerminationSignal string            `json:"termination_signal,omitempty"`
 	Stdout            string            `json:"stdout"`
 	Stderr            string            `json:"stderr"`
+	StdoutBytes       int               `json:"stdout_bytes"`
+	StderrBytes       int               `json:"stderr_bytes"`
+	StdoutSHA256      string            `json:"stdout_sha256"`
+	StderrSHA256      string            `json:"stderr_sha256"`
 	StdoutTruncated   bool              `json:"stdout_truncated"`
 	StderrTruncated   bool              `json:"stderr_truncated"`
 	WallTimeMS        int64             `json:"wall_time_ms"`
+	SetupTimeMS       int64             `json:"setup_time_ms,omitempty"`
+	CPUTimeUsec       int64             `json:"cpu_time_usec,omitempty"`
+	CPUTimeSource     string            `json:"cpu_time_source,omitempty"`
+	MemoryPeakBytes   int64             `json:"memory_peak_bytes,omitempty"`
+	MemoryPeakSource  string            `json:"memory_peak_source,omitempty"`
 	DiagnosticCode    string            `json:"diagnostic_code,omitempty"`
 	Clean             bool              `json:"clean"`
 	Evidence          *RuntimeEvidence  `json:"resource_evidence,omitempty"`
@@ -192,25 +295,32 @@ type RawExecutionFacts struct {
 }
 
 type RealExecutionResult struct {
-	ProtocolVersion    string          `json:"protocol_version"`
-	ExecutionRequestID string          `json:"execution_request_id"`
-	JudgeJobID         string          `json:"judge_job_id"`
-	SubmissionID       string          `json:"submission_id"`
-	Attempt            int             `json:"attempt"`
-	ExecutionAttemptID string          `json:"execution_attempt_id"`
-	CompileAttemptID   string          `json:"compile_attempt_id"`
-	RuntimeAttemptID   string          `json:"runtime_attempt_id"`
-	CompileSandboxID   string          `json:"compile_sandbox_id"`
-	RuntimeSandboxID   string          `json:"runtime_sandbox_id"`
-	ResultGeneration   int64           `json:"result_generation"`
-	CorrelationID      string          `json:"correlation_id"`
-	LanguageProfileID  string          `json:"language_profile_id"`
-	SourceSHA256       string          `json:"source_sha256"`
-	PipelineOutcome    string          `json:"pipeline_outcome"`
-	Compile            StageResult     `json:"compile"`
-	Artifact           *ArtifactResult `json:"artifact,omitempty"`
-	Runtime            *StageResult    `json:"runtime,omitempty"`
-	StartedAt          time.Time       `json:"started_at"`
-	CompletedAt        time.Time       `json:"completed_at"`
-	Clean              bool            `json:"clean"`
+	ProtocolVersion     string                         `json:"protocol_version"`
+	ExecutionRequestID  string                         `json:"execution_request_id"`
+	JudgeJobID          string                         `json:"judge_job_id"`
+	SubmissionID        string                         `json:"submission_id"`
+	Attempt             int                            `json:"attempt"`
+	ExecutionAttemptID  string                         `json:"execution_attempt_id"`
+	CompileAttemptID    string                         `json:"compile_attempt_id"`
+	RuntimeAttemptID    string                         `json:"runtime_attempt_id"`
+	CompileSandboxID    string                         `json:"compile_sandbox_id"`
+	RuntimeSandboxID    string                         `json:"runtime_sandbox_id"`
+	ResultGeneration    int64                          `json:"result_generation"`
+	CorrelationID       string                         `json:"correlation_id"`
+	LanguageProfileID   string                         `json:"language_profile_id"`
+	SourceSHA256        string                         `json:"source_sha256"`
+	ProblemID           string                         `json:"problem_id,omitempty"`
+	ProblemRevisionID   string                         `json:"problem_revision_id,omitempty"`
+	TestdataVersionID   string                         `json:"testdata_version_id,omitempty"`
+	TestcaseID          string                         `json:"testcase_id,omitempty"`
+	TestcaseInputSHA256 string                         `json:"testcase_input_sha256,omitempty"`
+	ExecutionProfileID  string                         `json:"execution_profile_id,omitempty"`
+	PipelineOutcome     string                         `json:"pipeline_outcome"`
+	Compile             StageResult                    `json:"compile"`
+	Artifact            *ArtifactResult                `json:"artifact,omitempty"`
+	Runtime             *StageResult                   `json:"runtime,omitempty"`
+	StartedAt           time.Time                      `json:"started_at"`
+	CompletedAt         time.Time                      `json:"completed_at"`
+	Clean               bool                           `json:"clean"`
+	ExecutionRecord     *SingleTestcaseExecutionRecord `json:"single_testcase_record,omitempty"`
 }

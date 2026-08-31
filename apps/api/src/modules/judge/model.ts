@@ -12,7 +12,7 @@ export type JudgeJobStatus =
 export type JudgeExecutionMode =
   'SAFE_FIXTURE_QUALIFICATION' | 'REAL_SANDBOXED_EXECUTION';
 export type RawExecutionResult = {
-  protocol_version: '2C.1';
+  protocol_version: '2C.1' | '2C.3';
   execution_request_id: string;
   judge_job_id: string;
   submission_id: string;
@@ -24,6 +24,13 @@ export type RawExecutionResult = {
   correlation_id: string;
   language_profile_id: 'cpp20-gcc-13-v1';
   source_sha256: string;
+  problem_id?: string;
+  problem_revision_id?: string;
+  testdata_version_id?: string;
+  testcase_id?: string;
+  testcase_input_sha256?: string;
+  execution_profile_id?: string;
+  single_testcase_record?: Record<string, unknown>;
   pipeline_outcome:
     | 'PIPELINE_COMPLETED'
     | 'PIPELINE_COMPILE_FAILED'
@@ -52,6 +59,10 @@ export type JudgeJob = {
   sourceBytes?: string | undefined;
   sourceSha256?: string | undefined;
   controlledInputId?: 'stdin-empty-v1' | 'stdin-echo-v1' | undefined;
+  testcaseId?: string | undefined;
+  testcaseInput?: string | undefined;
+  testcaseInputSha256?: string | undefined;
+  executionProfileId?: 'cpp20-gcc-13-v1' | undefined;
   rawExecutionResult?: RawExecutionResult | undefined;
   status: JudgeJobStatus;
   attempt: number;
@@ -83,6 +94,10 @@ export type JudgeJobCreateInput = {
   sourceBytes?: string;
   sourceSha256?: string;
   controlledInputId?: 'stdin-empty-v1' | 'stdin-echo-v1';
+  testcaseId?: string;
+  testcaseInput?: string;
+  testcaseInputSha256?: string;
+  executionProfileId?: 'cpp20-gcc-13-v1';
   idempotencyKey?: string;
   maxAttempts?: number;
 };

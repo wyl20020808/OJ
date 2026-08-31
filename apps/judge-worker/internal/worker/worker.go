@@ -237,7 +237,10 @@ func (w *Worker) processReal(ctx, queueCtx context.Context, lease queueadapter.L
 		JudgeJobID: lease.Job.ID, SubmissionID: lease.Job.SubmissionID, Attempt: lease.Job.Attempt,
 		CorrelationID: lease.Job.ID, ProblemRevisionID: lease.Job.ProblemRevisionID,
 		TestdataVersionRef: lease.Job.TestdataVersionRef, LanguageProfileID: lease.Job.LanguageProfileID,
-		SourceSnapshotRef: lease.Job.SourceSnapshotRef, SourceBytes: lease.Job.SourceBytes,
+		ProblemID: lease.Job.ProblemID, TestcaseID: lease.Job.TestcaseID,
+		TestcaseInput: []byte(lease.Job.TestcaseInput), TestcaseInputSHA256: lease.Job.TestcaseInputSHA256,
+		ExecutionProfileID: lease.Job.ExecutionProfileID,
+		SourceSnapshotRef:  lease.Job.SourceSnapshotRef, SourceBytes: lease.Job.SourceBytes,
 		SourceSHA256: lease.Job.SourceSHA256, ControlledInputID: lease.Job.ControlledInputID,
 		DeadlineAt: deadline, CancellationGeneration: lease.Job.CancellationGeneration,
 	}

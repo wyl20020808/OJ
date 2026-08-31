@@ -28,6 +28,54 @@ const stableJson = (value: unknown): string => {
   return JSON.stringify(value);
 };
 const rawDigest = (value: RawExecutionResult) => sha256(stableJson(value));
+const testcaseFieldsPresent = (
+  value: Record<string, unknown> | JudgeJobCreateInput,
+) =>
+  value.testcaseId !== undefined ||
+  value.testcaseInput !== undefined ||
+  value.testcaseInputSha256 !== undefined ||
+  value.executionProfileId !== undefined;
+const validTestcaseId = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  value.length > 0 &&
+  value.length <= 128 &&
+  value === value.trim() &&
+  !/[\\/\0]/.test(value) &&
+  value !== '.' &&
+  value !== '..';
+const validTestcaseInput = (
+  value: Record<string, unknown> | JudgeJobCreateInput,
+) =>
+  validTestcaseId(value.testcaseId) &&
+  value.executionProfileId === 'cpp20-gcc-13-v1' &&
+  typeof value.testcaseInput === 'string' &&
+  Buffer.byteLength(value.testcaseInput, 'utf8') <= 64 * 1024 &&
+  typeof value.testcaseInputSha256 === 'string' &&
+  /^[a-f0-9]{64}$/.test(value.testcaseInputSha256) &&
+  sha256(value.testcaseInput) === value.testcaseInputSha256;
+const validStageOutput = (value: unknown) => {
+  if (!isRecord(value)) return false;
+  const stdout = value.stdout;
+  const stderr = value.stderr;
+  return (
+    typeof stdout === 'string' &&
+    typeof stderr === 'string' &&
+    Buffer.byteLength(stdout, 'utf8') <= 64 * 1024 &&
+    Buffer.byteLength(stderr, 'utf8') <= 64 * 1024 &&
+    Number.isSafeInteger(value.stdout_bytes) &&
+    Number(value.stdout_bytes) >= 0 &&
+    Number(value.stdout_bytes) <= 64 * 1024 &&
+    Number.isSafeInteger(value.stderr_bytes) &&
+    Number(value.stderr_bytes) >= 0 &&
+    Number(value.stderr_bytes) <= 64 * 1024 &&
+    typeof value.stdout_sha256 === 'string' &&
+    /^[a-f0-9]{64}$/.test(value.stdout_sha256) &&
+    typeof value.stderr_sha256 === 'string' &&
+    /^[a-f0-9]{64}$/.test(value.stderr_sha256) &&
+    typeof value.stdout_truncated === 'boolean' &&
+    typeof value.stderr_truncated === 'boolean'
+  );
+};
 const rawPipelineOutcomes = new Set<RawExecutionResult['pipeline_outcome']>([
   'PIPELINE_COMPLETED',
   'PIPELINE_COMPILE_FAILED',
@@ -44,8 +92,36 @@ const validRawExecutionResult = (
   if (!isRecord(value)) return false;
   const startedAt = Date.parse(String(value.started_at));
   const completedAt = Date.parse(String(value.completed_at));
+  const testcaseRecordValid =
+    typeof job.testcaseId !== 'string' ||
+    job.testcaseId === '' ||
+    (isRecord(value.single_testcase_record) &&
+      value.single_testcase_record.record_version === '2C.3' &&
+      value.single_testcase_record.record_id ===
+        `${String(value.execution_request_id)}:${String(job.testcaseId)}` &&
+      isRecord(value.single_testcase_record.identity) &&
+      value.single_testcase_record.identity.testcase_id === job.testcaseId &&
+      value.single_testcase_record.identity.problem_id === job.problemId &&
+      value.single_testcase_record.identity.problem_revision_id ===
+        job.problemRevisionId &&
+      value.single_testcase_record.identity.testdata_version_id ===
+        job.testdataVersionRef &&
+      value.single_testcase_record.identity.execution_attempt_id ===
+        value.execution_attempt_id &&
+      value.single_testcase_record.identity.input_sha256 ===
+        job.testcaseInputSha256 &&
+      value.single_testcase_record.identity.execution_profile_id ===
+        job.executionProfileId &&
+      typeof value.single_testcase_record.digest === 'string' &&
+      /^[a-f0-9]{64}$/.test(value.single_testcase_record.digest));
+  const testcaseJob = validTestcaseId(job.testcaseId);
+  const outputMetadataValid =
+    !testcaseJob ||
+    (validStageOutput(value.compile) &&
+      (value.runtime === undefined || validStageOutput(value.runtime)));
   return (
-    value.protocol_version === '2C.1' &&
+    (value.protocol_version === '2C.1' ||
+      (value.protocol_version === '2C.3' && testcaseJob)) &&
     value.execution_request_id ===
       (typeof job.executionRequestId === 'string'
         ? job.executionRequestId
@@ -63,6 +139,7 @@ const validRawExecutionResult = (
     isRecord(value.compile) &&
     (value.artifact === undefined || isRecord(value.artifact)) &&
     (value.runtime === undefined || isRecord(value.runtime)) &&
+    outputMetadataValid &&
     Number.isFinite(startedAt) &&
     Number.isFinite(completedAt) &&
     completedAt >= startedAt &&
@@ -75,7 +152,16 @@ const validRawExecutionResult = (
       `${String(value.execution_request_id)}:compile` &&
     value.runtime_attempt_id ===
       `${String(value.execution_request_id)}:runtime` &&
-    value.result_generation === Number(job.resultGeneration ?? job.attempt)
+    value.result_generation === Number(job.resultGeneration ?? job.attempt) &&
+    (!testcaseJob ||
+      (value.testcase_id === job.testcaseId &&
+        value.testcase_input_sha256 === job.testcaseInputSha256 &&
+        value.execution_profile_id === job.executionProfileId &&
+        testcaseRecordValid)) &&
+    (!testcaseJob ||
+      (value.problem_id === job.problemId &&
+        value.problem_revision_id === job.problemRevisionId &&
+        value.testdata_version_id === job.testdataVersionRef))
   );
 };
 const normalize = (i: JudgeJobCreateInput): JudgeJob => {
@@ -85,6 +171,7 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
     !i.problemId ||
     !i.problemRevisionId ||
     !i.testdataVersionRef ||
+    i.testdataVersionRef.toLowerCase() === 'latest' ||
     !i.languageId
   )
     throw new JudgeJobPayloadError('Missing immutable linkage');
@@ -101,6 +188,11 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
       !['stdin-empty-v1', 'stdin-echo-v1'].includes(i.controlledInputId ?? ''))
   )
     throw new JudgeJobPayloadError('Invalid real execution snapshot');
+  if (
+    testcaseFieldsPresent(i) &&
+    (executionMode !== realMode || !validTestcaseInput(i))
+  )
+    throw new JudgeJobPayloadError('Invalid testcase input contract');
   const t = stamp();
   return {
     id: randomUUID(),
@@ -119,6 +211,14 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
           sourceBytes: i.sourceBytes!,
           sourceSha256: i.sourceSha256!,
           controlledInputId: i.controlledInputId!,
+          ...(i.testcaseId
+            ? {
+                testcaseId: i.testcaseId,
+                testcaseInput: i.testcaseInput!,
+                testcaseInputSha256: i.testcaseInputSha256!,
+                executionProfileId: i.executionProfileId!,
+              }
+            : {}),
         }
       : {}),
     status: 'QUEUED',
@@ -154,6 +254,7 @@ export function assertPayload(v: unknown): asserts v is JudgeJob {
     typeof j.problemId !== 'string' ||
     typeof j.problemRevisionId !== 'string' ||
     typeof j.testdataVersionRef !== 'string' ||
+    j.testdataVersionRef.toLowerCase() === 'latest' ||
     typeof j.languageId !== 'string' ||
     ![safeMode, realMode].includes(
       j.executionMode as typeof safeMode | typeof realMode,
@@ -186,6 +287,11 @@ export function assertPayload(v: unknown): asserts v is JudgeJob {
       ))
   )
     throw new JudgeJobPayloadError('Invalid real execution snapshot');
+  if (
+    testcaseFieldsPresent(j) &&
+    (j.executionMode !== realMode || !validTestcaseInput(j))
+  )
+    throw new JudgeJobPayloadError('Invalid testcase input contract');
   if (
     (j.status === 'LEASED_FAKE' || j.status === 'LEASED') &&
     (typeof j.leaseOwner !== 'string' ||

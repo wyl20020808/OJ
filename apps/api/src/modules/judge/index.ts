@@ -35,6 +35,13 @@ export function publicJudgeJob(job: JudgeJob) {
     problemId: job.problemId,
     problemRevisionId: job.problemRevisionId,
     testdataVersionRef: job.testdataVersionRef,
+    ...(job.testcaseId ? { testcaseId: job.testcaseId } : {}),
+    ...(job.testcaseInputSha256
+      ? { testcaseInputSha256: job.testcaseInputSha256 }
+      : {}),
+    ...(job.executionProfileId
+      ? { executionProfileId: job.executionProfileId }
+      : {}),
     languageId: job.languageId,
     status: job.status,
     attempt: job.attempt,
@@ -60,6 +67,15 @@ function publicStage(value: Record<string, unknown> | undefined) {
       : {}),
     stdout: value.stdout,
     stderr: value.stderr,
+    stdoutBytes: value.stdout_bytes,
+    stderrBytes: value.stderr_bytes,
+    stdoutSha256: value.stdout_sha256,
+    stderrSha256: value.stderr_sha256,
+    setupTimeMs: value.setup_time_ms,
+    cpuTimeUsec: value.cpu_time_usec,
+    cpuTimeSource: value.cpu_time_source,
+    memoryPeakBytes: value.memory_peak_bytes,
+    memoryPeakSource: value.memory_peak_source,
     stdoutTruncated: value.stdout_truncated,
     stderrTruncated: value.stderr_truncated,
     wallTimeMs: value.wall_time_ms,
@@ -69,6 +85,7 @@ function publicStage(value: Record<string, unknown> | undefined) {
 }
 
 function publicRawExecutionResult(result: RawExecutionResult) {
+  const record = result.single_testcase_record;
   return {
     protocolVersion: result.protocol_version,
     executionRequestId: result.execution_request_id,
@@ -81,6 +98,32 @@ function publicRawExecutionResult(result: RawExecutionResult) {
     pipelineOutcome: result.pipeline_outcome,
     languageProfileId: result.language_profile_id,
     snapshotSha256: result.source_sha256,
+    ...(result.problem_id ? { problemId: result.problem_id } : {}),
+    ...(result.problem_revision_id
+      ? { problemRevisionId: result.problem_revision_id }
+      : {}),
+    ...(result.testdata_version_id
+      ? { testdataVersionId: result.testdata_version_id }
+      : {}),
+    ...(result.testcase_id ? { testcaseId: result.testcase_id } : {}),
+    ...(result.testcase_input_sha256
+      ? { testcaseInputSha256: result.testcase_input_sha256 }
+      : {}),
+    ...(result.execution_profile_id
+      ? { executionProfileId: result.execution_profile_id }
+      : {}),
+    ...(record &&
+    typeof record.record_version === 'string' &&
+    typeof record.record_id === 'string' &&
+    typeof record.digest === 'string'
+      ? {
+          executionRecord: {
+            recordVersion: record.record_version,
+            recordId: record.record_id,
+            digest: record.digest,
+          },
+        }
+      : {}),
     compile: publicStage(result.compile),
     ...(result.artifact
       ? {

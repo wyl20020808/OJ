@@ -24,6 +24,129 @@ func pathWithin(root, candidate string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && !filepath.IsAbs(rel)
 }
 
+const maxTestcaseInputBytes = 64 << 10
+
+// StageTestcaseInput writes Supervisor-owned bytes with exclusive creation and
+// immediately verifies the same inode and digest that execution will consume.
+func StageTestcaseInput(root string, input model.TestcaseInput) (string, error) {
+	if root == "" || input.TestcaseID == "" || len(input.TestcaseID) > 128 || input.TestdataVersionID == "" || strings.EqualFold(input.TestdataVersionID, "latest") || len(input.Bytes) > maxTestcaseInputBytes {
+		return "", errors.New("invalid testcase input")
+	}
+	if !sha256HexPattern(input.SHA256) || digestBytes(input.Bytes) != input.SHA256 {
+		return "", errors.New("testcase input hash mismatch")
+	}
+	if strings.ContainsAny(input.TestcaseID, "/\\\x00") || filepath.Clean(input.TestcaseID) != input.TestcaseID {
+		return "", errors.New("testcase identity rejected")
+	}
+	path := filepath.Join(root, "testcase-"+input.TestcaseID+".input")
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return "", err
+	}
+	if _, err = file.Write(input.Bytes); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	if err = VerifyStagedTestcaseInput(path, input); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, nil
+}
+
+func VerifyStagedTestcaseInput(path string, input model.TestcaseInput) error {
+	clean := filepath.Clean(path)
+	if path == "" || clean != path || strings.ContainsRune(path, '\x00') {
+		return errors.New("testcase input path rejected")
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("testcase input is not a regular file")
+	}
+	canonical, err := filepath.EvalSymlinks(path)
+	if err != nil || canonical != clean {
+		return errors.New("testcase input symlink rejected")
+	}
+	if info.Size() != int64(len(input.Bytes)) || info.Size() > maxTestcaseInputBytes {
+		return errors.New("testcase input size mismatch")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		return errors.New("testcase input replaced during validation")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxTestcaseInputBytes+1))
+	if err != nil {
+		return err
+	}
+	if len(data) != len(input.Bytes) || digestBytes(data) != input.SHA256 {
+		return errors.New("testcase input digest mismatch")
+	}
+	return nil
+}
+
+// ReadVerifiedTestcaseInput keeps the final bytes tied to the inode and hash
+// checked immediately before runtime.  The final lstat also rejects a
+// symlink replacement that happens after the descriptor is opened.
+func ReadVerifiedTestcaseInput(path string, input model.TestcaseInput) ([]byte, error) {
+	if err := VerifyStagedTestcaseInput(path, input); err != nil {
+		return nil, err
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("testcase input is not a regular file")
+	}
+	canonical, err := filepath.EvalSymlinks(path)
+	if err != nil || canonical != filepath.Clean(path) {
+		return nil, errors.New("testcase input symlink rejected")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		return nil, errors.New("testcase input replaced before runtime")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxTestcaseInputBytes+1))
+	if err != nil || len(data) != len(input.Bytes) || digestBytes(data) != input.SHA256 {
+		return nil, errors.New("testcase input digest mismatch")
+	}
+	final, err := os.Lstat(path)
+	if err != nil || !final.Mode().IsRegular() || final.Mode()&os.ModeSymlink != 0 || !os.SameFile(info, final) {
+		return nil, errors.New("testcase input replaced during runtime handoff")
+	}
+	canonical, err = filepath.EvalSymlinks(path)
+	if err != nil || canonical != filepath.Clean(path) {
+		return nil, errors.New("testcase input symlink replacement rejected")
+	}
+	return data, nil
+}
+
+func digestBytes(data []byte) string {
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
+}
+
+func sha256HexPattern(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
 type ResidueClass string
 
 const (

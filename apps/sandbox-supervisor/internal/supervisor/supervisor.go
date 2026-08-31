@@ -521,6 +521,7 @@ func (w *boundedWriter) markExceeded() {
 func (w *boundedWriter) String() string { return w.buf.String() }
 func (w *boundedWriter) Len() int       { return w.buf.Len() }
 func (w *boundedWriter) Exceeded() bool { return w.exceeded }
+func (w *boundedWriter) Bytes() []byte  { return append([]byte(nil), w.buf.Bytes()...) }
 func copyFile(src, dst string, mode os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -616,14 +617,26 @@ func (m *resourceMonitor) capture() {
 	}
 	m.mu.Lock()
 	m.evidence.ControlGroup = path
+	cpuStat := read("cpu.stat")
+	memoryPeak := read("memory.peak")
 	for target, value := range map[*string]string{
 		&m.evidence.MemoryMax: memoryMax, &m.evidence.MemoryCurrent: read("memory.current"),
 		&m.evidence.MemoryEvents: read("memory.events"), &m.evidence.PidsMax: pidsMax,
 		&m.evidence.PidsCurrent: read("pids.current"), &m.evidence.PidsEvents: read("pids.events"),
-		&m.evidence.CPUMax: read("cpu.max"), &m.evidence.CPUStat: read("cpu.stat"),
+		&m.evidence.CPUMax: read("cpu.max"), &m.evidence.CPUStat: cpuStat,
+		&m.evidence.MemoryPeak: memoryPeak,
 	} {
 		if value != "" {
 			*target = value
+		}
+	}
+	if usage, ok := cgroupStatValue(cpuStat, "usage_usec"); ok {
+		m.evidence.CPUUsageUsec = usage
+		m.evidence.CPUUsageSource = "cgroup.v2:cpu.stat:usage_usec"
+	}
+	if memoryPeak != "" && memoryPeak != "max" {
+		if _, err := strconv.ParseInt(memoryPeak, 10, 64); err == nil {
+			m.evidence.MemoryPeakSource = "cgroup.v2:memory.peak"
 		}
 	}
 	if m.evidence.SystemdMemoryMax != strconv.FormatInt(m.request.MemoryBytes, 10) || m.evidence.SystemdTasksMax != strconv.Itoa(m.request.Pids) {
@@ -640,6 +653,17 @@ func (m *resourceMonitor) capture() {
 		}
 	}
 	m.mu.Unlock()
+}
+
+func cgroupStatValue(raw, key string) (int64, bool) {
+	for _, line := range strings.Split(raw, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == key {
+			value, err := strconv.ParseInt(fields[1], 10, 64)
+			return value, err == nil && value >= 0
+		}
+	}
+	return 0, false
 }
 
 func findScope(sid string) string {

@@ -24,7 +24,13 @@ import (
 )
 
 const (
-	CPP20ProfileID = "cpp20-gcc-13-v1"
+	CPP20ProfileID           = "cpp20-gcc-13-v1"
+	DefaultTestcaseID        = "sample-1"
+	DefaultTestdataVersionID = "testdata-v1"
+	FilesystemPolicyID       = "rootfs-workspace-v1"
+	NetworkPolicyID          = "deny-all-v1"
+	SeccompPolicyID          = "default-seccomp-v1"
+	EnvironmentAllowlistID   = "runtime-c-v1"
 
 	PipelineCompleted     = "PIPELINE_COMPLETED"
 	PipelineCompileFailed = "PIPELINE_COMPILE_FAILED"
@@ -83,9 +89,12 @@ type stageRun struct {
 	Signal            string
 	Stdout            string
 	Stderr            string
+	StdoutBytes       []byte
+	StderrBytes       []byte
 	StdoutTruncated   bool
 	StderrTruncated   bool
 	WallTimeMS        int64
+	SetupTimeMS       int64
 	TimedOut          bool
 	Cancelled         bool
 	WorkspaceExceeded bool
@@ -120,7 +129,7 @@ func sandboxIDFor(value, stage string) string {
 }
 
 func ValidateRealExecutionRequest(request model.RealExecutionRequest) error {
-	if request.ProtocolVersion != model.ExecutionContractVersion {
+	if request.ProtocolVersion != model.ExecutionContractVersion && request.ProtocolVersion != model.LegacyExecutionContractVersion {
 		return errors.New("unsupported real execution contract")
 	}
 	for name, value := range map[string]string{
@@ -142,7 +151,18 @@ func ValidateRealExecutionRequest(request model.RealExecutionRequest) error {
 	if request.LanguageProfileID != CPP20ProfileID {
 		return errors.New("unsupported language profile")
 	}
-	if request.ControlledInputID != "stdin-empty-v1" && request.ControlledInputID != "stdin-echo-v1" {
+	hasTestcase := request.TestcaseID != "" || request.TestcaseInputSHA256 != "" || len(request.TestcaseInput) > 0 || request.ExecutionProfileID != ""
+	if request.ProtocolVersion == model.ExecutionContractVersion && !hasTestcase {
+		return errors.New("2C.3 testcase identity is required")
+	}
+	if hasTestcase {
+		if request.ProblemID == "" || request.TestcaseID == "" || request.TestcaseID != strings.TrimSpace(request.TestcaseID) || request.TestcaseID == "." || request.TestcaseID == ".." || len(request.TestcaseID) > 128 || strings.EqualFold(request.TestdataVersionRef, "latest") || request.ExecutionProfileID != CPP20ProfileID || strings.ContainsAny(request.TestcaseID, "/\\\x00") {
+			return errors.New("incomplete testcase identity")
+		}
+		if len(request.TestcaseInput) > maxTestcaseInputBytes || !sha256HexPattern(request.TestcaseInputSHA256) || digestBytes(request.TestcaseInput) != request.TestcaseInputSHA256 {
+			return errors.New("testcase input hash mismatch")
+		}
+	} else if request.ControlledInputID != "stdin-empty-v1" && request.ControlledInputID != "stdin-echo-v1" {
 		return errors.New("unknown controlled input")
 	}
 	source := []byte(request.SourceBytes)
@@ -157,6 +177,120 @@ func ValidateRealExecutionRequest(request model.RealExecutionRequest) error {
 		return errors.New("execution deadline expired")
 	}
 	return nil
+}
+
+func testcaseForRequest(request model.RealExecutionRequest) model.TestcaseInput {
+	if request.TestcaseID != "" {
+		return model.TestcaseInput{TestcaseID: request.TestcaseID, TestdataVersionID: request.TestdataVersionRef, Bytes: append([]byte(nil), request.TestcaseInput...), SHA256: request.TestcaseInputSHA256}
+	}
+	input := []byte{}
+	if request.ControlledInputID == "stdin-echo-v1" {
+		input = []byte("phase2c1-input\n")
+	}
+	return model.TestcaseInput{TestcaseID: DefaultTestcaseID, TestdataVersionID: request.TestdataVersionRef, Bytes: input, SHA256: digestBytes(input)}
+}
+
+func profileForRequest(request model.RealExecutionRequest, artifactSHA string) model.ExecutionProfile {
+	return model.ExecutionProfile{ID: request.ExecutionProfileID, LanguageRuntime: request.LanguageProfileID, ArtifactSHA256: artifactSHA, Limits: runtimeLimits, FilesystemPolicyID: FilesystemPolicyID, NetworkPolicyID: NetworkPolicyID, SeccompPolicyID: SeccompPolicyID, EnvironmentAllowlistID: EnvironmentAllowlistID, StdinLimitBytes: maxTestcaseInputBytes}
+}
+
+// BuildSingleTestcaseExecutionRecord freezes raw execution facts without
+// interpreting them as an online-judge verdict.
+func BuildSingleTestcaseExecutionRecord(request model.RealExecutionRequest, result model.RealExecutionResult) model.SingleTestcaseExecutionRecord {
+	testcase := testcaseForRequest(request)
+	runtime := result.Runtime
+	if runtime == nil {
+		runtime = &result.Compile
+	}
+	identity := model.TestcaseIdentity{ProblemID: request.ProblemID, ProblemRevisionID: request.ProblemRevisionID, TestdataVersionID: request.TestdataVersionRef, TestcaseID: testcase.TestcaseID, InputSHA256: testcase.SHA256, ExecutionProfileID: request.ExecutionProfileID, ExecutionAttemptID: result.ExecutionAttemptID}
+	record := model.SingleTestcaseExecutionRecord{
+		RecordVersion: model.TestcaseContractVersion,
+		RecordID:      request.ExecutionRequestID + ":" + testcase.TestcaseID,
+		SubmissionID:  request.SubmissionID, SnapshotID: request.SourceSnapshotRef,
+		ArtifactSHA256: func() string {
+			if result.Artifact != nil {
+				return result.Artifact.SHA256
+			}
+			return ""
+		}(),
+		Identity: identity, Input: testcase, Profile: profileForRequest(request, func() string {
+			if result.Artifact != nil {
+				return result.Artifact.SHA256
+			}
+			return ""
+		}()),
+		Stdin:  model.OutputCapture{SHA256: testcase.SHA256, ByteCount: len(testcase.Bytes)},
+		Wall:   model.Measurement{Available: true, Value: runtime.WallTimeMS, Source: "go:monotonic:time.Since", Units: "milliseconds", Semantics: "runtime process wall time; queue wait excluded"},
+		CPU:    model.Measurement{Available: runtime.CPUTimeSource != "", Value: runtime.CPUTimeUsec, Source: measurementSource(runtime.CPUTimeSource), Units: "microseconds", Semantics: measurementSemantics(runtime.CPUTimeSource, "per-attempt cgroup v2 cpu.stat usage_usec", "unavailable; no estimate")},
+		Memory: model.MemoryMeasurement{Max: cgroupMeasurement(runtimeMemoryMax(runtime.Evidence), "cgroup.v2:memory.max", "bytes", "configured hard limit"), Current: cgroupMeasurement(runtimeMemoryCurrent(runtime.Evidence), "cgroup.v2:memory.current", "bytes", "value at monitor stop"), Peak: model.Measurement{Available: runtime.MemoryPeakSource != "", Value: runtime.MemoryPeakBytes, Source: measurementSource(runtime.MemoryPeakSource), Units: "bytes", Semantics: measurementSemantics(runtime.MemoryPeakSource, "kernel memory.peak; no sampling claim", "unavailable; no sampling claim")}, EventsRaw: runtimeMemoryEvents(runtime.Evidence)},
+		Pids:   model.PidsMeasurement{Max: cgroupMeasurement(runtimePidsMax(runtime.Evidence), "cgroup.v2:pids.max", "processes", "configured hard limit"), Current: cgroupMeasurement(runtimePidsCurrent(runtime.Evidence), "cgroup.v2:pids.current", "processes", "value at monitor stop"), EventsRaw: runtimePidsEvents(runtime.Evidence)},
+		Stdout: model.OutputCapture{SHA256: runtime.StdoutSHA256, ByteCount: runtime.StdoutBytes, Truncated: runtime.StdoutTruncated},
+		Stderr: model.OutputCapture{SHA256: runtime.StderrSHA256, ByteCount: runtime.StderrBytes, Truncated: runtime.StderrTruncated},
+		Facts:  runtime.Facts, PipelineOutcome: result.PipelineOutcome, CleanupVerified: result.Clean,
+		PublishedAt: result.CompletedAt,
+	}
+	withoutDigest := record
+	withoutDigest.Digest = ""
+	encoded, _ := json.Marshal(withoutDigest)
+	digest := sha256.Sum256(encoded)
+	record.Digest = hex.EncodeToString(digest[:])
+	return record
+}
+
+func runtimeMemoryMax(e *model.RuntimeEvidence) int64 {
+	return parseCgroupNumber(e, func(x *model.RuntimeEvidence) string { return x.MemoryMax })
+}
+func runtimeMemoryCurrent(e *model.RuntimeEvidence) int64 {
+	return parseCgroupNumber(e, func(x *model.RuntimeEvidence) string { return x.MemoryCurrent })
+}
+func runtimePidsMax(e *model.RuntimeEvidence) int64 {
+	return parseCgroupNumber(e, func(x *model.RuntimeEvidence) string { return x.PidsMax })
+}
+func runtimePidsCurrent(e *model.RuntimeEvidence) int64 {
+	return parseCgroupNumber(e, func(x *model.RuntimeEvidence) string { return x.PidsCurrent })
+}
+func runtimeMemoryEvents(e *model.RuntimeEvidence) string {
+	if e == nil {
+		return ""
+	}
+	return e.MemoryEvents
+}
+func runtimePidsEvents(e *model.RuntimeEvidence) string {
+	if e == nil {
+		return ""
+	}
+	return e.PidsEvents
+}
+func parseCgroupNumber(e *model.RuntimeEvidence, value func(*model.RuntimeEvidence) string) int64 {
+	if e == nil {
+		return -1
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(value(e)), 10, 64)
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
+func measurementSource(source string) string {
+	if source == "" {
+		return "unavailable"
+	}
+	return source
+}
+
+func measurementSemantics(source, available, unavailable string) string {
+	if source == "" {
+		return unavailable
+	}
+	return available
+}
+
+func cgroupMeasurement(value int64, source, units, semantics string) model.Measurement {
+	if value < 0 {
+		return model.Measurement{Available: false, Source: "unavailable", Units: units, Semantics: "unavailable; no estimate"}
+	}
+	return model.Measurement{Available: true, Value: value, Source: source, Units: units, Semantics: semantics}
 }
 
 func (s *Supervisor) PreflightRealExecution(ctx context.Context, rootfs CompilerRootfs) error {
@@ -210,14 +344,21 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 		ProtocolVersion: model.ExecutionContractVersion, ExecutionRequestID: request.ExecutionRequestID,
 		JudgeJobID: request.JudgeJobID, SubmissionID: request.SubmissionID, Attempt: request.Attempt,
 		CorrelationID: request.CorrelationID, LanguageProfileID: request.LanguageProfileID,
-		SourceSHA256: request.SourceSHA256, StartedAt: started,
+		SourceSHA256: request.SourceSHA256, ProblemID: request.ProblemID,
+		ProblemRevisionID: request.ProblemRevisionID, TestdataVersionID: request.TestdataVersionRef,
+		TestcaseID: request.TestcaseID, TestcaseInputSHA256: request.TestcaseInputSHA256,
+		ExecutionProfileID: request.ExecutionProfileID, StartedAt: started,
 	}
 	identity := executionIdentity(request)
 	compileSandboxID := sandboxIDFor(identity.CompileAttemptID, "compile")
 	runtimeSandboxID := sandboxIDFor(identity.RuntimeAttemptID, "runtime")
 	result.ExecutionAttemptID, result.CompileAttemptID, result.RuntimeAttemptID, result.ResultGeneration = identity.ExecutionAttemptID, identity.CompileAttemptID, identity.RuntimeAttemptID, identity.ResultGeneration
 	result.CompileSandboxID, result.RuntimeSandboxID = compileSandboxID, runtimeSandboxID
-	defer func() { result.CompletedAt = time.Now().UTC() }()
+	defer func() {
+		if result.CompletedAt.IsZero() {
+			result.CompletedAt = time.Now().UTC()
+		}
+	}()
 	if err := ValidateRealExecutionRequest(request); err != nil {
 		result.PipelineOutcome = PipelineInfraFailure
 		result.Compile = model.StageResult{Outcome: CompileInfraFailure, DiagnosticCode: "REQUEST_REJECTED", Clean: true}
@@ -255,12 +396,17 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 		return result, err
 	}
 	defer func() {
+		result.CompletedAt = time.Now().UTC()
 		removeErr := removeOwnedExecutionRoot(jobRoot, identity.ExecutionAttemptID, identity.SandboxID)
 		clean := removeErr == nil && !pathExists(jobRoot)
 		result.Clean = result.Compile.Clean && (result.Runtime == nil || result.Runtime.Clean) && clean
 		if !clean {
 			result.PipelineOutcome = PipelineInfraFailure
 			runErr = errors.New("real execution workspace cleanup failed")
+		}
+		if result.Compile.Outcome != "" {
+			record := BuildSingleTestcaseExecutionRecord(request, result)
+			result.ExecutionRecord = &record
 		}
 	}()
 	if err := os.Chmod(s.Root, 0711); err != nil {
@@ -274,6 +420,19 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 	}
 	if err := os.MkdirAll(buildDir, 0700); err != nil {
 		return result, err
+	}
+	testcase := testcaseForRequest(request)
+	inputPath, err := StageTestcaseInput(workspace, testcase)
+	if err != nil {
+		result.PipelineOutcome = PipelineInfraFailure
+		result.Compile = model.StageResult{Outcome: CompileInfraFailure, DiagnosticCode: "TESTCASE_INPUT_REJECTED", Clean: true, Facts: model.RawExecutionFacts{SandboxSetupFailed: true, CleanupVerified: true}}
+		return result, err
+	}
+	if err := WriteOwnershipMetadata(inputPath+".ownership", model.ResourceOwnership{Schema: ownershipSchema, ResourceKind: "testcase-input", SubmissionID: request.SubmissionID, JudgeJobID: request.JudgeJobID, ExecutionRequestID: request.ExecutionRequestID, ExecutionAttemptID: identity.ExecutionAttemptID, SandboxID: compileSandboxID}); err != nil {
+		return result, err
+	}
+	if ownership, err := readOwnership(inputPath + ".ownership"); err != nil || ownership.ResourceKind != "testcase-input" || ownership.ExecutionAttemptID != identity.ExecutionAttemptID || ownership.SandboxID != compileSandboxID {
+		return result, errors.New("testcase input ownership rejected")
 	}
 	sourcePath, err := StageSourceSnapshot(inputDir, []byte(request.SourceBytes), request.SourceSHA256)
 	if err != nil {
@@ -355,15 +514,22 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 		result.PipelineOutcome = PipelineInfraFailure
 		return result, err
 	}
-	stdin := []byte{}
-	if request.ControlledInputID == "stdin-echo-v1" {
-		stdin = []byte("phase2c1-input\n")
+	if err := VerifyStagedTestcaseInput(inputPath, testcase); err != nil {
+		result.PipelineOutcome = PipelineInfraFailure
+		return result, err
+	}
+	stdin, err := ReadVerifiedTestcaseInput(inputPath, testcase)
+	if err != nil {
+		result.PipelineOutcome = PipelineInfraFailure
+		return result, errors.New("testcase input changed before runtime")
 	}
 	runtimeRun := s.runExecutionStageWithID(ctx, runtimeBundle, "rootfs", true, []string{"/program"},
 		"/workspace", []string{"PATH=/", "LANG=C", "LC_ALL=C"}, stageMounts(1<<20), runtimeLimits, stdin, "", runtimeSandboxID)
 	runtimeResult := classifyRuntime(runtimeRun)
 	result.Runtime = &runtimeResult
 	result.PipelineOutcome = pipelineForRuntime(runtimeResult.Outcome)
+	result.TestcaseID = testcase.TestcaseID
+	result.TestcaseInputSHA256 = testcase.SHA256
 	return result, runtimeRun.Err
 }
 
@@ -381,7 +547,7 @@ func (s *Supervisor) runExecutionStage(ctx context.Context, bundle, rootfs strin
 }
 
 func (s *Supervisor) runExecutionStageWithID(ctx context.Context, bundle, rootfs string, readonly bool, args []string, cwd string, env []string, mounts []bundleMount, limits model.ExecutionLimits, stdin []byte, watchedWorkspace, sandboxID string) stageRun {
-	started := time.Now()
+	setupStarted := time.Now()
 	if err := os.MkdirAll(bundle, 0700); err != nil {
 		return stageRun{Err: err}
 	}
@@ -448,7 +614,9 @@ func (s *Supervisor) runExecutionStageWithID(ctx context.Context, bundle, rootfs
 	resourceRequest := model.Request{MemoryBytes: limits.MemoryBytes, Pids: limits.Pids}
 	resource := newResourceMonitor(sid, resourceRequest)
 	go resource.run()
+	executionStarted := time.Now()
 	err := command.Run()
+	wallTimeMS := time.Since(executionStarted).Milliseconds()
 	cancelTimeout()
 	<-monitorWorkspaceDone
 	evidence := resource.stop()
@@ -457,10 +625,16 @@ func (s *Supervisor) runExecutionStageWithID(ctx context.Context, bundle, rootfs
 	removeErr := removeOwnedExecutionRoot(bundle, sid, sid)
 	clean := guestGone(s.Runc, sid) && removeErr == nil && !pathExists(bundle)
 	exitCode, signal := processExit(err)
+	// A signal observed on the host runc process is not proof of a guest
+	// signal.  Cancellation, timeout, and limit termination are therefore
+	// explicitly reported through their raw facts instead.
+	if commandCtx.Err() != nil {
+		signal = ""
+	}
 	return stageRun{
-		ExitCode: exitCode, Signal: signal, Stdout: stdout.String(), Stderr: stderr.String(),
+		ExitCode: exitCode, Signal: signal, Stdout: stdout.String(), Stderr: stderr.String(), StdoutBytes: stdout.Bytes(), StderrBytes: stderr.Bytes(),
 		StdoutTruncated: stdout.Exceeded(), StderrTruncated: stderr.Exceeded(),
-		WallTimeMS: time.Since(started).Milliseconds(), TimedOut: errors.Is(commandCtx.Err(), context.DeadlineExceeded),
+		WallTimeMS: wallTimeMS, SetupTimeMS: executionStarted.Sub(setupStarted).Milliseconds(), TimedOut: errors.Is(commandCtx.Err(), context.DeadlineExceeded),
 		Cancelled: ctx.Err() != nil, WorkspaceExceeded: workspaceExceeded.Load(), Clean: clean,
 		Evidence: evidence, Err: err,
 	}
@@ -517,13 +691,35 @@ func classifyRuntime(run stageRun) model.StageResult {
 }
 
 func stageResult(run stageRun) model.StageResult {
+	cpuUsec, cpuSource := cpuMeasurement(run.Evidence)
+	memoryPeak, memoryPeakSource := memoryPeakMeasurement(run.Evidence)
 	return model.StageResult{
 		ExitCode: run.ExitCode, TerminationSignal: run.Signal,
 		Stdout: strings.ToValidUTF8(run.Stdout, "\uFFFD"), Stderr: strings.ToValidUTF8(run.Stderr, "\uFFFD"),
+		StdoutBytes: len(run.StdoutBytes), StderrBytes: len(run.StderrBytes), StdoutSHA256: digestBytes(run.StdoutBytes), StderrSHA256: digestBytes(run.StderrBytes),
 		StdoutTruncated: run.StdoutTruncated, StderrTruncated: run.StderrTruncated,
-		WallTimeMS: run.WallTimeMS, Clean: run.Clean, Evidence: run.Evidence,
+		WallTimeMS: run.WallTimeMS, SetupTimeMS: run.SetupTimeMS, CPUTimeUsec: cpuUsec, CPUTimeSource: cpuSource,
+		MemoryPeakBytes: memoryPeak, MemoryPeakSource: memoryPeakSource, Clean: run.Clean, Evidence: run.Evidence,
 		Facts: NormalizeRawExecutionFacts(run),
 	}
+}
+
+func cpuMeasurement(evidence *model.RuntimeEvidence) (int64, string) {
+	if evidence == nil || evidence.CPUUsageSource == "" {
+		return 0, ""
+	}
+	return evidence.CPUUsageUsec, evidence.CPUUsageSource
+}
+
+func memoryPeakMeasurement(evidence *model.RuntimeEvidence) (int64, string) {
+	if evidence == nil || evidence.MemoryPeakSource == "" {
+		return 0, ""
+	}
+	value, err := strconv.ParseInt(strings.TrimSpace(evidence.MemoryPeak), 10, 64)
+	if err != nil || value < 0 {
+		return 0, ""
+	}
+	return value, evidence.MemoryPeakSource
 }
 
 func compileState(outcome string) model.ExecutionState {

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,10 @@ type Job struct {
 	ProblemID              string          `json:"problemId"`
 	ProblemRevisionID      string          `json:"problemRevisionId"`
 	TestdataVersionRef     string          `json:"testdataVersionRef"`
+	TestcaseID             string          `json:"testcaseId"`
+	TestcaseInput          string          `json:"testcaseInput"`
+	TestcaseInputSHA256    string          `json:"testcaseInputSha256"`
+	ExecutionProfileID     string          `json:"executionProfileId"`
 	LanguageID             string          `json:"languageId"`
 	ExecutionMode          string          `json:"executionMode"`
 	LanguageProfileID      string          `json:"languageProfileId"`
@@ -53,17 +58,38 @@ type Job struct {
 }
 
 type rawExecutionResultIdentity struct {
-	ProtocolVersion    string          `json:"protocol_version"`
-	ExecutionRequestID string          `json:"execution_request_id"`
-	JudgeJobID         string          `json:"judge_job_id"`
-	SubmissionID       string          `json:"submission_id"`
-	Attempt            int             `json:"attempt"`
-	ExecutionAttemptID string          `json:"execution_attempt_id"`
-	ResultGeneration   int64           `json:"result_generation"`
-	LanguageProfileID  string          `json:"language_profile_id"`
-	SourceSHA256       string          `json:"source_sha256"`
-	PipelineOutcome    string          `json:"pipeline_outcome"`
-	Compile            json.RawMessage `json:"compile"`
+	ProtocolVersion      string `json:"protocol_version"`
+	ExecutionRequestID   string `json:"execution_request_id"`
+	JudgeJobID           string `json:"judge_job_id"`
+	SubmissionID         string `json:"submission_id"`
+	Attempt              int    `json:"attempt"`
+	ExecutionAttemptID   string `json:"execution_attempt_id"`
+	ResultGeneration     int64  `json:"result_generation"`
+	LanguageProfileID    string `json:"language_profile_id"`
+	SourceSHA256         string `json:"source_sha256"`
+	TestcaseID           string `json:"testcase_id"`
+	TestcaseInputSHA256  string `json:"testcase_input_sha256"`
+	ExecutionProfileID   string `json:"execution_profile_id"`
+	ProblemID            string `json:"problem_id"`
+	ProblemRevisionID    string `json:"problem_revision_id"`
+	TestdataVersionID    string `json:"testdata_version_id"`
+	SingleTestcaseRecord *struct {
+		RecordVersion string `json:"record_version"`
+		RecordID      string `json:"record_id"`
+		Digest        string `json:"digest"`
+		Identity      struct {
+			ProblemID          string `json:"problem_id"`
+			ProblemRevisionID  string `json:"problem_revision_id"`
+			TestdataVersionID  string `json:"testdata_version_id"`
+			TestcaseID         string `json:"testcase_id"`
+			InputSHA256        string `json:"input_sha256"`
+			ExecutionProfileID string `json:"execution_profile_id"`
+			ExecutionAttemptID string `json:"execution_attempt_id"`
+		} `json:"identity"`
+	} `json:"single_testcase_record"`
+	PipelineOutcome string          `json:"pipeline_outcome"`
+	Compile         json.RawMessage `json:"compile"`
+	Runtime         json.RawMessage `json:"runtime"`
 }
 
 func validateRawExecutionResult(result json.RawMessage, job Job) error {
@@ -78,7 +104,7 @@ func validateRawExecutionResult(result json.RawMessage, job Job) error {
 		"PIPELINE_CANCELLED":      true,
 		"PIPELINE_INFRA_FAILURE":  true,
 	}
-	if identity.ProtocolVersion != "2C.1" ||
+	if identity.ProtocolVersion != "2C.3" && identity.ProtocolVersion != "2C.1" ||
 		identity.ExecutionRequestID != executionRequestID(job) ||
 		identity.JudgeJobID != job.ID ||
 		identity.SubmissionID != job.SubmissionID ||
@@ -91,7 +117,56 @@ func validateRawExecutionResult(result json.RawMessage, job Job) error {
 		identity.ResultGeneration != job.ResultGeneration {
 		return errors.New("raw execution result identity mismatch")
 	}
+	testcaseJob := job.TestcaseID != ""
+	if testcaseJob && (identity.ProtocolVersion != "2C.3" || identity.TestcaseID != job.TestcaseID || identity.TestcaseInputSHA256 != job.TestcaseInputSHA256 || identity.ExecutionProfileID != job.ExecutionProfileID) {
+		return errors.New("raw testcase result identity mismatch")
+	}
+	if testcaseJob && (identity.ProblemID != job.ProblemID || identity.ProblemRevisionID != job.ProblemRevisionID || identity.TestdataVersionID != job.TestdataVersionRef) {
+		return errors.New("raw provenance result identity mismatch")
+	}
+	if testcaseJob && (identity.SingleTestcaseRecord == nil || identity.SingleTestcaseRecord.RecordVersion != "2C.3" || identity.SingleTestcaseRecord.RecordID != identity.ExecutionRequestID+":"+job.TestcaseID || !isSHA256(identity.SingleTestcaseRecord.Digest) || identity.SingleTestcaseRecord.Identity.ProblemID != job.ProblemID || identity.SingleTestcaseRecord.Identity.ProblemRevisionID != job.ProblemRevisionID || identity.SingleTestcaseRecord.Identity.TestdataVersionID != job.TestdataVersionRef || identity.SingleTestcaseRecord.Identity.TestcaseID != job.TestcaseID || identity.SingleTestcaseRecord.Identity.InputSHA256 != job.TestcaseInputSHA256 || identity.SingleTestcaseRecord.Identity.ExecutionProfileID != job.ExecutionProfileID || identity.SingleTestcaseRecord.Identity.ExecutionAttemptID != identity.ExecutionAttemptID) {
+		return errors.New("missing immutable testcase execution record")
+	}
+	if testcaseJob && (!validRawStageOutput(identity.Compile) || (len(identity.Runtime) > 0 && string(identity.Runtime) != "null" && !validRawStageOutput(identity.Runtime))) {
+		return errors.New("invalid bounded output metadata")
+	}
 	return nil
+}
+
+func validRawStageOutput(raw json.RawMessage) bool {
+	var stage struct {
+		Stdout          string `json:"stdout"`
+		Stderr          string `json:"stderr"`
+		StdoutBytes     int    `json:"stdout_bytes"`
+		StderrBytes     int    `json:"stderr_bytes"`
+		StdoutSHA256    string `json:"stdout_sha256"`
+		StderrSHA256    string `json:"stderr_sha256"`
+		StdoutTruncated bool   `json:"stdout_truncated"`
+		StderrTruncated bool   `json:"stderr_truncated"`
+	}
+	if len(raw) == 0 || string(raw) == "null" || json.Unmarshal(raw, &stage) != nil {
+		return false
+	}
+	return len(stage.Stdout) <= 64<<10 && len(stage.Stderr) <= 64<<10 && stage.StdoutBytes >= 0 && stage.StdoutBytes <= 64<<10 && stage.StderrBytes >= 0 && stage.StderrBytes <= 64<<10 && isSHA256(stage.StdoutSHA256) && isSHA256(stage.StderrSHA256)
+}
+
+func validateTestcaseJob(j Job) error {
+	hasTestcase := j.TestcaseID != "" || j.TestcaseInput != "" || j.TestcaseInputSHA256 != "" || j.ExecutionProfileID != ""
+	if !hasTestcase {
+		return nil
+	}
+	if j.ExecutionMode != "REAL_SANDBOXED_EXECUTION" || j.ProblemID == "" || j.ProblemRevisionID == "" || j.TestdataVersionRef == "" || strings.EqualFold(j.TestdataVersionRef, "latest") || j.TestcaseID == "." || j.TestcaseID == ".." || len(j.TestcaseID) > 128 || strings.ContainsAny(j.TestcaseID, "/\\\x00") || j.ExecutionProfileID != "cpp20-gcc-13-v1" || len(j.TestcaseInput) > 64<<10 || !isSHA256(j.TestcaseInputSHA256) || j.TestcaseInputSHA256 != digest([]byte(j.TestcaseInput)) {
+		return errors.New("invalid testcase job contract")
+	}
+	return nil
+}
+
+func isSHA256(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil && value == strings.ToLower(value)
 }
 
 func executionRequestID(job Job) string {
@@ -108,6 +183,11 @@ func resultDigest(result json.RawMessage) string {
 	}
 	digest := sha256.Sum256(compact.Bytes())
 	return fmt.Sprintf("%x", digest[:])
+}
+
+func digest(value []byte) string {
+	h := sha256.Sum256(value)
+	return fmt.Sprintf("%x", h[:])
 }
 
 type Lease struct {
@@ -291,14 +371,22 @@ type Queue struct {
 
 type CreateInput struct {
 	ID, SubmissionID, OwnerUserID, ProblemID, ProblemRevisionID, TestdataVersionRef, LanguageID       string
+	TestcaseID, TestcaseInput, TestcaseInputSHA256, ExecutionProfileID                                string
 	ExecutionMode, LanguageProfileID, SourceSnapshotRef, SourceBytes, SourceSHA256, ControlledInputID string
 	FixtureID                                                                                         string
 	MaxAttempts                                                                                       int
 }
 
 func (q Queue) Enqueue(ctx context.Context, in CreateInput) (Job, error) {
-	if in.ID == "" || in.SubmissionID == "" || in.OwnerUserID == "" || in.ProblemID == "" || in.ProblemRevisionID == "" || in.TestdataVersionRef == "" || in.LanguageID == "" {
+	if in.ID == "" || in.SubmissionID == "" || in.OwnerUserID == "" || in.ProblemID == "" || in.ProblemRevisionID == "" || in.TestdataVersionRef == "" || strings.EqualFold(in.TestdataVersionRef, "latest") || in.LanguageID == "" {
 		return Job{}, errors.New("missing immutable linkage")
+	}
+	hasTestcase := in.TestcaseID != "" || in.TestcaseInput != "" || in.TestcaseInputSHA256 != "" || in.ExecutionProfileID != ""
+	if hasTestcase {
+		candidate := Job{ExecutionMode: in.ExecutionMode, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, TestcaseID: in.TestcaseID, TestcaseInput: in.TestcaseInput, TestcaseInputSHA256: in.TestcaseInputSHA256, ExecutionProfileID: in.ExecutionProfileID}
+		if err := validateTestcaseJob(candidate); err != nil {
+			return Job{}, errors.New("invalid testcase contract")
+		}
 	}
 	lock := q.key("mutation-lock", "")
 	lockToken := fmt.Sprintf("%d", time.Now().UnixNano())
@@ -319,6 +407,9 @@ func (q Queue) Enqueue(ctx context.Context, in CreateInput) (Job, error) {
 		}
 		var j Job
 		e = json.Unmarshal([]byte(raw), &j)
+		if e == nil {
+			e = validateTestcaseJob(j)
+		}
 		return j, e
 	}
 	max := in.MaxAttempts
@@ -326,7 +417,7 @@ func (q Queue) Enqueue(ctx context.Context, in CreateInput) (Job, error) {
 		max = 3
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	j := Job{ID: in.ID, SubmissionID: in.SubmissionID, IdempotencyKey: "submission:" + in.SubmissionID, OwnerUserID: in.OwnerUserID, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, LanguageID: in.LanguageID, ExecutionMode: in.ExecutionMode, LanguageProfileID: in.LanguageProfileID, SourceSnapshotRef: in.SourceSnapshotRef, SourceBytes: in.SourceBytes, SourceSHA256: in.SourceSHA256, ControlledInputID: in.ControlledInputID, FixtureID: in.FixtureID, Status: "QUEUED", MaxAttempts: max, CreatedAt: now, UpdatedAt: now}
+	j := Job{ID: in.ID, SubmissionID: in.SubmissionID, IdempotencyKey: "submission:" + in.SubmissionID, OwnerUserID: in.OwnerUserID, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, TestcaseID: in.TestcaseID, TestcaseInput: in.TestcaseInput, TestcaseInputSHA256: in.TestcaseInputSHA256, ExecutionProfileID: in.ExecutionProfileID, LanguageID: in.LanguageID, ExecutionMode: in.ExecutionMode, LanguageProfileID: in.LanguageProfileID, SourceSnapshotRef: in.SourceSnapshotRef, SourceBytes: in.SourceBytes, SourceSHA256: in.SourceSHA256, ControlledInputID: in.ControlledInputID, FixtureID: in.FixtureID, Status: "QUEUED", MaxAttempts: max, CreatedAt: now, UpdatedAt: now}
 	if j.ExecutionMode == "" {
 		j.ExecutionMode = "SAFE_FIXTURE_QUALIFICATION"
 	}
@@ -370,6 +461,9 @@ func (q Queue) claim(ctx context.Context, worker string, lease time.Duration) (*
 	}
 	var j Job
 	if err = json.Unmarshal([]byte(raw), &j); err != nil {
+		return nil, err
+	}
+	if err = validateTestcaseJob(j); err != nil {
 		return nil, err
 	}
 	if j.ExecutionMode == "" {
@@ -456,6 +550,9 @@ func (q Queue) update(ctx context.Context, l Lease, status, reason string, resul
 	}
 	var j Job
 	if err = json.Unmarshal([]byte(raw), &j); err != nil {
+		return err
+	}
+	if err = validateTestcaseJob(j); err != nil {
 		return err
 	}
 	if j.Status == "SUCCEEDED_FAKE" || j.Status == "COMPLETED" || j.Status == "FAILED_TERMINAL" || j.Status == "CANCELLED" {
