@@ -3,7 +3,7 @@
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: PHASE 2C IN PROGRESS
-Current Status: PHASE 2C.2 PASS / REAL EXECUTION LIFECYCLE RELIABILITY QUALIFIED
+Current Status: PHASE 2C.3 PASS / DETERMINISTIC SINGLE-TESTCASE EXECUTION RECORD QUALIFIED
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 PHASE 1C: PASS
@@ -14,6 +14,7 @@ PHASE 2A: PASS / REAL MULTI-PROCESS QUALIFICATION COMPLETE
 PHASE 2B: PASS / CLOSED
 PHASE 2C: IN PROGRESS / C++20 REAL EXECUTION LIFECYCLE RELIABILITY QUALIFIED
 PHASE 2C.2: PASS / REAL EXECUTION LIFECYCLE, INTEGRITY & RELIABILITY QUALIFIED
+PHASE 2C.3: PASS / DETERMINISTIC SINGLE-TESTCASE EXECUTION & MEASUREMENT RECORD QUALIFIED
 REAL C++20 EXECUTION: QUALIFICATION ONLY
 VERDICT ENGINE: NOT STARTED
 PHASE 2D: NOT STARTED
@@ -40,6 +41,7 @@ READY FOR NEXT PHASE 2C GOAL: YES
 - PHASE 2B — Sandbox Security Qualification: PASS
 - PHASE 2C.1 — C++20 Real Compiler & Runtime Execution Foundation: PASS
 - PHASE 2C.2 — Real Execution Lifecycle, Integrity & Reliability Qualification: PASS
+- PHASE 2C.3 — Deterministic Testcase Execution & Runtime Measurement Contract: PASS
 
 ## Current Project State
 
@@ -48,18 +50,19 @@ READY FOR NEXT PHASE 2C GOAL: YES
 - Phase 2C.1 implementation commit: `0c230df` (`feat: add phase 2C.1 C++20 execution foundation`)
 - Phase 2C.2 implementation commit: `74a9566` (`feat: harden phase 2C.2 execution lifecycle`)
 - Phase 2C.2 qualification commits: `26cc692`, `9e17d7e`
-- Business implementation: Phase 1 product foundations, Phase 2A Worker foundation, Phase 2B trusted-probe Sandbox boundary, and the Phase 2C.1/2C.2 qualification-only C++20 execution foundation implemented
+- Business implementation: Phase 1 product foundations, Phase 2A Worker foundation, Phase 2B trusted-probe Sandbox boundary, and the Phase 2C.1/2C.2/2C.3 qualification-only C++20 execution foundation implemented
 - Framework/toolchain: initialized and qualified through the current Phase 2C.1 scope
 - Local PostgreSQL/Redis/MinIO infrastructure: Docker Engine/Compose, Windows localhost API/browser boundary, and recovery behavior qualified with WSL instance kept alive
-- Judge Worker: Phase 2A qualification complete; Phase 2B Sandbox boundary and Phase 2C.1/2C.2 real C++20 queue/Worker path, attempt identity, retry, crash recovery and stale-result protection qualified; no Application PostgreSQL access
+- Judge Worker: Phase 2A qualification complete; Phase 2B Sandbox boundary and Phase 2C.1/2C.2/2C.3 real C++20 queue/Worker path, attempt identity, retry, crash recovery, stale-result protection and deterministic testcase record publication qualified; no Application PostgreSQL access
 - Sandbox: trusted-probe protocol remains available; gated 2C.1 source compilation and raw execution use the dedicated non-root Supervisor and separate rootless-runc lifecycles
 - Runtime security controls: dedicated non-root Supervisor, rootless OCI/runc, systemd user manager, cgroup v2, namespaces, seccomp, and finite memory/pids limits qualified
 - Runtime attack tests: integrated FS, NET, process/privilege, resource, lifecycle, cleanup-failure, crash, cancellation and concurrent-isolation matrices PASS
 - Production security qualification: NOT CLAIMED; Phase 2B development-runtime trusted-probe scope only
 - C++20 profile: fixed `cpp20-gcc-13-v1`, GCC 13.3.0, immutable source hash, fixed argv, bounded compile/runtime resources, verified static ELF artifact, attempt-owned lifecycle, and raw result only
 - Phase 2C.2 reliability: source TOCTOU checks, rootfs hard preflight, artifact reverify, duplicate/retry/stale-result authority, cancellation races, startup residue ownership, sequential/concurrent soak, and restart recovery qualified
-- Real C++20 execution: QUALIFICATION ONLY; no verdict mapping, output comparison, checker, scoring, testcase aggregation, multi-language support, or production readiness claim
-- TypeScript quality gates: PASS (format, lint, typecheck, 322 tests/4 skipped, architecture, build, and 4/4 infrastructure integration)
+- Phase 2C.3 deterministic testcase contract: immutable testcase identity and exact testdata version, Supervisor-controlled stdin staging/reverify, fixed profile, monotonic wall time, cgroup CPU/memory/pids facts, bounded output metadata, proven termination facts, immutable record publication, 20-cycle repeatability, 10-pair concurrency and zero owned residue qualified
+- Real C++20 execution: deterministic single-testcase execution record qualified; no verdict mapping, output comparison, checker, scoring, testcase aggregation, multi-language support, or production readiness claim
+- TypeScript quality gates: PASS (format, lint, typecheck, 326 tests/4 skipped, architecture, build, and 4/4 infrastructure integration)
 - Real Web/API platform skeleton: AVAILABLE
 - CI foundation: AVAILABLE (local workflow validation; remote run not observed)
 - 0B.3 implementation and runtime qualification: PASS; see the final closure report
