@@ -148,7 +148,7 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
   });
 
   it('performs verified email registration atomically and issues a session', async () => {
-    const { server } = await setup();
+    const { server, repository } = await setup();
     const challenge = await requestCode(
       server,
       'EMAIL',
@@ -193,6 +193,35 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
       },
     });
     expect(duplicate.statusCode).toBe(400);
+
+    const rollbackChallenge = await requestCode(
+      server,
+      'EMAIL',
+      'rollback@example.test',
+    );
+    const rollbackGrant = await verifyCode(
+      server,
+      rollbackChallenge.challengeId,
+      emailCodes.at(-1)!,
+    );
+    const rollback = await server.inject({
+      method: 'POST',
+      url: '/api/auth/register/verified',
+      payload: {
+        grantId: rollbackGrant.grantId,
+        identifierType: 'EMAIL',
+        username: 'new-user',
+        displayName: 'Rollback',
+        password: 'StrongPass123!',
+      },
+    });
+    expect(rollback.statusCode).toBe(409);
+    await expect(
+      repository.v2?.findIdentity({
+        kind: 'EMAIL',
+        value: 'rollback@example.test',
+      }),
+    ).resolves.toBeNull();
     await server.close();
   });
 
@@ -226,11 +255,44 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
       },
     });
     expect(login.statusCode).toBe(200);
+    const duplicateChallenge = await requestCode(server, 'SMS', '+14155550199');
+    const duplicateGrant = await verifyCode(
+      server,
+      duplicateChallenge.challengeId,
+      smsCodes.at(-1)!,
+    );
+    expect(
+      (
+        await server.inject({
+          method: 'POST',
+          url: '/api/auth/register/phone',
+          payload: {
+            grantId: duplicateGrant.grantId,
+            username: 'another-phone-user',
+            displayName: 'Another Phone',
+            password: 'PhonePass123!',
+          },
+        })
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (
+        await server.inject({
+          method: 'POST',
+          url: '/api/auth/register/phone',
+          payload: {
+            username: 'unverified-phone',
+            displayName: 'Unverified Phone',
+            password: 'PhonePass123!',
+          },
+        })
+      ).statusCode,
+    ).toBe(400);
     await server.close();
   });
 
   it('logs in existing OTP identity and creates a JIT continuation for a new identity', async () => {
-    const { server } = await setup();
+    const { server, repository } = await setup();
     const registrationChallenge = await requestCode(
       server,
       'EMAIL',
@@ -297,6 +359,12 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
       code: 'ONBOARDING_REQUIRED',
       details: { continuationId: expect.any(String) },
     });
+    await expect(
+      repository.v2?.findIdentity({
+        kind: 'EMAIL',
+        value: 'jit@example.test',
+      }),
+    ).resolves.toBeNull();
     const finalize = await server.inject({
       method: 'POST',
       url: '/api/auth/login/code/onboarding',
@@ -363,6 +431,33 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
         url: `/api/auth/oauth/${provider}/callback?state=${nextState}&code=one`,
       });
       expect(result.statusCode).toBe(409);
+      expect(
+        (
+          await server.inject({
+            method: 'POST',
+            url: '/api/auth/oauth/onboarding',
+            payload: {
+              transactionId: result.json().details.transactionId,
+              username: `${provider}-user`,
+              displayName: `${provider} User`,
+            },
+          })
+        ).statusCode,
+      ).toBe(200);
+      const existing = await server.inject({
+        method: 'POST',
+        url: `/api/auth/oauth/${provider}/start`,
+        payload: {},
+      });
+      const existingState = new URL(
+        existing.json().authorizationUrl,
+      ).searchParams.get('state')!;
+      const authenticated = await server.inject({
+        method: 'GET',
+        url: `/api/auth/oauth/${provider}/callback?state=${existingState}&code=again`,
+      });
+      expect(authenticated.statusCode).toBe(200);
+      expect(authenticated.json().status).toBe('AUTHENTICATED');
     }
     const collision = await server.inject({
       method: 'POST',
@@ -907,6 +1002,54 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
         windowMs: 1000,
       }),
     ).resolves.toMatchObject({ allowed: false });
+  });
+
+  it('fails closed on verification-attempt, password-login, and OAuth-start abuse', async () => {
+    const { server } = await setup({
+      rateLimiter: {
+        check: async ({ scope }) => ({
+          allowed: ![
+            'verification:verify',
+            'login:password',
+            'oauth:start',
+          ].includes(scope),
+          retryAfterSeconds: 10,
+        }),
+      },
+    });
+    const challenge = await requestCode(server, 'EMAIL', 'abuse@example.test');
+    expect(
+      (
+        await server.inject({
+          method: 'POST',
+          url: `/api/auth/verification/challenges/${challenge.challengeId}/verify`,
+          payload: { code: '000000' },
+        })
+      ).statusCode,
+    ).toBe(429);
+    expect(
+      (
+        await server.inject({
+          method: 'POST',
+          url: '/api/auth/login/password',
+          payload: {
+            identifierType: 'EMAIL',
+            identifier: 'abuse@example.test',
+            password: 'WrongPass123!',
+          },
+        })
+      ).statusCode,
+    ).toBe(429);
+    expect(
+      (
+        await server.inject({
+          method: 'POST',
+          url: '/api/auth/oauth/google/start',
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(429);
+    await server.close();
   });
 
   it('requires Google OIDC claims and accepts tokeninfo expiry strings', async () => {
