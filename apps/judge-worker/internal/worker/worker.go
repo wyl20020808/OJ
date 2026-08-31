@@ -227,6 +227,10 @@ func (w *Worker) processReal(ctx, queueCtx context.Context, lease queueadapter.L
 		_ = w.Queue.FailTerminal(queueCtx, lease, "WORKER_CAPABILITY_MISMATCH")
 		return
 	}
+	if lease.Job.TestcaseSet != nil {
+		w.processRealSet(ctx, queueCtx, lease)
+		return
+	}
 	deadline := lease.Job.LeaseExpiresAt.Add(-100 * time.Millisecond)
 	if !deadline.After(time.Now()) {
 		_ = w.Queue.Retry(queueCtx, lease, "EXECUTION_DEADLINE_UNAVAILABLE")
@@ -258,7 +262,56 @@ func (w *Worker) processReal(ctx, queueCtx context.Context, lease queueadapter.L
 		return
 	}
 	if err = w.Queue.CompleteReal(queueCtx, lease, execution.Raw); err != nil {
-		w.logger.Printf(`{"event":"worker_result_persist_error","worker_id":%q,"job_id":%q}`, w.WorkerID, lease.Job.ID)
+		w.logger.Printf(`{"event":"worker_result_persist_error","worker_id":%q,"job_id":%q,"error":%q}`, w.WorkerID, lease.Job.ID, err.Error())
+	}
+}
+
+func (w *Worker) processRealSet(ctx, queueCtx context.Context, lease queueadapter.Lease) {
+	if lease.Job.TestcaseSet == nil {
+		_ = w.Queue.FailTerminal(queueCtx, lease, "WORKER_PROTOCOL_ERROR")
+		return
+	}
+	deadline := lease.Job.LeaseExpiresAt.Add(-100 * time.Millisecond)
+	if !deadline.After(time.Now()) {
+		_ = w.Queue.Retry(queueCtx, lease, "EXECUTION_DEADLINE_UNAVAILABLE")
+		return
+	}
+	manifest := supervisorclient.TestcaseSetManifest{
+		ProblemID: lease.Job.TestcaseSet.ProblemID, ProblemRevisionID: lease.Job.TestcaseSet.ProblemRevisionID,
+		TestdataVersionID: lease.Job.TestcaseSet.TestdataVersionID, TestcaseSetID: lease.Job.TestcaseSet.TestcaseSetID,
+		ExecutionProfileID: lease.Job.TestcaseSet.ExecutionProfileID, ManifestHash: lease.Job.TestcaseSet.ManifestHash,
+		Entries: make([]supervisorclient.TestcaseSetEntry, 0, len(lease.Job.TestcaseSet.Entries)),
+	}
+	for _, entry := range lease.Job.TestcaseSet.Entries {
+		manifest.Entries = append(manifest.Entries, supervisorclient.TestcaseSetEntry{
+			Index: entry.Index, TestcaseID: entry.TestcaseID, TestdataVersionID: entry.TestdataVersionID,
+			Input: []byte(entry.Input), InputSHA256: entry.InputSHA256, ExecutionProfileID: entry.ExecutionProfileID,
+			ExpectedOutputSHA256: entry.ExpectedOutputSHA256,
+		})
+	}
+	policy := lease.Job.ExecutionSetPolicy
+	if policy == "" {
+		policy = "RUN_ALL"
+	}
+	request := supervisorclient.SetRequest{
+		ProtocolVersion: supervisorclient.SetProtocolVersion, ExecutionSetRequestID: lease.Job.ExecutionRequestID,
+		ExecutionSetAttemptID: lease.Job.ExecutionAttemptID, JudgeJobID: lease.Job.ID, SubmissionID: lease.Job.SubmissionID,
+		Attempt: lease.Job.Attempt, CorrelationID: lease.Job.ID, Manifest: manifest, ExecutionPolicy: policy,
+		LanguageProfileID: lease.Job.LanguageProfileID, SourceSnapshotRef: lease.Job.SourceSnapshotRef,
+		SourceBytes: lease.Job.SourceBytes, SourceSHA256: lease.Job.SourceSHA256, DeadlineAt: deadline,
+		CancellationGeneration: lease.Job.CancellationGeneration,
+	}
+	execution, err := w.Supervisor.ExecuteSet(ctx, request)
+	if ctx.Err() != nil || execution.Result.PipelineOutcome == "PIPELINE_CANCELLED" {
+		_ = w.Queue.Cancel(queueCtx, lease)
+		return
+	}
+	if err != nil || execution.Result.PipelineOutcome == "PIPELINE_INFRA_FAILURE" {
+		_ = w.Queue.Retry(queueCtx, lease, "REAL_EXECUTION_SET_INFRA_FAILURE")
+		return
+	}
+	if err = w.Queue.CompleteReal(queueCtx, lease, execution.Raw); err != nil {
+		w.logger.Printf(`{"event":"worker_set_result_persist_error","worker_id":%q,"job_id":%q,"error":%q}`, w.WorkerID, lease.Job.ID, err.Error())
 	}
 }
 

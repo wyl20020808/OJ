@@ -9,6 +9,11 @@ import {
   type JudgeJobRepository,
   type RawExecutionResult,
 } from './model.js';
+import {
+  TestcaseSetContractError,
+  validateTestcaseSetManifest,
+  type TestcaseSetManifest,
+} from './testcase-set.js';
 const stamp = () => new Date().toISOString();
 const safeMode = 'SAFE_FIXTURE_QUALIFICATION' as const;
 const realMode = 'REAL_SANDBOXED_EXECUTION' as const;
@@ -28,13 +33,65 @@ const stableJson = (value: unknown): string => {
   return JSON.stringify(value);
 };
 const rawDigest = (value: RawExecutionResult) => sha256(stableJson(value));
+const isSha256 = (value: unknown): value is string =>
+  typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const validRawStageOutput = (value: unknown) => {
+  if (!isRecord(value)) return false;
+  const stdout = value.stdout;
+  const stderr = value.stderr;
+  const stdoutBytes = value.stdout_bytes;
+  const stderrBytes = value.stderr_bytes;
+  return (
+    typeof stdout === 'string' &&
+    typeof stderr === 'string' &&
+    Buffer.byteLength(stdout, 'utf8') <= 64 * 1024 &&
+    Buffer.byteLength(stderr, 'utf8') <= 64 * 1024 &&
+    typeof stdoutBytes === 'number' &&
+    Number.isInteger(stdoutBytes) &&
+    stdoutBytes >= 0 &&
+    stdoutBytes <= 64 * 1024 &&
+    typeof stderrBytes === 'number' &&
+    Number.isInteger(stderrBytes) &&
+    stderrBytes >= 0 &&
+    stderrBytes <= 64 * 1024 &&
+    isSha256(value.stdout_sha256) &&
+    isSha256(value.stderr_sha256)
+  );
+};
+const validTestcaseSet = (
+  value: unknown,
+  job: Record<string, unknown> | JudgeJobCreateInput,
+): value is TestcaseSetManifest => {
+  if (!value || typeof value !== 'object') return false;
+  try {
+    validateTestcaseSetManifest(value as TestcaseSetManifest);
+  } catch (error) {
+    if (error instanceof TestcaseSetContractError) return false;
+    throw error;
+  }
+  const manifest = value as TestcaseSetManifest;
+  return (
+    manifest.problemId === job.problemId &&
+    manifest.problemRevisionId === job.problemRevisionId &&
+    manifest.testdataVersionId === job.testdataVersionRef
+  );
+};
+const immutableTestcaseSet = (manifest: TestcaseSetManifest) =>
+  Object.freeze({
+    ...manifest,
+    entries: Object.freeze(
+      manifest.entries.map((entry) => Object.freeze({ ...entry })),
+    ),
+  });
 const testcaseFieldsPresent = (
   value: Record<string, unknown> | JudgeJobCreateInput,
 ) =>
-  value.testcaseId !== undefined ||
-  value.testcaseInput !== undefined ||
-  value.testcaseInputSha256 !== undefined ||
-  value.executionProfileId !== undefined;
+  [
+    value.testcaseId,
+    value.testcaseInput,
+    value.testcaseInputSha256,
+    value.executionProfileId,
+  ].some((field) => field !== undefined && field !== '');
 const validTestcaseId = (value: unknown): value is string =>
   typeof value === 'string' &&
   value.length > 0 &&
@@ -90,6 +147,8 @@ const validRawExecutionResult = (
   job: Record<string, unknown> | JudgeJob,
 ): value is RawExecutionResult => {
   if (!isRecord(value)) return false;
+  if (job.testcaseSet && isRecord(job.testcaseSet))
+    return validRawExecutionSetResult(value, job);
   const startedAt = Date.parse(String(value.started_at));
   const completedAt = Date.parse(String(value.completed_at));
   const testcaseRecordValid =
@@ -164,6 +223,189 @@ const validRawExecutionResult = (
         value.testdata_version_id === job.testdataVersionRef))
   );
 };
+const validRawExecutionSetResult = (
+  value: Record<string, unknown>,
+  job: Record<string, unknown> | JudgeJob,
+): value is RawExecutionResult => {
+  if (!isRecord(job.testcaseSet)) return false;
+  const manifest = job.testcaseSet as unknown as TestcaseSetManifest;
+  const aggregate = value.aggregate_execution_set_record;
+  if (!isRecord(aggregate)) return false;
+  const read = (
+    object: Record<string, unknown>,
+    snake: string,
+    camel: string,
+  ) => object[snake] ?? object[camel];
+  const aggregateRecord = aggregate as Record<string, unknown>;
+  const members = read(aggregateRecord, 'testcases', 'testcases');
+  const executionSetRequestId = value.execution_set_request_id;
+  const executionSetAttemptId = value.execution_set_attempt_id;
+  const startedAt = Date.parse(String(value.started_at));
+  const completedAt = Date.parse(String(value.completed_at));
+  const policy = job.executionSetPolicy ?? 'RUN_ALL';
+  const pipelineOutcome = value.pipeline_outcome;
+  const stopReason = read(aggregateRecord, 'stop_reason', 'stopReason');
+  const startedMembers = Array.isArray(members)
+    ? members.filter((member) => {
+        if (!isRecord(member)) return false;
+        const status = String(member.status);
+        return ![
+          'CANCELLED_BEFORE_START',
+          'SKIPPED_BY_SET_POLICY',
+          'NOT_STARTED',
+        ].includes(status);
+      }).length
+    : -1;
+  const completedMembers = Array.isArray(members)
+    ? members.filter(
+        (member) => isRecord(member) && member.status === 'RAW_COMPLETED',
+      ).length
+    : -1;
+  const validMemberStatuses = new Set([
+    'RAW_COMPLETED',
+    'CANCELLED',
+    'CANCELLED_BEFORE_START',
+    'INFRA_FAILED',
+    'SKIPPED_BY_SET_POLICY',
+    'NOT_STARTED',
+  ]);
+  const membersValid =
+    Array.isArray(members) &&
+    members.length === manifest.entries.length &&
+    members.every((member, index) => {
+      if (!isRecord(member)) return false;
+      const entry = manifest.entries[index]!;
+      const status = String(member.status);
+      if (
+        member.index !== entry.index ||
+        (member.testcase_id !== undefined &&
+          member.testcase_id !== entry.testcaseId) ||
+        (member.testcaseId !== undefined &&
+          member.testcaseId !== entry.testcaseId) ||
+        (member.input_sha256 !== undefined &&
+          member.input_sha256 !== entry.inputSha256) ||
+        (member.inputSha256 !== undefined &&
+          member.inputSha256 !== entry.inputSha256) ||
+        (member.testdata_version_id !== undefined &&
+          member.testdata_version_id !== entry.testdataVersionId) ||
+        (member.testdataVersionId !== undefined &&
+          member.testdataVersionId !== entry.testdataVersionId) ||
+        (member.execution_profile_id !== undefined &&
+          member.execution_profile_id !== entry.executionProfileId) ||
+        (member.executionProfileId !== undefined &&
+          member.executionProfileId !== entry.executionProfileId) ||
+        !validMemberStatuses.has(status)
+      )
+        return false;
+      if (status === 'RAW_COMPLETED' && !isRecord(member.record)) return false;
+      if (!isRecord(member.record)) return true;
+      const record = member.record;
+      const identity = isRecord(record.identity) ? record.identity : undefined;
+      return (
+        record.record_version === '2C.3' &&
+        typeof record.digest === 'string' &&
+        /^[a-f0-9]{64}$/.test(record.digest) &&
+        identity !== undefined &&
+        identity.problem_id === job.problemId &&
+        identity.problem_revision_id === job.problemRevisionId &&
+        identity.testdata_version_id === entry.testdataVersionId &&
+        identity.testcase_id === entry.testcaseId &&
+        identity.input_sha256 === entry.inputSha256 &&
+        identity.execution_profile_id === entry.executionProfileId &&
+        record.execution_set_attempt_id === job.executionAttemptId &&
+        record.testcase_index === entry.index &&
+        record.testcase_set_manifest_hash === manifest.manifestHash
+      );
+    });
+  return (
+    value.protocol_version === '2C.4' &&
+    [
+      'PIPELINE_COMPLETED',
+      'PIPELINE_COMPILE_FAILED',
+      'PIPELINE_LIMIT_HIT',
+      'PIPELINE_CANCELLED',
+      'PIPELINE_INFRA_FAILURE',
+    ].includes(String(pipelineOutcome)) &&
+    executionSetRequestId === job.executionRequestId &&
+    value.judge_job_id === job.id &&
+    value.submission_id === job.submissionId &&
+    value.attempt === job.attempt &&
+    executionSetAttemptId === job.executionAttemptId &&
+    value.result_generation === job.resultGeneration &&
+    value.source_sha256 === job.sourceSha256 &&
+    value.problem_id === job.problemId &&
+    value.problem_revision_id === job.problemRevisionId &&
+    value.testdata_version_id === job.testdataVersionRef &&
+    value.testcase_set_id === manifest.testcaseSetId &&
+    value.testcase_set_manifest_hash === manifest.manifestHash &&
+    value.execution_set_attempt_id === job.executionAttemptId &&
+    value.execution_set_policy === policy &&
+    read(aggregateRecord, 'record_version', 'recordVersion') === '2C.4' &&
+    read(aggregateRecord, 'record_id', 'recordId') ===
+      `${String(executionSetRequestId)}:record` &&
+    read(aggregateRecord, 'submission_id', 'submissionId') ===
+      job.submissionId &&
+    read(aggregateRecord, 'snapshot_id', 'snapshotId') ===
+      job.sourceSnapshotRef &&
+    read(aggregateRecord, 'source_sha256', 'sourceSha256') ===
+      job.sourceSha256 &&
+    read(aggregateRecord, 'problem_id', 'problemId') === job.problemId &&
+    read(aggregateRecord, 'problem_revision_id', 'problemRevisionId') ===
+      job.problemRevisionId &&
+    read(aggregateRecord, 'testdata_version_id', 'testdataVersionId') ===
+      job.testdataVersionRef &&
+    read(aggregateRecord, 'testcase_set_id', 'testcaseSetId') ===
+      manifest.testcaseSetId &&
+    read(aggregateRecord, 'manifest_hash', 'manifestHash') ===
+      manifest.manifestHash &&
+    read(
+      aggregateRecord,
+      'execution_set_request_id',
+      'executionSetRequestId',
+    ) === executionSetRequestId &&
+    read(
+      aggregateRecord,
+      'execution_set_attempt_id',
+      'executionSetAttemptId',
+    ) === executionSetAttemptId &&
+    read(aggregateRecord, 'execution_profile_id', 'executionProfileId') ===
+      manifest.executionProfileId &&
+    read(aggregateRecord, 'execution_policy', 'policy') === policy &&
+    [
+      'COMPLETED',
+      'CANCELLED',
+      'RAW_EXECUTION_BLOCKING_EVENT',
+      'INFRASTRUCTURE_FAILURE',
+    ].includes(String(stopReason)) &&
+    read(aggregateRecord, 'total_testcase_count', 'totalTestcaseCount') ===
+      manifest.entries.length &&
+    read(aggregateRecord, 'started_testcase_count', 'startedTestcaseCount') ===
+      startedMembers &&
+    read(
+      aggregateRecord,
+      'completed_testcase_count',
+      'completedTestcaseCount',
+    ) === completedMembers &&
+    membersValid &&
+    typeof read(aggregateRecord, 'set_cancelled', 'setCancelled') ===
+      'boolean' &&
+    typeof read(
+      aggregateRecord,
+      'set_infrastructure_failure',
+      'setInfrastructureFailure',
+    ) === 'boolean' &&
+    typeof read(aggregateRecord, 'cleanup_verified', 'cleanupVerified') ===
+      'boolean' &&
+    typeof read(aggregateRecord, 'digest', 'digest') === 'string' &&
+    /^[a-f0-9]{64}$/.test(String(read(aggregateRecord, 'digest', 'digest'))) &&
+    (value.pipeline_outcome === 'PIPELINE_INFRA_FAILURE' ||
+      validRawStageOutput(value.compile)) &&
+    Number.isFinite(startedAt) &&
+    Number.isFinite(completedAt) &&
+    completedAt >= startedAt &&
+    typeof value.clean === 'boolean'
+  );
+};
 const normalize = (i: JudgeJobCreateInput): JudgeJob => {
   if (
     !i.submissionId ||
@@ -193,6 +435,16 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
     (executionMode !== realMode || !validTestcaseInput(i))
   )
     throw new JudgeJobPayloadError('Invalid testcase input contract');
+  if (
+    i.testcaseSet !== undefined &&
+    (executionMode !== realMode ||
+      testcaseFieldsPresent(i) ||
+      !validTestcaseSet(i.testcaseSet, i) ||
+      !['RUN_ALL', 'STOP_ON_EXECUTION_BLOCKING_EVENT'].includes(
+        i.executionSetPolicy ?? 'RUN_ALL',
+      ))
+  )
+    throw new JudgeJobPayloadError('Invalid testcase-set contract');
   const t = stamp();
   return {
     id: randomUUID(),
@@ -217,6 +469,12 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
                 testcaseInput: i.testcaseInput!,
                 testcaseInputSha256: i.testcaseInputSha256!,
                 executionProfileId: i.executionProfileId!,
+              }
+            : {}),
+          ...(i.testcaseSet
+            ? {
+                testcaseSet: immutableTestcaseSet(i.testcaseSet),
+                executionSetPolicy: i.executionSetPolicy ?? 'RUN_ALL',
               }
             : {}),
         }
@@ -292,6 +550,16 @@ export function assertPayload(v: unknown): asserts v is JudgeJob {
     (j.executionMode !== realMode || !validTestcaseInput(j))
   )
     throw new JudgeJobPayloadError('Invalid testcase input contract');
+  if (
+    j.testcaseSet !== undefined &&
+    (j.executionMode !== realMode ||
+      testcaseFieldsPresent(j) ||
+      !validTestcaseSet(j.testcaseSet, j) ||
+      !['RUN_ALL', 'STOP_ON_EXECUTION_BLOCKING_EVENT'].includes(
+        String(j.executionSetPolicy ?? 'RUN_ALL'),
+      ))
+  )
+    throw new JudgeJobPayloadError('Invalid testcase-set contract');
   if (
     (j.status === 'LEASED_FAKE' || j.status === 'LEASED') &&
     (typeof j.leaseOwner !== 'string' ||

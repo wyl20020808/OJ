@@ -227,7 +227,8 @@ func BuildSingleTestcaseExecutionRecord(request model.RealExecutionRequest, resu
 		Stdout: model.OutputCapture{SHA256: runtime.StdoutSHA256, ByteCount: runtime.StdoutBytes, Truncated: runtime.StdoutTruncated},
 		Stderr: model.OutputCapture{SHA256: runtime.StderrSHA256, ByteCount: runtime.StderrBytes, Truncated: runtime.StderrTruncated},
 		Facts:  runtime.Facts, PipelineOutcome: result.PipelineOutcome, CleanupVerified: result.Clean,
-		PublishedAt: result.CompletedAt,
+		PublishedAt: result.CompletedAt, ExecutionSetAttemptID: request.ExecutionSetAttemptID,
+		TestcaseIndex: request.TestcaseIndex, TestcaseSetManifestHash: request.TestcaseSetManifestHash,
 	}
 	withoutDigest := record
 	withoutDigest.Digest = ""

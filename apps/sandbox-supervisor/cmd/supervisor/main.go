@@ -115,19 +115,21 @@ type protocolResult struct {
 }
 
 type protocolServer struct {
-	mu                   sync.Mutex
-	root                 string
-	runc                 string
-	probePath            string
-	probeHash            string
-	definitions          map[string]probeDefinition
-	result               protocolResult
-	run                  context.CancelFunc
-	activeProbe          string
-	realExecutionEnabled bool
-	compilerRootfs       supervisor.CompilerRootfs
-	executions           map[string]*executionRecord
-	executionRecordRoot  string
+	mu                     sync.Mutex
+	root                   string
+	runc                   string
+	probePath              string
+	probeHash              string
+	definitions            map[string]probeDefinition
+	result                 protocolResult
+	run                    context.CancelFunc
+	activeProbe            string
+	realExecutionEnabled   bool
+	compilerRootfs         supervisor.CompilerRootfs
+	executions             map[string]*executionRecord
+	executionRecordRoot    string
+	executionSets          map[string]*executionSetRecord
+	executionSetRecordRoot string
 }
 
 type executionRecord struct {
@@ -176,9 +178,13 @@ func serve(address string) {
 		root: root, runc: runc, probePath: probePath, probeHash: hash,
 		definitions: definitions(os.Getenv("OJPLATFORM_SANDBOX_QUALIFICATION_FAULTS") == "true"),
 		executions:  make(map[string]*executionRecord), executionRecordRoot: executionRecordRoot(root),
+		executionSets: make(map[string]*executionSetRecord), executionSetRecordRoot: executionSetRecordRoot(root),
 	}
 	if err := server.loadExecutionRecords(); err != nil {
 		panic(fmt.Errorf("execution record recovery failed: %w", err))
+	}
+	if err := server.loadExecutionSetRecords(); err != nil {
+		panic(fmt.Errorf("execution-set record recovery failed: %w", err))
 	}
 	if os.Getenv("OJPLATFORM_REAL_EXECUTION_ENABLED") == "true" {
 		compilerPath := os.Getenv("OJPLATFORM_CPP20_ROOTFS")
@@ -211,6 +217,9 @@ func serve(address string) {
 	h.HandleFunc("/v1/executions/start", server.startExecution)
 	h.HandleFunc("/v1/executions/status", server.executionStatus)
 	h.HandleFunc("/v1/executions/cancel", server.cancelExecution)
+	h.HandleFunc("/v1/execution-sets/start", server.startExecutionSet)
+	h.HandleFunc("/v1/execution-sets/status", server.executionSetStatus)
+	h.HandleFunc("/v1/execution-sets/cancel", server.cancelExecutionSet)
 	httpServer := &http.Server{Addr: address, Handler: h, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second}
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		panic(err)

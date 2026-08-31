@@ -2,6 +2,7 @@ export * from './model.js';
 export * from './repository.js';
 export * from './service.js';
 export * from './safety.js';
+export * from './testcase-set.js';
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { timingSafeEqual } from 'node:crypto';
@@ -41,6 +42,21 @@ export function publicJudgeJob(job: JudgeJob) {
       : {}),
     ...(job.executionProfileId
       ? { executionProfileId: job.executionProfileId }
+      : {}),
+    ...(job.testcaseSet
+      ? {
+          testcaseSet: {
+            testcaseSetId: job.testcaseSet.testcaseSetId,
+            manifestHash: job.testcaseSet.manifestHash,
+            testcaseCount: job.testcaseSet.entries.length,
+            entries: job.testcaseSet.entries.map((entry) => ({
+              index: entry.index,
+              testcaseId: entry.testcaseId,
+              inputSha256: entry.inputSha256,
+            })),
+            policy: job.executionSetPolicy,
+          },
+        }
       : {}),
     languageId: job.languageId,
     status: job.status,
@@ -86,11 +102,24 @@ function publicStage(value: Record<string, unknown> | undefined) {
 
 function publicRawExecutionResult(result: RawExecutionResult) {
   const record = result.single_testcase_record;
+  const aggregate = result.aggregate_execution_set_record;
+  const aggregateValue = aggregate as unknown as
+    Record<string, unknown> | undefined;
+  const aggregateField = (snake: string, camel: string) =>
+    aggregateValue
+      ? (aggregateValue[snake] ?? aggregateValue[camel])
+      : undefined;
+  const aggregateMembers = aggregateField('testcases', 'testcases') as
+    Array<Record<string, unknown>> | undefined;
   return {
     protocolVersion: result.protocol_version,
-    executionRequestId: result.execution_request_id,
-    ...(result.execution_attempt_id
-      ? { executionAttemptId: result.execution_attempt_id }
+    executionRequestId:
+      result.execution_set_request_id ?? result.execution_request_id,
+    ...((result.execution_set_attempt_id ?? result.execution_attempt_id)
+      ? {
+          executionAttemptId:
+            result.execution_set_attempt_id ?? result.execution_attempt_id,
+        }
       : {}),
     ...(result.result_generation !== undefined
       ? { resultGeneration: result.result_generation }
@@ -121,6 +150,61 @@ function publicRawExecutionResult(result: RawExecutionResult) {
             recordVersion: record.record_version,
             recordId: record.record_id,
             digest: record.digest,
+          },
+        }
+      : {}),
+    ...(aggregate
+      ? {
+          executionSetRecord: {
+            recordVersion: aggregateField('record_version', 'recordVersion'),
+            recordId: aggregateField('record_id', 'recordId'),
+            digest: aggregateField('digest', 'digest'),
+            testcaseSetId: aggregateField('testcase_set_id', 'testcaseSetId'),
+            manifestHash: aggregateField('manifest_hash', 'manifestHash'),
+            totalTestcaseCount: aggregateField(
+              'total_testcase_count',
+              'totalTestcaseCount',
+            ),
+            startedTestcaseCount: aggregateField(
+              'started_testcase_count',
+              'startedTestcaseCount',
+            ),
+            completedTestcaseCount: aggregateField(
+              'completed_testcase_count',
+              'completedTestcaseCount',
+            ),
+            stopReason: aggregateField('stop_reason', 'stopReason'),
+            setCancelled: aggregateField('set_cancelled', 'setCancelled'),
+            setInfrastructureFailure: aggregateField(
+              'set_infrastructure_failure',
+              'setInfrastructureFailure',
+            ),
+            testcases: (aggregateMembers ?? []).map((testcase) => {
+              const memberRecord =
+                testcase.record &&
+                typeof testcase.record === 'object' &&
+                !Array.isArray(testcase.record)
+                  ? (testcase.record as Record<string, unknown>)
+                  : undefined;
+              return {
+                index: testcase.index,
+                testcaseId: testcase.testcase_id ?? testcase.testcaseId,
+                inputSha256: testcase.input_sha256 ?? testcase.inputSha256,
+                status: testcase.status,
+                ...(memberRecord &&
+                typeof (memberRecord.record_id ?? memberRecord.recordId) ===
+                  'string' &&
+                typeof memberRecord.digest === 'string'
+                  ? {
+                      record: {
+                        recordId:
+                          memberRecord.record_id ?? memberRecord.recordId,
+                        digest: memberRecord.digest,
+                      },
+                    }
+                  : {}),
+              };
+            }),
           },
         }
       : {}),

@@ -20,7 +20,7 @@ const (
 	ProtocolVersion       = "2C.3"
 	LegacyProtocolVersion = "2C.1"
 	CPP20ProfileID        = "cpp20-gcc-13-v1"
-	maxResponseSize       = 1 << 20
+	maxResponseSize       = 8 << 20
 )
 
 type Request struct {

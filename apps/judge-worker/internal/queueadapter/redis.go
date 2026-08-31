@@ -19,61 +19,88 @@ import (
 )
 
 type Job struct {
-	ID                     string          `json:"id"`
-	SubmissionID           string          `json:"submissionId"`
-	IdempotencyKey         string          `json:"idempotencyKey"`
-	OwnerUserID            string          `json:"ownerUserId"`
-	ProblemID              string          `json:"problemId"`
-	ProblemRevisionID      string          `json:"problemRevisionId"`
-	TestdataVersionRef     string          `json:"testdataVersionRef"`
-	TestcaseID             string          `json:"testcaseId"`
-	TestcaseInput          string          `json:"testcaseInput"`
-	TestcaseInputSHA256    string          `json:"testcaseInputSha256"`
-	ExecutionProfileID     string          `json:"executionProfileId"`
-	LanguageID             string          `json:"languageId"`
-	ExecutionMode          string          `json:"executionMode"`
-	LanguageProfileID      string          `json:"languageProfileId"`
-	SourceSnapshotRef      string          `json:"sourceSnapshotRef"`
-	SourceBytes            string          `json:"sourceBytes"`
-	SourceSHA256           string          `json:"sourceSha256"`
-	ControlledInputID      string          `json:"controlledInputId"`
-	RawExecutionResult     json.RawMessage `json:"rawExecutionResult,omitempty"`
-	Status                 string          `json:"status"`
-	Attempt                int             `json:"attempt"`
-	MaxAttempts            int             `json:"maxAttempts"`
-	LeaseOwner             string          `json:"leaseOwner"`
-	LeaseToken             string          `json:"leaseToken"`
-	LeaseExpiresAt         time.Time       `json:"leaseExpiresAt"`
-	FixtureID              string          `json:"fixtureId"`
-	FailureReason          string          `json:"failureReason"`
-	SyntheticFixtureID     string          `json:"syntheticFixtureId"`
-	CompletedAt            string          `json:"completedAt"`
-	CreatedAt              string          `json:"createdAt"`
-	UpdatedAt              string          `json:"updatedAt"`
-	ExecutionRequestID     string          `json:"executionRequestId"`
-	ExecutionAttemptID     string          `json:"executionAttemptId"`
-	ResultGeneration       int64           `json:"resultGeneration"`
-	ResultDigest           string          `json:"rawResultDigest"`
-	CancellationGeneration int64           `json:"cancellationGeneration"`
+	ID                     string               `json:"id"`
+	SubmissionID           string               `json:"submissionId"`
+	IdempotencyKey         string               `json:"idempotencyKey"`
+	OwnerUserID            string               `json:"ownerUserId"`
+	ProblemID              string               `json:"problemId"`
+	ProblemRevisionID      string               `json:"problemRevisionId"`
+	TestdataVersionRef     string               `json:"testdataVersionRef"`
+	TestcaseID             string               `json:"testcaseId"`
+	TestcaseInput          string               `json:"testcaseInput"`
+	TestcaseInputSHA256    string               `json:"testcaseInputSha256"`
+	ExecutionProfileID     string               `json:"executionProfileId"`
+	TestcaseSet            *TestcaseSetManifest `json:"testcaseSet,omitempty"`
+	ExecutionSetPolicy     string               `json:"executionSetPolicy,omitempty"`
+	LanguageID             string               `json:"languageId"`
+	ExecutionMode          string               `json:"executionMode"`
+	LanguageProfileID      string               `json:"languageProfileId"`
+	SourceSnapshotRef      string               `json:"sourceSnapshotRef"`
+	SourceBytes            string               `json:"sourceBytes"`
+	SourceSHA256           string               `json:"sourceSha256"`
+	ControlledInputID      string               `json:"controlledInputId"`
+	RawExecutionResult     json.RawMessage      `json:"rawExecutionResult,omitempty"`
+	Status                 string               `json:"status"`
+	Attempt                int                  `json:"attempt"`
+	MaxAttempts            int                  `json:"maxAttempts"`
+	LeaseOwner             string               `json:"leaseOwner"`
+	LeaseToken             string               `json:"leaseToken"`
+	LeaseExpiresAt         time.Time            `json:"leaseExpiresAt"`
+	FixtureID              string               `json:"fixtureId"`
+	FailureReason          string               `json:"failureReason"`
+	SyntheticFixtureID     string               `json:"syntheticFixtureId"`
+	CompletedAt            string               `json:"completedAt"`
+	CreatedAt              string               `json:"createdAt"`
+	UpdatedAt              string               `json:"updatedAt"`
+	ExecutionRequestID     string               `json:"executionRequestId"`
+	ExecutionAttemptID     string               `json:"executionAttemptId"`
+	ResultGeneration       int64                `json:"resultGeneration"`
+	ResultDigest           string               `json:"rawResultDigest"`
+	CancellationGeneration int64                `json:"cancellationGeneration"`
+}
+
+type TestcaseSetEntry struct {
+	Index                int    `json:"index"`
+	TestcaseID           string `json:"testcaseId"`
+	TestdataVersionID    string `json:"testdataVersionId"`
+	Input                string `json:"input"`
+	InputSHA256          string `json:"inputSha256"`
+	ExecutionProfileID   string `json:"executionProfileId"`
+	ExpectedOutputSHA256 string `json:"expectedOutputSha256,omitempty"`
+}
+
+type TestcaseSetManifest struct {
+	ProblemID          string             `json:"problemId"`
+	ProblemRevisionID  string             `json:"problemRevisionId"`
+	TestdataVersionID  string             `json:"testdataVersionId"`
+	TestcaseSetID      string             `json:"testcaseSetId"`
+	ExecutionProfileID string             `json:"executionProfileId"`
+	Entries            []TestcaseSetEntry `json:"entries"`
+	ManifestHash       string             `json:"manifestHash"`
 }
 
 type rawExecutionResultIdentity struct {
-	ProtocolVersion      string `json:"protocol_version"`
-	ExecutionRequestID   string `json:"execution_request_id"`
-	JudgeJobID           string `json:"judge_job_id"`
-	SubmissionID         string `json:"submission_id"`
-	Attempt              int    `json:"attempt"`
-	ExecutionAttemptID   string `json:"execution_attempt_id"`
-	ResultGeneration     int64  `json:"result_generation"`
-	LanguageProfileID    string `json:"language_profile_id"`
-	SourceSHA256         string `json:"source_sha256"`
-	TestcaseID           string `json:"testcase_id"`
-	TestcaseInputSHA256  string `json:"testcase_input_sha256"`
-	ExecutionProfileID   string `json:"execution_profile_id"`
-	ProblemID            string `json:"problem_id"`
-	ProblemRevisionID    string `json:"problem_revision_id"`
-	TestdataVersionID    string `json:"testdata_version_id"`
-	SingleTestcaseRecord *struct {
+	ProtocolVersion         string `json:"protocol_version"`
+	ExecutionRequestID      string `json:"execution_request_id"`
+	ExecutionSetRequestID   string `json:"execution_set_request_id"`
+	JudgeJobID              string `json:"judge_job_id"`
+	SubmissionID            string `json:"submission_id"`
+	Attempt                 int    `json:"attempt"`
+	ExecutionAttemptID      string `json:"execution_attempt_id"`
+	ResultGeneration        int64  `json:"result_generation"`
+	LanguageProfileID       string `json:"language_profile_id"`
+	SourceSHA256            string `json:"source_sha256"`
+	TestcaseID              string `json:"testcase_id"`
+	TestcaseInputSHA256     string `json:"testcase_input_sha256"`
+	ExecutionProfileID      string `json:"execution_profile_id"`
+	TestcaseSetID           string `json:"testcase_set_id"`
+	TestcaseSetManifestHash string `json:"testcase_set_manifest_hash"`
+	ExecutionSetAttemptID   string `json:"execution_set_attempt_id"`
+	ExecutionSetPolicy      string `json:"execution_set_policy"`
+	ProblemID               string `json:"problem_id"`
+	ProblemRevisionID       string `json:"problem_revision_id"`
+	TestdataVersionID       string `json:"testdata_version_id"`
+	SingleTestcaseRecord    *struct {
 		RecordVersion string `json:"record_version"`
 		RecordID      string `json:"record_id"`
 		Digest        string `json:"digest"`
@@ -87,15 +114,19 @@ type rawExecutionResultIdentity struct {
 			ExecutionAttemptID string `json:"execution_attempt_id"`
 		} `json:"identity"`
 	} `json:"single_testcase_record"`
-	PipelineOutcome string          `json:"pipeline_outcome"`
-	Compile         json.RawMessage `json:"compile"`
-	Runtime         json.RawMessage `json:"runtime"`
+	PipelineOutcome             string          `json:"pipeline_outcome"`
+	Compile                     json.RawMessage `json:"compile"`
+	Runtime                     json.RawMessage `json:"runtime"`
+	AggregateExecutionSetRecord json.RawMessage `json:"aggregate_execution_set_record"`
 }
 
 func validateRawExecutionResult(result json.RawMessage, job Job) error {
 	var identity rawExecutionResultIdentity
 	if !json.Valid(result) || json.Unmarshal(result, &identity) != nil {
 		return errors.New("invalid raw execution result")
+	}
+	if job.TestcaseSet != nil {
+		return validateRawExecutionSetResult(identity, job)
 	}
 	allowedOutcome := map[string]bool{
 		"PIPELINE_COMPLETED":      true,
@@ -133,6 +164,165 @@ func validateRawExecutionResult(result json.RawMessage, job Job) error {
 	return nil
 }
 
+type rawSetAggregate struct {
+	RecordVersion            string         `json:"record_version"`
+	RecordID                 string         `json:"record_id"`
+	SubmissionID             string         `json:"submission_id"`
+	SourceSHA256             string         `json:"source_sha256"`
+	ProblemID                string         `json:"problem_id"`
+	ProblemRevisionID        string         `json:"problem_revision_id"`
+	TestdataVersionID        string         `json:"testdata_version_id"`
+	TestcaseSetID            string         `json:"testcase_set_id"`
+	ManifestHash             string         `json:"manifest_hash"`
+	ExecutionSetRequestID    string         `json:"execution_set_request_id"`
+	ExecutionSetAttemptID    string         `json:"execution_set_attempt_id"`
+	ExecutionProfileID       string         `json:"execution_profile_id"`
+	ExecutionPolicy          string         `json:"execution_policy"`
+	TotalTestcaseCount       int            `json:"total_testcase_count"`
+	StartedTestcaseCount     int            `json:"started_testcase_count"`
+	CompletedTestcaseCount   int            `json:"completed_testcase_count"`
+	Testcases                []rawSetMember `json:"testcases"`
+	SetCancelled             bool           `json:"set_cancelled"`
+	SetInfrastructureFailure bool           `json:"set_infrastructure_failure"`
+	StopReason               string         `json:"stop_reason"`
+	CleanupVerified          bool           `json:"cleanup_verified"`
+	Digest                   string         `json:"digest"`
+}
+
+type rawSetMember struct {
+	Index              int             `json:"index"`
+	TestcaseID         string          `json:"testcase_id"`
+	InputSHA256        string          `json:"input_sha256"`
+	TestdataVersionID  string          `json:"testdata_version_id"`
+	ExecutionProfileID string          `json:"execution_profile_id"`
+	Status             string          `json:"status"`
+	Record             json.RawMessage `json:"record"`
+}
+
+func validateRawExecutionSetResult(identity rawExecutionResultIdentity, job Job) error {
+	manifest := job.TestcaseSet
+	if err := validateRawExecutionSetIdentity(identity, job, manifest); err != nil {
+		return err
+	}
+	var aggregate rawSetAggregate
+	if json.Unmarshal(identity.AggregateExecutionSetRecord, &aggregate) != nil || aggregate.RecordVersion != "2C.4" || aggregate.RecordID != executionRequestID(job)+":record" || aggregate.SubmissionID != job.SubmissionID || aggregate.SourceSHA256 != job.SourceSHA256 || aggregate.ProblemID != job.ProblemID || aggregate.ProblemRevisionID != job.ProblemRevisionID || aggregate.TestdataVersionID != job.TestdataVersionRef || aggregate.TestcaseSetID != manifest.TestcaseSetID || aggregate.ManifestHash != manifest.ManifestHash || aggregate.ExecutionSetRequestID != executionRequestID(job) || aggregate.ExecutionSetAttemptID != job.ExecutionAttemptID || aggregate.ExecutionProfileID != manifest.ExecutionProfileID || aggregate.ExecutionPolicy != effectiveSetPolicy(job) || aggregate.TotalTestcaseCount != len(manifest.Entries) || len(aggregate.Testcases) != len(manifest.Entries) || !isSHA256(aggregate.Digest) || !validSetPipelineOutcome(identity.PipelineOutcome) || !validSetStopReason(aggregate.StopReason) || aggregate.SetCancelled != (aggregate.StopReason == "CANCELLED") || aggregate.SetInfrastructureFailure != (aggregate.StopReason == "INFRASTRUCTURE_FAILURE") {
+		return errors.New("invalid testcase-set aggregate")
+	}
+	started, completed := 0, 0
+	for index, member := range aggregate.Testcases {
+		entry := manifest.Entries[index]
+		if member.Index != entry.Index || member.TestcaseID != entry.TestcaseID || member.InputSHA256 != entry.InputSHA256 || member.TestdataVersionID != entry.TestdataVersionID || member.ExecutionProfileID != entry.ExecutionProfileID || !validSetMemberStatus(member.Status) {
+			return errors.New("testcase-set aggregate membership mismatch")
+		}
+		if member.Status != "CANCELLED_BEFORE_START" && member.Status != "SKIPPED_BY_SET_POLICY" && member.Status != "NOT_STARTED" {
+			started++
+		}
+		if member.Status == "RAW_COMPLETED" {
+			completed++
+			if len(member.Record) == 0 || string(member.Record) == "null" {
+				return errors.New("completed testcase is missing immutable record")
+			}
+		}
+		if len(member.Record) > 0 && string(member.Record) != "null" {
+			var record struct {
+				RecordVersion string `json:"record_version"`
+				Digest        string `json:"digest"`
+				Identity      struct {
+					ProblemID          string `json:"problem_id"`
+					ProblemRevisionID  string `json:"problem_revision_id"`
+					TestdataVersionID  string `json:"testdata_version_id"`
+					TestcaseID         string `json:"testcase_id"`
+					InputSHA256        string `json:"input_sha256"`
+					ExecutionProfileID string `json:"execution_profile_id"`
+					ExecutionAttemptID string `json:"execution_attempt_id"`
+				} `json:"identity"`
+				ExecutionSetAttemptID   string `json:"execution_set_attempt_id"`
+				TestcaseIndex           int    `json:"testcase_index"`
+				TestcaseSetManifestHash string `json:"testcase_set_manifest_hash"`
+			}
+			if json.Unmarshal(member.Record, &record) != nil || record.RecordVersion != "2C.3" || !isSHA256(record.Digest) || record.Identity.ProblemID != job.ProblemID || record.Identity.ProblemRevisionID != job.ProblemRevisionID || record.Identity.TestdataVersionID != entry.TestdataVersionID || record.Identity.TestcaseID != entry.TestcaseID || record.Identity.InputSHA256 != entry.InputSHA256 || record.Identity.ExecutionProfileID != entry.ExecutionProfileID || record.Identity.ExecutionAttemptID == "" || record.ExecutionSetAttemptID != job.ExecutionAttemptID || record.TestcaseIndex != entry.Index || record.TestcaseSetManifestHash != manifest.ManifestHash {
+				return errors.New("invalid testcase record binding")
+			}
+		}
+	}
+	if aggregate.StartedTestcaseCount != started || aggregate.CompletedTestcaseCount != completed || aggregate.CompletedTestcaseCount > aggregate.StartedTestcaseCount {
+		return errors.New("invalid testcase-set aggregate counts or compile output")
+	}
+	if identity.PipelineOutcome != "PIPELINE_INFRA_FAILURE" && !validRawStageOutput(identity.Compile) {
+		return errors.New("invalid testcase-set compile output")
+	}
+	return nil
+}
+
+func validateRawExecutionSetIdentity(identity rawExecutionResultIdentity, job Job, manifest *TestcaseSetManifest) error {
+	if manifest == nil {
+		return errors.New("raw testcase-set result identity mismatch: missing manifest")
+	}
+	checks := []struct {
+		name, actual, expected string
+	}{
+		{"protocol_version", identity.ProtocolVersion, "2C.4"},
+		{"execution_set_request_id", identity.ExecutionSetRequestID, executionRequestID(job)},
+		{"judge_job_id", identity.JudgeJobID, job.ID},
+		{"submission_id", identity.SubmissionID, job.SubmissionID},
+		{"language_profile_id", identity.LanguageProfileID, job.LanguageProfileID},
+		{"source_sha256", identity.SourceSHA256, job.SourceSHA256},
+		{"problem_id", identity.ProblemID, job.ProblemID},
+		{"problem_revision_id", identity.ProblemRevisionID, job.ProblemRevisionID},
+		{"testdata_version_id", identity.TestdataVersionID, job.TestdataVersionRef},
+		{"testcase_set_id", identity.TestcaseSetID, manifest.TestcaseSetID},
+		{"testcase_set_manifest_hash", identity.TestcaseSetManifestHash, manifest.ManifestHash},
+		{"execution_set_attempt_id", identity.ExecutionSetAttemptID, job.ExecutionAttemptID},
+		{"execution_set_policy", identity.ExecutionSetPolicy, effectiveSetPolicy(job)},
+	}
+	for _, check := range checks {
+		if check.actual != check.expected {
+			return fmt.Errorf("raw testcase-set result identity mismatch: %s", check.name)
+		}
+	}
+	if identity.Attempt != job.Attempt {
+		return errors.New("raw testcase-set result identity mismatch: attempt")
+	}
+	if identity.ResultGeneration != job.ResultGeneration {
+		return errors.New("raw testcase-set result identity mismatch: result_generation")
+	}
+	return nil
+}
+
+func effectiveSetPolicy(job Job) string {
+	if job.ExecutionSetPolicy == "" {
+		return "RUN_ALL"
+	}
+	return job.ExecutionSetPolicy
+}
+
+func validSetMemberStatus(status string) bool {
+	switch status {
+	case "RAW_COMPLETED", "CANCELLED", "CANCELLED_BEFORE_START", "INFRA_FAILED", "SKIPPED_BY_SET_POLICY", "NOT_STARTED":
+		return true
+	default:
+		return false
+	}
+}
+
+func validSetPipelineOutcome(outcome string) bool {
+	switch outcome {
+	case "PIPELINE_COMPLETED", "PIPELINE_COMPILE_FAILED", "PIPELINE_LIMIT_HIT", "PIPELINE_CANCELLED", "PIPELINE_INFRA_FAILURE":
+		return true
+	default:
+		return false
+	}
+}
+
+func validSetStopReason(reason string) bool {
+	switch reason {
+	case "COMPLETED", "CANCELLED", "RAW_EXECUTION_BLOCKING_EVENT", "INFRASTRUCTURE_FAILURE":
+		return true
+	default:
+		return false
+	}
+}
+
 func validRawStageOutput(raw json.RawMessage) bool {
 	var stage struct {
 		Stdout          string `json:"stdout"`
@@ -151,6 +341,18 @@ func validRawStageOutput(raw json.RawMessage) bool {
 }
 
 func validateTestcaseJob(j Job) error {
+	if j.TestcaseSet != nil {
+		if j.ExecutionMode != "REAL_SANDBOXED_EXECUTION" || j.TestcaseID != "" || j.TestcaseInput != "" || j.TestcaseInputSHA256 != "" || j.ExecutionProfileID != "" {
+			return errors.New("invalid testcase-set job shape")
+		}
+		if j.ExecutionSetPolicy == "" {
+			j.ExecutionSetPolicy = "RUN_ALL"
+		}
+		if j.ExecutionSetPolicy != "RUN_ALL" && j.ExecutionSetPolicy != "STOP_ON_EXECUTION_BLOCKING_EVENT" {
+			return errors.New("invalid testcase-set policy")
+		}
+		return validateTestcaseSet(*j.TestcaseSet, j.ProblemID, j.ProblemRevisionID, j.TestdataVersionRef)
+	}
 	hasTestcase := j.TestcaseID != "" || j.TestcaseInput != "" || j.TestcaseInputSHA256 != "" || j.ExecutionProfileID != ""
 	if !hasTestcase {
 		return nil
@@ -159,6 +361,35 @@ func validateTestcaseJob(j Job) error {
 		return errors.New("invalid testcase job contract")
 	}
 	return nil
+}
+
+func validateTestcaseSet(manifest TestcaseSetManifest, problemID, revisionID, testdataVersion string) error {
+	if manifest.ProblemID == "" || manifest.ProblemID != problemID || manifest.ProblemRevisionID == "" || manifest.ProblemRevisionID != revisionID || manifest.TestdataVersionID == "" || manifest.TestdataVersionID != testdataVersion || strings.EqualFold(manifest.TestdataVersionID, "latest") || manifest.TestcaseSetID == "" || manifest.ExecutionProfileID != "cpp20-gcc-13-v1" || len(manifest.Entries) == 0 || len(manifest.Entries) > 64 || !isSHA256(manifest.ManifestHash) || manifest.ManifestHash != testcaseSetManifestHash(manifest) {
+		return errors.New("invalid testcase-set manifest")
+	}
+	seen := make(map[string]struct{}, len(manifest.Entries))
+	for index, entry := range manifest.Entries {
+		if entry.Index != index || !validSetID(entry.TestcaseID) || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || len(entry.Input) > 64<<10 || !isSHA256(entry.InputSHA256) || entry.InputSHA256 != digest([]byte(entry.Input)) || entry.ExpectedOutputSHA256 != "" && !isSHA256(entry.ExpectedOutputSHA256) {
+			return errors.New("invalid testcase-set entry")
+		}
+		if _, exists := seen[entry.TestcaseID]; exists {
+			return errors.New("duplicate testcase-set entry")
+		}
+		seen[entry.TestcaseID] = struct{}{}
+	}
+	return nil
+}
+
+func testcaseSetManifestHash(manifest TestcaseSetManifest) string {
+	parts := []string{"2C.4", manifest.ProblemID, manifest.ProblemRevisionID, manifest.TestdataVersionID, manifest.TestcaseSetID, manifest.ExecutionProfileID, strconv.Itoa(len(manifest.Entries))}
+	for _, entry := range manifest.Entries {
+		parts = append(parts, strconv.Itoa(entry.Index), entry.TestcaseID, entry.TestdataVersionID, entry.InputSHA256, entry.ExecutionProfileID, entry.ExpectedOutputSHA256)
+	}
+	return digest([]byte(strings.Join(parts, "\x00")))
+}
+
+func validSetID(value string) bool {
+	return value != "" && value != "." && value != ".." && len(value) <= 128 && value == strings.TrimSpace(value) && !strings.ContainsAny(value, "/\\\x00")
 }
 
 func isSHA256(value string) bool {
@@ -372,6 +603,8 @@ type Queue struct {
 type CreateInput struct {
 	ID, SubmissionID, OwnerUserID, ProblemID, ProblemRevisionID, TestdataVersionRef, LanguageID       string
 	TestcaseID, TestcaseInput, TestcaseInputSHA256, ExecutionProfileID                                string
+	TestcaseSet                                                                                       *TestcaseSetManifest
+	ExecutionSetPolicy                                                                                string
 	ExecutionMode, LanguageProfileID, SourceSnapshotRef, SourceBytes, SourceSHA256, ControlledInputID string
 	FixtureID                                                                                         string
 	MaxAttempts                                                                                       int
@@ -386,6 +619,12 @@ func (q Queue) Enqueue(ctx context.Context, in CreateInput) (Job, error) {
 		candidate := Job{ExecutionMode: in.ExecutionMode, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, TestcaseID: in.TestcaseID, TestcaseInput: in.TestcaseInput, TestcaseInputSHA256: in.TestcaseInputSHA256, ExecutionProfileID: in.ExecutionProfileID}
 		if err := validateTestcaseJob(candidate); err != nil {
 			return Job{}, errors.New("invalid testcase contract")
+		}
+	}
+	if in.TestcaseSet != nil {
+		candidate := Job{ExecutionMode: in.ExecutionMode, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, TestcaseSet: in.TestcaseSet, ExecutionSetPolicy: in.ExecutionSetPolicy}
+		if err := validateTestcaseJob(candidate); err != nil {
+			return Job{}, errors.New("invalid testcase-set contract")
 		}
 	}
 	lock := q.key("mutation-lock", "")
@@ -417,9 +656,12 @@ func (q Queue) Enqueue(ctx context.Context, in CreateInput) (Job, error) {
 		max = 3
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	j := Job{ID: in.ID, SubmissionID: in.SubmissionID, IdempotencyKey: "submission:" + in.SubmissionID, OwnerUserID: in.OwnerUserID, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, TestcaseID: in.TestcaseID, TestcaseInput: in.TestcaseInput, TestcaseInputSHA256: in.TestcaseInputSHA256, ExecutionProfileID: in.ExecutionProfileID, LanguageID: in.LanguageID, ExecutionMode: in.ExecutionMode, LanguageProfileID: in.LanguageProfileID, SourceSnapshotRef: in.SourceSnapshotRef, SourceBytes: in.SourceBytes, SourceSHA256: in.SourceSHA256, ControlledInputID: in.ControlledInputID, FixtureID: in.FixtureID, Status: "QUEUED", MaxAttempts: max, CreatedAt: now, UpdatedAt: now}
+	j := Job{ID: in.ID, SubmissionID: in.SubmissionID, IdempotencyKey: "submission:" + in.SubmissionID, OwnerUserID: in.OwnerUserID, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, TestcaseID: in.TestcaseID, TestcaseInput: in.TestcaseInput, TestcaseInputSHA256: in.TestcaseInputSHA256, ExecutionProfileID: in.ExecutionProfileID, TestcaseSet: in.TestcaseSet, ExecutionSetPolicy: in.ExecutionSetPolicy, LanguageID: in.LanguageID, ExecutionMode: in.ExecutionMode, LanguageProfileID: in.LanguageProfileID, SourceSnapshotRef: in.SourceSnapshotRef, SourceBytes: in.SourceBytes, SourceSHA256: in.SourceSHA256, ControlledInputID: in.ControlledInputID, FixtureID: in.FixtureID, Status: "QUEUED", MaxAttempts: max, CreatedAt: now, UpdatedAt: now}
 	if j.ExecutionMode == "" {
 		j.ExecutionMode = "SAFE_FIXTURE_QUALIFICATION"
+	}
+	if j.TestcaseSet != nil && j.ExecutionSetPolicy == "" {
+		j.ExecutionSetPolicy = "RUN_ALL"
 	}
 	encoded, _ := json.Marshal(j)
 	if _, err = q.Redis.String(ctx, "SET", q.key("job", j.ID), string(encoded)); err != nil {

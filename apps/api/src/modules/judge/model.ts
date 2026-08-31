@@ -11,9 +11,16 @@ export type JudgeJobStatus =
   | 'TERMINAL_FAILURE';
 export type JudgeExecutionMode =
   'SAFE_FIXTURE_QUALIFICATION' | 'REAL_SANDBOXED_EXECUTION';
+import type {
+  AggregateExecutionSetRecord,
+  TestcaseSetManifest,
+  TestcaseSetPolicy,
+} from './testcase-set.js';
+
 export type RawExecutionResult = {
-  protocol_version: '2C.1' | '2C.3';
-  execution_request_id: string;
+  protocol_version: '2C.1' | '2C.3' | '2C.4';
+  execution_request_id?: string;
+  execution_set_request_id?: string;
   judge_job_id: string;
   submission_id: string;
   attempt: number;
@@ -31,6 +38,11 @@ export type RawExecutionResult = {
   testcase_input_sha256?: string;
   execution_profile_id?: string;
   single_testcase_record?: Record<string, unknown>;
+  testcase_set_id?: string;
+  testcase_set_manifest_hash?: string;
+  execution_set_attempt_id?: string;
+  execution_set_policy?: TestcaseSetPolicy;
+  aggregate_execution_set_record?: AggregateExecutionSetRecord;
   pipeline_outcome:
     | 'PIPELINE_COMPLETED'
     | 'PIPELINE_COMPILE_FAILED'
@@ -63,6 +75,8 @@ export type JudgeJob = {
   testcaseInput?: string | undefined;
   testcaseInputSha256?: string | undefined;
   executionProfileId?: 'cpp20-gcc-13-v1' | undefined;
+  testcaseSet?: TestcaseSetManifest | undefined;
+  executionSetPolicy?: TestcaseSetPolicy | undefined;
   rawExecutionResult?: RawExecutionResult | undefined;
   status: JudgeJobStatus;
   attempt: number;
@@ -98,6 +112,8 @@ export type JudgeJobCreateInput = {
   testcaseInput?: string;
   testcaseInputSha256?: string;
   executionProfileId?: 'cpp20-gcc-13-v1';
+  testcaseSet?: TestcaseSetManifest;
+  executionSetPolicy?: TestcaseSetPolicy;
   idempotencyKey?: string;
   maxAttempts?: number;
 };

@@ -6,6 +6,7 @@ const ContractVersion = "2B.1"
 const ExecutionContractVersion = "2C.3"
 const LegacyExecutionContractVersion = "2C.1"
 const TestcaseContractVersion = "2C.3"
+const ExecutionSetContractVersion = "2C.4"
 
 // ExecutionState is the lifecycle vocabulary shared by the Supervisor and
 // qualification harness.  It describes what happened, not an OJ verdict.
@@ -196,49 +197,158 @@ type OutputCapture struct {
 // SingleTestcaseExecutionRecord is the immutable "what happened" record
 // consumed by a future verdict engine. It intentionally contains no verdict.
 type SingleTestcaseExecutionRecord struct {
-	RecordVersion   string            `json:"record_version"`
-	RecordID        string            `json:"record_id"`
-	SubmissionID    string            `json:"submission_id"`
-	SnapshotID      string            `json:"snapshot_id"`
-	ArtifactSHA256  string            `json:"artifact_sha256"`
-	Identity        TestcaseIdentity  `json:"identity"`
-	Input           TestcaseInput     `json:"input"`
-	Profile         ExecutionProfile  `json:"profile"`
-	Stdin           OutputCapture     `json:"stdin"`
-	Wall            Measurement       `json:"wall"`
-	CPU             Measurement       `json:"cpu"`
-	Memory          MemoryMeasurement `json:"memory"`
-	Pids            PidsMeasurement   `json:"pids"`
-	Stdout          OutputCapture     `json:"stdout"`
-	Stderr          OutputCapture     `json:"stderr"`
-	Facts           RawExecutionFacts `json:"facts"`
-	PipelineOutcome string            `json:"pipeline_outcome"`
-	CleanupVerified bool              `json:"cleanup_verified"`
-	PublishedAt     time.Time         `json:"published_at"`
-	Digest          string            `json:"digest"`
+	RecordVersion         string            `json:"record_version"`
+	RecordID              string            `json:"record_id"`
+	SubmissionID          string            `json:"submission_id"`
+	SnapshotID            string            `json:"snapshot_id"`
+	ArtifactSHA256        string            `json:"artifact_sha256"`
+	Identity              TestcaseIdentity  `json:"identity"`
+	Input                 TestcaseInput     `json:"input"`
+	Profile               ExecutionProfile  `json:"profile"`
+	Stdin                 OutputCapture     `json:"stdin"`
+	Wall                  Measurement       `json:"wall"`
+	CPU                   Measurement       `json:"cpu"`
+	Memory                MemoryMeasurement `json:"memory"`
+	Pids                  PidsMeasurement   `json:"pids"`
+	Stdout                OutputCapture     `json:"stdout"`
+	Stderr                OutputCapture     `json:"stderr"`
+	Facts                 RawExecutionFacts `json:"facts"`
+	PipelineOutcome       string            `json:"pipeline_outcome"`
+	CleanupVerified       bool              `json:"cleanup_verified"`
+	PublishedAt           time.Time         `json:"published_at"`
+	Digest                string            `json:"digest"`
+	ExecutionSetAttemptID string            `json:"execution_set_attempt_id,omitempty"`
+	// Keep index 0 on the wire: omitempty would erase the first set member's
+	// immutable binding.
+	TestcaseIndex           int    `json:"testcase_index"`
+	TestcaseSetManifestHash string `json:"testcase_set_manifest_hash,omitempty"`
 }
 
 type RealExecutionRequest struct {
-	ProtocolVersion        string    `json:"protocol_version"`
-	ExecutionRequestID     string    `json:"execution_request_id"`
-	JudgeJobID             string    `json:"judge_job_id"`
-	SubmissionID           string    `json:"submission_id"`
-	Attempt                int       `json:"attempt"`
-	CorrelationID          string    `json:"correlation_id"`
-	ProblemRevisionID      string    `json:"problem_revision_id"`
-	TestdataVersionRef     string    `json:"testdata_version_ref"`
-	ProblemID              string    `json:"problem_id,omitempty"`
-	TestcaseID             string    `json:"testcase_id,omitempty"`
-	TestcaseInput          []byte    `json:"testcase_input,omitempty"`
-	TestcaseInputSHA256    string    `json:"testcase_input_sha256,omitempty"`
-	ExecutionProfileID     string    `json:"execution_profile_id,omitempty"`
-	LanguageProfileID      string    `json:"language_profile_id"`
-	SourceSnapshotRef      string    `json:"source_snapshot_ref"`
-	SourceBytes            string    `json:"source_bytes"`
-	SourceSHA256           string    `json:"source_sha256"`
-	ControlledInputID      string    `json:"controlled_input_id"`
-	DeadlineAt             time.Time `json:"deadline_at"`
-	CancellationGeneration int64     `json:"cancellation_generation"`
+	ProtocolVersion         string    `json:"protocol_version"`
+	ExecutionRequestID      string    `json:"execution_request_id"`
+	JudgeJobID              string    `json:"judge_job_id"`
+	SubmissionID            string    `json:"submission_id"`
+	Attempt                 int       `json:"attempt"`
+	CorrelationID           string    `json:"correlation_id"`
+	ProblemRevisionID       string    `json:"problem_revision_id"`
+	TestdataVersionRef      string    `json:"testdata_version_ref"`
+	ProblemID               string    `json:"problem_id,omitempty"`
+	TestcaseID              string    `json:"testcase_id,omitempty"`
+	TestcaseInput           []byte    `json:"testcase_input,omitempty"`
+	TestcaseInputSHA256     string    `json:"testcase_input_sha256,omitempty"`
+	ExecutionProfileID      string    `json:"execution_profile_id,omitempty"`
+	LanguageProfileID       string    `json:"language_profile_id"`
+	SourceSnapshotRef       string    `json:"source_snapshot_ref"`
+	SourceBytes             string    `json:"source_bytes"`
+	SourceSHA256            string    `json:"source_sha256"`
+	ControlledInputID       string    `json:"controlled_input_id"`
+	DeadlineAt              time.Time `json:"deadline_at"`
+	CancellationGeneration  int64     `json:"cancellation_generation"`
+	ExecutionSetAttemptID   string    `json:"execution_set_attempt_id,omitempty"`
+	TestcaseIndex           int       `json:"testcase_index,omitempty"`
+	TestcaseSetManifestHash string    `json:"testcase_set_manifest_hash,omitempty"`
+}
+
+type TestcaseSetEntry struct {
+	Index                int    `json:"index"`
+	TestcaseID           string `json:"testcase_id"`
+	TestdataVersionID    string `json:"testdata_version_id"`
+	Input                []byte `json:"input"`
+	InputSHA256          string `json:"input_sha256"`
+	ExecutionProfileID   string `json:"execution_profile_id"`
+	ExpectedOutputSHA256 string `json:"expected_output_sha256,omitempty"`
+}
+
+type TestcaseSetManifest struct {
+	ProblemID          string             `json:"problem_id"`
+	ProblemRevisionID  string             `json:"problem_revision_id"`
+	TestdataVersionID  string             `json:"testdata_version_id"`
+	TestcaseSetID      string             `json:"testcase_set_id"`
+	ExecutionProfileID string             `json:"execution_profile_id"`
+	Entries            []TestcaseSetEntry `json:"entries"`
+	ManifestHash       string             `json:"manifest_hash"`
+}
+
+type RealExecutionSetRequest struct {
+	ProtocolVersion        string              `json:"protocol_version"`
+	ExecutionSetRequestID  string              `json:"execution_set_request_id"`
+	JudgeJobID             string              `json:"judge_job_id"`
+	SubmissionID           string              `json:"submission_id"`
+	Attempt                int                 `json:"attempt"`
+	CorrelationID          string              `json:"correlation_id"`
+	Manifest               TestcaseSetManifest `json:"manifest"`
+	ExecutionPolicy        string              `json:"execution_policy"`
+	LanguageProfileID      string              `json:"language_profile_id"`
+	SourceSnapshotRef      string              `json:"source_snapshot_ref"`
+	SourceBytes            string              `json:"source_bytes"`
+	SourceSHA256           string              `json:"source_sha256"`
+	DeadlineAt             time.Time           `json:"deadline_at"`
+	CancellationGeneration int64               `json:"cancellation_generation"`
+}
+
+type TestcaseSetMemberResult struct {
+	Index              int                            `json:"index"`
+	TestcaseID         string                         `json:"testcase_id"`
+	InputSHA256        string                         `json:"input_sha256"`
+	TestdataVersionID  string                         `json:"testdata_version_id"`
+	ExecutionProfileID string                         `json:"execution_profile_id"`
+	Status             string                         `json:"status"`
+	Record             *SingleTestcaseExecutionRecord `json:"record,omitempty"`
+}
+
+type AggregateExecutionSetRecord struct {
+	RecordVersion            string                    `json:"record_version"`
+	RecordID                 string                    `json:"record_id"`
+	SubmissionID             string                    `json:"submission_id"`
+	SnapshotID               string                    `json:"snapshot_id"`
+	SourceSHA256             string                    `json:"source_sha256"`
+	ArtifactSHA256           string                    `json:"artifact_sha256"`
+	ProblemID                string                    `json:"problem_id"`
+	ProblemRevisionID        string                    `json:"problem_revision_id"`
+	TestdataVersionID        string                    `json:"testdata_version_id"`
+	TestcaseSetID            string                    `json:"testcase_set_id"`
+	ManifestHash             string                    `json:"manifest_hash"`
+	ExecutionSetRequestID    string                    `json:"execution_set_request_id"`
+	ExecutionSetAttemptID    string                    `json:"execution_set_attempt_id"`
+	ExecutionProfileID       string                    `json:"execution_profile_id"`
+	ExecutionPolicy          string                    `json:"execution_policy"`
+	TotalTestcaseCount       int                       `json:"total_testcase_count"`
+	StartedTestcaseCount     int                       `json:"started_testcase_count"`
+	CompletedTestcaseCount   int                       `json:"completed_testcase_count"`
+	Testcases                []TestcaseSetMemberResult `json:"testcases"`
+	SetCancelled             bool                      `json:"set_cancelled"`
+	SetInfrastructureFailure bool                      `json:"set_infrastructure_failure"`
+	StopReason               string                    `json:"stop_reason"`
+	CleanupVerified          bool                      `json:"cleanup_verified"`
+	Digest                   string                    `json:"digest"`
+}
+
+type RealExecutionSetResult struct {
+	ProtocolVersion          string                       `json:"protocol_version"`
+	ExecutionSetRequestID    string                       `json:"execution_set_request_id"`
+	ExecutionSetAttemptID    string                       `json:"execution_set_attempt_id"`
+	JudgeJobID               string                       `json:"judge_job_id"`
+	SubmissionID             string                       `json:"submission_id"`
+	Attempt                  int                          `json:"attempt"`
+	ResultGeneration         int64                        `json:"result_generation"`
+	CorrelationID            string                       `json:"correlation_id"`
+	LanguageProfileID        string                       `json:"language_profile_id"`
+	SourceSHA256             string                       `json:"source_sha256"`
+	ProblemID                string                       `json:"problem_id"`
+	ProblemRevisionID        string                       `json:"problem_revision_id"`
+	TestdataVersionID        string                       `json:"testdata_version_id"`
+	TestcaseSetID            string                       `json:"testcase_set_id"`
+	TestcaseSetManifestHash  string                       `json:"testcase_set_manifest_hash"`
+	ExecutionProfileID       string                       `json:"execution_profile_id"`
+	ExecutionSetPolicy       string                       `json:"execution_set_policy"`
+	PipelineOutcome          string                       `json:"pipeline_outcome"`
+	Compile                  StageResult                  `json:"compile"`
+	Artifact                 *ArtifactResult              `json:"artifact,omitempty"`
+	AggregateExecutionRecord *AggregateExecutionSetRecord `json:"aggregate_execution_set_record,omitempty"`
+	StartedAt                time.Time                    `json:"started_at"`
+	CompletedAt              time.Time                    `json:"completed_at"`
+	Clean                    bool                         `json:"clean"`
 }
 
 type ArtifactResult struct {
