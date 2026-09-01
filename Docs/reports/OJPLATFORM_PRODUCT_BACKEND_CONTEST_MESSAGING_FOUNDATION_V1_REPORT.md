@@ -43,13 +43,15 @@ Real local PostgreSQL and Redis were healthy. `tests/contest-social-foundation.i
 
 `EXPLAIN` evidence showed `contests_public_listing_idx` for public listings, `notifications_unread_idx` for unread notifications, and `messages_conversation_cursor_idx` for message cursors.
 
+An isolated PostgreSQL database was also created for migration lifecycle qualification. Migrations `0000` through `0009` (with Auth V2's reserved `0006` absent from this worktree) applied successfully; `0009`, `0008`, and `0007` then rolled back in order; `0007`, `0008`, and `0009` reapplied successfully. `to_regclass` confirmed `contests`, `messages`, and `notifications`; the temporary database was deleted immediately afterward.
+
 ## Acceptance Matrix
 
 The code and focused real integration cover the principal CON-BE and MSG-BE behavior. The following still require Lead-owned composed API/runtime evidence or the requested authoritative external contract, so the full matrices are not claimed PASS:
 
 - CON-BE-34 through CON-BE-37: formal Submission/Judge integration is intentionally unavailable pending `BACKEND-IR-AUTHORITATIVE-CONTEST-SCORING`.
 - CON-BE-42: contest route rate-limit wiring is a composition decision.
-- CON-BE-43 through CON-BE-45: worker migration and transaction behavior is tested against an existing local database, but fresh isolated database, runner down/up, and registry-order qualification require the Lead migration runner.
+- CON-BE-43 through CON-BE-45: transaction behavior and an isolated fresh database up/down/up lifecycle are verified. Migration-runner registry-order qualification still requires Lead ownership because Auth V2's reserved `0006` is not present in this worktree registry.
 - MSG-BE-47 through MSG-BE-53: database uniqueness and sequential/idempotent retry behavior are implemented; full concurrent accept/conversation/duplicate-message, rollback injection, fresh-database, and migration-runner compatibility qualification remain to be broadened by Lead integration.
 - Audit hook contracts are invoked for contest and social writes without body/source/session data. Durable audit persistence is owned by the existing Auth/Audit composition and is not independently runtime-qualified here.
 
@@ -68,6 +70,7 @@ Executed successfully:
 - `pnpm test:architecture`
 - `pnpm build`
 - `pnpm vitest run tests/contest-social-foundation.integration.test.ts` - 3 passed real PostgreSQL/Redis tests
+- isolated PostgreSQL `0000`-`0009` up, `0009`-`0007` down, and `0007`-`0009` up lifecycle verification
 - `git diff --check`
 
 ## Integration Requests and Handoff
