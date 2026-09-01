@@ -10,6 +10,8 @@ export type AuthenticatedUser = {
   email: string;
   displayName: string;
   status: 'active';
+  guest?: boolean;
+  upgradeHint?: string;
 };
 export type Account = AuthenticatedUser & {
   createdAt: string;
@@ -35,6 +37,9 @@ export type AuthMethods = {
   };
   providers: Record<AuthProvider, 'enabled' | 'disabled' | 'not_configured'>;
   passwordPolicy: { minLength: number };
+};
+export type AuthCapabilities = {
+  guestLogin: { available: boolean };
 };
 export type VerificationChallenge = {
   challengeId: string;
@@ -329,6 +334,24 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
           return defaultAuthMethods;
         throw error;
       }),
+    authCapabilities: () =>
+      request<AuthCapabilities>(
+        baseUrl,
+        '/api/auth/capabilities',
+        undefined,
+        fetcher,
+      ).catch((error) => {
+        if (error instanceof ApiError && [404, 501].includes(error.status))
+          return { guestLogin: { available: false } };
+        throw error;
+      }),
+    guestContinue: () =>
+      request<AuthenticatedUser & { guest: true }>(
+        baseUrl,
+        '/api/auth/guest/continue',
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
     requestVerification: (input: {
       channel: 'EMAIL' | 'SMS';
       purpose: 'REGISTER' | 'LOGIN_CODE' | 'ADD_IDENTIFIER';
@@ -417,13 +440,19 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'DELETE' },
         fetcher,
       ),
-    problems: (offset = 0, limit = 20) =>
-      request<ProblemList>(
+    problems: (offset = 0, limit = 20, options: { search?: string } = {}) => {
+      const params = new URLSearchParams({
+        offset: String(offset),
+        limit: String(limit),
+      });
+      if (options.search) params.set('search', options.search);
+      return request<ProblemList>(
         baseUrl,
-        `/api/problems?offset=${offset}&limit=${limit}`,
+        `/api/problems?${params.toString()}`,
         undefined,
         fetcher,
-      ),
+      );
+    },
     home: () => request<Home>(baseUrl, '/api/home', undefined, fetcher),
     problem: (idOrSlug: string) =>
       request<Problem>(

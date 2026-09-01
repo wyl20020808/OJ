@@ -560,9 +560,17 @@ export function ProfileExperience({
         </div>
         <h1>{user?.displayName ?? '个人主页'}</h1>
         <p>{user ? `@${user.username}` : '公开资料服务正在接入'}</p>
+        {user?.guest && (
+          <span className="guest-badge profile-guest-badge">游客账号</span>
+        )}
         <p className="profile-bio">
           {user ? '个人签名尚未提供。' : '登录后可查看自己的真实账户资料。'}
         </p>
+        {user?.guest && (
+          <p className="guest-upgrade-hint">
+            {user.upgradeHint ?? '绑定邮箱、手机号或第三方账号以升级账户。'}
+          </p>
+        )}
         {user && (
           <button
             type="button"
@@ -951,9 +959,11 @@ function AddFriend() {
         好友申请说明
         <textarea disabled rows={3} />
       </label>
-      <button type="button" disabled>
-        搜索并添加
-      </button>
+      <div className="control-group">
+        <button type="button" disabled>
+          搜索并添加
+        </button>
+      </div>
       <CapabilityNotice
         title="好友服务正在接入"
         text="搜索、申请发送、屏蔽与举报必须由后端授权并限流。"
@@ -974,19 +984,23 @@ function FriendRequests({ requests }: { requests: FriendRequest[] }) {
         ) : (
           <p>暂无收到的申请</p>
         )}
-        <button type="button" disabled>
-          接受
-        </button>
-        <button type="button" disabled>
-          拒绝
-        </button>
+        <div className="control-group">
+          <button type="button" disabled>
+            接受
+          </button>
+          <button type="button" className="secondary" disabled>
+            拒绝
+          </button>
+        </div>
       </section>
       <section>
         <h2>发出的申请</h2>
         <p>暂无发出的申请</p>
-        <button type="button" disabled>
-          取消申请
-        </button>
+        <div className="control-group">
+          <button type="button" className="secondary" disabled>
+            取消申请
+          </button>
+        </div>
       </section>
       <CapabilityNotice
         title="好友申请服务正在接入"

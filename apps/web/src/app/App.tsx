@@ -616,34 +616,171 @@ function State({
     </div>
   );
 }
+
+type PaginationItem = number | 'ellipsis';
+
+function paginationItems(current: number, total: number): PaginationItem[] {
+  if (total <= 0) return [];
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+  if (current <= 4) return [1, 2, 3, 4, 5, 'ellipsis', total];
+  if (current >= total - 3)
+    return [1, 'ellipsis', total - 4, total - 3, total - 2, total - 1, total];
+  return [1, 'ellipsis', current - 1, current, current + 1, 'ellipsis', total];
+}
+
+function Pagination({
+  current,
+  total,
+  onChange,
+}: {
+  current: number;
+  total: number;
+  onChange: (page: number) => void;
+}) {
+  const items = paginationItems(current, total);
+  return (
+    <nav className="pagination" aria-label="分页">
+      <button
+        type="button"
+        className="pagination-control"
+        disabled={current <= 1 || total === 0}
+        onClick={() => onChange(current - 1)}
+      >
+        上一页
+      </button>
+      <div className="pagination-pages">
+        {items.map((item, index) =>
+          item === 'ellipsis' ? (
+            <span
+              key={`ellipsis-${index}`}
+              className="pagination-ellipsis"
+              aria-hidden="true"
+            >
+              …
+            </span>
+          ) : (
+            <button
+              key={item}
+              type="button"
+              className="pagination-page"
+              aria-current={item === current ? 'page' : undefined}
+              aria-label={`第 ${item} 页`}
+              onClick={() => onChange(item)}
+            >
+              {item}
+            </button>
+          ),
+        )}
+      </div>
+      <span className="pagination-mobile-status" aria-live="polite">
+        {total > 0 ? `${current} / ${total}` : '暂无页码'}
+      </span>
+      <button
+        type="button"
+        className="pagination-control"
+        disabled={current >= total || total === 0}
+        onClick={() => onChange(current + 1)}
+      >
+        下一页
+      </button>
+    </nav>
+  );
+}
+
 function ProblemList({ api }: { api: ApiClient }) {
+  const pageSize = 20;
   const [data, setData] = useState<{
     items: Problem[];
     page: { total: number; offset: number; limit: number };
   } | null>(null);
   const [error, setError] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const initialFilters = useMemo(
-    () => new URLSearchParams(window.location.search),
-    [],
-  );
-  const [query, setQuery] = useState(() => initialFilters.get('q') ?? '');
-  const [difficulty, setDifficulty] = useState(
-    () => initialFilters.get('difficulty') ?? '',
-  );
-  const [tag, setTag] = useState(() => initialFilters.get('tag') ?? '');
-  const [source, setSource] = useState(
-    () => initialFilters.get('source') ?? '',
-  );
+  const initialState = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const parsedPage = Number(params.get('page') ?? 1);
+    return {
+      page: Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1,
+      query: params.get('q') ?? '',
+      difficulty: params.get('difficulty') ?? '',
+      tag: params.get('tag') ?? '',
+      source: params.get('source') ?? '',
+    };
+  }, []);
+  const [page, setPage] = useState(initialState.page);
+  const [query, setQuery] = useState(initialState.query);
+  const [difficulty, setDifficulty] = useState(initialState.difficulty);
+  const [tag, setTag] = useState(initialState.tag);
+  const [source, setSource] = useState(initialState.source);
+  const offset = (page - 1) * pageSize;
+  const syncUrl = (
+    values: {
+      q: string;
+      difficulty: string;
+      tag: string;
+      source: string;
+    },
+    nextPage: number,
+    replace = false,
+  ) => {
+    const params = new URLSearchParams();
+    if (nextPage > 1) params.set('page', String(nextPage));
+    Object.entries(values).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    const url = `/problems${params.size ? `?${params.toString()}` : ''}`;
+    if (replace) window.history.replaceState({}, '', url);
+    else window.history.pushState({}, '', url);
+  };
+  const currentFilters = () => ({ q: query, difficulty, tag, source });
+  const changePage = (nextPage: number) => {
+    const totalPages = data ? Math.ceil(data.page.total / data.page.limit) : 0;
+    if (!totalPages || nextPage < 1 || nextPage > totalPages) return;
+    setPage(nextPage);
+    syncUrl(currentFilters(), nextPage);
+  };
+  const updateFilter = (
+    key: 'q' | 'difficulty' | 'tag' | 'source',
+    value: string,
+  ) => {
+    const next = { ...currentFilters(), [key]: value };
+    setQuery(next.q);
+    setDifficulty(next.difficulty);
+    setTag(next.tag);
+    setSource(next.source);
+    setPage(1);
+    syncUrl(next, 1, true);
+  };
   const load = () => {
     setError(false);
-    setData(null);
     void api
-      .problems(offset)
+      .problems(offset, pageSize, query.trim() ? { search: query.trim() } : {})
       .then(setData)
       .catch(() => setError(true));
   };
-  useEffect(load, [api, offset]);
+  useEffect(load, [api, offset, query]);
+  useEffect(() => {
+    if (!data || data.page.total === 0) return;
+    const totalPages = Math.ceil(data.page.total / data.page.limit);
+    if (page > totalPages) {
+      setPage(totalPages);
+      syncUrl(currentFilters(), totalPages, true);
+    }
+  }, [data, page]);
+  useEffect(() => {
+    const onPopState = () => {
+      if (window.location.pathname !== '/problems') return;
+      const params = new URLSearchParams(window.location.search);
+      const parsedPage = Number(params.get('page') ?? 1);
+      setPage(
+        Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1,
+      );
+      setQuery(params.get('q') ?? '');
+      setDifficulty(params.get('difficulty') ?? '');
+      setTag(params.get('tag') ?? '');
+      setSource(params.get('source') ?? '');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   if (error)
     return (
       <State
@@ -652,7 +789,17 @@ function ProblemList({ api }: { api: ApiClient }) {
         action={<button onClick={load}>重试</button>}
       />
     );
-  if (!data) return <State title="正在加载题库" text="正在获取最新题目列表…" />;
+  if (!data)
+    return (
+      <section className="problem-list-v4">
+        <State title="正在加载题库" text="正在获取最新题目列表…" />
+        <div className="problem-skeleton" aria-hidden="true">
+          {[1, 2, 3, 4].map((item) => (
+            <span key={item} />
+          ))}
+        </div>
+      </section>
+    );
   const difficulties = [
     ...new Set(data.items.map((problem) => problem.difficulty).filter(Boolean)),
   ] as string[];
@@ -671,35 +818,26 @@ function ProblemList({ api }: { api: ApiClient }) {
       (!tag || problem.tags?.includes(tag)) &&
       (!source || problem.source === source),
   );
-  const writeFilters = (next: {
-    q?: string;
-    difficulty?: string;
-    tag?: string;
-    source?: string;
-  }) => {
-    const values = {
-      q: next.q ?? query,
-      difficulty: next.difficulty ?? difficulty,
-      tag: next.tag ?? tag,
-      source: next.source ?? source,
-    };
-    const params = new URLSearchParams();
-    Object.entries(values).forEach(([key, value]) => {
-      if (value) params.set(key, value);
-    });
-    window.history.replaceState(
-      {},
-      '',
-      `/problems${params.size ? `?${params.toString()}` : ''}`,
-    );
-  };
   const clearFilters = () => {
     setQuery('');
     setDifficulty('');
     setTag('');
     setSource('');
+    setPage(1);
     window.history.replaceState({}, '', '/problems');
   };
+  const totalPages = Math.ceil(data.page.total / data.page.limit);
+  const activeFilters = [
+    query ? { key: 'q' as const, label: `关键词：${query}` } : null,
+    difficulty
+      ? { key: 'difficulty' as const, label: `难度：${difficulty}` }
+      : null,
+    tag ? { key: 'tag' as const, label: `标签：${tag}` } : null,
+    source ? { key: 'source' as const, label: `来源：${source}` } : null,
+  ].filter(Boolean) as Array<{
+    key: 'q' | 'difficulty' | 'tag' | 'source';
+    label: string;
+  }>;
   return (
     <section className="problem-list-v4">
       <div className="page-heading">
@@ -708,83 +846,102 @@ function ProblemList({ api }: { api: ApiClient }) {
         </div>
         <span className="muted">共 {data.page.total} 题</span>
       </div>
-      <div className="problem-filters" aria-label="题库筛选">
-        <label className="search-field">
-          关键词
-          <input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              writeFilters({ q: event.target.value });
-            }}
-            placeholder="按题目标题或题号筛选"
-          />
-        </label>
-        <label>
-          难度
-          <select
-            value={difficulty}
-            disabled={!difficulties.length}
-            onChange={(event) => {
-              setDifficulty(event.target.value);
-              writeFilters({ difficulty: event.target.value });
-            }}
+      <details className="problem-filter-disclosure" open>
+        <summary>筛选题目</summary>
+        <div className="problem-filters" aria-label="题库筛选">
+          <label className="search-field">
+            关键词
+            <input
+              value={query}
+              onChange={(event) => {
+                updateFilter('q', event.target.value);
+              }}
+              placeholder="按题目标题或题号筛选"
+            />
+          </label>
+          <label>
+            难度
+            <select
+              value={difficulty}
+              disabled={!difficulties.length}
+              onChange={(event) => {
+                updateFilter('difficulty', event.target.value);
+              }}
+            >
+              <option value="">
+                {difficulties.length ? '全部难度' : '后端暂未提供'}
+              </option>
+              {difficulties.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            标签
+            <select
+              value={tag}
+              disabled={!tags.length}
+              onChange={(event) => {
+                updateFilter('tag', event.target.value);
+              }}
+            >
+              <option value="">
+                {tags.length ? '全部标签' : '后端暂未提供'}
+              </option>
+              {tags.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            来源
+            <select
+              value={source}
+              disabled={!sources.length}
+              onChange={(event) => {
+                updateFilter('source', event.target.value);
+              }}
+            >
+              <option value="">
+                {sources.length ? '全部来源' : '后端暂未提供'}
+              </option>
+              {sources.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="secondary"
+            disabled={!query && !difficulty && !tag && !source}
+            onClick={clearFilters}
           >
-            <option value="">
-              {difficulties.length ? '全部难度' : '后端暂未提供'}
-            </option>
-            {difficulties.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          标签
-          <select
-            value={tag}
-            disabled={!tags.length}
-            onChange={(event) => {
-              setTag(event.target.value);
-              writeFilters({ tag: event.target.value });
-            }}
-          >
-            <option value="">
-              {tags.length ? '全部标签' : '后端暂未提供'}
-            </option>
-            {tags.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          来源
-          <select
-            value={source}
-            disabled={!sources.length}
-            onChange={(event) => {
-              setSource(event.target.value);
-              writeFilters({ source: event.target.value });
-            }}
-          >
-            <option value="">
-              {sources.length ? '全部来源' : '后端暂未提供'}
-            </option>
-            {sources.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className="secondary"
-          disabled={!query && !difficulty && !tag && !source}
-          onClick={clearFilters}
-        >
-          清除筛选
-        </button>
-      </div>
+            清除筛选
+          </button>
+        </div>
+      </details>
+      {activeFilters.length > 0 && (
+        <div className="applied-filters" aria-label="已应用筛选">
+          <span className="applied-filters-label">已筛选</span>
+          {activeFilters.map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              className="filter-chip"
+              onClick={() => updateFilter(filter.key, '')}
+            >
+              {filter.label} ×
+            </button>
+          ))}
+          <button type="button" className="filter-clear" onClick={clearFilters}>
+            清除全部
+          </button>
+        </div>
+      )}
       <div className="filter-summary" aria-live="polite">
-        <span>{filtered.length} 条结果</span>
+        <span>
+          本页 {filtered.length} 条 · 共 {data.page.total} 题
+        </span>
         {!difficulties.length && !tags.length && (
           <span>难度与标签筛选将在后端提供字段后启用</span>
         )}
@@ -827,7 +984,7 @@ function ProblemList({ api }: { api: ApiClient }) {
                     )}
                   </div>
                 </div>
-                <span className="difficulty-label">
+                <span className="difficulty-label problem-difficulty-chip">
                   {p.difficulty ?? '难度未提供'}
                 </span>
                 <span aria-hidden="true">→</span>
@@ -836,20 +993,7 @@ function ProblemList({ api }: { api: ApiClient }) {
           ))}
         </div>
       )}
-      <div className="pagination">
-        <button
-          disabled={offset === 0}
-          onClick={() => setOffset(Math.max(0, offset - data.page.limit))}
-        >
-          上一页
-        </button>
-        <button
-          disabled={offset + data.page.limit >= data.page.total}
-          onClick={() => setOffset(offset + data.page.limit)}
-        >
-          下一页
-        </button>
-      </div>
+      <Pagination current={page} total={totalPages} onChange={changePage} />
     </section>
   );
 }
@@ -2022,6 +2166,9 @@ export function App() {
           <NotificationBell navigate={navigate} />
           {user ? (
             <>
+              {user.guest && (
+                <span className="guest-badge nav-guest-badge">游客</span>
+              )}
               <Link
                 to="/profile"
                 className={current.name === 'profile' ? 'active' : ''}

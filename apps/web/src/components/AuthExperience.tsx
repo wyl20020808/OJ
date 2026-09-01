@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   ApiError,
+  type AuthCapabilities,
   type AuthMethods,
   type AuthProvider,
   type ApiClient,
@@ -67,6 +68,105 @@ function useAuthMethods(api: ApiClient) {
     };
   }, [api]);
   return { methods: methods ?? fallbackMethods, loading: !resolved, error };
+}
+
+function useGuestCapability(api: ApiClient) {
+  const [capability, setCapability] = useState<
+    'loading' | 'available' | 'unavailable' | 'error'
+  >('loading');
+  const load = () => {
+    setCapability('loading');
+    if (typeof api.authCapabilities !== 'function') {
+      setCapability('unavailable');
+      return;
+    }
+    void api
+      .authCapabilities()
+      .then((value: AuthCapabilities) =>
+        setCapability(value.guestLogin.available ? 'available' : 'unavailable'),
+      )
+      .catch((reason: unknown) => {
+        setCapability(
+          reason instanceof ApiError && [404, 501].includes(reason.status)
+            ? 'unavailable'
+            : 'error',
+        );
+      });
+  };
+  useEffect(() => {
+    load();
+  }, [api]);
+  return { capability, retry: load };
+}
+
+function GuestContinue({
+  api,
+  onUser,
+  onNavigate,
+}: {
+  api: ApiClient;
+  onUser: (user: AuthenticatedUser) => void;
+  onNavigate: (path: string) => void;
+}) {
+  const { capability, retry } = useGuestCapability(api);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const continueAsGuest = async () => {
+    if (capability !== 'available') return;
+    setBusy(true);
+    setError('');
+    try {
+      const user = await api.guestContinue();
+      if (user.guest !== true) throw new Error('游客身份响应无效。');
+      onUser(user);
+      onNavigate('/problems');
+    } catch (reason) {
+      setError(messageFor(reason, '游客登录未完成，请稍后重试。'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const label =
+    busy || capability === 'loading' ? '正在检查游客登录…' : '以游客身份继续';
+  return (
+    <section className="guest-auth-section" aria-label="游客登录">
+      <div className="guest-auth-heading">
+        <span>临时体验</span>
+        <span className="guest-badge">游客</span>
+      </div>
+      <button
+        type="button"
+        className="guest-button secondary"
+        disabled={busy || capability !== 'available'}
+        onClick={() => void continueAsGuest()}
+      >
+        {label}
+      </button>
+      <p className="guest-warning">
+        游客账号仅用于临时体验。清除浏览器数据或更换浏览器后可能无法找回，建议稍后绑定邮箱、手机号或第三方账号。
+      </p>
+      {capability === 'unavailable' && (
+        <p className="field-help" role="status">
+          游客登录服务正在接入，当前不会创建本地账号或伪造登录状态。
+          <br />
+          GUEST-AUTH-BACKEND-INTEGRATION-REQUEST
+        </p>
+      )}
+      {capability === 'error' && (
+        <div className="guest-auth-error" role="alert">
+          <span>暂时无法检查游客登录能力。</span>
+          <button type="button" className="filter-clear" onClick={retry}>
+            重试
+          </button>
+        </div>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
+  );
 }
 
 function AuthFrame({
@@ -584,6 +684,7 @@ function LoginExperience({
         <span>或使用以下方式继续</span>
       </div>
       <ProviderButtons methods={methods} api={api} onError={setError} />
+      <GuestContinue api={api} onUser={onUser} onNavigate={onNavigate} />
       <p className="switch">
         还没有账户？<a href="/register">注册账户</a>
       </p>
@@ -594,7 +695,8 @@ function LoginExperience({
 function RegisterExperience({
   api,
   onNavigate,
-}: Omit<AuthExperienceProps, 'mode' | 'onUser'>) {
+  onUser,
+}: Omit<AuthExperienceProps, 'mode'>) {
   const {
     methods,
     loading: methodsLoading,
@@ -845,6 +947,7 @@ function RegisterExperience({
           </p>
         )}
       </form>
+      <GuestContinue api={api} onUser={onUser} onNavigate={onNavigate} />
       <p className="switch">
         已有账户？<a href="/login">登录</a>
       </p>
@@ -860,6 +963,10 @@ export function AuthExperience(props: AuthExperienceProps) {
       onNavigate={props.onNavigate}
     />
   ) : (
-    <RegisterExperience api={props.api} onNavigate={props.onNavigate} />
+    <RegisterExperience
+      api={props.api}
+      onUser={props.onUser}
+      onNavigate={props.onNavigate}
+    />
   );
 }

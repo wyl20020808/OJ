@@ -584,6 +584,9 @@
 .request-columns > .capability-notice {
   grid-column: 1 / -1;
 }
+.control-group {
+  margin-top: var(--space-3);
+}
 @media (max-width: 800px) {
   .portal-heading,
   .messages-heading,
@@ -643,5 +646,11 @@
   }
   .message-modes {
     width: 100%;
+  }
+  .control-group {
+    width: 100%;
+  }
+  .control-group > button {
+    flex: 1 1 auto;
   }
 }
