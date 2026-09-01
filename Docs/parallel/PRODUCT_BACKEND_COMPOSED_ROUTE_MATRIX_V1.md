@@ -48,6 +48,11 @@ means the route is registered and covered by an owned or central runtime test;
 | Notifications | GET | `/api/notifications` | Contest/Messaging V1 | yes | COMPOSED_PASS | authenticated | PostgreSQL | supported | User-scoped list |
 | Notifications | GET | `/api/notifications/unread-count` | Contest/Messaging V1 | yes | COMPOSED_PASS | authenticated | PostgreSQL | supported | User-scoped count |
 | Notifications | POST | `/api/notifications/:id/read`, `/api/notifications/read-all` | Contest/Messaging V1 | yes | COMPOSED_PASS | owner | PostgreSQL | supported | Read state |
+| Profile | GET | `/api/profile/capabilities` | Runtime Gap Closure V1 | yes | COMPOSED_PASS | public/session/guest | PostgreSQL contract | supported/unavailable | Truthful per-capability availability and reasons |
+| Profile | GET | `/api/profiles/:username` | Runtime Gap Closure V1 | yes | COMPOSED_PASS | public | PostgreSQL | supported | Safe public projection excludes email and phone |
+| Profile | GET/POST/DELETE | `/api/profile/favorites`, `/api/profile/favorites/:problemId` | Runtime Gap Closure V1 | yes | COMPOSED_PASS | password session | PostgreSQL | supported | User-scoped, idempotent public published problem favorites |
+| Profile | GET | `/api/profile/contests` | Runtime Gap Closure V1 | yes | COMPOSED_PASS | password session | PostgreSQL | supported | Created, managed and registered projections reuse contest data |
+| Profile | GET | `/api/profile/problems` | Runtime Gap Closure V1 | yes | COMPOSED_PASS | password session | PostgreSQL | supported | Authored projection reuses `problems.author_id` |
 | Platform | GET | `/health`, `/ready`, `/openapi.json` | Integration | yes | COMPOSED_PASS | public | dependency checks | supported | Readiness requires PostgreSQL, Redis and Storage |
 
 No Web, Judge Worker, Sandbox, Queue, Phase 2C or Verdict Engine route was

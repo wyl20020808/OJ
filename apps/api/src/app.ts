@@ -18,6 +18,7 @@ import {
 } from './modules/auth/index.js';
 import { registerContestModule } from './modules/contest/index.js';
 import { registerSocialModule } from './modules/social/index.js';
+import { registerProfileModule } from './modules/profile/index.js';
 import { RedisFixedWindowLimiter } from './modules/social/rate-limiter.js';
 import {
   InMemoryProblemRepository,
@@ -345,6 +346,11 @@ export async function buildApp(options: AppOptions = {}) {
         (await auth.getAuthContext(request)) ?? undefined,
       audit: auditHook,
       limiter: new RedisFixedWindowLimiter(cache),
+    });
+    await registerProfileModule(app, {
+      pool: database.pool,
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
     await registerWorkerControlRoutes(app, {
       cache,

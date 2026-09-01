@@ -172,6 +172,9 @@ describe('product backend central runtime composition', () => {
     const rotatedResume = cookies(resumed.headers['set-cookie']).find((value) =>
       value.startsWith('oj_guest_resume='),
     )!;
+    const resumedGuestSession = cookies(resumed.headers['set-cookie']).find(
+      (value) => value.startsWith('oj_session='),
+    )!;
     expect(
       (
         await app.inject({
@@ -266,6 +269,153 @@ describe('product backend central runtime composition', () => {
       headers: { cookie: aCookie },
     });
     const userBId = search.json().items[0].id as string;
+    const userAId = loginA.json().id as string;
+    await pool.query('UPDATE problems SET author_id=$2 WHERE id=$1', [
+      problemId,
+      userAId,
+    ]);
+    expect(
+      (await app.inject('/api/profile/capabilities')).json(),
+    ).toMatchObject({
+      favorites: { available: false, reason: 'AUTHENTICATION_REQUIRED' },
+      heatmap: {
+        available: false,
+        reason: 'UPSTREAM_BLOCKED_BY_AUTHORITATIVE_SUBMISSION_OUTCOME',
+      },
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/profile/capabilities',
+          headers: { cookie: aCookie },
+        })
+      ).json(),
+    ).toMatchObject({
+      favorites: { available: true },
+      myContests: { available: true },
+      myProblems: { available: true },
+      activity: {
+        available: false,
+        reason: 'NO_AUTHORITATIVE_PRODUCT_ACTIVITY_SOURCE',
+      },
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/profile/favorites/${problemId}`,
+          headers: { cookie: aCookie },
+        })
+      ).statusCode,
+    ).toBe(201);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/profile/favorites/${problemId}`,
+          headers: { cookie: aCookie },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/profile/favorites',
+          headers: { cookie: aCookie },
+        })
+      ).json().items,
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ problemId })]));
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/api/profile/favorites/${problemId}`,
+          headers: { cookie: aCookie },
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/api/profile/favorites/${problemId}`,
+          headers: { cookie: aCookie },
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/profile/favorites/${problemId}`,
+          headers: { cookie: aCookie },
+        })
+      ).statusCode,
+    ).toBe(201);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/profile/favorites',
+          headers: { cookie: bCookie },
+        })
+      ).json().items,
+    ).toEqual([]);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/profile/favorites',
+          headers: { cookie: resumedGuestSession },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/profiles/${userA}`,
+        })
+      ).json(),
+    ).toMatchObject({ username: userA, displayName: userA });
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/profiles/${userA}` })).body,
+    ).not.toContain(userAEmail);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/profile/contests?kind=CREATED',
+          headers: { cookie: aCookie },
+        })
+      ).json().items,
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: contestId })]),
+    );
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/profile/contests?kind=REGISTERED',
+          headers: { cookie: bCookie },
+        })
+      ).json().items,
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: contestId })]),
+    );
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/profile/problems',
+          headers: { cookie: aCookie },
+        })
+      ).json().items,
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: problemId })]),
+    );
     expect(
       (
         await app.inject({
@@ -394,6 +544,24 @@ describe('product backend central runtime composition', () => {
     ).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: messageId })]),
     );
+    expect(
+      (
+        await restarted.inject({
+          method: 'GET',
+          url: '/api/profile/favorites',
+          headers: { cookie: aCookie },
+        })
+      ).json().items,
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ problemId })]));
+    expect(
+      (
+        await restarted.inject({
+          method: 'GET',
+          url: '/api/profile/capabilities',
+          headers: { cookie: aCookie },
+        })
+      ).json(),
+    ).toMatchObject({ favorites: { available: true } });
     await restarted.close();
   });
 });

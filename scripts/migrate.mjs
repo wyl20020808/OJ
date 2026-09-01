@@ -22,6 +22,7 @@ try {
     '0008_social_messaging_foundation',
     '0009_notifications_foundation',
     '0010_guest_auth',
+    '0011_profile_favorites',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {

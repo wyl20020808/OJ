@@ -16,14 +16,15 @@ Order is numeric, explicit, deterministic, and executed in the listed direction.
 | 0008 | `0008_social_messaging_foundation.sql` | Social/Messaging | `codex/product-backend-contest-messaging-foundation-v1` (`8d85fa1`) | 9 | PASS | PASS | PASS | Friend, conversation and message tables |
 | 0009 | `0009_notifications_foundation.sql` | Notifications | `codex/product-backend-contest-messaging-foundation-v1` (`8d85fa1`) | 10 | PASS | PASS | PASS | Notification persistence |
 | 0010 | `0010_guest_auth.sql` | Guest Auth | `codex/product-backend-guest-auth-contract-reconciliation-v2` (`6f4cca4`) | 11 | PASS | PASS | PASS | Guest tables after Auth V2 nullable email |
+| 0011 | `0011_profile_favorites.sql` | Profile Favorites | Runtime Gap Closure V1 | 12 | PASS | PASS | PASS | User/problem uniqueness and stable per-user index |
 
 ## Lifecycle Evidence
 
-- Registry uniqueness: PASS; `0000` through `0010` occur once.
+- Registry uniqueness: PASS; `0000` through `0011` occur once.
 - Deterministic order: PASS; up uses ascending order and down uses the exact reverse.
 - Fresh database up: PASS (isolated PostgreSQL qualification database).
-- Existing baseline upgrade: PASS (baseline `0000` through `0005`, then `0006` through `0010`).
-- Reverse down and up again: PASS; `0010` through `0000` reverse successfully after test data cleanup, followed by a second ascending run.
+- Existing baseline upgrade: PASS (baseline `0000` through `0010`, then `0011`).
+- Reverse down and up again: PASS; `0011` through `0000` reverse successfully after test data cleanup, followed by a second ascending run.
 - Schema checks: Auth identity/verification/OAuth, contest, social/messaging, notifications and Guest tables were present after composed up.
 
 `0006` is Auth V2-owned and was absent only from the prior integration ancestry;
