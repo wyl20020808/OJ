@@ -112,7 +112,7 @@ describe('real local infrastructure', () => {
       evaluationGeneration: 1,
       attemptGeneration: 1,
       status: 'COMPLETED_WITH_VERDICT',
-      verdict: 'AC',
+      verdict: 'WA',
       evaluationRecordDigest: 'integration-evaluation-1',
       verdictRecordDigest: 'b'.repeat(64),
     });
@@ -121,12 +121,108 @@ describe('real local infrastructure', () => {
       'integration-job-2',
     );
     expect(rejudge.evaluationGeneration).toBe(2);
-    const history = await repository.listEvaluationHistory!(submission.id);
-    expect(history).toHaveLength(2);
-    expect(await repository.getEvaluation!(submission.id)).toMatchObject({
+    await expect(
+      repository.startRejudge!(submission.id, 'integration-job-2'),
+    ).resolves.toMatchObject({ evaluationGeneration: 2 });
+    await expect(
+      repository.startRejudge!(submission.id, 'integration-job-conflict'),
+    ).rejects.toThrow('EVALUATION_ALREADY_EXISTS');
+    await expect(
+      repository.publishEvaluation!({
+        submissionId: submission.id,
+        judgeJobId: 'integration-job-1',
+        evaluationGeneration: 1,
+        attemptGeneration: 1,
+        status: 'COMPLETED_WITH_VERDICT',
+        verdict: 'WA',
+        evaluationRecordDigest: 'integration-evaluation-1',
+        verdictRecordDigest: 'b'.repeat(64),
+      }),
+    ).rejects.toThrow('STALE_EVALUATION');
+    await repository.publishEvaluation!({
+      submissionId: submission.id,
+      judgeJobId: 'integration-job-2',
       evaluationGeneration: 2,
-      status: 'REJUDGE_PENDING',
+      attemptGeneration: 2,
+      status: 'COMPLETED_WITH_VERDICT',
+      verdict: 'AC',
+      evaluationRecordDigest: 'integration-evaluation-2',
+      verdictRecordDigest: 'c'.repeat(64),
+    });
+    const cancelledRejudge = await repository.startRejudge!(
+      submission.id,
+      'integration-job-3',
+    );
+    await repository.cancelEvaluation!(
+      submission.id,
+      cancelledRejudge.judgeJobId,
+    );
+    const history = await repository.listEvaluationHistory!(submission.id);
+    expect(history).toEqual([
+      expect.objectContaining({
+        evaluationGeneration: 1,
+        verdict: 'WA',
+        current: false,
+      }),
+      expect.objectContaining({
+        evaluationGeneration: 2,
+        verdict: 'AC',
+        current: false,
+      }),
+      expect.objectContaining({
+        evaluationGeneration: 3,
+        status: 'CANCELLED',
+        current: true,
+      }),
+    ]);
+    expect(await repository.getEvaluation!(submission.id)).toMatchObject({
+      evaluationGeneration: 3,
+      status: 'CANCELLED',
       current: true,
     });
+  });
+
+  it('serializes concurrent rejudge commands into one current generation', async () => {
+    const repository = new PostgresSubmissionRepository(database.pool);
+    const submission = await repository.create({
+      ownerUserId: `integration-race-${crypto.randomUUID()}`,
+      problemId: 'integration-problem',
+      problemRevisionId: 'integration-revision',
+      testdataVersionRef: 'integration-testdata',
+      languageId: 'cpp20',
+      source: 'integration-source',
+    });
+    await repository.beginEvaluation!(submission.id, 'integration-race-job-1');
+    await repository.publishEvaluation!({
+      submissionId: submission.id,
+      judgeJobId: 'integration-race-job-1',
+      evaluationGeneration: 1,
+      attemptGeneration: 1,
+      status: 'COMPLETED_WITH_VERDICT',
+      verdict: 'AC',
+      evaluationRecordDigest: 'integration-race-evaluation-1',
+      verdictRecordDigest: 'd'.repeat(64),
+    });
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, (_, index) =>
+        repository.startRejudge!(
+          submission.id,
+          `integration-race-job-${index + 2}`,
+        ),
+      ),
+    );
+    expect(
+      results.filter((result) => result.status === 'fulfilled'),
+    ).toHaveLength(1);
+    expect(await repository.listEvaluationHistory!(submission.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ evaluationGeneration: 1, current: false }),
+        expect.objectContaining({
+          evaluationGeneration: 2,
+          current: true,
+          status: 'REJUDGE_PENDING',
+        }),
+      ]),
+    );
   });
 });

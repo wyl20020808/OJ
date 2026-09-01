@@ -151,6 +151,7 @@ func Derive(input Input) (AggregateRecord, error) {
 		return sealAggregate(base), nil
 	}
 	if raw.PipelineOutcome == "PIPELINE_COMPILE_FAILED" && raw.Compile.Outcome == "COMPILE_FAILED" && raw.Compile.DiagnosticCode == "SOURCE_COMPILE_FAILED" && raw.Compile.Clean && raw.Compile.Facts.ProcessExited && raw.Compile.Facts.ExitCode > 0 && raw.Compile.Facts.TerminationSignal == "" && !compileInfra(raw.Compile.Facts) && !raw.Compile.Facts.Cancelled {
+		base.Cases = make([]CaseRecord, 0)
 		base.CompileVerdict, base.OverallUserVerdict, base.EvaluationState = "CE", "CE", "COMPLETE"
 		return sealAggregate(base), nil
 	}

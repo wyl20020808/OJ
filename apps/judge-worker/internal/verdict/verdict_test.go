@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -125,6 +126,10 @@ func TestCompileFailureOnlyMakesCEWithQualifiedEvidence(t *testing.T) {
 	if got.CompileVerdict != "CE" || got.OverallUserVerdict != "CE" || len(got.Cases) != 0 {
 		t.Fatalf("qualified CE: %#v", got)
 	}
+	encoded, err := json.Marshal(got)
+	if err != nil || !strings.Contains(string(encoded), `"cases":[]`) {
+		t.Fatalf("CE must serialize an empty cases array: %v %s", err, encoded)
+	}
 	v["compile"] = map[string]any{"outcome": "COMPILE_FAILED", "diagnostic_code": "SOURCE_COMPILE_FAILED", "clean": true, "raw_facts": map[string]any{"process_exited": true, "exit_code": 1, "cleanup_verified": true, "runtime_infra_failed": true}}
 	r, _ = json.Marshal(v)
 	got = derive(t, []Entry{entry(0, "ok\n", "EXACT_BYTES")}, r)
@@ -168,7 +173,7 @@ func TestStaleAttemptProducesExplicitNonVerdictRecord(t *testing.T) {
 		ExecutionSetAttemptID: "job-1:1:attempt", ManifestHash: hash([]byte("manifest")),
 		Attempt: 1, Authoritative: false, SupersededBy: "job-1:2:attempt",
 		Entries: []Entry{entry(0, "ok\n", "EXACT_BYTES")},
-		Raw: raw(t, "PIPELINE_COMPLETED", []map[string]any{{"stdout": "ok\n"}}),
+		Raw:     raw(t, "PIPELINE_COMPLETED", []map[string]any{{"stdout": "ok\n"}}),
 	})
 	if err != nil {
 		t.Fatal(err)

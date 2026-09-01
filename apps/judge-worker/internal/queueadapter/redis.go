@@ -24,6 +24,7 @@ import (
 type Job struct {
 	ID                     string               `json:"id"`
 	SubmissionID           string               `json:"submissionId"`
+	EvaluationGeneration   int                  `json:"evaluationGeneration"`
 	IdempotencyKey         string               `json:"idempotencyKey"`
 	OwnerUserID            string               `json:"ownerUserId"`
 	ProblemID              string               `json:"problemId"`
@@ -62,6 +63,12 @@ type Job struct {
 	CancellationGeneration int64                `json:"cancellationGeneration"`
 }
 
+func normalizeEvaluationGeneration(job *Job) {
+	if job.EvaluationGeneration == 0 {
+		job.EvaluationGeneration = 1
+	}
+}
+
 type TestcaseSetEntry struct {
 	Index                int    `json:"index"`
 	TestcaseID           string `json:"testcaseId"`
@@ -70,7 +77,7 @@ type TestcaseSetEntry struct {
 	InputSHA256          string `json:"inputSha256"`
 	ExecutionProfileID   string `json:"executionProfileId"`
 	ExpectedOutputSHA256 string `json:"expectedOutputSha256,omitempty"`
-	ExpectedOutput       string `json:"expectedOutput,omitempty"`
+	ExpectedOutput       string `json:"expectedOutput"`
 	CheckerType          string `json:"checkerType,omitempty"`
 	CheckerVersion       string `json:"checkerVersion,omitempty"`
 	CheckerConfigSHA256  string `json:"checkerConfigSha256,omitempty"`
@@ -696,6 +703,7 @@ func (q Queue) Enqueue(ctx context.Context, in CreateInput) (Job, error) {
 		}
 		var j Job
 		e = json.Unmarshal([]byte(raw), &j)
+		normalizeEvaluationGeneration(&j)
 		if e == nil {
 			e = validateTestcaseJob(j)
 		}
@@ -706,7 +714,7 @@ func (q Queue) Enqueue(ctx context.Context, in CreateInput) (Job, error) {
 		max = 3
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	j := Job{ID: in.ID, SubmissionID: in.SubmissionID, IdempotencyKey: "submission:" + in.SubmissionID, OwnerUserID: in.OwnerUserID, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, TestcaseID: in.TestcaseID, TestcaseInput: in.TestcaseInput, TestcaseInputSHA256: in.TestcaseInputSHA256, ExecutionProfileID: in.ExecutionProfileID, TestcaseSet: in.TestcaseSet, ExecutionSetPolicy: in.ExecutionSetPolicy, LanguageID: in.LanguageID, ExecutionMode: in.ExecutionMode, LanguageProfileID: in.LanguageProfileID, SourceSnapshotRef: in.SourceSnapshotRef, SourceBytes: in.SourceBytes, SourceSHA256: in.SourceSHA256, ControlledInputID: in.ControlledInputID, FixtureID: in.FixtureID, Status: "QUEUED", MaxAttempts: max, CreatedAt: now, UpdatedAt: now}
+	j := Job{ID: in.ID, SubmissionID: in.SubmissionID, EvaluationGeneration: 1, IdempotencyKey: "submission:" + in.SubmissionID, OwnerUserID: in.OwnerUserID, ProblemID: in.ProblemID, ProblemRevisionID: in.ProblemRevisionID, TestdataVersionRef: in.TestdataVersionRef, TestcaseID: in.TestcaseID, TestcaseInput: in.TestcaseInput, TestcaseInputSHA256: in.TestcaseInputSHA256, ExecutionProfileID: in.ExecutionProfileID, TestcaseSet: in.TestcaseSet, ExecutionSetPolicy: in.ExecutionSetPolicy, LanguageID: in.LanguageID, ExecutionMode: in.ExecutionMode, LanguageProfileID: in.LanguageProfileID, SourceSnapshotRef: in.SourceSnapshotRef, SourceBytes: in.SourceBytes, SourceSHA256: in.SourceSHA256, ControlledInputID: in.ControlledInputID, FixtureID: in.FixtureID, Status: "QUEUED", MaxAttempts: max, CreatedAt: now, UpdatedAt: now}
 	if j.ExecutionMode == "" {
 		j.ExecutionMode = "SAFE_FIXTURE_QUALIFICATION"
 	}
@@ -755,6 +763,7 @@ func (q Queue) claim(ctx context.Context, worker string, lease time.Duration) (*
 	if err = json.Unmarshal([]byte(raw), &j); err != nil {
 		return nil, err
 	}
+	normalizeEvaluationGeneration(&j)
 	if err = validateTestcaseJob(j); err != nil {
 		return nil, err
 	}
@@ -803,6 +812,7 @@ func (q Queue) recoverStaleLocked(ctx context.Context) error {
 		if json.Unmarshal([]byte(raw), &j) != nil {
 			continue
 		}
+		normalizeEvaluationGeneration(&j)
 		if (j.Status != "LEASED_FAKE" && j.Status != "LEASED") || j.LeaseExpiresAt.IsZero() || time.Now().Before(j.LeaseExpiresAt) {
 			continue
 		}
@@ -860,6 +870,7 @@ func (q Queue) update(ctx context.Context, l Lease, status, reason string, resul
 	if err = json.Unmarshal([]byte(raw), &j); err != nil {
 		return err
 	}
+	normalizeEvaluationGeneration(&j)
 	if err = validateTestcaseJob(j); err != nil {
 		return err
 	}

@@ -569,6 +569,7 @@ export function assertPayload(v: unknown): asserts v is JudgeJob {
   if (!v || typeof v !== 'object') throw new JudgeJobPayloadError();
   const j = v as Record<string, unknown>;
   if (j.executionMode === undefined) j.executionMode = safeMode;
+  if (j.evaluationGeneration === undefined) j.evaluationGeneration = 1;
   const states = [
     'QUEUED',
     'LEASED_FAKE',

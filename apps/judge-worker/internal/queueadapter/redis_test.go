@@ -84,6 +84,48 @@ func TestValidateRawExecutionResultBindsAuthoritativeJobIdentity(t *testing.T) {
 	}
 }
 
+func TestJobPreservesEvaluationGenerationAcrossRedisPayload(t *testing.T) {
+	raw := []byte(`{"id":"job-1","submissionId":"submission-1","evaluationGeneration":2,"idempotencyKey":"submission:submission-1:evaluation:2"}`)
+	var job Job
+	if err := json.Unmarshal(raw, &job); err != nil {
+		t.Fatal(err)
+	}
+	if job.EvaluationGeneration != 2 {
+		t.Fatalf("evaluation generation lost: %d", job.EvaluationGeneration)
+	}
+	encoded, err := json.Marshal(job)
+	if err != nil || !strings.Contains(string(encoded), `"evaluationGeneration":2`) {
+		t.Fatalf("evaluation generation was not serialized: %v %s", err, encoded)
+	}
+}
+
+func TestLegacyJobDefaultsToFirstEvaluationGeneration(t *testing.T) {
+	job := Job{}
+	normalizeEvaluationGeneration(&job)
+	if job.EvaluationGeneration != 1 {
+		t.Fatalf("legacy job did not default to first generation: %d", job.EvaluationGeneration)
+	}
+}
+
+func TestJobPreservesEmptyExpectedOutputInVerdictManifest(t *testing.T) {
+	job := Job{TestcaseSet: &TestcaseSetManifest{Entries: []TestcaseSetEntry{{
+		Index: 0, ExpectedOutput: "", ExpectedOutputSHA256: digest(nil),
+		CheckerType: "EXACT_BYTES", CheckerVersion: "builtin-v1",
+		CheckerConfigSHA256: digest([]byte("EXACT_BYTES\x00builtin-v1")),
+	}}}}
+	encoded, err := json.Marshal(job)
+	if err != nil || !strings.Contains(string(encoded), `"expectedOutput":""`) {
+		t.Fatalf("empty expected output was not serialized: %v %s", err, encoded)
+	}
+	var decoded Job
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.TestcaseSet == nil || decoded.TestcaseSet.Entries[0].ExpectedOutput != "" {
+		t.Fatal("empty expected output was not preserved")
+	}
+}
+
 func TestValidateRawExecutionResultBindsTestcaseProvenanceAndRecord(t *testing.T) {
 	job := Job{
 		ID: "job-tcx", SubmissionID: "submission-tcx", ProblemID: "problem-v1",

@@ -373,9 +373,19 @@ export class PostgresSubmissionRepository implements SubmissionRepository {
       try {
         await client.query('BEGIN');
         const locked = await client.query(
-          'SELECT evaluation_generation FROM submission_evaluations WHERE submission_id=$1 FOR UPDATE',
+          'SELECT * FROM submission_evaluations WHERE submission_id=$1 FOR UPDATE',
           [submissionId],
         );
+        const current = locked.rows.find((row) => Boolean(row.current));
+        if (
+          current &&
+          ['REJUDGE_PENDING', 'REJUDGING'].includes(String(current.status))
+        ) {
+          await client.query('COMMIT');
+          if (String(current.judge_job_id) === judgeJobId)
+            return mapEvaluation(current);
+          throw new Error('EVALUATION_ALREADY_EXISTS');
+        }
         const generation =
           Math.max(
             0,
