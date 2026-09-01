@@ -14,7 +14,7 @@ non-verdict states. No Lead Integration was performed.
 - Branch: `codex/phase2c5-deterministic-verdict-foundation`
 - Starting HEAD: `73537b6a3728d6b986d5a8f265db3ba4702a0ca0`
 - Final implementation HEAD: `09294f1` (`feat: add phase 2c5 deterministic verdict engine`)
-- Report/closure commit: pending until this report is committed
+- Report/closure commit: `cb11080` (`docs: close phase 2c5 deterministic verdict foundation`)
 - Baseline closure: `73537b6` (Phase 2C.4)
 - `master` was not changed and still points to the Phase 2C.4 baseline.
 - Existing untracked user/project artifacts were preserved.
@@ -148,12 +148,13 @@ case records after WA, proving `RUN_ALL`.
 
 ## Skipped-Test Audit and Limitations
 
-The default TypeScript suite skips four tests: three Redis opt-in tests and one
-optional browser/runtime test. The Redis suite was explicitly run with
+The default TypeScript suite skips four tests, all in the Redis opt-in file.
+The Redis suite was explicitly run with
 `OJPLATFORM_QUEUE_REDIS_QUALIFICATION=true` and passed 4/4. The real Worker
 crash test was explicitly run with `OJPLATFORM_REAL_WORKER_PROCESS_TEST=true`
-and passed. Browser/product tests are outside this Judge-only Goal and were
-not used to claim verdict qualification.
+and passed. Browser/product E2E tests are outside this Judge-only Goal, are not
+part of the Vitest skip count above, and were not used to claim verdict
+qualification.
 
 Three legacy Supervisor diagnostics were run under the dedicated non-root WSL
 user and failed because no cgroupfs scope was observable in that diagnostic
@@ -187,4 +188,4 @@ or deleted and remains outside this Goal's ownership.
 - `PRODUCTION READY`: no
 - `READY FOR NEXT JUDGE GOAL`: YES
 
-Final implementation commit: `09294f1`. The report/closure commit follows.
+Final implementation commit: `09294f1`. Report/closure commit: `cb11080`.
