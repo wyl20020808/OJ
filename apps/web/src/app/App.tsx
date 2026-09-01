@@ -178,7 +178,7 @@ function Breadcrumbs({ current }: { current: Route }) {
     'homework-detail': current.id ?? '作业详情',
     'wrong-book': '错题集',
     notifications: '通知',
-    messages: '通讯中心',
+    messages: '通讯',
     author: '出题工作台',
     'author-new': '创建题目',
     'author-edit': '编辑题目',
@@ -840,12 +840,6 @@ function ProblemList({ api }: { api: ApiClient }) {
   }>;
   return (
     <section className="problem-list-v4">
-      <div className="page-heading">
-        <div>
-          <h1>题库</h1>
-        </div>
-        <span className="muted">共 {data.page.total} 题</span>
-      </div>
       <details className="problem-filter-disclosure" open>
         <summary>筛选题目</summary>
         <div className="problem-filters" aria-label="题库筛选">
@@ -969,11 +963,16 @@ function ProblemList({ api }: { api: ApiClient }) {
           }
         />
       ) : (
-        <div className="problem-table" role="list">
+        <div className="problem-table problem-list-modern" role="list">
           {filtered.map((p) => (
             <Link key={p.id} to={`/problems/${p.slug || p.id}`}>
-              <article role="listitem">
-                <span className="problem-id">{p.slug || p.id}</span>
+              <article className="problem-row" role="listitem">
+                <span
+                  className="problem-id"
+                  aria-label={`题目编号 ${p.slug || p.id}`}
+                >
+                  {p.slug || p.id}
+                </span>
                 <div className="problem-title-cell">
                   <h2>{p.title}</h2>
                   <div className="tag-row">
@@ -983,6 +982,9 @@ function ProblemList({ api }: { api: ApiClient }) {
                       <span>暂无标签</span>
                     )}
                   </div>
+                  {p.source && (
+                    <span className="problem-source">来源 · {p.source}</span>
+                  )}
                 </div>
                 <span className="difficulty-label problem-difficulty-chip">
                   {p.difficulty ?? '难度未提供'}
@@ -1927,9 +1929,6 @@ export function App() {
   const [authState, setAuthState] = useState<
     'loading' | 'authenticated' | 'unauthenticated' | 'unavailable'
   >('loading');
-  const [readiness, setReadiness] = useState<
-    'loading' | 'ready' | 'degraded' | 'error'
-  >('loading');
   useEffect(() => {
     const h = () => setCurrent(route());
     window.addEventListener('popstate', h);
@@ -1947,10 +1946,8 @@ export function App() {
             : 'unavailable',
         );
       });
-    void api
-      .readiness()
-      .then((r) => setReadiness(r.status === 'ok' ? 'ready' : 'degraded'))
-      .catch(() => setReadiness('error'));
+    // Keep readiness polling for runtime diagnostics without reserving page-header space.
+    void api.readiness().catch(() => undefined);
     return () => window.removeEventListener('popstate', h);
   }, [api]);
   const page =
@@ -2211,23 +2208,6 @@ export function App() {
         </nav>
       </header>
       <Breadcrumbs current={current} />
-      <div className="readiness" aria-live="polite">
-        {readiness === 'loading' && (
-          <span role="status">{zhCN.platform.checking}</span>
-        )}
-        {readiness === 'ready' && (
-          <span role="status">{zhCN.platform.ready}</span>
-        )}
-        {readiness === 'degraded' && (
-          <span role="alert">
-            <strong>{zhCN.platform.notReady}</strong> ·{' '}
-            {zhCN.platform.notReadyDetail}
-          </span>
-        )}
-        {readiness === 'error' && (
-          <span role="alert">{zhCN.platform.unavailable}</span>
-        )}
-      </div>
       <main className="shell">{page}</main>
       <footer>OJPlatform · 练习、学习、持续进步。</footer>
     </div>

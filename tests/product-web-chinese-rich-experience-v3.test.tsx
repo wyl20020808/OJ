@@ -133,7 +133,7 @@ describe('Product Web Chinese Rich Experience V3', () => {
       />,
     );
     expect(screen.getByText('从验证身份开始')).toBeInTheDocument();
-    expect(screen.getByText('手机号注册')).toBeInTheDocument();
+    expect(screen.getByText('手机号')).toBeInTheDocument();
   });
   it.each([
     ['WEB-V3-05', '/problems', '题库'],
@@ -144,9 +144,15 @@ describe('Product Web Chinese Rich Experience V3', () => {
     ['WEB-V3-10', '/forbidden', '无权访问'],
   ])('%s localized route shell', async (_id, path, text) => {
     renderApp(path);
-    expect(
-      await screen.findByRole('heading', { name: text }),
-    ).toBeInTheDocument();
+    if (path === '/problems') {
+      expect(
+        await screen.findByRole('navigation', { name: '面包屑' }),
+      ).toHaveTextContent('题库');
+    } else {
+      expect(
+        await screen.findByRole('heading', { name: text }),
+      ).toBeInTheDocument();
+    }
   });
   it('WEB-V3-11 compact welcome/actions', async () => {
     renderApp();
@@ -251,8 +257,8 @@ describe('Product Web Chinese Rich Experience V3', () => {
   it('WEB-V3-27 list compact desktop', async () => {
     renderApp('/problems');
     expect(
-      await screen.findByRole('heading', { name: '题库' }),
-    ).toBeInTheDocument();
+      await screen.findByRole('navigation', { name: '面包屑' }),
+    ).toHaveTextContent('题库');
     expect(screen.getByRole('list')).toBeInTheDocument();
   });
   it('WEB-V3-28 list mobile usable', async () => {

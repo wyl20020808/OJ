@@ -256,15 +256,15 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
       screen.getByRole('heading', { name: '无权访问' }),
     ).toBeInTheDocument();
   });
-  it('WEB-PROD-21 app supports loading semantics', () => {
+  it('WEB-PROD-21 app polls readiness without a visible status strip', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockReturnValue(new Promise(() => undefined)),
     );
     render(<App />);
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '正在检查平台服务状态',
-    );
+    expect(
+      screen.queryByText(/平台状态检测|平台服务正常/),
+    ).not.toBeInTheDocument();
   });
   it('WEB-PROD-22 app supports empty states', async () => {
     vi.stubGlobal('fetch', appFetch());

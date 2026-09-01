@@ -165,32 +165,45 @@ export function ContestExperience({
   if (view === 'list' || view === 'mine') {
     return (
       <section className="portal-page contest-page">
-        <div className="portal-heading">
-          <div>
-            <p className="eyebrow">竞赛中心</p>
-            <h1>{view === 'mine' ? '我的比赛' : '比赛'}</h1>
-          </div>
+        <div className="contest-nav-bar">
+          <nav
+            className="filter-tabs contest-internal-nav"
+            aria-label="比赛导航"
+          >
+            <PortalLink
+              to="/contests"
+              navigate={navigate}
+              className={view === 'list' ? 'active' : ''}
+            >
+              比赛列表
+            </PortalLink>
+            <PortalLink
+              to="/contests/mine"
+              navigate={navigate}
+              className={view === 'mine' ? 'active' : ''}
+            >
+              我的比赛
+            </PortalLink>
+            {['即将开始', '进行中', '已结束', '我参加的', '我创建的'].map(
+              (label) => (
+                <button
+                  key={label}
+                  type="button"
+                  role="tab"
+                  aria-selected={false}
+                >
+                  {label}
+                </button>
+              ),
+            )}
+          </nav>
           <PortalLink
             to="/contests/new"
             navigate={navigate}
-            className="button-link"
+            className="button-link contest-create-action"
           >
             新建比赛
           </PortalLink>
-        </div>
-        <div className="filter-tabs" role="tablist" aria-label="比赛筛选">
-          {['全部', '即将开始', '进行中', '已结束', '我参加的', '我创建的'].map(
-            (label, index) => (
-              <button
-                key={label}
-                type="button"
-                role="tab"
-                aria-selected={index === 0}
-              >
-                {label}
-              </button>
-            ),
-          )}
         </div>
         {contests.length ? (
           <div className="contest-list" role="list">
@@ -763,59 +776,55 @@ export function MessagesExperience({
       ].some((value) => value.toLocaleLowerCase().includes(query)),
     );
   }, [conversationQuery, conversations]);
+  const changeMode = (
+    next: 'conversations' | 'contacts' | 'requests' | 'add',
+  ) => {
+    setMode(next);
+    if (next !== 'conversations') setSelected(null);
+  };
   return (
     <section className="messages-page">
-      <header className="messages-heading">
-        <div>
-          <p className="eyebrow">站内通讯</p>
-          <h1>通讯中心</h1>
-        </div>
-        <div className="message-modes" role="tablist" aria-label="通讯中心视图">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'conversations'}
-            onClick={() => setMode('conversations')}
-          >
-            会话
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'contacts'}
-            onClick={() => setMode('contacts')}
-          >
-            通讯录
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'requests'}
-            onClick={() => setMode('requests')}
-          >
-            新的朋友
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'add'}
-            onClick={() => setMode('add')}
-          >
-            添加好友
-          </button>
-        </div>
-      </header>
-      {mode === 'add' ? (
-        <AddFriend />
-      ) : mode === 'requests' ? (
-        <FriendRequests requests={requests} />
-      ) : mode === 'contacts' ? (
-        <Contacts friends={friends} />
-      ) : (
-        <div className={`messenger-shell ${selected ? 'show-chat' : ''}`}>
-          <aside className="conversation-pane" aria-label="会话列表">
-            <div className="conversation-pane-header">
-              <h2>最近会话</h2>
+      <div
+        className={`messenger-shell message-workspace message-mode-${mode} ${selected ? 'show-chat' : ''}`}
+      >
+        <aside className="conversation-pane" aria-label="通讯工作区导航">
+          <div className="conversation-pane-header">
+            <div className="message-modes" role="tablist" aria-label="通讯视图">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'conversations'}
+                onClick={() => changeMode('conversations')}
+              >
+                会话
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'contacts'}
+                onClick={() => changeMode('contacts')}
+              >
+                通讯录
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'requests'}
+                onClick={() => changeMode('requests')}
+              >
+                新的朋友
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'add'}
+                onClick={() => changeMode('add')}
+              >
+                添加好友
+              </button>
+            </div>
+            {mode === 'conversations' && <h2>最近会话</h2>}
+            {mode === 'conversations' && (
               <label className="conversation-search">
                 <span className="sr-only">搜索会话</span>
                 <input
@@ -825,86 +834,110 @@ export function MessagesExperience({
                   placeholder="搜索会话"
                 />
               </label>
+            )}
+            {mode === 'contacts' && (
+              <span className="rail-section-label">联系人</span>
+            )}
+            {mode === 'requests' && (
+              <span className="rail-section-label">好友请求</span>
+            )}
+            {mode === 'add' && (
+              <span className="rail-section-label">添加联系人</span>
+            )}
+          </div>
+          {mode === 'conversations' && (
+            <div className="conversation-list">
+              {visibleConversations.map((conversation) => (
+                <button
+                  key={conversation.id}
+                  type="button"
+                  className={selected === conversation.id ? 'selected' : ''}
+                  onClick={() => setSelected(conversation.id)}
+                >
+                  <span className="mini-avatar">
+                    {conversation.peer.displayName.slice(0, 1)}
+                  </span>
+                  <span>
+                    <strong>{conversation.peer.displayName}</strong>
+                    <small>{conversation.lastMessage ?? '暂无消息'}</small>
+                  </span>
+                  {conversation.unreadCount > 0 && (
+                    <b aria-label={`${conversation.unreadCount} 条未读`}>
+                      {conversation.unreadCount}
+                    </b>
+                  )}
+                </button>
+              ))}
+              {!visibleConversations.length && (
+                <p className="empty-copy">
+                  {conversationQuery
+                    ? '没有匹配的会话。'
+                    : '暂无会话。通讯后端接入后，真实会话会显示在这里。'}
+                </p>
+              )}
             </div>
-            {visibleConversations.map((conversation) => (
-              <button
-                key={conversation.id}
-                type="button"
-                className={selected === conversation.id ? 'selected' : ''}
-                onClick={() => setSelected(conversation.id)}
-              >
-                <span className="mini-avatar">
-                  {conversation.peer.displayName.slice(0, 1)}
-                </span>
-                <span>
-                  <strong>{conversation.peer.displayName}</strong>
-                  <small>{conversation.lastMessage ?? '暂无消息'}</small>
-                </span>
-                {conversation.unreadCount > 0 && (
-                  <b aria-label={`${conversation.unreadCount} 条未读`}>
-                    {conversation.unreadCount}
-                  </b>
-                )}
-              </button>
-            ))}
-            {!visibleConversations.length && (
-              <p className="empty-copy">
-                {conversationQuery
-                  ? '没有匹配的会话。'
-                  : '暂无会话。通讯后端接入后，真实会话会显示在这里。'}
-              </p>
-            )}
-          </aside>
-          <section className="chat-pane" aria-label="聊天内容">
-            {selectedConversation ? (
-              <>
-                <header>
-                  <button
-                    type="button"
-                    className="mobile-back"
-                    onClick={() => setSelected(null)}
-                  >
-                    ←
-                  </button>
-                  <div>
-                    <strong>{selectedConversation.peer.displayName}</strong>
-                    <span>@{selectedConversation.peer.username}</span>
-                  </div>
-                </header>
-                <div className="message-stream">
-                  {messages
-                    .filter((message) => message.conversationId === selected)
-                    .map((message) => (
-                      <p key={message.id} className="message-bubble">
-                        {message.content}
-                        <time>{message.sentAt}</time>
-                      </p>
-                    ))}
+          )}
+          {mode !== 'conversations' && (
+            <p className="empty-copy rail-empty-copy">
+              {mode === 'contacts'
+                ? '联系人列表将在真实社交服务接入后显示。'
+                : mode === 'requests'
+                  ? '好友请求将在真实社交服务接入后显示。'
+                  : '添加好友功能将在真实社交服务接入后启用。'}
+            </p>
+          )}
+        </aside>
+        <section className="chat-pane message-content" aria-label="聊天内容">
+          {mode === 'add' ? (
+            <AddFriend />
+          ) : mode === 'requests' ? (
+            <FriendRequests requests={requests} />
+          ) : mode === 'contacts' ? (
+            <Contacts friends={friends} />
+          ) : selectedConversation ? (
+            <>
+              <header>
+                <button
+                  type="button"
+                  className="mobile-back"
+                  onClick={() => setSelected(null)}
+                >
+                  ←
+                </button>
+                <div>
+                  <strong>{selectedConversation.peer.displayName}</strong>
+                  <span>@{selectedConversation.peer.username}</span>
                 </div>
-                <form className="message-composer">
-                  <label>
-                    <span className="sr-only">输入消息</span>
-                    <textarea
-                      disabled
-                      placeholder="消息服务正在接入"
-                      rows={2}
-                    />
-                  </label>
-                  <button type="button" disabled>
-                    发送
-                  </button>
-                </form>
-              </>
-            ) : (
-              <div className="no-conversation">
-                <strong>选择一个会话</strong>
-                <p>当前没有已选择的聊天。消息不会在本地伪造或持久化。</p>
-                <code>MESSAGING-BACKEND-INTEGRATION-REQUEST</code>
+              </header>
+              <div className="message-stream">
+                {messages
+                  .filter((message) => message.conversationId === selected)
+                  .map((message) => (
+                    <p key={message.id} className="message-bubble">
+                      {message.content}
+                      <time>{message.sentAt}</time>
+                    </p>
+                  ))}
               </div>
-            )}
-          </section>
-        </div>
-      )}
+              <form className="message-composer">
+                <label>
+                  <span className="sr-only">输入消息</span>
+                  <textarea disabled placeholder="消息服务正在接入" rows={2} />
+                </label>
+                <button type="button" disabled>
+                  发送
+                </button>
+              </form>
+            </>
+          ) : (
+            <div className="no-conversation">
+              <strong>选择一个会话</strong>
+              <p>当前没有已选择的聊天。消息不会在本地伪造或持久化。</p>
+              <code>MESSAGING-BACKEND-INTEGRATION-REQUEST</code>
+            </div>
+          )}
+        </section>
+      </div>
     </section>
   );
 }

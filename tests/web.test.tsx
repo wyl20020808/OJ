@@ -48,26 +48,35 @@ describe('Web platform shell', () => {
     ].map((state) => presentJudgeStatus(state).label);
     expect(labels.join(' ')).not.toMatch(/\b(AC|WA|TLE|MLE|RE|CE)\b/);
   });
-  it('renders loading then healthy state', async () => {
+  it('polls readiness without rendering a platform status strip', async () => {
+    const requests: string[] = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        status: 200,
-        json: async () => ({ status: 'ok', dependencies: {} }),
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        requests.push(String(input));
+        return {
+          status: 200,
+          json: async () => ({ status: 'ok', dependencies: {} }),
+        };
       }),
     );
     render(<App />);
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '正在检查平台服务状态',
+    await waitFor(() =>
+      expect(requests.some((url) => url.endsWith('/ready'))).toBe(true),
     );
-    expect(await screen.findByText('平台服务正常')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/平台状态检测|平台服务正常/),
+    ).not.toBeInTheDocument();
   });
-  it('renders an accessible error state', async () => {
+  it('keeps readiness errors out of page content', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     render(<App />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('不可用');
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '公告' })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/平台服务|平台状态检测/)).not.toBeInTheDocument();
   });
-  it('renders a controlled degraded readiness state', async () => {
+  it('keeps degraded readiness out of page content', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -79,7 +88,10 @@ describe('Web platform shell', () => {
       }),
     );
     render(<App />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('尚未完全就绪');
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '公告' })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/尚未完全就绪|平台服务/)).not.toBeInTheDocument();
   });
   it('renders controlled not-found UI', () => {
     render(<NotFound />);

@@ -97,7 +97,7 @@ describe('Product Web Modern Experience V2', () => {
     login();
     expect(await screen.findByText('已验证身份')).toBeInTheDocument();
     expect(
-      screen.getByRole('group', { name: '登录身份类型' }),
+      screen.getByRole('tablist', { name: '登录方式' }),
     ).toBeInTheDocument();
   });
   it('WEB-V2-02 renders the polished desktop auth composition', async () => {
@@ -151,9 +151,9 @@ describe('Product Web Modern Experience V2', () => {
     login();
     expect(
       (
-        await screen.findByRole('group', { name: '登录身份类型' })
-      ).querySelectorAll('button'),
-    ).toHaveLength(2);
+        await screen.findByRole('tablist', { name: '登录方式' })
+      ).querySelectorAll('[role="tab"]'),
+    ).toHaveLength(3);
   });
   it('WEB-V2-09 supports email password mode', async () => {
     const api = apiMock();
@@ -179,7 +179,7 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-10 supports phone password mode', async () => {
     const api = apiMock();
     login({ loginPassword: api.loginPassword });
-    fireEvent.click(await screen.findByRole('button', { name: '手机号' }));
+    fireEvent.click(await screen.findByRole('tab', { name: '手机号' }));
     fireEvent.change(screen.getByLabelText('手机号'), {
       target: { value: '+8613800138000' },
     });
@@ -213,7 +213,7 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-12 supports phone code mode', async () => {
     const api = apiMock();
     login({ requestVerification: api.requestVerification });
-    fireEvent.click(await screen.findByRole('button', { name: '手机号' }));
+    fireEvent.click(await screen.findByRole('tab', { name: '手机号' }));
     fireEvent.click(screen.getByRole('tab', { name: '验证码登录' }));
     fireEvent.change(screen.getByLabelText('手机号'), {
       target: { value: '+8613800138000' },
@@ -280,18 +280,18 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-21 starts email registration in an explicit mode', async () => {
     register();
-    expect(await screen.findByRole('button', { name: '邮箱注册' })).toHaveClass(
+    expect(await screen.findByRole('tab', { name: '邮箱' })).toHaveClass(
       'selected',
     );
   });
   it('WEB-V2-22 starts phone registration in an explicit mode', async () => {
     register();
-    fireEvent.click(await screen.findByRole('button', { name: '手机号注册' }));
+    fireEvent.click(await screen.findByRole('tab', { name: '手机号' }));
     expect(screen.getByLabelText('手机号')).toBeInTheDocument();
   });
   it('WEB-V2-23 exposes country code selection', async () => {
     register();
-    fireEvent.click(await screen.findByRole('button', { name: '手机号注册' }));
+    fireEvent.click(await screen.findByRole('tab', { name: '手机号' }));
     expect(screen.getByLabelText('国家/地区代码')).toBeInTheDocument();
   });
   it('WEB-V2-24 requires a verification grant before account creation', async () => {
@@ -414,7 +414,7 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-41 supports keyboard focusable mode controls', async () => {
     login();
-    const phone = await screen.findByRole('button', { name: '手机号' });
+    const phone = await screen.findByRole('tab', { name: '手机号' });
     phone.focus();
     expect(document.activeElement).toBe(phone);
   });
@@ -448,7 +448,7 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-46 supports narrow phone input type', async () => {
     register();
-    fireEvent.click(await screen.findByRole('button', { name: '手机号注册' }));
+    fireEvent.click(await screen.findByRole('tab', { name: '手机号' }));
     expect(screen.getByLabelText('手机号')).toHaveAttribute('type', 'tel');
   });
   it('WEB-V2-47 does not log provider errors by default', async () => {

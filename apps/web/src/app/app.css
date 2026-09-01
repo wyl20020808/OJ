@@ -49,6 +49,7 @@
   --state-selected: #e4f3f7;
   --state-selected-border: #0d718f;
 }
+
 * {
   box-sizing: border-box;
 }
@@ -1874,5 +1875,110 @@ footer {
   .pagination .pagination-control {
     flex: 1 1 auto;
     max-width: 7rem;
+  }
+}
+
+/* R3 final cascade for compact transparent shell and modern problem rows. */
+.breadcrumbs {
+  width: min(1180px, calc(100% - 2.5rem));
+  min-height: 0;
+  margin: 0 auto;
+  padding: 0.65rem 0 0.35rem;
+  border: 0;
+  background: transparent;
+}
+.breadcrumbs a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.breadcrumbs a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.breadcrumbs a:focus-visible,
+.breadcrumbs [aria-current='page']:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+.breadcrumbs > span > span[aria-hidden='true'] {
+  color: #9aaab1;
+}
+.shell {
+  padding-top: var(--space-5);
+}
+.problem-list-modern {
+  display: grid;
+  gap: var(--space-3);
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+.problem-list-modern > a {
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgba(23, 32, 42, 0.04);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+.problem-list-modern > a:hover,
+.problem-list-modern > a:focus-visible {
+  border-color: #9bcbd4;
+  box-shadow:
+    0 8px 18px rgba(23, 32, 42, 0.08),
+    inset 3px 0 0 var(--accent);
+  transform: translateY(-1px);
+  text-decoration: none;
+}
+.problem-list-modern article {
+  grid-template-columns: minmax(6rem, 0.16fr) minmax(0, 1fr) auto auto;
+  min-height: 4.75rem;
+  padding: var(--space-4) var(--space-5);
+}
+.problem-list-modern .problem-id {
+  color: var(--accent-dark);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0;
+}
+.problem-list-modern h2 {
+  font-size: 1.04rem;
+  line-height: 1.35;
+}
+.problem-list-modern .tag-row {
+  margin-top: var(--space-2);
+}
+.problem-list-modern .tag-row > span {
+  border: 1px solid #dce8eb;
+  border-radius: 999px;
+  background: #f5f9fa;
+  color: #536871;
+  font-size: 0.68rem;
+}
+.problem-source {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.problem-list-modern .problem-difficulty-chip {
+  border-color: #d6e3d9;
+  background: #f1f7f2;
+  color: #44634c;
+  font-size: 0.74rem;
+}
+@media (max-width: 560px) {
+  .breadcrumbs {
+    width: calc(100% - 1.5rem);
+    padding-top: 0.55rem;
+  }
+  .problem-list-modern article {
+    grid-template-columns: 1fr auto;
+    padding: var(--space-4);
+  }
+  .problem-list-modern .problem-id {
+    grid-column: 1 / -1;
   }
 }

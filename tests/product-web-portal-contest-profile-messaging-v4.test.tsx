@@ -292,7 +292,7 @@ async function verifyBreadcrumb(id: number) {
     expect(nav.querySelector('[aria-current="page"]')).toBeTruthy();
   if (id === 29) expect(nav).toHaveTextContent('比赛');
   if (id === 30) expect(nav).toHaveTextContent('个人主页');
-  if (id === 31) expect(nav).toHaveTextContent('通讯中心');
+  if (id === 31) expect(nav).toHaveTextContent('通讯');
 }
 
 async function verifyProblemList(id: number) {
@@ -301,7 +301,7 @@ async function verifyProblemList(id: number) {
     return;
   }
   renderApp(id === 47 ? '/problems?q=two' : '/problems');
-  await screen.findByRole('heading', { name: '题库' });
+  await screen.findByRole('navigation', { name: '面包屑' });
   if (id === 39) expect(screen.queryByText('题目资源')).not.toBeInTheDocument();
   if (id === 40) expect(screen.getByText('two-sum')).toBeInTheDocument();
   if (id === 41) expect(screen.getAllByText('入门').length).toBeGreaterThan(0);
@@ -372,11 +372,15 @@ async function verifyContest(id: number) {
     renderApp(
       id === 62 ? '/contests' : id === 66 ? '/me/contests' : '/contests/new',
     );
-    expect(
-      await screen.findByRole('heading', {
-        name: id === 62 ? '比赛' : id === 66 ? '我的比赛' : '新建比赛',
-      }),
-    ).toBeInTheDocument();
+    if (id === 76) {
+      expect(
+        await screen.findByRole('heading', { name: '新建比赛' }),
+      ).toBeInTheDocument();
+    } else {
+      expect(
+        await screen.findByRole('navigation', { name: '面包屑' }),
+      ).toHaveTextContent(id === 62 ? '比赛' : '我的比赛');
+    }
     return;
   }
   if ([63, 64, 65].includes(id)) {
@@ -581,11 +585,14 @@ async function verifyCommunication(id: number) {
   }
   if (id === 106 || id === 107) {
     renderApp(id === 106 ? '/notifications' : '/messages');
-    expect(
-      await screen.findByRole('heading', {
-        name: id === 106 ? '通知' : '通讯中心',
-      }),
-    ).toBeInTheDocument();
+    if (id === 106)
+      expect(
+        await screen.findByRole('heading', { name: '通知' }),
+      ).toBeInTheDocument();
+    else
+      expect(
+        await screen.findByRole('navigation', { name: '面包屑' }),
+      ).toHaveTextContent('通讯');
     return;
   }
   const withFixture = [108, 109, 111, 119].includes(id);
@@ -683,7 +690,7 @@ async function verifyRegression(id: number) {
     const method = id === 142 ? 'error' : 'warn';
     const spy = vi.spyOn(console, method).mockImplementation(() => undefined);
     renderApp('/messages');
-    await screen.findByRole('heading', { name: '通讯中心' });
+    await screen.findByRole('navigation', { name: '面包屑' });
     expect(spy).not.toHaveBeenCalled();
   } else if (id === 144) {
     renderApp();

@@ -143,7 +143,9 @@ function GuestContinue({
         {label}
       </button>
       <p className="guest-warning">
-        游客账号仅用于临时体验。清除浏览器数据或更换浏览器后可能无法找回，建议稍后绑定邮箱、手机号或第三方账号。
+        快速创建一个临时账号开始体验。游客账号仅能在当前浏览器环境中恢复。
+        <br />
+        清除浏览器数据或更换浏览器后可能无法找回，之后可升级为正式账号。
       </p>
       {capability === 'unavailable' && (
         <p className="field-help" role="status">
@@ -470,6 +472,9 @@ function LoginExperience({
   const [identifierType, setIdentifierType] = useState<'EMAIL' | 'PHONE'>(
     'EMAIL',
   );
+  const [authMethod, setAuthMethod] = useState<'email' | 'phone' | 'guest'>(
+    'email',
+  );
   const [authMode, setAuthMode] = useState<'password' | 'code'>('password');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -576,115 +581,146 @@ function LoginExperience({
     >
       <MethodNotice loading={methodsLoading} error={methodsError} />
       <OAuthStateNotice />
-      <div className="segmented-control" role="group" aria-label="登录身份类型">
+      <div
+        className="segmented-control auth-method-control"
+        role="tablist"
+        aria-label="登录方式"
+      >
         <button
           type="button"
-          className={identifierType === 'EMAIL' ? 'selected' : ''}
+          role="tab"
+          aria-selected={authMethod === 'email'}
+          className={authMethod === 'email' ? 'selected' : ''}
           onClick={() => {
+            setAuthMethod('email');
             setIdentifierType('EMAIL');
             setChallenge(null);
             setGrant(null);
+            setError('');
           }}
         >
           邮箱
         </button>
         <button
           type="button"
-          className={identifierType === 'PHONE' ? 'selected' : ''}
+          role="tab"
+          aria-selected={authMethod === 'phone'}
+          className={authMethod === 'phone' ? 'selected' : ''}
           onClick={() => {
+            setAuthMethod('phone');
             setIdentifierType('PHONE');
             setChallenge(null);
             setGrant(null);
+            setError('');
           }}
         >
           手机号
         </button>
-      </div>
-      <div className="mode-tabs" role="tablist" aria-label="登录方式">
         <button
           type="button"
           role="tab"
-          aria-selected={authMode === 'password'}
-          className={authMode === 'password' ? 'active' : ''}
-          disabled={!passwordEnabled}
-          onClick={() => setAuthMode('password')}
+          aria-selected={authMethod === 'guest'}
+          className={authMethod === 'guest' ? 'selected' : ''}
+          onClick={() => {
+            setAuthMethod('guest');
+            setChallenge(null);
+            setGrant(null);
+            setError('');
+          }}
         >
-          密码登录
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={authMode === 'code'}
-          className={authMode === 'code' ? 'active' : ''}
-          disabled={!codeEnabled}
-          onClick={() => setAuthMode('code')}
-        >
-          验证码登录
+          游客登录
         </button>
       </div>
-      <form onSubmit={submit} noValidate>
-        <label>
-          {identifierType === 'EMAIL' ? '邮箱地址' : '手机号'}
-          <input
-            type={identifierType === 'EMAIL' ? 'email' : 'tel'}
-            value={identifier}
-            onChange={(event) => setIdentifier(event.target.value)}
-            autoComplete="username"
-            required
-          />
-        </label>
-        {authMode === 'password' ? (
-          <label>
-            密码
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </label>
-        ) : !challenge ? (
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => void sendCode()}
-            disabled={busy || !codeEnabled}
-          >
-            {busy ? '发送中…' : '发送验证码'}
-          </button>
-        ) : (
-          <CodeStep
-            challenge={challenge}
-            code={code}
-            setCode={setCode}
-            onVerify={() => void verify()}
-            busy={busy}
-            onResend={() => void sendCode()}
-            resendIn={cooldown}
-          />
-        )}
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        {authMode === 'password' && (
-          <button type="submit" disabled={busy || !passwordEnabled}>
-            {busy ? '登录中…' : '登录'}
-          </button>
-        )}
-        {authMode === 'code' && grant && (
-          <button type="submit" disabled={busy}>
-            {busy ? '登录中…' : '使用已验证验证码继续'}
-          </button>
-        )}
-      </form>
-      <div className="social-divider">
-        <span>或使用以下方式继续</span>
-      </div>
-      <ProviderButtons methods={methods} api={api} onError={setError} />
-      <GuestContinue api={api} onUser={onUser} onNavigate={onNavigate} />
+      {authMethod === 'guest' ? (
+        <GuestContinue api={api} onUser={onUser} onNavigate={onNavigate} />
+      ) : (
+        <>
+          <div className="mode-tabs" role="tablist" aria-label="登录验证方式">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={authMode === 'password'}
+              className={authMode === 'password' ? 'active' : ''}
+              disabled={!passwordEnabled}
+              onClick={() => setAuthMode('password')}
+            >
+              密码登录
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={authMode === 'code'}
+              className={authMode === 'code' ? 'active' : ''}
+              disabled={!codeEnabled}
+              onClick={() => setAuthMode('code')}
+            >
+              验证码登录
+            </button>
+          </div>
+          <form onSubmit={submit} noValidate>
+            <label>
+              {identifierType === 'EMAIL' ? '邮箱地址' : '手机号'}
+              <input
+                type={identifierType === 'EMAIL' ? 'email' : 'tel'}
+                value={identifier}
+                onChange={(event) => setIdentifier(event.target.value)}
+                autoComplete="username"
+                required
+              />
+            </label>
+            {authMode === 'password' ? (
+              <label>
+                密码
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </label>
+            ) : !challenge ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void sendCode()}
+                disabled={busy || !codeEnabled}
+              >
+                {busy ? '发送中…' : '发送验证码'}
+              </button>
+            ) : (
+              <CodeStep
+                challenge={challenge}
+                code={code}
+                setCode={setCode}
+                onVerify={() => void verify()}
+                busy={busy}
+                onResend={() => void sendCode()}
+                resendIn={cooldown}
+              />
+            )}
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            {authMode === 'password' && (
+              <button type="submit" disabled={busy || !passwordEnabled}>
+                {busy ? '登录中…' : '登录'}
+              </button>
+            )}
+            {authMode === 'code' && grant && (
+              <button type="submit" disabled={busy}>
+                {busy ? '登录中…' : '使用已验证验证码继续'}
+              </button>
+            )}
+          </form>
+          <div className="social-divider">
+            <span>或使用以下方式继续</span>
+          </div>
+          <ProviderButtons methods={methods} api={api} onError={setError} />
+        </>
+      )}
       <p className="switch">
         还没有账户？<a href="/register">注册账户</a>
       </p>
@@ -704,6 +740,9 @@ function RegisterExperience({
   } = useAuthMethods(api);
   const [identifierType, setIdentifierType] = useState<'EMAIL' | 'PHONE'>(
     'EMAIL',
+  );
+  const [authMethod, setAuthMethod] = useState<'email' | 'phone' | 'guest'>(
+    'email',
   );
   const [destination, setDestination] = useState('');
   const [country, setCountry] = useState('+1');
@@ -809,145 +848,174 @@ function RegisterExperience({
       description="先验证你对邮箱或手机号的控制权，再创建属于你的账户。"
     >
       <MethodNotice loading={methodsLoading} error={methodsError} />
-      <div className="segmented-control" role="group" aria-label="注册方式">
+      <div
+        className="segmented-control auth-method-control"
+        role="tablist"
+        aria-label="注册方式"
+      >
         <button
           type="button"
-          className={identifierType === 'EMAIL' ? 'selected' : ''}
+          role="tab"
+          aria-selected={authMethod === 'email'}
+          className={authMethod === 'email' ? 'selected' : ''}
           onClick={() => {
+            setAuthMethod('email');
             setIdentifierType('EMAIL');
             setChallenge(null);
             setGrant(null);
+            setError('');
           }}
         >
-          邮箱注册
+          邮箱
         </button>
         <button
           type="button"
-          className={identifierType === 'PHONE' ? 'selected' : ''}
+          role="tab"
+          aria-selected={authMethod === 'phone'}
+          className={authMethod === 'phone' ? 'selected' : ''}
           onClick={() => {
+            setAuthMethod('phone');
             setIdentifierType('PHONE');
             setChallenge(null);
             setGrant(null);
+            setError('');
           }}
         >
-          手机号注册
+          手机号
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={authMethod === 'guest'}
+          className={authMethod === 'guest' ? 'selected' : ''}
+          onClick={() => {
+            setAuthMethod('guest');
+            setChallenge(null);
+            setGrant(null);
+            setError('');
+          }}
+        >
+          游客登录
         </button>
       </div>
-      <form onSubmit={submit} noValidate>
-        {identifierType === 'PHONE' && (
+      {authMethod === 'guest' ? (
+        <GuestContinue api={api} onUser={onUser} onNavigate={onNavigate} />
+      ) : (
+        <form onSubmit={submit} noValidate>
+          {identifierType === 'PHONE' && (
+            <label>
+              国家/地区代码
+              <select
+                value={country}
+                onChange={(event) => setCountry(event.target.value)}
+              >
+                <option value="+1">+1 · 美国/加拿大</option>
+                <option value="+44">+44 · 英国</option>
+                <option value="+86">+86 · 中国</option>
+                <option value="+81">+81 · 日本</option>
+              </select>
+            </label>
+          )}
           <label>
-            国家/地区代码
-            <select
-              value={country}
-              onChange={(event) => setCountry(event.target.value)}
-            >
-              <option value="+1">+1 · 美国/加拿大</option>
-              <option value="+44">+44 · 英国</option>
-              <option value="+86">+86 · 中国</option>
-              <option value="+81">+81 · 日本</option>
-            </select>
+            {identifierType === 'EMAIL' ? '邮箱地址' : '手机号'}
+            <input
+              type={identifierType === 'EMAIL' ? 'email' : 'tel'}
+              value={destination}
+              onChange={(event) => setDestination(event.target.value)}
+              autoComplete="email"
+              required
+            />
           </label>
-        )}
-        <label>
-          {identifierType === 'EMAIL' ? '邮箱地址' : '手机号'}
-          <input
-            type={identifierType === 'EMAIL' ? 'email' : 'tel'}
-            value={destination}
-            onChange={(event) => setDestination(event.target.value)}
-            autoComplete="email"
-            required
-          />
-        </label>
-        {!grant && !challenge && (
-          <button
-            type="button"
-            onClick={() => void requestCode()}
-            disabled={busy || !registrationEnabled}
-          >
-            {busy
-              ? '发送中…'
-              : `发送${identifierType === 'EMAIL' ? '邮箱' : '短信'}验证码`}
-          </button>
-        )}
-        {challenge && !grant && (
-          <CodeStep
-            challenge={challenge}
-            code={code}
-            setCode={setCode}
-            onVerify={() => void verify()}
-            busy={busy}
-            onResend={() => void requestCode()}
-            resendIn={cooldown}
-          />
-        )}
-        {grant && (
-          <div className="verified-grant" role="status">
-            {identifierType === 'EMAIL' ? '邮箱' : '手机号'}已验证 ·
-            可以创建账户
-          </div>
-        )}
-        {grant && (
-          <>
-            <label>
-              用户名
-              <input
-                value={details.username}
-                onChange={(event) =>
-                  setDetails({ ...details, username: event.target.value })
-                }
-                required
-              />
-            </label>
-            <label>
-              显示名称
-              <input
-                value={details.displayName}
-                onChange={(event) =>
-                  setDetails({ ...details, displayName: event.target.value })
-                }
-                required
-              />
-            </label>
-            <label>
-              密码
-              <input
-                type="password"
-                value={details.password}
-                onChange={(event) =>
-                  setDetails({ ...details, password: event.target.value })
-                }
-                autoComplete="new-password"
-                required
-              />
-            </label>
-            <label>
-              确认密码
-              <input
-                type="password"
-                value={details.confirm}
-                onChange={(event) =>
-                  setDetails({ ...details, confirm: event.target.value })
-                }
-                autoComplete="new-password"
-                required
-              />
-            </label>
-            <p className="field-help">
-              至少 {methods.passwordPolicy.minLength}{' '}
-              个字符，遵循服务端密码策略。
-            </p>
-            <button type="submit" disabled={busy}>
-              {busy ? '创建中…' : '创建账户'}
+          {!grant && !challenge && (
+            <button
+              type="button"
+              onClick={() => void requestCode()}
+              disabled={busy || !registrationEnabled}
+            >
+              {busy
+                ? '发送中…'
+                : `发送${identifierType === 'EMAIL' ? '邮箱' : '短信'}验证码`}
             </button>
-          </>
-        )}
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-      </form>
-      <GuestContinue api={api} onUser={onUser} onNavigate={onNavigate} />
+          )}
+          {challenge && !grant && (
+            <CodeStep
+              challenge={challenge}
+              code={code}
+              setCode={setCode}
+              onVerify={() => void verify()}
+              busy={busy}
+              onResend={() => void requestCode()}
+              resendIn={cooldown}
+            />
+          )}
+          {grant && (
+            <div className="verified-grant" role="status">
+              {identifierType === 'EMAIL' ? '邮箱' : '手机号'}已验证 ·
+              可以创建账户
+            </div>
+          )}
+          {grant && (
+            <>
+              <label>
+                用户名
+                <input
+                  value={details.username}
+                  onChange={(event) =>
+                    setDetails({ ...details, username: event.target.value })
+                  }
+                  required
+                />
+              </label>
+              <label>
+                显示名称
+                <input
+                  value={details.displayName}
+                  onChange={(event) =>
+                    setDetails({ ...details, displayName: event.target.value })
+                  }
+                  required
+                />
+              </label>
+              <label>
+                密码
+                <input
+                  type="password"
+                  value={details.password}
+                  onChange={(event) =>
+                    setDetails({ ...details, password: event.target.value })
+                  }
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+              <label>
+                确认密码
+                <input
+                  type="password"
+                  value={details.confirm}
+                  onChange={(event) =>
+                    setDetails({ ...details, confirm: event.target.value })
+                  }
+                  autoComplete="new-password"
+                  required
+                />
+              </label>
+              <p className="field-help">
+                至少 {methods.passwordPolicy.minLength}{' '}
+                个字符，遵循服务端密码策略。
+              </p>
+              <button type="submit" disabled={busy}>
+                {busy ? '创建中…' : '创建账户'}
+              </button>
+            </>
+          )}
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+        </form>
+      )}
       <p className="switch">
         已有账户？<a href="/login">登录</a>
       </p>

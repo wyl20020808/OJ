@@ -140,6 +140,7 @@ describe('Web V4 R2 problem library and guest contracts', () => {
         onNavigate={vi.fn()}
       />,
     );
+    fireEvent.click(screen.getByRole('tab', { name: '游客登录' }));
     const guest = await screen.findByRole('button', { name: '以游客身份继续' });
     expect(guest).toBeDisabled();
     expect(
@@ -168,6 +169,7 @@ describe('Web V4 R2 problem library and guest contracts', () => {
         onNavigate={onNavigate}
       />,
     );
+    fireEvent.click(screen.getByRole('tab', { name: '游客登录' }));
     const guest = await screen.findByRole('button', { name: '以游客身份继续' });
     expect(guest).toBeEnabled();
     fireEvent.click(guest);
