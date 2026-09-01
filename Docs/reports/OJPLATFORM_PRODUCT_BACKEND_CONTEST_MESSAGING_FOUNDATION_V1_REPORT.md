@@ -52,7 +52,8 @@ The code and focused real integration cover the principal CON-BE and MSG-BE beha
 - CON-BE-34 through CON-BE-37: formal Submission/Judge integration is intentionally unavailable pending `BACKEND-IR-AUTHORITATIVE-CONTEST-SCORING`.
 - CON-BE-42: contest route rate-limit wiring is a composition decision.
 - CON-BE-43 through CON-BE-45: transaction behavior and an isolated fresh database up/down/up lifecycle are verified. Migration-runner registry-order qualification still requires Lead ownership because Auth V2's reserved `0006` is not present in this worktree registry.
-- MSG-BE-47 through MSG-BE-53: database uniqueness and sequential/idempotent retry behavior are implemented; full concurrent accept/conversation/duplicate-message, rollback injection, fresh-database, and migration-runner compatibility qualification remain to be broadened by Lead integration.
+- MSG-BE-47 through MSG-BE-49: real PostgreSQL integration verifies concurrent accept replay, concurrent direct-conversation creation, and concurrent duplicate-message retries. Rollback injection and migration-runner compatibility remain Lead-owned follow-up evidence.
+- MSG-BE-50 through MSG-BE-53: transaction rollback injection and migration-runner compatibility remain to be broadened by Lead; fresh database up/down/up is verified in this worker.
 - Audit hook contracts are invoked for contest and social writes without body/source/session data. Durable audit persistence is owned by the existing Auth/Audit composition and is not independently runtime-qualified here.
 
 ## Web V4 Alignment

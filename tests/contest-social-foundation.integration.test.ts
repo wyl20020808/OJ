@@ -196,6 +196,18 @@ describe('contest and messaging foundation against PostgreSQL and Redis', () => 
       headers: { 'x-user-id': userB },
     });
     expect(accept.statusCode).toBe(200);
+    const acceptReplay = await Promise.all(
+      [0, 1].map(() =>
+        app.inject({
+          method: 'POST',
+          url: `/api/friend-requests/${requestId}/accept`,
+          headers: { 'x-user-id': userB },
+        }),
+      ),
+    );
+    expect(acceptReplay.map((response) => response.statusCode)).toEqual([
+      200, 200,
+    ]);
     expect(
       (
         await app.inject({
@@ -214,6 +226,22 @@ describe('contest and messaging foundation against PostgreSQL and Redis', () => 
     });
     expect(conversation.statusCode).toBe(201);
     const conversationId = conversation.json().id as string;
+    const concurrentConversation = await Promise.all(
+      [0, 1].map(() =>
+        app.inject({
+          method: 'POST',
+          url: '/api/conversations/direct',
+          headers: { 'x-user-id': userA },
+          payload: { userId: userB },
+        }),
+      ),
+    );
+    expect(
+      concurrentConversation.map((response) => response.statusCode),
+    ).toEqual([201, 201]);
+    expect(
+      new Set(concurrentConversation.map((response) => response.json().id)),
+    ).toEqual(new Set([conversationId]));
     const message = {
       body: 'trusted fixture message',
       clientMessageId: `client-${randomUUID()}`,
@@ -233,6 +261,26 @@ describe('contest and messaging foundation against PostgreSQL and Redis', () => 
     });
     expect(duplicate.statusCode).toBe(200);
     expect(duplicate.json().id).toBe(sent.json().id);
+    const duplicateMessage = {
+      body: 'same-key concurrent fixture message',
+      clientMessageId: `same-key-${randomUUID()}`,
+    };
+    const concurrentDuplicate = await Promise.all(
+      [0, 1].map(() =>
+        app.inject({
+          method: 'POST',
+          url: `/api/conversations/${conversationId}/messages`,
+          headers: { 'x-user-id': userA },
+          payload: duplicateMessage,
+        }),
+      ),
+    );
+    expect(
+      concurrentDuplicate.map((response) => response.statusCode).sort(),
+    ).toEqual([200, 201]);
+    expect(
+      new Set(concurrentDuplicate.map((response) => response.json().id)).size,
+    ).toBe(1);
     const concurrent = await Promise.all(
       [0, 1].map(() =>
         app.inject({
@@ -254,7 +302,7 @@ describe('contest and messaging foundation against PostgreSQL and Redis', () => 
         "SELECT count(*)::int count FROM notifications WHERE user_id=$1 AND category='DIRECT_MESSAGE'",
         [userB],
       ),
-    ).toMatchObject({ rows: [{ count: 3 }] });
+    ).toMatchObject({ rows: [{ count: 4 }] });
     expect(
       (
         await app.inject({
@@ -263,7 +311,7 @@ describe('contest and messaging foundation against PostgreSQL and Redis', () => 
           headers: { 'x-user-id': userB },
         })
       ).json(),
-    ).toMatchObject({ count: 4 });
+    ).toMatchObject({ count: 5 });
     const limiter = new RedisFixedWindowLimiter(redis, `${prefix}:direct`);
     expect(await limiter.consume('key', 1, 60)).toBe(true);
     expect(await limiter.consume('key', 1, 60)).toBe(false);
