@@ -1091,6 +1091,16 @@ pre {
 .segmented-control {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+.auth-method-control {
+  width: min(100%, 25rem);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.auth-method-control button {
+  min-height: 2.35rem;
+  padding: 0.45rem 0.35rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
 .mode-tabs {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   border: 0;
