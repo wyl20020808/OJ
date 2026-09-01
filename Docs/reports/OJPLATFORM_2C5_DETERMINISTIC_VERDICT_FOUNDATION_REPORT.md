@@ -144,6 +144,9 @@ case records after WA, proving `RUN_ALL`.
 - `pnpm build`: PASS
 - Judge Worker `go test ./...`: PASS
 - Judge Worker `go vet ./...`: PASS
+- Supervisor Linux `GOFLAGS=-buildvcs=false go test ./...`: PASS when run as
+  root, the intended identity for its common unit suite.
+- Supervisor Linux `GOFLAGS=-buildvcs=false go vet ./...`: PASS.
 - `git diff --check`: PASS before implementation commit
 
 ## Skipped-Test Audit and Limitations
@@ -164,6 +167,13 @@ mode: `TestRealRuncCgroupfsCurrentLimits`,
 environment diagnostic limitation**, not converted to PASS and not used as the
 source of the passing cgroup enforcement claim. The applicable non-root
 Supervisor/R4/R34 enforcement groups passed with direct cgroup evidence.
+
+The generic Supervisor unit suite was also attempted as `oj-sandbox` and
+correctly exercised its non-root branches: the default cgroup path becomes
+`user.slice` and UID0 preflight is not applicable. Its root-oriented assertions
+therefore failed in that intentionally different context. It was rerun as root,
+its intended unit-test identity, and passed in full. This is an execution
+identity classification, not a product or security regression.
 
 This Goal does not implement Special Judge, interactive/floating/scoring
 checkers, OLE, subtasks, contests, multi-language verdicts, production HA,
@@ -188,4 +198,4 @@ or deleted and remains outside this Goal's ownership.
 - `PRODUCTION READY`: no
 - `READY FOR NEXT JUDGE GOAL`: YES
 
-Final implementation commit: `09294f1`. Report/closure commit: `cb11080`.
+Final implementation commit: `09294f1`. Report commits: `cb11080`, `02ae708`.
