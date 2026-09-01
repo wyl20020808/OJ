@@ -231,6 +231,7 @@ func TestRealWorkerCrashRecoveryUsesNewExecutionAttempt(t *testing.T) {
 		LanguageID: "cpp20", ExecutionMode: "REAL_SANDBOXED_EXECUTION",
 		LanguageProfileID: "cpp20-gcc-13-v1", SourceSnapshotRef: "submission:real-crash-submission:" + runID,
 		SourceBytes: source, SourceSHA256: fmt.Sprintf("%x", digest[:]), ControlledInputID: "stdin-empty-v1",
+		TestcaseID: "crash-case-1", TestcaseInput: "", TestcaseInputSHA256: fmt.Sprintf("%x", sha256.Sum256(nil)), ExecutionProfileID: "cpp20-gcc-13-v1",
 		MaxAttempts: 3,
 	})
 	if err != nil {

@@ -3,6 +3,10 @@ import { createHash } from 'node:crypto';
 export const TESTCASE_SET_PROTOCOL_VERSION = '2C.4' as const;
 export const TESTCASE_SET_MAX_SIZE = 64;
 export const TESTCASE_SET_MAX_INPUT_BYTES = 64 * 1024;
+export const TESTCASE_SET_MAX_EXPECTED_OUTPUT_BYTES = 64 * 1024;
+export const BUILTIN_CHECKER_VERSION = 'builtin-v1' as const;
+
+export type BuiltinCheckerType = 'EXACT_BYTES' | 'TOKEN_WHITESPACE';
 
 export type TestcaseSetPolicy = 'RUN_ALL' | 'STOP_ON_EXECUTION_BLOCKING_EVENT';
 
@@ -14,6 +18,10 @@ export type TestcaseSetEntry = {
   inputSha256: string;
   executionProfileId: 'cpp20-gcc-13-v1';
   expectedOutputSha256?: string;
+  expectedOutput?: string;
+  checkerType?: BuiltinCheckerType;
+  checkerVersion?: typeof BUILTIN_CHECKER_VERSION;
+  checkerConfigSha256?: string;
 };
 
 export type TestcaseSetManifest = {
@@ -128,6 +136,11 @@ export class TestcaseSetContractError extends Error {
 const sha256 = (value: string) =>
   createHash('sha256').update(value, 'utf8').digest('hex');
 
+export const builtinCheckerConfigSha256 = (
+  type: BuiltinCheckerType,
+  version = BUILTIN_CHECKER_VERSION,
+) => sha256(`${type}\0${version}`);
+
 const stableJson = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
   if (value && typeof value === 'object') {
@@ -172,6 +185,10 @@ export const testcaseSetManifestHash = (
         entry.inputSha256,
         entry.executionProfileId,
         entry.expectedOutputSha256 ?? '',
+        entry.checkerType === undefined ? '' : '2C.5',
+        entry.checkerType ?? '',
+        entry.checkerVersion ?? '',
+        entry.checkerConfigSha256 ?? '',
       ]),
     ].join('\0'),
   );
@@ -205,7 +222,24 @@ export function validateTestcaseSetManifest(
       !isSha256(entry.inputSha256) ||
       sha256(entry.input) !== entry.inputSha256 ||
       (entry.expectedOutputSha256 !== undefined &&
-        !isSha256(entry.expectedOutputSha256))
+        !isSha256(entry.expectedOutputSha256)) ||
+      (entry.expectedOutput !== undefined &&
+        (typeof entry.expectedOutput !== 'string' ||
+          Buffer.byteLength(entry.expectedOutput, 'utf8') >
+            TESTCASE_SET_MAX_EXPECTED_OUTPUT_BYTES)) ||
+      ((entry.expectedOutput !== undefined ||
+        entry.checkerType !== undefined ||
+        entry.checkerVersion !== undefined ||
+        entry.checkerConfigSha256 !== undefined) &&
+        (entry.expectedOutput === undefined ||
+          !isSha256(entry.expectedOutputSha256) ||
+          sha256(entry.expectedOutput) !== entry.expectedOutputSha256 ||
+          (entry.checkerType !== 'EXACT_BYTES' &&
+            entry.checkerType !== 'TOKEN_WHITESPACE') ||
+          entry.checkerVersion !== BUILTIN_CHECKER_VERSION ||
+          !isSha256(entry.checkerConfigSha256) ||
+          entry.checkerConfigSha256 !==
+            builtinCheckerConfigSha256(entry.checkerType)))
     )
       throw new TestcaseSetContractError('invalid testcase-set manifest entry');
     seen.add(entry.testcaseId);

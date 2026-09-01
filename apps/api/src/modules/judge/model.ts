@@ -43,6 +43,7 @@ export type RawExecutionResult = {
   execution_set_attempt_id?: string;
   execution_set_policy?: TestcaseSetPolicy;
   aggregate_execution_set_record?: AggregateExecutionSetRecord;
+  verdict_record?: Record<string, unknown>;
   pipeline_outcome:
     | 'PIPELINE_COMPLETED'
     | 'PIPELINE_COMPILE_FAILED'

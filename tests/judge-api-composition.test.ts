@@ -171,4 +171,85 @@ describe('Lead Judge API composition', () => {
       }),
     ).toEqual(expect.objectContaining({ id: 'job', synthetic: true }));
   });
+
+  it('projects verdict metadata without expected output, stdout, or lease secrets', () => {
+    const publicJob = publicJudgeJob({
+      id: 'job-verdict',
+      submissionId: 'submission-verdict',
+      ownerUserId: 'owner',
+      problemId: 'problem',
+      problemRevisionId: 'revision',
+      testdataVersionRef: 'testdata-v1',
+      languageId: 'cpp20',
+      idempotencyKey: 'submission:submission-verdict',
+      executionMode: 'REAL_SANDBOXED_EXECUTION',
+      attempt: 1,
+      maxAttempts: 3,
+      leaseToken: 'lease-secret',
+      leaseOwner: 'worker-secret',
+      rawExecutionResult: {
+        protocol_version: '2C.4',
+        execution_set_request_id: 'job-verdict:1',
+        execution_set_attempt_id: 'job-verdict:1:attempt',
+        judge_job_id: 'job-verdict',
+        submission_id: 'submission-verdict',
+        attempt: 1,
+        result_generation: 1,
+        correlation_id: 'job-verdict',
+        language_profile_id: 'cpp20-gcc-13-v1',
+        source_sha256: 'a'.repeat(64),
+        pipeline_outcome: 'PIPELINE_COMPLETED',
+        compile: {
+          stdout: 'compiler output',
+          stderr: '',
+          stdout_bytes: 15,
+          stderr_bytes: 0,
+          stdout_sha256: 'b'.repeat(64),
+          stderr_sha256: 'c'.repeat(64),
+          stdout_truncated: false,
+          stderr_truncated: false,
+        },
+        verdict_record: {
+          record_version: '2C.5-builtin-v1',
+          digest: 'd'.repeat(64),
+          compile_verdict: undefined,
+          overall_user_verdict: 'AC',
+          evaluation_state: 'COMPLETE',
+          cases: [
+            {
+              testcase_index: 0,
+              testcase_id: 'case-1',
+              verdict: 'AC',
+              evaluation_state: 'COMPLETE',
+              reason_code: 'CHECKER_MATCH',
+              digest: 'e'.repeat(64),
+              expected_output: 'must-not-leak',
+              actual_stdout: 'must-not-leak',
+            },
+          ],
+        },
+        started_at: '2026-09-01T00:00:00.000Z',
+        completed_at: '2026-09-01T00:00:01.000Z',
+        clean: true,
+      },
+      status: 'COMPLETED',
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-01T00:00:01.000Z',
+      completedAt: '2026-09-01T00:00:01.000Z',
+    });
+    const encoded = JSON.stringify(publicJob);
+    expect(publicJob).toMatchObject({
+      rawExecution: {
+        verdict: {
+          engineVersion: '2C.5-builtin-v1',
+          overallUserVerdict: 'AC',
+          cases: [{ verdict: 'AC', testcaseId: 'case-1' }],
+        },
+      },
+    });
+    expect(encoded).not.toContain('must-not-leak');
+    expect(encoded).not.toMatch(
+      /lease-secret|worker-secret|expected_output|actual_stdout/i,
+    );
+  });
 });

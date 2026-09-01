@@ -19,6 +19,8 @@ const safeMode = 'SAFE_FIXTURE_QUALIFICATION' as const;
 const realMode = 'REAL_SANDBOXED_EXECUTION' as const;
 const sha256 = (value: string) =>
   createHash('sha256').update(value, 'utf8').digest('hex');
+const sha256Bytes = (value: Uint8Array) =>
+  createHash('sha256').update(value).digest('hex');
 const stableJson = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
   if (value && typeof value === 'object') {
@@ -35,6 +37,12 @@ const stableJson = (value: unknown): string => {
 const rawDigest = (value: RawExecutionResult) => sha256(stableJson(value));
 const isSha256 = (value: unknown): value is string =>
   typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const verifyDigestRecord = (value: unknown) => {
+  if (!isRecord(value) || !isSha256(value.digest)) return false;
+  const copy = { ...value };
+  delete copy.digest;
+  return value.digest === sha256(stableJson(copy));
+};
 const validRawStageOutput = (value: unknown) => {
   if (!isRecord(value)) return false;
   const stdout = value.stdout;
@@ -54,8 +62,12 @@ const validRawStageOutput = (value: unknown) => {
     Number.isInteger(stderrBytes) &&
     stderrBytes >= 0 &&
     stderrBytes <= 64 * 1024 &&
+    stdoutBytes === Buffer.byteLength(stdout, 'utf8') &&
+    stderrBytes === Buffer.byteLength(stderr, 'utf8') &&
     isSha256(value.stdout_sha256) &&
-    isSha256(value.stderr_sha256)
+    value.stdout_sha256 === sha256(stdout) &&
+    isSha256(value.stderr_sha256) &&
+    value.stderr_sha256 === sha256(stderr)
   );
 };
 const validTestcaseSet = (
@@ -297,14 +309,35 @@ const validRawExecutionSetResult = (
         !validMemberStatuses.has(status)
       )
         return false;
+      if (entry.checkerType !== undefined && status === 'RAW_COMPLETED') {
+        const actualStdout = member.actual_stdout;
+        const actualStdoutSha256 = member.actual_stdout_sha256;
+        const actualStdoutBytes = member.actual_stdout_bytes;
+        if (
+          typeof actualStdout !== 'string' ||
+          typeof actualStdoutSha256 !== 'string' ||
+          !isSha256(actualStdoutSha256) ||
+          !Number.isSafeInteger(actualStdoutBytes) ||
+          Number(actualStdoutBytes) < 0 ||
+          Number(actualStdoutBytes) > 64 * 1024
+        )
+          return false;
+        const actual = Buffer.from(actualStdout, 'base64');
+        if (
+          actual.length !== actualStdoutBytes ||
+          actual.length > 64 * 1024 ||
+          sha256Bytes(actual) !== actualStdoutSha256
+        )
+          return false;
+      }
       if (status === 'RAW_COMPLETED' && !isRecord(member.record)) return false;
       if (!isRecord(member.record)) return true;
       const record = member.record;
       const identity = isRecord(record.identity) ? record.identity : undefined;
       return (
         record.record_version === '2C.3' &&
-        typeof record.digest === 'string' &&
-        /^[a-f0-9]{64}$/.test(record.digest) &&
+        verifyDigestRecord(record) &&
+        isSha256(record.digest) &&
         identity !== undefined &&
         identity.problem_id === job.problemId &&
         identity.problem_revision_id === job.problemRevisionId &&
@@ -317,6 +350,45 @@ const validRawExecutionSetResult = (
         record.testcase_set_manifest_hash === manifest.manifestHash
       );
     });
+  const verdictReady = manifest.entries.every(
+    (entry) => entry.checkerType !== undefined,
+  );
+  const verdict = value.verdict_record;
+  const verdictValid = !verdictReady
+    ? verdict === undefined
+    : isRecord(verdict) &&
+      verdict.record_version === '2C.5-builtin-v1' &&
+      verdict.record_id === `${String(executionSetRequestId)}:verdict` &&
+      verdict.submission_id === job.submissionId &&
+      verdict.execution_set_request_id === executionSetRequestId &&
+      verdict.execution_set_attempt_id === executionSetAttemptId &&
+      verdict.attempt === job.attempt &&
+      verdict.manifest_hash === manifest.manifestHash &&
+      verdict.raw_result_digest === read(aggregateRecord, 'digest', 'digest') &&
+      verifyDigestRecord(verdict) &&
+      Array.isArray(verdict.cases) &&
+      (value.pipeline_outcome === 'PIPELINE_COMPILE_FAILED'
+        ? verdict.cases.length === 0
+        : verdict.cases.length === manifest.entries.length &&
+          verdict.cases.every((item, index) => {
+            if (!isRecord(item)) return false;
+            const entry = manifest.entries[index]!;
+            return (
+              item.record_version === '2C.5-builtin-v1' &&
+              item.record_id ===
+                `${String(executionSetRequestId)}:verdict:${entry.index}` &&
+              item.submission_id === job.submissionId &&
+              item.execution_set_attempt_id === executionSetAttemptId &&
+              item.testcase_index === entry.index &&
+              item.testcase_id === entry.testcaseId &&
+              item.testdata_version_id === entry.testdataVersionId &&
+              item.checker_type === entry.checkerType &&
+              item.checker_version === entry.checkerVersion &&
+              item.checker_config_sha256 === entry.checkerConfigSha256 &&
+              item.expected_output_sha256 === entry.expectedOutputSha256 &&
+              isSha256(item.digest)
+            );
+          }));
   return (
     value.protocol_version === '2C.4' &&
     [
@@ -387,6 +459,7 @@ const validRawExecutionSetResult = (
       'completedTestcaseCount',
     ) === completedMembers &&
     membersValid &&
+    verdictValid &&
     typeof read(aggregateRecord, 'set_cancelled', 'setCancelled') ===
       'boolean' &&
     typeof read(
@@ -396,8 +469,7 @@ const validRawExecutionSetResult = (
     ) === 'boolean' &&
     typeof read(aggregateRecord, 'cleanup_verified', 'cleanupVerified') ===
       'boolean' &&
-    typeof read(aggregateRecord, 'digest', 'digest') === 'string' &&
-    /^[a-f0-9]{64}$/.test(String(read(aggregateRecord, 'digest', 'digest'))) &&
+    verifyDigestRecord(aggregateRecord) &&
     (value.pipeline_outcome === 'PIPELINE_INFRA_FAILURE' ||
       validRawStageOutput(value.compile)) &&
     Number.isFinite(startedAt) &&

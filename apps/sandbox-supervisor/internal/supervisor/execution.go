@@ -232,10 +232,37 @@ func BuildSingleTestcaseExecutionRecord(request model.RealExecutionRequest, resu
 	}
 	withoutDigest := record
 	withoutDigest.Digest = ""
-	encoded, _ := json.Marshal(withoutDigest)
-	digest := sha256.Sum256(encoded)
-	record.Digest = hex.EncodeToString(digest[:])
+	record.Digest = canonicalRecordDigest(withoutDigest)
 	return record
+}
+
+func canonicalRecordDigest(value any) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	// The digest is over the record with its self-referential field omitted.
+	// Decode to an object first so this remains identical to the Worker verifier
+	// even when the input was originally a typed struct.
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &object); err != nil {
+		return ""
+	}
+	delete(object, "digest")
+	withoutDigest, err := json.Marshal(object)
+	if err != nil {
+		return ""
+	}
+	var normalized any
+	if err := json.Unmarshal(withoutDigest, &normalized); err != nil {
+		return ""
+	}
+	canonical, err := json.Marshal(normalized)
+	if err != nil {
+		return ""
+	}
+	digest := sha256.Sum256(canonical)
+	return hex.EncodeToString(digest[:])
 }
 
 func runtimeMemoryMax(e *model.RuntimeEvidence) int64 {
@@ -616,7 +643,23 @@ func (s *Supervisor) runExecutionStageWithID(ctx context.Context, bundle, rootfs
 	resource := newResourceMonitor(sid, resourceRequest)
 	go resource.run()
 	executionStarted := time.Now()
-	err := command.Run()
+	var err error
+	if startErr := command.Start(); startErr != nil {
+		err = startErr
+	} else {
+		// Very short-lived programs can exit before the monitor's periodic
+		// capture observes their cgroup. Capture synchronously after start so a
+		// qualified non-zero user exit is distinguishable from launch failure.
+		captureDeadline := time.Now().Add(250 * time.Millisecond)
+		for !resource.qualified() && time.Now().Before(captureDeadline) {
+			resource.capture()
+			if resource.qualified() {
+				break
+			}
+			time.Sleep(2 * time.Millisecond)
+		}
+		err = command.Wait()
+	}
 	wallTimeMS := time.Since(executionStarted).Milliseconds()
 	cancelTimeout()
 	<-monitorWorkspaceDone
@@ -648,6 +691,11 @@ func classifyCompile(run stageRun, rootfs, workspace string) model.StageResult {
 	switch {
 	case run.Cancelled:
 		result.Outcome, result.DiagnosticCode = CompileCancelled, "CANCELLED"
+	case run.Err != nil && !qualifiedSandboxEvidence(run.Evidence):
+		// An exit status from runc is not evidence that the compiler ran. In
+		// particular, rootless cgroup/user-bus setup failures may exit 1. CE is
+		// reserved for a compiler that ran inside the verified sandbox.
+		result.Outcome, result.DiagnosticCode = CompileInfraFailure, "COMPILE_SANDBOX_UNPROVEN"
 	case resourceLimitHit(run.Evidence):
 		result.Outcome, result.DiagnosticCode = CompileLimitExceeded, "COMPILE_RESOURCE_LIMIT"
 	case run.TimedOut:
@@ -674,6 +722,8 @@ func classifyRuntime(run stageRun) model.StageResult {
 	switch {
 	case run.Cancelled:
 		result.Outcome, result.DiagnosticCode = ExecutionCancelled, "CANCELLED"
+	case run.Err != nil && !qualifiedSandboxEvidence(run.Evidence):
+		result.Outcome, result.DiagnosticCode = ExecutionInfraFailure, "RUNTIME_SANDBOX_UNPROVEN"
 	case resourceLimitHit(run.Evidence):
 		result.Outcome, result.DiagnosticCode = ExecutionLimitHit, "RUNTIME_RESOURCE_LIMIT"
 	case run.TimedOut:
@@ -689,6 +739,10 @@ func classifyRuntime(run stageRun) model.StageResult {
 	}
 	result.State = runtimeState(result.Outcome)
 	return result
+}
+
+func qualifiedSandboxEvidence(evidence *model.RuntimeEvidence) bool {
+	return evidence != nil && evidence.ControlGroup != "" && evidence.MemoryMax != "" && evidence.PidsMax != "" && evidence.CPUMax != ""
 }
 
 func stageResult(run stageRun) model.StageResult {

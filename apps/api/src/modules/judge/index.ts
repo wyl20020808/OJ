@@ -111,6 +111,14 @@ function publicRawExecutionResult(result: RawExecutionResult) {
       : undefined;
   const aggregateMembers = aggregateField('testcases', 'testcases') as
     Array<Record<string, unknown>> | undefined;
+  const verdict = result.verdict_record;
+  const verdictCases =
+    verdict && Array.isArray(verdict.cases)
+      ? verdict.cases.filter(
+          (value): value is Record<string, unknown> =>
+            !!value && typeof value === 'object',
+        )
+      : undefined;
   return {
     protocolVersion: result.protocol_version,
     executionRequestId:
@@ -205,6 +213,25 @@ function publicRawExecutionResult(result: RawExecutionResult) {
                   : {}),
               };
             }),
+          },
+        }
+      : {}),
+    ...(verdict && typeof verdict === 'object'
+      ? {
+          verdict: {
+            engineVersion: verdict.record_version,
+            digest: verdict.digest,
+            compileVerdict: verdict.compile_verdict,
+            overallUserVerdict: verdict.overall_user_verdict,
+            evaluationState: verdict.evaluation_state,
+            cases: verdictCases?.map((value) => ({
+              testcaseIndex: value.testcase_index,
+              testcaseId: value.testcase_id,
+              verdict: value.verdict,
+              evaluationState: value.evaluation_state,
+              reasonCode: value.reason_code,
+              digest: value.digest,
+            })),
           },
         }
       : {}),

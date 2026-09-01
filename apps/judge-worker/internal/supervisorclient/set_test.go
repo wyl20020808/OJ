@@ -16,6 +16,15 @@ func setDigest(value []byte) string {
 	return hex.EncodeToString(digest[:])
 }
 
+func sealSetDigest(value map[string]any) {
+	delete(value, "digest")
+	encoded, _ := json.Marshal(value)
+	var normalized any
+	_ = json.Unmarshal(encoded, &normalized)
+	encoded, _ = json.Marshal(normalized)
+	value["digest"] = setDigest(encoded)
+}
+
 func setManifest() TestcaseSetManifest {
 	entries := []TestcaseSetEntry{}
 	for index, input := range []string{"one\n", "two\n"} {
@@ -44,7 +53,8 @@ func TestSetManifestHashAndResultBinding(t *testing.T) {
 	for _, entry := range request.Manifest.Entries {
 		members = append(members, map[string]any{"index": entry.Index, "testcase_id": entry.TestcaseID, "input_sha256": entry.InputSHA256, "testdata_version_id": entry.TestdataVersionID, "execution_profile_id": entry.ExecutionProfileID, "status": "CANCELLED_BEFORE_START"})
 	}
-	aggregate := map[string]any{"record_version": "2C.4", "record_id": "job:1:record", "submission_id": request.SubmissionID, "snapshot_id": request.SourceSnapshotRef, "source_sha256": request.SourceSHA256, "problem_id": request.Manifest.ProblemID, "problem_revision_id": request.Manifest.ProblemRevisionID, "testdata_version_id": request.Manifest.TestdataVersionID, "testcase_set_id": request.Manifest.TestcaseSetID, "manifest_hash": request.Manifest.ManifestHash, "execution_set_request_id": request.ExecutionSetRequestID, "execution_set_attempt_id": request.ExecutionSetAttemptID, "execution_profile_id": request.Manifest.ExecutionProfileID, "execution_policy": request.ExecutionPolicy, "total_testcase_count": 2, "started_testcase_count": 0, "completed_testcase_count": 0, "testcases": members, "set_cancelled": false, "set_infrastructure_failure": false, "stop_reason": "COMPLETED", "cleanup_verified": true, "digest": setDigest([]byte("aggregate"))}
+	aggregate := map[string]any{"record_version": "2C.4", "record_id": "job:1:record", "submission_id": request.SubmissionID, "snapshot_id": request.SourceSnapshotRef, "source_sha256": request.SourceSHA256, "problem_id": request.Manifest.ProblemID, "problem_revision_id": request.Manifest.ProblemRevisionID, "testdata_version_id": request.Manifest.TestdataVersionID, "testcase_set_id": request.Manifest.TestcaseSetID, "manifest_hash": request.Manifest.ManifestHash, "execution_set_request_id": request.ExecutionSetRequestID, "execution_set_attempt_id": request.ExecutionSetAttemptID, "execution_profile_id": request.Manifest.ExecutionProfileID, "execution_policy": request.ExecutionPolicy, "total_testcase_count": 2, "started_testcase_count": 0, "completed_testcase_count": 0, "testcases": members, "set_cancelled": false, "set_infrastructure_failure": false, "stop_reason": "COMPLETED", "cleanup_verified": true}
+	sealSetDigest(aggregate)
 	aggregateBytes, _ := json.Marshal(aggregate)
 	result := SetResult{ProtocolVersion: SetProtocolVersion, ExecutionSetRequestID: request.ExecutionSetRequestID, ExecutionSetAttemptID: request.ExecutionSetAttemptID, JudgeJobID: request.JudgeJobID, SubmissionID: request.SubmissionID, Attempt: 1, ResultGeneration: 1, CorrelationID: request.CorrelationID, LanguageProfileID: request.LanguageProfileID, SourceSHA256: request.SourceSHA256, ProblemID: request.Manifest.ProblemID, ProblemRevisionID: request.Manifest.ProblemRevisionID, TestdataVersionID: request.Manifest.TestdataVersionID, TestcaseSetID: request.Manifest.TestcaseSetID, TestcaseSetManifestHash: request.Manifest.ManifestHash, ExecutionProfileID: request.Manifest.ExecutionProfileID, ExecutionSetPolicy: request.ExecutionPolicy, PipelineOutcome: pipelineCompleted, Compile: mustJSON(setStage()), AggregateExecutionRecord: aggregateBytes, StartedAt: time.Now().Add(-time.Second), CompletedAt: time.Now(), Clean: true}
 	if err := validateSetResult(request, result); err != nil {
@@ -88,8 +98,9 @@ func TestExecuteSetPollsAndReturnsRawResult(t *testing.T) {
 			for _, entry := range request.Manifest.Entries {
 				members = append(members, map[string]any{"index": entry.Index, "testcase_id": entry.TestcaseID, "input_sha256": entry.InputSHA256, "testdata_version_id": entry.TestdataVersionID, "execution_profile_id": entry.ExecutionProfileID, "status": "CANCELLED_BEFORE_START"})
 			}
-			aggregate := map[string]any{"record_version": "2C.4", "record_id": "job:1:record", "submission_id": request.SubmissionID, "snapshot_id": request.SourceSnapshotRef, "source_sha256": request.SourceSHA256, "problem_id": request.Manifest.ProblemID, "problem_revision_id": request.Manifest.ProblemRevisionID, "testdata_version_id": request.Manifest.TestdataVersionID, "testcase_set_id": request.Manifest.TestcaseSetID, "manifest_hash": request.Manifest.ManifestHash, "execution_set_request_id": request.ExecutionSetRequestID, "execution_set_attempt_id": request.ExecutionSetAttemptID, "execution_profile_id": request.Manifest.ExecutionProfileID, "execution_policy": request.ExecutionPolicy, "total_testcase_count": 2, "started_testcase_count": 0, "completed_testcase_count": 0, "testcases": members, "set_cancelled": false, "set_infrastructure_failure": false, "stop_reason": "COMPLETED", "cleanup_verified": true, "digest": setDigest([]byte("aggregate"))}
+			aggregate := map[string]any{"record_version": "2C.4", "record_id": "job:1:record", "submission_id": request.SubmissionID, "snapshot_id": request.SourceSnapshotRef, "source_sha256": request.SourceSHA256, "problem_id": request.Manifest.ProblemID, "problem_revision_id": request.Manifest.ProblemRevisionID, "testdata_version_id": request.Manifest.TestdataVersionID, "testcase_set_id": request.Manifest.TestcaseSetID, "manifest_hash": request.Manifest.ManifestHash, "execution_set_request_id": request.ExecutionSetRequestID, "execution_set_attempt_id": request.ExecutionSetAttemptID, "execution_profile_id": request.Manifest.ExecutionProfileID, "execution_policy": request.ExecutionPolicy, "total_testcase_count": 2, "started_testcase_count": 0, "completed_testcase_count": 0, "testcases": members, "set_cancelled": false, "set_infrastructure_failure": false, "stop_reason": "COMPLETED", "cleanup_verified": true}
 			result := map[string]any{"protocol_version": SetProtocolVersion, "execution_set_request_id": request.ExecutionSetRequestID, "execution_set_attempt_id": request.ExecutionSetAttemptID, "judge_job_id": request.JudgeJobID, "submission_id": request.SubmissionID, "attempt": 1, "result_generation": 1, "correlation_id": request.CorrelationID, "language_profile_id": request.LanguageProfileID, "source_sha256": request.SourceSHA256, "problem_id": request.Manifest.ProblemID, "problem_revision_id": request.Manifest.ProblemRevisionID, "testdata_version_id": request.Manifest.TestdataVersionID, "testcase_set_id": request.Manifest.TestcaseSetID, "testcase_set_manifest_hash": request.Manifest.ManifestHash, "execution_profile_id": request.Manifest.ExecutionProfileID, "execution_set_policy": request.ExecutionPolicy, "pipeline_outcome": pipelineCompleted, "compile": setStage(), "aggregate_execution_set_record": aggregate, "started_at": time.Now().Add(-time.Second), "completed_at": time.Now(), "clean": true}
+			sealSetDigest(aggregate)
 			_ = json.NewEncoder(w).Encode(result)
 		default:
 			http.NotFound(w, r)

@@ -258,6 +258,9 @@ type TestcaseSetEntry struct {
 	InputSHA256          string `json:"input_sha256"`
 	ExecutionProfileID   string `json:"execution_profile_id"`
 	ExpectedOutputSHA256 string `json:"expected_output_sha256,omitempty"`
+	CheckerType          string `json:"checker_type,omitempty"`
+	CheckerVersion       string `json:"checker_version,omitempty"`
+	CheckerConfigSHA256  string `json:"checker_config_sha256,omitempty"`
 }
 
 type TestcaseSetManifest struct {
@@ -295,6 +298,12 @@ type TestcaseSetMemberResult struct {
 	ExecutionProfileID string                         `json:"execution_profile_id"`
 	Status             string                         `json:"status"`
 	Record             *SingleTestcaseExecutionRecord `json:"record,omitempty"`
+	// ActualStdout is the already bounded sandbox capture. It is raw Judge
+	// evidence for the Worker checker and is never part of a public projection.
+	ActualStdout          []byte `json:"actual_stdout"`
+	ActualStdoutSHA256    string `json:"actual_stdout_sha256"`
+	ActualStdoutBytes     int    `json:"actual_stdout_bytes"`
+	ActualStdoutTruncated bool   `json:"actual_stdout_truncated"`
 }
 
 type AggregateExecutionSetRecord struct {

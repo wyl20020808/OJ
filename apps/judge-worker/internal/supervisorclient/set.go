@@ -31,6 +31,9 @@ type TestcaseSetEntry struct {
 	InputSHA256          string `json:"input_sha256"`
 	ExecutionProfileID   string `json:"execution_profile_id"`
 	ExpectedOutputSHA256 string `json:"expected_output_sha256,omitempty"`
+	CheckerType          string `json:"checker_type,omitempty"`
+	CheckerVersion       string `json:"checker_version,omitempty"`
+	CheckerConfigSHA256  string `json:"checker_config_sha256,omitempty"`
 }
 
 type TestcaseSetManifest struct {
@@ -121,19 +124,26 @@ type setAggregate struct {
 }
 
 type setMember struct {
-	Index              int             `json:"index"`
-	TestcaseID         string          `json:"testcase_id"`
-	InputSHA256        string          `json:"input_sha256"`
-	TestdataVersionID  string          `json:"testdata_version_id"`
-	ExecutionProfileID string          `json:"execution_profile_id"`
-	Status             string          `json:"status"`
-	Record             json.RawMessage `json:"record,omitempty"`
+	Index                 int             `json:"index"`
+	TestcaseID            string          `json:"testcase_id"`
+	InputSHA256           string          `json:"input_sha256"`
+	TestdataVersionID     string          `json:"testdata_version_id"`
+	ExecutionProfileID    string          `json:"execution_profile_id"`
+	Status                string          `json:"status"`
+	Record                json.RawMessage `json:"record,omitempty"`
+	ActualStdout          []byte          `json:"actual_stdout"`
+	ActualStdoutSHA256    string          `json:"actual_stdout_sha256"`
+	ActualStdoutBytes     int             `json:"actual_stdout_bytes"`
+	ActualStdoutTruncated bool            `json:"actual_stdout_truncated"`
 }
 
 func TestcaseSetManifestHash(manifest TestcaseSetManifest) string {
 	parts := []string{SetProtocolVersion, manifest.ProblemID, manifest.ProblemRevisionID, manifest.TestdataVersionID, manifest.TestcaseSetID, manifest.ExecutionProfileID, strconv.Itoa(len(manifest.Entries))}
 	for _, entry := range manifest.Entries {
 		parts = append(parts, strconv.Itoa(entry.Index), entry.TestcaseID, entry.TestdataVersionID, entry.InputSHA256, entry.ExecutionProfileID, entry.ExpectedOutputSHA256)
+		if entry.CheckerType != "" || entry.CheckerVersion != "" || entry.CheckerConfigSHA256 != "" {
+			parts = append(parts, "2C.5", entry.CheckerType, entry.CheckerVersion, entry.CheckerConfigSHA256)
+		}
 	}
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(digest[:])
@@ -151,7 +161,8 @@ func validateSetRequest(request SetRequest) error {
 	}
 	seen := make(map[string]struct{}, len(request.Manifest.Entries))
 	for index, entry := range request.Manifest.Entries {
-		if entry.Index != index || entry.TestcaseID == "" || entry.TestcaseID == "." || entry.TestcaseID == ".." || strings.ContainsAny(entry.TestcaseID, "/\\\x00") || entry.TestdataVersionID != request.Manifest.TestdataVersionID || entry.ExecutionProfileID != request.Manifest.ExecutionProfileID || len(entry.Input) > 64<<10 || entry.InputSHA256 != digestBytes(entry.Input) || !sha256Hex(entry.InputSHA256) {
+		verdictBinding := entry.CheckerType != "" || entry.CheckerVersion != "" || entry.CheckerConfigSHA256 != ""
+		if entry.Index != index || entry.TestcaseID == "" || entry.TestcaseID == "." || entry.TestcaseID == ".." || strings.ContainsAny(entry.TestcaseID, "/\\\x00") || entry.TestdataVersionID != request.Manifest.TestdataVersionID || entry.ExecutionProfileID != request.Manifest.ExecutionProfileID || len(entry.Input) > 64<<10 || entry.InputSHA256 != digestBytes(entry.Input) || !sha256Hex(entry.InputSHA256) || verdictBinding && (!sha256Hex(entry.ExpectedOutputSHA256) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digestString(entry.CheckerType+"\x00"+entry.CheckerVersion)) {
 			return errors.New("invalid testcase-set entry")
 		}
 		if _, exists := seen[entry.TestcaseID]; exists {
@@ -225,7 +236,7 @@ func validateSetResult(request SetRequest, result SetResult) error {
 		return errors.New("invalid testcase-set result identity")
 	}
 	var aggregate setAggregate
-	if json.Unmarshal(result.AggregateExecutionRecord, &aggregate) != nil || aggregate.RecordVersion != SetProtocolVersion || aggregate.RecordID != request.ExecutionSetRequestID+":record" || aggregate.SubmissionID != request.SubmissionID || aggregate.SnapshotID != request.SourceSnapshotRef || aggregate.SourceSHA256 != request.SourceSHA256 || aggregate.ProblemID != request.Manifest.ProblemID || aggregate.ProblemRevisionID != request.Manifest.ProblemRevisionID || aggregate.TestdataVersionID != request.Manifest.TestdataVersionID || aggregate.TestcaseSetID != request.Manifest.TestcaseSetID || aggregate.ManifestHash != request.Manifest.ManifestHash || aggregate.ExecutionSetRequestID != request.ExecutionSetRequestID || aggregate.ExecutionSetAttemptID != request.ExecutionSetAttemptID || aggregate.ExecutionProfileID != request.Manifest.ExecutionProfileID || aggregate.ExecutionPolicy != request.ExecutionPolicy || aggregate.TotalTestcaseCount != len(request.Manifest.Entries) || len(aggregate.Testcases) != len(request.Manifest.Entries) || !sha256Hex(aggregate.Digest) {
+	if json.Unmarshal(result.AggregateExecutionRecord, &aggregate) != nil || !verifyRecordDigest(result.AggregateExecutionRecord) || aggregate.RecordVersion != SetProtocolVersion || aggregate.RecordID != request.ExecutionSetRequestID+":record" || aggregate.SubmissionID != request.SubmissionID || aggregate.SnapshotID != request.SourceSnapshotRef || aggregate.SourceSHA256 != request.SourceSHA256 || aggregate.ProblemID != request.Manifest.ProblemID || aggregate.ProblemRevisionID != request.Manifest.ProblemRevisionID || aggregate.TestdataVersionID != request.Manifest.TestdataVersionID || aggregate.TestcaseSetID != request.Manifest.TestcaseSetID || aggregate.ManifestHash != request.Manifest.ManifestHash || aggregate.ExecutionSetRequestID != request.ExecutionSetRequestID || aggregate.ExecutionSetAttemptID != request.ExecutionSetAttemptID || aggregate.ExecutionProfileID != request.Manifest.ExecutionProfileID || aggregate.ExecutionPolicy != request.ExecutionPolicy || aggregate.TotalTestcaseCount != len(request.Manifest.Entries) || len(aggregate.Testcases) != len(request.Manifest.Entries) || !sha256Hex(aggregate.Digest) {
 		return errors.New("invalid testcase-set aggregate")
 	}
 	started, completed := 0, 0
@@ -242,6 +253,9 @@ func validateSetResult(request SetRequest, result SetResult) error {
 			if len(member.Record) == 0 || string(member.Record) == "null" {
 				return errors.New("completed testcase is missing immutable record")
 			}
+		}
+		if member.Status == "RAW_COMPLETED" && entry.CheckerType != "" && (member.ActualStdoutBytes < 0 || member.ActualStdoutBytes > 64<<10 || len(member.ActualStdout) > 64<<10 || !sha256Hex(member.ActualStdoutSHA256) || member.ActualStdoutBytes != len(member.ActualStdout) || member.ActualStdoutSHA256 != digestBytes(member.ActualStdout)) {
+			return errors.New("invalid testcase stdout evidence")
 		}
 		if len(member.Record) > 0 && string(member.Record) != "null" {
 			var record struct {
@@ -261,7 +275,7 @@ func validateSetResult(request SetRequest, result SetResult) error {
 				TestcaseIndex           int    `json:"testcase_index"`
 				TestcaseSetManifestHash string `json:"testcase_set_manifest_hash"`
 			}
-			if json.Unmarshal(member.Record, &record) != nil || record.RecordVersion != "2C.3" || !sha256Hex(record.Digest) || record.Identity.ProblemID != request.Manifest.ProblemID || record.Identity.ProblemRevisionID != request.Manifest.ProblemRevisionID || record.Identity.TestdataVersionID != entry.TestdataVersionID || record.Identity.TestcaseID != entry.TestcaseID || record.Identity.InputSHA256 != entry.InputSHA256 || record.Identity.ExecutionProfileID != entry.ExecutionProfileID || record.ExecutionSetAttemptID != request.ExecutionSetAttemptID || record.TestcaseIndex != entry.Index || record.TestcaseSetManifestHash != request.Manifest.ManifestHash {
+			if json.Unmarshal(member.Record, &record) != nil || !verifyRecordDigest(member.Record) || record.RecordVersion != "2C.3" || !sha256Hex(record.Digest) || record.RecordID == "" || record.Identity.ProblemID != request.Manifest.ProblemID || record.Identity.ProblemRevisionID != request.Manifest.ProblemRevisionID || record.Identity.TestdataVersionID != entry.TestdataVersionID || record.Identity.TestcaseID != entry.TestcaseID || record.Identity.InputSHA256 != entry.InputSHA256 || record.Identity.ExecutionProfileID != entry.ExecutionProfileID || record.ExecutionSetAttemptID != request.ExecutionSetAttemptID || record.TestcaseIndex != entry.Index || record.TestcaseSetManifestHash != request.Manifest.ManifestHash {
 				return errors.New("invalid testcase execution record binding")
 			}
 		}
@@ -316,7 +330,7 @@ func validRawStageOutput(raw json.RawMessage) bool {
 	if len(raw) == 0 || string(raw) == "null" || json.Unmarshal(raw, &stage) != nil {
 		return false
 	}
-	return len(stage.Stdout) <= 64<<10 && len(stage.Stderr) <= 64<<10 && stage.StdoutBytes >= 0 && stage.StdoutBytes <= 64<<10 && stage.StderrBytes >= 0 && stage.StderrBytes <= 64<<10 && sha256Hex(stage.StdoutSHA256) && sha256Hex(stage.StderrSHA256)
+	return len([]byte(stage.Stdout)) <= 64<<10 && len([]byte(stage.Stderr)) <= 64<<10 && stage.StdoutBytes == len([]byte(stage.Stdout)) && stage.StdoutBytes >= 0 && stage.StdoutBytes <= 64<<10 && stage.StderrBytes == len([]byte(stage.Stderr)) && stage.StderrBytes >= 0 && stage.StderrBytes <= 64<<10 && sha256Hex(stage.StdoutSHA256) && stage.StdoutSHA256 == digestString(stage.Stdout) && sha256Hex(stage.StderrSHA256) && stage.StderrSHA256 == digestString(stage.Stderr)
 }
 
 func digestBytes(value []byte) string {
@@ -332,4 +346,30 @@ func sha256Hex(value string) bool {
 	}
 	_, err := hex.DecodeString(value)
 	return err == nil && value == strings.ToLower(value)
+}
+
+func verifyRecordDigest(raw json.RawMessage) bool {
+	var value map[string]json.RawMessage
+	if json.Unmarshal(raw, &value) != nil {
+		return false
+	}
+	claimedRaw, ok := value["digest"]
+	if !ok {
+		return false
+	}
+	var claimed string
+	if json.Unmarshal(claimedRaw, &claimed) != nil || !sha256Hex(claimed) {
+		return false
+	}
+	delete(value, "digest")
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return false
+	}
+	var normalized any
+	if json.Unmarshal(encoded, &normalized) != nil {
+		return false
+	}
+	canonical, err := json.Marshal(normalized)
+	return err == nil && digestBytes(canonical) == claimed
 }

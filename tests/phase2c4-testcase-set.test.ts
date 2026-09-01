@@ -8,6 +8,7 @@ import {
   JudgeJobConflictError,
   TestcaseSetContractError,
   TestcaseSetPublicationRepository,
+  builtinCheckerConfigSha256,
   validateTestcaseSetManifest,
   type TestcaseSetExecutorAdapter,
   type TestcaseSetRequest,
@@ -16,6 +17,25 @@ import {
 
 const digest = (value: string) =>
   createHash('sha256').update(value, 'utf8').digest('hex');
+
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${stableJson((value as Record<string, unknown>)[key])}`,
+      )
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const sealDigest = (value: Record<string, unknown>) => {
+  delete value.digest;
+  value.digest = digest(stableJson(value));
+};
 
 const manifest = () =>
   createTestcaseSetManifest({
@@ -73,6 +93,53 @@ const adapter = (calls: {
 });
 
 describe('Phase 2C.4 testcase-set contract', () => {
+  it('freezes the Phase 2C.5 expected-output and built-in checker binding', () => {
+    const expectedOutput = '42\n';
+    const verdictManifest = createTestcaseSetManifest({
+      problemId: 'problem-verdict',
+      problemRevisionId: 'revision-verdict',
+      testdataVersionId: 'testdata-verdict',
+      testcaseSetId: 'set-verdict',
+      entries: [
+        {
+          testcaseId: 'case-1',
+          testdataVersionId: 'testdata-verdict',
+          input: 'input\n',
+          inputSha256: digest('input\n'),
+          executionProfileId: 'cpp20-gcc-13-v1' as const,
+          expectedOutput,
+          expectedOutputSha256: digest(expectedOutput),
+          checkerType: 'EXACT_BYTES' as const,
+          checkerVersion: 'builtin-v1' as const,
+          checkerConfigSha256: builtinCheckerConfigSha256('EXACT_BYTES'),
+        },
+      ],
+    });
+    expect(() =>
+      validateTestcaseSetManifest({
+        ...verdictManifest,
+        entries: [{ ...verdictManifest.entries[0]!, expectedOutput: '41\n' }],
+      }),
+    ).toThrow(TestcaseSetContractError);
+    expect(() =>
+      validateTestcaseSetManifest({
+        ...verdictManifest,
+        entries: [
+          {
+            ...verdictManifest.entries[0]!,
+            checkerConfigSha256: digest('tampered'),
+          },
+        ],
+      }),
+    ).toThrow(TestcaseSetContractError);
+    expect(() =>
+      validateTestcaseSetManifest({
+        ...verdictManifest,
+        manifestHash: digest('different-manifest'),
+      }),
+    ).toThrow(TestcaseSetContractError);
+  });
+
   it('freezes exact membership, order, version and deterministic manifest hash', () => {
     const first = manifest();
     const second = manifest();
@@ -313,12 +380,15 @@ describe('Phase 2C.4 testcase-set contract', () => {
         set_infrastructure_failure: false,
         stop_reason: 'COMPLETED',
         cleanup_verified: true,
-        digest: digest('aggregate'),
+        digest: '',
       },
       started_at: new Date(Date.now() - 1000).toISOString(),
       completed_at: new Date().toISOString(),
       clean: true,
     } as unknown as RawExecutionResult;
+    sealDigest(
+      raw.aggregate_execution_set_record as unknown as Record<string, unknown>,
+    );
     const snapshotTampered = structuredClone(raw) as unknown as {
       aggregate_execution_set_record: { snapshot_id: string };
     };

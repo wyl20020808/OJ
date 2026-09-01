@@ -4,7 +4,18 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/ojplatform/judge-worker/internal/verdict"
 )
+
+func sealDigest(value map[string]any) {
+	delete(value, "digest")
+	encoded, _ := json.Marshal(value)
+	var normalized any
+	_ = json.Unmarshal(encoded, &normalized)
+	encoded, _ = json.Marshal(normalized)
+	value["digest"] = digest(encoded)
+}
 
 func validRawExecutionResult() json.RawMessage {
 	return json.RawMessage(`{
@@ -129,18 +140,20 @@ func TestValidateRawExecutionSetResultUsesSetAttemptIdentity(t *testing.T) {
 		LanguageProfileID: "cpp20-gcc-13-v1", SourceSHA256: strings.Repeat("a", 64),
 	}
 	record := map[string]any{
-		"record_version": "2C.3", "record_id": "job-set:2:testcase:0:case-1", "digest": strings.Repeat("b", 64),
+		"record_version": "2C.3", "record_id": "job-set:2:testcase:0:case-1",
 		"identity":                 map[string]any{"problem_id": "problem-v1", "problem_revision_id": "revision-v1", "testdata_version_id": "testdata-v1", "testcase_id": "case-1", "input_sha256": inputHash, "execution_profile_id": "cpp20-gcc-13-v1", "execution_attempt_id": "job-set:2:attempt:testcase:0"},
 		"execution_set_attempt_id": "job-set:2:attempt", "testcase_index": 0, "testcase_set_manifest_hash": manifest.ManifestHash,
 	}
+	sealDigest(record)
 	aggregate := map[string]any{
 		"record_version": "2C.4", "record_id": "job-set:2:record", "submission_id": "submission-set", "source_sha256": strings.Repeat("a", 64),
 		"problem_id": "problem-v1", "problem_revision_id": "revision-v1", "testdata_version_id": "testdata-v1", "testcase_set_id": "set-v1",
 		"manifest_hash": manifest.ManifestHash, "execution_set_request_id": "job-set:2", "execution_set_attempt_id": "job-set:2:attempt",
 		"execution_profile_id": "cpp20-gcc-13-v1", "execution_policy": "RUN_ALL", "total_testcase_count": 1, "started_testcase_count": 1, "completed_testcase_count": 1,
 		"testcases":     []any{map[string]any{"index": 0, "testcase_id": "case-1", "input_sha256": inputHash, "testdata_version_id": "testdata-v1", "execution_profile_id": "cpp20-gcc-13-v1", "status": "RAW_COMPLETED", "record": record}},
-		"set_cancelled": false, "set_infrastructure_failure": false, "stop_reason": "COMPLETED", "cleanup_verified": true, "digest": strings.Repeat("c", 64),
+		"set_cancelled": false, "set_infrastructure_failure": false, "stop_reason": "COMPLETED", "cleanup_verified": true,
 	}
+	sealDigest(aggregate)
 	result := map[string]any{
 		"protocol_version": "2C.4", "execution_set_request_id": "job-set:2", "execution_set_attempt_id": "job-set:2:attempt",
 		"judge_job_id": "job-set", "submission_id": "submission-set", "attempt": 2, "result_generation": 2,
@@ -158,5 +171,36 @@ func TestValidateRawExecutionSetResultUsesSetAttemptIdentity(t *testing.T) {
 	raw, _ = json.Marshal(result)
 	if validateRawExecutionResult(raw, job) == nil {
 		t.Fatal("stale testcase-set attempt accepted")
+	}
+}
+
+func TestValidateVerdictRecordRejectsTampering(t *testing.T) {
+	expected := []byte("ok\n")
+	checkerConfig := digest([]byte("EXACT_BYTES\x00builtin-v1"))
+	inputHash := digest([]byte("input\n"))
+	manifest := TestcaseSetManifest{ProblemID: "problem-v1", ProblemRevisionID: "revision-v1", TestdataVersionID: "testdata-v1", TestcaseSetID: "set-v1", ExecutionProfileID: "cpp20-gcc-13-v1", Entries: []TestcaseSetEntry{{Index: 0, TestcaseID: "case-1", TestdataVersionID: "testdata-v1", Input: "input\n", InputSHA256: inputHash, ExecutionProfileID: "cpp20-gcc-13-v1", ExpectedOutput: string(expected), ExpectedOutputSHA256: digest(expected), CheckerType: "EXACT_BYTES", CheckerVersion: "builtin-v1", CheckerConfigSHA256: checkerConfig}}}
+	manifest.ManifestHash = testcaseSetManifestHash(manifest)
+	job := Job{ID: "job-set", SubmissionID: "submission-set", ProblemID: "problem-v1", ProblemRevisionID: "revision-v1", TestdataVersionRef: "testdata-v1", TestcaseSet: &manifest, ExecutionSetPolicy: "RUN_ALL", Attempt: 1, ExecutionRequestID: "job-set:1", ExecutionAttemptID: "job-set:1:attempt", ResultGeneration: 1, LanguageProfileID: "cpp20-gcc-13-v1", SourceSHA256: strings.Repeat("a", 64)}
+	stdout := []byte("ok\n")
+	record := map[string]any{"record_version": "2C.3", "record_id": "job-set:1:testcase:0:case-1", "identity": map[string]any{"problem_id": "problem-v1", "problem_revision_id": "revision-v1", "testdata_version_id": "testdata-v1", "testcase_id": "case-1", "input_sha256": inputHash, "execution_profile_id": "cpp20-gcc-13-v1", "execution_attempt_id": "job-set:1:attempt:testcase:0"}, "execution_set_attempt_id": "job-set:1:attempt", "testcase_index": 0, "testcase_set_manifest_hash": manifest.ManifestHash, "facts": map[string]any{"process_exited": true, "exit_code": 0, "cleanup_verified": true}}
+	sealDigest(record)
+	aggregate := map[string]any{"record_version": "2C.4", "record_id": "job-set:1:record", "submission_id": "submission-set", "source_sha256": strings.Repeat("a", 64), "problem_id": "problem-v1", "problem_revision_id": "revision-v1", "testdata_version_id": "testdata-v1", "testcase_set_id": "set-v1", "manifest_hash": manifest.ManifestHash, "execution_set_request_id": "job-set:1", "execution_set_attempt_id": "job-set:1:attempt", "execution_profile_id": "cpp20-gcc-13-v1", "execution_policy": "RUN_ALL", "total_testcase_count": 1, "started_testcase_count": 1, "completed_testcase_count": 1, "testcases": []any{map[string]any{"index": 0, "testcase_id": "case-1", "input_sha256": inputHash, "testdata_version_id": "testdata-v1", "execution_profile_id": "cpp20-gcc-13-v1", "status": "RAW_COMPLETED", "record": record, "actual_stdout": stdout, "actual_stdout_sha256": digest(stdout), "actual_stdout_bytes": len(stdout)}}, "set_cancelled": false, "set_infrastructure_failure": false, "stop_reason": "COMPLETED", "cleanup_verified": true}
+	sealDigest(aggregate)
+	payload := map[string]any{"protocol_version": "2C.4", "execution_set_request_id": "job-set:1", "execution_set_attempt_id": "job-set:1:attempt", "judge_job_id": "job-set", "submission_id": "submission-set", "attempt": 1, "result_generation": 1, "language_profile_id": "cpp20-gcc-13-v1", "source_sha256": strings.Repeat("a", 64), "problem_id": "problem-v1", "problem_revision_id": "revision-v1", "testdata_version_id": "testdata-v1", "testcase_set_id": "set-v1", "testcase_set_manifest_hash": manifest.ManifestHash, "execution_profile_id": "cpp20-gcc-13-v1", "execution_set_policy": "RUN_ALL", "pipeline_outcome": "PIPELINE_COMPLETED", "compile": map[string]any{"stdout": "", "stderr": "", "stdout_bytes": 0, "stderr_bytes": 0, "stdout_sha256": digest(nil), "stderr_sha256": digest(nil), "stdout_truncated": false, "stderr_truncated": false}, "aggregate_execution_set_record": aggregate}
+	raw, _ := json.Marshal(payload)
+	derived, err := verdict.Derive(verdict.Input{SubmissionID: job.SubmissionID, ExecutionSetRequestID: job.ExecutionRequestID, ExecutionSetAttemptID: job.ExecutionAttemptID, ManifestHash: manifest.ManifestHash, Attempt: job.Attempt, Authoritative: true, Entries: queueVerdictEntries(&manifest), Raw: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload["verdict_record"] = derived
+	raw, _ = json.Marshal(payload)
+	if err = validateRawExecutionResult(raw, job); err != nil {
+		t.Fatalf("valid verdict rejected: %v", err)
+	}
+	derived.OverallUserVerdict = "WA"
+	payload["verdict_record"] = derived
+	raw, _ = json.Marshal(payload)
+	if validateRawExecutionResult(raw, job) == nil {
+		t.Fatal("tampered verdict accepted")
 	}
 }

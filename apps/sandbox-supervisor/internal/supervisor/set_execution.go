@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -22,6 +21,9 @@ func TestcaseSetManifestHash(manifest model.TestcaseSetManifest) string {
 	parts := []string{model.ExecutionSetContractVersion, manifest.ProblemID, manifest.ProblemRevisionID, manifest.TestdataVersionID, manifest.TestcaseSetID, manifest.ExecutionProfileID, strconv.Itoa(len(manifest.Entries))}
 	for _, entry := range manifest.Entries {
 		parts = append(parts, strconv.Itoa(entry.Index), entry.TestcaseID, entry.TestdataVersionID, entry.InputSHA256, entry.ExecutionProfileID, entry.ExpectedOutputSHA256)
+		if entry.CheckerType != "" || entry.CheckerVersion != "" || entry.CheckerConfigSHA256 != "" {
+			parts = append(parts, "2C.5", entry.CheckerType, entry.CheckerVersion, entry.CheckerConfigSHA256)
+		}
 	}
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(digest[:])
@@ -40,7 +42,8 @@ func ValidateRealExecutionSetRequest(request model.RealExecutionSetRequest) erro
 	}
 	seen := make(map[string]bool, len(manifest.Entries))
 	for index, entry := range manifest.Entries {
-		if entry.Index != index || entry.TestcaseID == "" || entry.TestcaseID == "." || entry.TestcaseID == ".." || len(entry.TestcaseID) > 128 || strings.ContainsAny(entry.TestcaseID, "/\\\x00") || seen[entry.TestcaseID] || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || len(entry.Input) > maxTestcaseInputBytes || !sha256HexPattern(entry.InputSHA256) || digestBytes(entry.Input) != entry.InputSHA256 || entry.ExpectedOutputSHA256 != "" && !sha256HexPattern(entry.ExpectedOutputSHA256) {
+		verdictBinding := entry.CheckerType != "" || entry.CheckerVersion != "" || entry.CheckerConfigSHA256 != ""
+		if entry.Index != index || entry.TestcaseID == "" || entry.TestcaseID == "." || entry.TestcaseID == ".." || len(entry.TestcaseID) > 128 || strings.ContainsAny(entry.TestcaseID, "/\\\x00") || seen[entry.TestcaseID] || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || len(entry.Input) > maxTestcaseInputBytes || !sha256HexPattern(entry.InputSHA256) || digestBytes(entry.Input) != entry.InputSHA256 || entry.ExpectedOutputSHA256 != "" && !sha256HexPattern(entry.ExpectedOutputSHA256) || verdictBinding && (!sha256HexPattern(entry.ExpectedOutputSHA256) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digestBytes([]byte(entry.CheckerType+"\x00"+entry.CheckerVersion))) {
 			return errors.New("invalid testcase-set manifest entry")
 		}
 		seen[entry.TestcaseID] = true
@@ -272,7 +275,7 @@ func (s *Supervisor) ExecuteCPP20Set(ctx context.Context, request model.RealExec
 		} else {
 			result.PipelineOutcome = PipelineCompleted
 		}
-		members = append(members, model.TestcaseSetMemberResult{Index: entry.Index, TestcaseID: entry.TestcaseID, InputSHA256: entry.InputSHA256, TestdataVersionID: entry.TestdataVersionID, ExecutionProfileID: entry.ExecutionProfileID, Status: status, Record: &record})
+		members = append(members, model.TestcaseSetMemberResult{Index: entry.Index, TestcaseID: entry.TestcaseID, InputSHA256: entry.InputSHA256, TestdataVersionID: entry.TestdataVersionID, ExecutionProfileID: entry.ExecutionProfileID, Status: status, Record: &record, ActualStdout: append([]byte{}, runtimeRun.StdoutBytes...), ActualStdoutSHA256: runtimeResult.StdoutSHA256, ActualStdoutBytes: runtimeResult.StdoutBytes, ActualStdoutTruncated: runtimeResult.StdoutTruncated})
 		blocking := runtimeResult.Facts.WallLimitReached || runtimeResult.Facts.MemoryLimitEvent || runtimeResult.Facts.PidsLimitEvent || runtimeResult.Facts.StdoutTruncated || runtimeResult.Facts.StderrTruncated
 		if status != "RAW_COMPLETED" || request.ExecutionPolicy == "STOP_ON_EXECUTION_BLOCKING_EVENT" && blocking {
 			if status == "RAW_COMPLETED" {
@@ -338,8 +341,6 @@ func BuildAggregateExecutionSetRecord(request model.RealExecutionSetRequest, res
 	}
 	withoutDigest := record
 	withoutDigest.Digest = ""
-	encoded, _ := json.Marshal(withoutDigest)
-	digest := sha256.Sum256(encoded)
-	record.Digest = hex.EncodeToString(digest[:])
+	record.Digest = canonicalRecordDigest(withoutDigest)
 	return &record
 }

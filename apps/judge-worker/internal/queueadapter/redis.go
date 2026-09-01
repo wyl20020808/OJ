@@ -12,10 +12,13 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ojplatform/judge-worker/internal/verdict"
 )
 
 type Job struct {
@@ -67,6 +70,10 @@ type TestcaseSetEntry struct {
 	InputSHA256          string `json:"inputSha256"`
 	ExecutionProfileID   string `json:"executionProfileId"`
 	ExpectedOutputSHA256 string `json:"expectedOutputSha256,omitempty"`
+	ExpectedOutput       string `json:"expectedOutput,omitempty"`
+	CheckerType          string `json:"checkerType,omitempty"`
+	CheckerVersion       string `json:"checkerVersion,omitempty"`
+	CheckerConfigSHA256  string `json:"checkerConfigSha256,omitempty"`
 }
 
 type TestcaseSetManifest struct {
@@ -126,7 +133,7 @@ func validateRawExecutionResult(result json.RawMessage, job Job) error {
 		return errors.New("invalid raw execution result")
 	}
 	if job.TestcaseSet != nil {
-		return validateRawExecutionSetResult(identity, job)
+		return validateRawExecutionSetResult(result, identity, job)
 	}
 	allowedOutcome := map[string]bool{
 		"PIPELINE_COMPLETED":      true,
@@ -190,22 +197,26 @@ type rawSetAggregate struct {
 }
 
 type rawSetMember struct {
-	Index              int             `json:"index"`
-	TestcaseID         string          `json:"testcase_id"`
-	InputSHA256        string          `json:"input_sha256"`
-	TestdataVersionID  string          `json:"testdata_version_id"`
-	ExecutionProfileID string          `json:"execution_profile_id"`
-	Status             string          `json:"status"`
-	Record             json.RawMessage `json:"record"`
+	Index                 int             `json:"index"`
+	TestcaseID            string          `json:"testcase_id"`
+	InputSHA256           string          `json:"input_sha256"`
+	TestdataVersionID     string          `json:"testdata_version_id"`
+	ExecutionProfileID    string          `json:"execution_profile_id"`
+	Status                string          `json:"status"`
+	Record                json.RawMessage `json:"record"`
+	ActualStdout          []byte          `json:"actual_stdout"`
+	ActualStdoutSHA256    string          `json:"actual_stdout_sha256"`
+	ActualStdoutBytes     int             `json:"actual_stdout_bytes"`
+	ActualStdoutTruncated bool            `json:"actual_stdout_truncated"`
 }
 
-func validateRawExecutionSetResult(identity rawExecutionResultIdentity, job Job) error {
+func validateRawExecutionSetResult(result json.RawMessage, identity rawExecutionResultIdentity, job Job) error {
 	manifest := job.TestcaseSet
 	if err := validateRawExecutionSetIdentity(identity, job, manifest); err != nil {
 		return err
 	}
 	var aggregate rawSetAggregate
-	if json.Unmarshal(identity.AggregateExecutionSetRecord, &aggregate) != nil || aggregate.RecordVersion != "2C.4" || aggregate.RecordID != executionRequestID(job)+":record" || aggregate.SubmissionID != job.SubmissionID || aggregate.SourceSHA256 != job.SourceSHA256 || aggregate.ProblemID != job.ProblemID || aggregate.ProblemRevisionID != job.ProblemRevisionID || aggregate.TestdataVersionID != job.TestdataVersionRef || aggregate.TestcaseSetID != manifest.TestcaseSetID || aggregate.ManifestHash != manifest.ManifestHash || aggregate.ExecutionSetRequestID != executionRequestID(job) || aggregate.ExecutionSetAttemptID != job.ExecutionAttemptID || aggregate.ExecutionProfileID != manifest.ExecutionProfileID || aggregate.ExecutionPolicy != effectiveSetPolicy(job) || aggregate.TotalTestcaseCount != len(manifest.Entries) || len(aggregate.Testcases) != len(manifest.Entries) || !isSHA256(aggregate.Digest) || !validSetPipelineOutcome(identity.PipelineOutcome) || !validSetStopReason(aggregate.StopReason) || aggregate.SetCancelled != (aggregate.StopReason == "CANCELLED") || aggregate.SetInfrastructureFailure != (aggregate.StopReason == "INFRASTRUCTURE_FAILURE") {
+	if json.Unmarshal(identity.AggregateExecutionSetRecord, &aggregate) != nil || !verdict.VerifyDigest(identity.AggregateExecutionSetRecord) || aggregate.RecordVersion != "2C.4" || aggregate.RecordID != executionRequestID(job)+":record" || aggregate.SubmissionID != job.SubmissionID || aggregate.SourceSHA256 != job.SourceSHA256 || aggregate.ProblemID != job.ProblemID || aggregate.ProblemRevisionID != job.ProblemRevisionID || aggregate.TestdataVersionID != job.TestdataVersionRef || aggregate.TestcaseSetID != manifest.TestcaseSetID || aggregate.ManifestHash != manifest.ManifestHash || aggregate.ExecutionSetRequestID != executionRequestID(job) || aggregate.ExecutionSetAttemptID != job.ExecutionAttemptID || aggregate.ExecutionProfileID != manifest.ExecutionProfileID || aggregate.ExecutionPolicy != effectiveSetPolicy(job) || aggregate.TotalTestcaseCount != len(manifest.Entries) || len(aggregate.Testcases) != len(manifest.Entries) || !isSHA256(aggregate.Digest) || !validSetPipelineOutcome(identity.PipelineOutcome) || !validSetStopReason(aggregate.StopReason) || aggregate.SetCancelled != (aggregate.StopReason == "CANCELLED") || aggregate.SetInfrastructureFailure != (aggregate.StopReason == "INFRASTRUCTURE_FAILURE") {
 		return errors.New("invalid testcase-set aggregate")
 	}
 	started, completed := 0, 0
@@ -222,6 +233,9 @@ func validateRawExecutionSetResult(identity rawExecutionResultIdentity, job Job)
 			if len(member.Record) == 0 || string(member.Record) == "null" {
 				return errors.New("completed testcase is missing immutable record")
 			}
+		}
+		if member.Status == "RAW_COMPLETED" && entry.CheckerType != "" && (member.ActualStdoutBytes < 0 || member.ActualStdoutBytes > 64<<10 || len(member.ActualStdout) > 64<<10 || !isSHA256(member.ActualStdoutSHA256) || member.ActualStdoutBytes != len(member.ActualStdout) || member.ActualStdoutSHA256 != digest(member.ActualStdout)) {
+			return errors.New("invalid testcase stdout evidence")
 		}
 		if len(member.Record) > 0 && string(member.Record) != "null" {
 			var record struct {
@@ -240,7 +254,7 @@ func validateRawExecutionSetResult(identity rawExecutionResultIdentity, job Job)
 				TestcaseIndex           int    `json:"testcase_index"`
 				TestcaseSetManifestHash string `json:"testcase_set_manifest_hash"`
 			}
-			if json.Unmarshal(member.Record, &record) != nil || record.RecordVersion != "2C.3" || !isSHA256(record.Digest) || record.Identity.ProblemID != job.ProblemID || record.Identity.ProblemRevisionID != job.ProblemRevisionID || record.Identity.TestdataVersionID != entry.TestdataVersionID || record.Identity.TestcaseID != entry.TestcaseID || record.Identity.InputSHA256 != entry.InputSHA256 || record.Identity.ExecutionProfileID != entry.ExecutionProfileID || record.Identity.ExecutionAttemptID == "" || record.ExecutionSetAttemptID != job.ExecutionAttemptID || record.TestcaseIndex != entry.Index || record.TestcaseSetManifestHash != manifest.ManifestHash {
+			if json.Unmarshal(member.Record, &record) != nil || !verdict.VerifyDigest(member.Record) || record.RecordVersion != "2C.3" || !isSHA256(record.Digest) || record.Identity.ProblemID != job.ProblemID || record.Identity.ProblemRevisionID != job.ProblemRevisionID || record.Identity.TestdataVersionID != entry.TestdataVersionID || record.Identity.TestcaseID != entry.TestcaseID || record.Identity.InputSHA256 != entry.InputSHA256 || record.Identity.ExecutionProfileID != entry.ExecutionProfileID || record.Identity.ExecutionAttemptID == "" || record.ExecutionSetAttemptID != job.ExecutionAttemptID || record.TestcaseIndex != entry.Index || record.TestcaseSetManifestHash != manifest.ManifestHash {
 				return errors.New("invalid testcase record binding")
 			}
 		}
@@ -251,7 +265,39 @@ func validateRawExecutionSetResult(identity rawExecutionResultIdentity, job Job)
 	if identity.PipelineOutcome != "PIPELINE_INFRA_FAILURE" && !validRawStageOutput(identity.Compile) {
 		return errors.New("invalid testcase-set compile output")
 	}
+	if verdictReady(manifest) {
+		var envelope struct {
+			VerdictRecord verdict.AggregateRecord `json:"verdict_record"`
+		}
+		if json.Unmarshal(result, &envelope) != nil || envelope.VerdictRecord.Digest == "" {
+			return errors.New("missing verdict record")
+		}
+		expected, err := verdict.Derive(verdict.Input{SubmissionID: job.SubmissionID, ExecutionSetRequestID: executionRequestID(job), ExecutionSetAttemptID: job.ExecutionAttemptID, ManifestHash: manifest.ManifestHash, Attempt: job.Attempt, Authoritative: true, Entries: queueVerdictEntries(manifest), Raw: result})
+		if err != nil || !reflect.DeepEqual(expected, envelope.VerdictRecord) {
+			return errors.New("verdict record validation failed")
+		}
+	}
 	return nil
+}
+
+func queueVerdictEntries(manifest *TestcaseSetManifest) []verdict.Entry {
+	entries := make([]verdict.Entry, 0, len(manifest.Entries))
+	for _, entry := range manifest.Entries {
+		entries = append(entries, verdict.Entry{Index: entry.Index, TestcaseID: entry.TestcaseID, TestdataVersionID: entry.TestdataVersionID, ExpectedOutputSHA256: entry.ExpectedOutputSHA256, ExpectedOutput: []byte(entry.ExpectedOutput), CheckerType: entry.CheckerType, CheckerVersion: entry.CheckerVersion, CheckerConfigSHA256: entry.CheckerConfigSHA256})
+	}
+	return entries
+}
+
+func verdictReady(manifest *TestcaseSetManifest) bool {
+	if manifest == nil || len(manifest.Entries) == 0 {
+		return false
+	}
+	for _, entry := range manifest.Entries {
+		if entry.CheckerType == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func validateRawExecutionSetIdentity(identity rawExecutionResultIdentity, job Job, manifest *TestcaseSetManifest) error {
@@ -337,7 +383,7 @@ func validRawStageOutput(raw json.RawMessage) bool {
 	if len(raw) == 0 || string(raw) == "null" || json.Unmarshal(raw, &stage) != nil {
 		return false
 	}
-	return len(stage.Stdout) <= 64<<10 && len(stage.Stderr) <= 64<<10 && stage.StdoutBytes >= 0 && stage.StdoutBytes <= 64<<10 && stage.StderrBytes >= 0 && stage.StderrBytes <= 64<<10 && isSHA256(stage.StdoutSHA256) && isSHA256(stage.StderrSHA256)
+	return len([]byte(stage.Stdout)) <= 64<<10 && len([]byte(stage.Stderr)) <= 64<<10 && stage.StdoutBytes == len([]byte(stage.Stdout)) && stage.StdoutBytes >= 0 && stage.StdoutBytes <= 64<<10 && stage.StderrBytes == len([]byte(stage.Stderr)) && stage.StderrBytes >= 0 && stage.StderrBytes <= 64<<10 && isSHA256(stage.StdoutSHA256) && stage.StdoutSHA256 == digest([]byte(stage.Stdout)) && isSHA256(stage.StderrSHA256) && stage.StderrSHA256 == digest([]byte(stage.Stderr))
 }
 
 func validateTestcaseJob(j Job) error {
@@ -369,7 +415,8 @@ func validateTestcaseSet(manifest TestcaseSetManifest, problemID, revisionID, te
 	}
 	seen := make(map[string]struct{}, len(manifest.Entries))
 	for index, entry := range manifest.Entries {
-		if entry.Index != index || !validSetID(entry.TestcaseID) || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || len(entry.Input) > 64<<10 || !isSHA256(entry.InputSHA256) || entry.InputSHA256 != digest([]byte(entry.Input)) || entry.ExpectedOutputSHA256 != "" && !isSHA256(entry.ExpectedOutputSHA256) {
+		verdictBinding := entry.ExpectedOutput != "" || entry.CheckerType != "" || entry.CheckerVersion != "" || entry.CheckerConfigSHA256 != ""
+		if entry.Index != index || !validSetID(entry.TestcaseID) || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || len(entry.Input) > 64<<10 || !isSHA256(entry.InputSHA256) || entry.InputSHA256 != digest([]byte(entry.Input)) || entry.ExpectedOutputSHA256 != "" && !isSHA256(entry.ExpectedOutputSHA256) || verdictBinding && (len(entry.ExpectedOutput) > 64<<10 || !isSHA256(entry.ExpectedOutputSHA256) || entry.ExpectedOutputSHA256 != digest([]byte(entry.ExpectedOutput)) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digest([]byte(entry.CheckerType+"\x00"+entry.CheckerVersion))) {
 			return errors.New("invalid testcase-set entry")
 		}
 		if _, exists := seen[entry.TestcaseID]; exists {
@@ -384,6 +431,9 @@ func testcaseSetManifestHash(manifest TestcaseSetManifest) string {
 	parts := []string{"2C.4", manifest.ProblemID, manifest.ProblemRevisionID, manifest.TestdataVersionID, manifest.TestcaseSetID, manifest.ExecutionProfileID, strconv.Itoa(len(manifest.Entries))}
 	for _, entry := range manifest.Entries {
 		parts = append(parts, strconv.Itoa(entry.Index), entry.TestcaseID, entry.TestdataVersionID, entry.InputSHA256, entry.ExecutionProfileID, entry.ExpectedOutputSHA256)
+		if entry.CheckerType != "" || entry.CheckerVersion != "" || entry.CheckerConfigSHA256 != "" {
+			parts = append(parts, "2C.5", entry.CheckerType, entry.CheckerVersion, entry.CheckerConfigSHA256)
+		}
 	}
 	return digest([]byte(strings.Join(parts, "\x00")))
 }
@@ -780,10 +830,26 @@ func (q Queue) recoverStaleLocked(ctx context.Context) error {
 }
 func (q Queue) update(ctx context.Context, l Lease, status, reason string, result json.RawMessage) error {
 	lock := q.key("mutation-lock", "")
-	token := fmt.Sprintf("%d", time.Now().UnixNano())
-	ok, err := q.Redis.SetNX(ctx, lock, token, 5*time.Second)
-	if err != nil || !ok {
-		return err
+	var token string
+	var err error
+	for attempt := 0; attempt < 40; attempt++ {
+		token = fmt.Sprintf("%d", time.Now().UnixNano())
+		var ok bool
+		ok, err = q.Redis.SetNX(ctx, lock, token, 5*time.Second)
+		if err != nil {
+			return err
+		}
+		if ok {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+		if attempt == 39 {
+			return errors.New("mutation lock busy")
+		}
 	}
 	defer func() { _ = q.Redis.Del(context.Background(), lock) }()
 	raw, err := q.Redis.Get(ctx, q.key("job", l.Job.ID))
@@ -810,7 +876,7 @@ func (q Queue) update(ctx context.Context, l Lease, status, reason string, resul
 	if j.Status != expectedLease || j.LeaseToken != l.Token || time.Now().After(j.LeaseExpiresAt) {
 		return errors.New("lease conflict")
 	}
-	if (status == "COMPLETED") != (j.ExecutionMode == "REAL_SANDBOXED_EXECUTION") {
+	if status == "COMPLETED" && j.ExecutionMode != "REAL_SANDBOXED_EXECUTION" {
 		return errors.New("execution mode completion mismatch")
 	}
 	if status == "COMPLETED" {

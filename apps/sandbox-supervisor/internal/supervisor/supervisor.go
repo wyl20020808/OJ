@@ -591,6 +591,12 @@ func (m *resourceMonitor) stop() *model.RuntimeEvidence {
 	return &copy
 }
 
+func (m *resourceMonitor) qualified() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.evidence.ControlGroup != "" && m.evidence.MemoryMax != "" && m.evidence.PidsMax != "" && m.evidence.CPUMax != ""
+}
+
 func (m *resourceMonitor) capture() {
 	m.mu.Lock()
 	path := m.evidence.ControlGroup

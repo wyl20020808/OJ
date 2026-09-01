@@ -17,6 +17,7 @@ import (
 	"github.com/ojplatform/judge-worker/internal/protocol"
 	"github.com/ojplatform/judge-worker/internal/queueadapter"
 	"github.com/ojplatform/judge-worker/internal/supervisorclient"
+	"github.com/ojplatform/judge-worker/internal/verdict"
 )
 
 type State string
@@ -207,7 +208,7 @@ func (w *Worker) process(parent context.Context, lease queueadapter.Lease) {
 	}
 	outcome, code, err := w.Executor.Run(ctx, request.FixtureID)
 	if err != nil && outcome == protocol.Cancelled {
-		_ = w.Queue.Cancel(parent, lease)
+		w.cancelLease(parent, lease)
 		return
 	}
 	switch outcome {
@@ -250,7 +251,7 @@ func (w *Worker) processReal(ctx, queueCtx context.Context, lease queueadapter.L
 	}
 	execution, err := w.Supervisor.Execute(ctx, request)
 	if ctx.Err() != nil || execution.Result.PipelineOutcome == "PIPELINE_CANCELLED" {
-		_ = w.Queue.Cancel(queueCtx, lease)
+		w.cancelLease(queueCtx, lease)
 		return
 	}
 	if execution.Result.PipelineOutcome == "PIPELINE_INFRA_FAILURE" {
@@ -271,6 +272,10 @@ func (w *Worker) processRealSet(ctx, queueCtx context.Context, lease queueadapte
 		_ = w.Queue.FailTerminal(queueCtx, lease, "WORKER_PROTOCOL_ERROR")
 		return
 	}
+	if w.cancelRequested(queueCtx, lease.Job.ID) {
+		w.cancelLease(queueCtx, lease)
+		return
+	}
 	deadline := lease.Job.LeaseExpiresAt.Add(-100 * time.Millisecond)
 	if !deadline.After(time.Now()) {
 		_ = w.Queue.Retry(queueCtx, lease, "EXECUTION_DEADLINE_UNAVAILABLE")
@@ -287,6 +292,7 @@ func (w *Worker) processRealSet(ctx, queueCtx context.Context, lease queueadapte
 			Index: entry.Index, TestcaseID: entry.TestcaseID, TestdataVersionID: entry.TestdataVersionID,
 			Input: []byte(entry.Input), InputSHA256: entry.InputSHA256, ExecutionProfileID: entry.ExecutionProfileID,
 			ExpectedOutputSHA256: entry.ExpectedOutputSHA256,
+			CheckerType:          entry.CheckerType, CheckerVersion: entry.CheckerVersion, CheckerConfigSHA256: entry.CheckerConfigSHA256,
 		})
 	}
 	policy := lease.Job.ExecutionSetPolicy
@@ -303,16 +309,80 @@ func (w *Worker) processRealSet(ctx, queueCtx context.Context, lease queueadapte
 	}
 	execution, err := w.Supervisor.ExecuteSet(ctx, request)
 	if ctx.Err() != nil || execution.Result.PipelineOutcome == "PIPELINE_CANCELLED" {
-		_ = w.Queue.Cancel(queueCtx, lease)
+		w.cancelLease(queueCtx, lease)
 		return
 	}
 	if err != nil || execution.Result.PipelineOutcome == "PIPELINE_INFRA_FAILURE" {
+		if w.cancelRequested(queueCtx, lease.Job.ID) {
+			w.cancelLease(queueCtx, lease)
+			return
+		}
 		_ = w.Queue.Retry(queueCtx, lease, "REAL_EXECUTION_SET_INFRA_FAILURE")
 		return
 	}
-	if err = w.Queue.CompleteReal(queueCtx, lease, execution.Raw); err != nil {
+	if !verdictReadyManifest(lease.Job.TestcaseSet) {
+		if err = w.Queue.CompleteReal(queueCtx, lease, execution.Raw); err != nil {
+			w.logger.Printf(`{"event":"worker_set_result_persist_error","worker_id":%q,"job_id":%q,"error":%q}`, w.WorkerID, lease.Job.ID, err.Error())
+		}
+		return
+	}
+	result, deriveErr := verdict.Derive(verdict.Input{SubmissionID: lease.Job.SubmissionID, ExecutionSetRequestID: lease.Job.ExecutionRequestID, ExecutionSetAttemptID: lease.Job.ExecutionAttemptID, ManifestHash: lease.Job.TestcaseSet.ManifestHash, Attempt: lease.Job.Attempt, Authoritative: true, Entries: verdictEntries(lease.Job.TestcaseSet), Raw: execution.Raw})
+	if deriveErr != nil {
+		_ = w.Queue.Retry(queueCtx, lease, "VERDICT_DERIVATION_INFRA_FAILURE")
+		return
+	}
+	published, err := attachVerdict(execution.Raw, result)
+	if err != nil {
+		_ = w.Queue.Retry(queueCtx, lease, "VERDICT_PUBLICATION_INFRA_FAILURE")
+		return
+	}
+	if err = w.Queue.CompleteReal(queueCtx, lease, published); err != nil {
 		w.logger.Printf(`{"event":"worker_set_result_persist_error","worker_id":%q,"job_id":%q,"error":%q}`, w.WorkerID, lease.Job.ID, err.Error())
 	}
+}
+
+func (w *Worker) cancelRequested(ctx context.Context, jobID string) bool {
+	requested, err := w.Queue.CancellationRequested(ctx, jobID)
+	return err == nil && requested
+}
+
+func (w *Worker) cancelLease(ctx context.Context, lease queueadapter.Lease) {
+	if err := w.Queue.Cancel(ctx, lease); err != nil {
+		w.logger.Printf(`{"event":"worker_cancel_persist_error","worker_id":%q,"job_id":%q,"error":%q}`, w.WorkerID, lease.Job.ID, err.Error())
+	}
+}
+
+func verdictEntries(manifest *queueadapter.TestcaseSetManifest) []verdict.Entry {
+	entries := make([]verdict.Entry, 0, len(manifest.Entries))
+	for _, entry := range manifest.Entries {
+		entries = append(entries, verdict.Entry{Index: entry.Index, TestcaseID: entry.TestcaseID, TestdataVersionID: entry.TestdataVersionID, ExpectedOutputSHA256: entry.ExpectedOutputSHA256, ExpectedOutput: []byte(entry.ExpectedOutput), CheckerType: entry.CheckerType, CheckerVersion: entry.CheckerVersion, CheckerConfigSHA256: entry.CheckerConfigSHA256})
+	}
+	return entries
+}
+
+func verdictReadyManifest(manifest *queueadapter.TestcaseSetManifest) bool {
+	if manifest == nil || len(manifest.Entries) == 0 {
+		return false
+	}
+	for _, entry := range manifest.Entries {
+		if entry.CheckerType == "" || entry.ExpectedOutputSHA256 == "" {
+			return false
+		}
+	}
+	return true
+}
+
+func attachVerdict(raw json.RawMessage, record verdict.AggregateRecord) (json.RawMessage, error) {
+	var payload map[string]json.RawMessage
+	if json.Unmarshal(raw, &payload) != nil {
+		return nil, errors.New("raw verdict payload malformed")
+	}
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return nil, err
+	}
+	payload["verdict_record"] = encoded
+	return json.Marshal(payload)
 }
 
 func (w *Worker) observeCancellation(ctx context.Context, jobID string, cancel context.CancelFunc) {

@@ -3,6 +3,7 @@ package supervisor
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,6 +95,55 @@ func TestSingleTestcaseRecordBindsFactsAndDigest(t *testing.T) {
 	second := BuildSingleTestcaseExecutionRecord(request, result)
 	if record.Digest != second.Digest {
 		t.Fatal("record digest is not deterministic")
+	}
+}
+
+func TestSingleTestcaseRecordDigestExcludesSelfField(t *testing.T) {
+	request := validRealRequest()
+	result := model.RealExecutionResult{
+		ExecutionRequestID: request.ExecutionRequestID,
+		ExecutionAttemptID: request.ExecutionRequestID + ":attempt",
+		PipelineOutcome:    PipelineCompleted,
+		SourceSHA256:       request.SourceSHA256,
+		Artifact:           &model.ArtifactResult{SHA256: strings.Repeat("a", 64)},
+		Runtime: &model.StageResult{
+			StdoutBytes: 4, StdoutSHA256: digestBytes([]byte("111\n")),
+			StderrBytes: 0, StderrSHA256: digestBytes(nil),
+			Facts: model.RawExecutionFacts{ProcessExited: true, CleanupVerified: true},
+			Clean: true,
+		},
+		Clean: true,
+	}
+	record := BuildSingleTestcaseExecutionRecord(request, result)
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &object); err != nil {
+		t.Fatal(err)
+	}
+	claimed := string(object["digest"])
+	var claimedDigest string
+	if err := json.Unmarshal(object["digest"], &claimedDigest); err != nil {
+		t.Fatal(err)
+	}
+	delete(object, "digest")
+	canonical, err := json.Marshal(object)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var normalized any
+	if err := json.Unmarshal(canonical, &normalized); err != nil {
+		t.Fatal(err)
+	}
+	canonical, err = json.Marshal(normalized)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(canonical)
+	if got := hex.EncodeToString(sum[:]); got != claimedDigest {
+		t.Fatalf("digest includes self field or uses a different canonical form: claimed=%s actual=%s raw=%s", claimedDigest, got, claimed)
 	}
 }
 
