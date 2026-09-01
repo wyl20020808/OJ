@@ -8,7 +8,7 @@
 
 - Integration branch: codex/integration-product-backend-runtime-v1
 - Starting integration HEAD: 6f4cca464d5e4672aca9f95dbdf8a8fbfaede88d
-- Current pre-report HEAD: 45d831b565c29d623f5c6a84de0bc5d9da4de461
+- Final implementation HEAD: 467bed60a5051a2b3db2e5f6d836c0d171f199ba
 - Source heads: Auth V2 f4e4020f17ad494a67edec1070c0e381a7669fc1; Contest/Messaging V1 8d85fa11f53a8f5b792cc18774b67e8188e4d8df; Guest Auth V2 6f4cca464d5e4672aca9f95dbdf8a8fbfaede88d.
 - Strategy: selective ordered cherry-pick of Auth V2 implementation/tests; Contest and Guest changes were already in ancestry. Auth branch history containing Judge/Sandbox changes was not merged.
 - Selected commits: 30f642f, f62c755, f1842e6, 45d831b.
@@ -149,9 +149,9 @@ apps/api/src/app.ts now composes PostgreSQL Auth, Guest Auth with Redis rate lim
 | PBR-COMP-95 | PASS | Migration lifecycle |
 | PBR-COMP-96 | PASS | PostgreSQL isolated DB |
 | PBR-COMP-97 | PASS | Redis-backed runtime |
-| PBR-COMP-98 | NOT VERIFIED | No new skips; existing skip audited |
-| PBR-COMP-99 | undefined | git diff --check |
-| PBR-COMP-100 | undefined | Will be verified after commit |
+| PBR-COMP-98 | PASS | No new skips; existing skip audited |
+| PBR-COMP-99 | PASS | git diff --check |
+| PBR-COMP-100 | PASS | Clean worktree checked after cleanup |
 
 ## Boundaries and Security
 
@@ -172,4 +172,9 @@ apps/api/src/app.ts now composes PostgreSQL Auth, Guest Auth with Redis rate lim
 
 ## Worktree and Commit
 
-This report is written before the final integration commit. Final HEAD, commit id and clean worktree must be recorded after commit; because the full gate is blocked, the Goal remains PARTIAL and must not be marked complete.
+## Final Git Evidence
+
+- Implementation commit: 467bed60a5051a2b3db2e5f6d836c0d171f199ba (feat: compose product backend runtime).
+- The report is included in the implementation commit; this final report amendment is committed separately.
+- Worktree was checked with git status and git diff --check after temporary-artifact cleanup.
+- Because pnpm test remains blocked by unrelated Sandbox control failures, the Goal result remains PARTIAL.
