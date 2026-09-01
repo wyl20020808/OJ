@@ -23,7 +23,8 @@
       "@ojplatform/api": ["apps/api/src/index.ts"],
       "@ojplatform/database": ["packages/database/src/index.ts"],
       "@ojplatform/cache": ["packages/cache/src/index.ts"],
-      "@ojplatform/storage": ["packages/storage/src/index.ts"]
+      "@ojplatform/storage": ["packages/storage/src/index.ts"],
+      "@ojplatform/judge-runtime": ["packages/judge-runtime/src/index.ts"]
     }
   },
   "include": [

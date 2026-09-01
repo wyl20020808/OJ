@@ -38,6 +38,9 @@ import {
   registerSubmissionModule,
   publicationFromJudgeJob,
   publicSubmissionEvaluation,
+  JudgeServiceClient,
+  judgeServiceInput,
+  productPublication,
   type ProblemRevisionResolver,
   type Submission,
 } from './modules/submission/index.js';
@@ -192,6 +195,13 @@ export async function buildApp(options: AppOptions = {}) {
       process.env.OJPLATFORM_PHASE1E_REDIS_KEY_PREFIX ??
         (qualificationMode ? 'oj:judge:qualification' : 'oj:judge'),
     );
+    const judgeService =
+      process.env.JUDGE_SERVICE_URL && process.env.JUDGE_SERVICE_TOKEN
+        ? new JudgeServiceClient(
+            process.env.JUDGE_SERVICE_URL,
+            process.env.JUDGE_SERVICE_TOKEN,
+          )
+        : undefined;
     await registerJudgeModule(app, {
       repository: judgeRepository,
       authorizationPolicy: createJudgeAuthorizationPolicy({
@@ -278,6 +288,20 @@ export async function buildApp(options: AppOptions = {}) {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       onCreated: async (submission) => {
+        if (judgeService) {
+          const job = await judgeService.submit(
+            judgeServiceInput(
+              submission,
+              `submission:${submission.id}:evaluation:1`,
+              realSubmissionExecution,
+            ),
+          );
+          await submissionRepository.beginEvaluation?.(
+            submission.id,
+            job.judgeJobId,
+          );
+          return;
+        }
         const { job } = await judgeRepository.enqueue(
           judgeInputForSubmission(submission, realSubmissionExecution),
         );
@@ -292,6 +316,17 @@ export async function buildApp(options: AppOptions = {}) {
           ['REJUDGE_PENDING', 'REJUDGING'].includes(current.status)
         )
           return;
+        if (judgeService && current) {
+          const job = await judgeService.rejudge(
+            current.judgeJobId,
+            `submission:${submission.id}:evaluation:${current.evaluationGeneration + 1}`,
+          );
+          await submissionRepository.startRejudge?.(
+            submission.id,
+            job.judgeJobId,
+          );
+          return;
+        }
         const evaluationGeneration = (current?.evaluationGeneration ?? 0) + 1;
         const { job } = await judgeRepository.enqueue({
           ...judgeInputForSubmission(submission, realSubmissionExecution),
@@ -304,6 +339,39 @@ export async function buildApp(options: AppOptions = {}) {
         (await submissionRepository.listEvaluationHistory?.(submissionId)) ??
         [],
       projectJudge: async (submission) => {
+        if (judgeService) {
+          const current = await submissionRepository.getEvaluation?.(
+            submission.id,
+          );
+          if (!current) return {};
+          const job = await judgeService.get(current.judgeJobId);
+          const publication = productPublication(job);
+          if (publication)
+            await submissionRepository.publishEvaluation?.(publication);
+          const evaluation = await submissionRepository.getEvaluation?.(
+            submission.id,
+          );
+          return {
+            judgeJobId: job.judgeJobId,
+            status:
+              job.status === 'RUNNING'
+                ? 'LEASED'
+                : job.status === 'QUEUED'
+                  ? 'QUEUED'
+                  : job.status === 'COMPLETED_WITH_VERDICT'
+                    ? 'EXECUTION_COMPLETED'
+                    : job.status === 'CANCELLED'
+                      ? 'CANCELLED'
+                      : 'PROTOCOL_FAILURE',
+            attempt: job.attemptGeneration,
+            maxAttempts: 3,
+            synthetic: false,
+            executionStage: job.status,
+            ...(publicSubmissionEvaluation(evaluation)
+              ? { evaluation: publicSubmissionEvaluation(evaluation) }
+              : {}),
+          };
+        }
         const job = await judgeRepository.getBySubmissionId(submission.id);
         if (!job) return {};
         const publication = publicationFromJudgeJob(job);

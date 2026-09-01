@@ -1,0 +1,11 @@
+{
+  "name": "@ojplatform/judge-runtime",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "ioredis": "^6.0.0"
+  }
+}

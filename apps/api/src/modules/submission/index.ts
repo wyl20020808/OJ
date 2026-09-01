@@ -6,3 +6,4 @@ export * from './service.js';
 export * from './routes.js';
 export * from './outcome.js';
 export * from './publication.js';
+export * from './judge-service-client.js';
