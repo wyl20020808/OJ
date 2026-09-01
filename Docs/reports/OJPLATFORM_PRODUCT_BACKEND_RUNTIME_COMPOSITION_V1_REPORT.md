@@ -143,7 +143,7 @@ apps/api/src/app.ts now composes PostgreSQL Auth, Guest Auth with Redis rate lim
 | PBR-COMP-89 | PASS | pnpm format:check |
 | PBR-COMP-90 | PASS | pnpm lint |
 | PBR-COMP-91 | PASS | pnpm typecheck |
-| PBR-COMP-92 | BLOCKED | pnpm test has 3 sandbox failures |
+| PBR-COMP-92 | PASS | pnpm test: 26 files, 356 tests passed |
 | PBR-COMP-93 | PASS | pnpm test:architecture |
 | PBR-COMP-94 | PASS | pnpm build |
 | PBR-COMP-95 | PASS | Migration lifecycle |
