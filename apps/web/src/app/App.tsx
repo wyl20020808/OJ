@@ -2006,6 +2006,7 @@ function ContestRoute({
       view={view}
       {...(contestId ? { contestId } : {})}
       navigate={navigate}
+      api={api}
       {...(view === 'list' || view === 'mine' ? { contests } : {})}
       {...(detail ? { detail } : {})}
       {...(view === 'problems' ? { problems } : {})}
@@ -2022,7 +2023,7 @@ function NotificationsRoute({ api }: { api: ApiClient }) {
       .then((result) => setItems(result.items))
       .catch(() => setItems([]));
   }, [api]);
-  return <NotificationsPage notifications={items} />;
+  return <NotificationsPage notifications={items} api={api} />;
 }
 
 function MessagesRoute({ api }: { api: ApiClient }) {
@@ -2051,6 +2052,7 @@ function MessagesRoute({ api }: { api: ApiClient }) {
   }, [api]);
   return (
     <MessagesExperience
+      api={api}
       conversations={conversations}
       friends={friends}
       requests={requests}

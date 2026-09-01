@@ -522,6 +522,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'POST', body: '{}' },
         fetcher,
       ),
+    updateContest: (id: string, input: Record<string, unknown>) =>
+      request<BackendContest>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}`,
+        { method: 'PATCH', body: JSON.stringify(input) },
+        fetcher,
+      ),
     setContestProblems: (
       id: string,
       problems: Array<{ problemId: string; score?: number }>,
@@ -547,6 +554,37 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         },
         fetcher,
       ),
+    contestRegistration: (id: string) =>
+      request<{
+        status: string;
+        contestId?: string;
+        userId?: string;
+        registeredAt?: string;
+      }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/registration`,
+        undefined,
+        fetcher,
+      ),
+    contestParticipants: (id: string) =>
+      request<{
+        items: Array<{
+          userId: string;
+          username?: string;
+          displayName?: string;
+        }>;
+      }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/participants`,
+        undefined,
+        fetcher,
+      ),
+    contestHomeSummary: () =>
+      request<{
+        running: BackendContest[];
+        upcoming: BackendContest[];
+        recentEnded: BackendContest[];
+      }>(baseUrl, '/api/contests/home-summary', undefined, fetcher),
     contestStandings: (id: string) =>
       request<
         | { available: true; items: unknown[] }

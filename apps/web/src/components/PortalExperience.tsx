@@ -4,8 +4,9 @@ import {
   type CSSProperties,
   type FormEvent,
   type ReactNode,
+  useEffect,
 } from 'react';
-import type { AuthenticatedUser } from '../services/api.js';
+import type { ApiClient, AuthenticatedUser } from '../services/api.js';
 import type {
   ContestDetail,
   ContestProblem,
@@ -152,6 +153,7 @@ export function ContestExperience({
   detail,
   problems = [],
   standings = [],
+  api,
 }: {
   view: ContestView;
   contestId?: string;
@@ -160,8 +162,9 @@ export function ContestExperience({
   detail?: ContestDetail;
   problems?: ContestProblem[];
   standings?: ContestStanding[];
+  api?: ApiClient | undefined;
 }) {
-  if (view === 'create') return <ContestCreate navigate={navigate} />;
+  if (view === 'create') return <ContestCreate navigate={navigate} api={api} />;
   if (view === 'list' || view === 'mine') {
     return (
       <section className="portal-page contest-page">
@@ -359,9 +362,16 @@ function Standings({ standings }: { standings: ContestStanding[] }) {
   );
 }
 
-function ContestCreate({ navigate }: { navigate: Navigate }) {
+function ContestCreate({
+  navigate,
+  api,
+}: {
+  navigate: Navigate;
+  api?: ApiClient | undefined;
+}) {
   const [message, setMessage] = useState('');
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
+  const [busy, setBusy] = useState(false);
   const saveDraft = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -392,9 +402,27 @@ function ContestCreate({ navigate }: { navigate: Navigate }) {
       return setMessage('每题分值必须与题目一一对应且为正数。');
     if (freezeMinutes && Number(freezeMinutes) < 0)
       return setMessage('封榜时间不能为负数。');
-    setMessage(
-      '本地未提交草稿已保留在当前页面；刷新后不会保存，也未发布到平台。',
-    );
+    if (!api) return setMessage('比赛服务暂不可用。');
+    setBusy(true);
+    void api
+      .createContest({
+        title,
+        description: String(data.get('description') ?? ''),
+        startsAt: new Date(startsAt).toISOString(),
+        endsAt: new Date(endsAt).toISOString(),
+        visibility,
+        format: String(data.get('format') ?? 'ICPC') as 'ICPC',
+        ...(visibility === 'PRIVATE' && data.get('privatePassword')
+          ? { privatePassword: String(data.get('privatePassword')) }
+          : {}),
+      })
+      .then((contest) => navigate(`/contests/${contest.id}/settings`))
+      .catch((reason) =>
+        setMessage(
+          reason instanceof Error ? reason.message : '比赛创建失败，请重试。',
+        ),
+      )
+      .finally(() => setBusy(false));
   };
   return (
     <section className="portal-page contest-create">
@@ -487,9 +515,8 @@ function ContestCreate({ navigate }: { navigate: Navigate }) {
           </p>
         )}
         <div className="actions">
-          <button type="submit">保存本地未提交草稿</button>
-          <button type="button" disabled title="比赛后端尚未接入">
-            发布比赛
+          <button type="submit" disabled={busy}>
+            {busy ? '创建中…' : '创建比赛'}
           </button>
           <button
             type="button"
@@ -700,9 +727,45 @@ export function NotificationBell({ navigate }: { navigate: Navigate }) {
 
 export function NotificationsPage({
   notifications = [],
+  api,
 }: {
   notifications?: NotificationSummary[];
+  api?: ApiClient | undefined;
 }) {
+  const [items, setItems] = useState(notifications);
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    setItems(notifications);
+  }, [notifications]);
+  useEffect(() => {
+    if (api)
+      void api
+        .unreadNotifications()
+        .then((r) => setUnread(r.count))
+        .catch(() => undefined);
+  }, [api]);
+  const mark = (id: string) => {
+    if (!api) return;
+    void api
+      .markNotificationRead(id)
+      .then(() => {
+        setItems((all) =>
+          all.map((n) => (n.id === id ? { ...n, read: true } : n)),
+        );
+        setUnread((n) => Math.max(0, n - 1));
+      })
+      .catch(() => undefined);
+  };
+  const markAll = () => {
+    if (!api) return;
+    void api
+      .markAllNotificationsRead()
+      .then(() => {
+        setItems((all) => all.map((n) => ({ ...n, read: true })));
+        setUnread(0);
+      })
+      .catch(() => undefined);
+  };
   return (
     <section className="portal-page notifications-page">
       <div className="portal-heading">
@@ -723,14 +786,23 @@ export function NotificationsPage({
           </button>
         ))}
       </div>
-      {notifications.length ? (
+      {api && unread > 0 && (
+        <button type="button" className="secondary" onClick={markAll}>
+          全部标为已读（{unread}）
+        </button>
+      )}
+      {items.length ? (
         <ul className="notification-list">
-          {notifications.map((item) => (
+          {items.map((item) => (
             <li key={item.id} className={item.read ? '' : 'unread'}>
               <strong>{item.title}</strong>
               <p>{item.body}</p>
               <time>{item.createdAt}</time>
-              {!item.read && <span>未读</span>}
+              {!item.read && (
+                <button type="button" onClick={() => mark(item.id)}>
+                  标为已读
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -750,17 +822,32 @@ export function MessagesExperience({
   messages = [],
   friends = [],
   requests = [],
+  api,
 }: {
   conversations?: ConversationSummary[];
   messages?: Message[];
   friends?: FriendSummary[];
   requests?: FriendRequest[];
+  api?: ApiClient | undefined;
 }) {
   const [mode, setMode] = useState<
     'conversations' | 'contacts' | 'requests' | 'add'
   >('conversations');
   const [selected, setSelected] = useState<string | null>(null);
   const [conversationQuery, setConversationQuery] = useState('');
+  const [liveMessages, setLiveMessages] = useState(messages);
+  const [draft, setDraft] = useState('');
+  const [friendsState, setFriendsState] = useState(friends);
+  const [requestsState, setRequestsState] = useState(requests);
+  useEffect(() => {
+    setFriendsState(friends);
+  }, [friends]);
+  useEffect(() => {
+    setRequestsState(requests);
+  }, [requests]);
+  useEffect(() => {
+    setLiveMessages(messages);
+  }, [messages]);
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.id === selected),
     [conversations, selected],
@@ -781,6 +868,23 @@ export function MessagesExperience({
   ) => {
     setMode(next);
     if (next !== 'conversations') setSelected(null);
+  };
+  useEffect(() => {
+    if (!api || !selected) return;
+    void api
+      .conversationMessages(selected)
+      .then((result) => setLiveMessages(result.items))
+      .catch(() => undefined);
+  }, [api, selected]);
+  const send = (event: FormEvent) => {
+    event.preventDefault();
+    if (!api || !selected || !draft.trim()) return;
+    const body = draft.trim();
+    setDraft('');
+    void api
+      .sendMessage(selected, body, crypto.randomUUID())
+      .then((message) => setLiveMessages((all) => [...all, message]))
+      .catch(() => setDraft(body));
   };
   return (
     <section className="messages-page">
@@ -889,11 +993,16 @@ export function MessagesExperience({
         </aside>
         <section className="chat-pane message-content" aria-label="聊天内容">
           {mode === 'add' ? (
-            <AddFriend />
+            <AddFriend
+              api={api}
+              onRequest={(request) =>
+                setRequestsState((all) => [...all, request])
+              }
+            />
           ) : mode === 'requests' ? (
-            <FriendRequests requests={requests} />
+            <FriendRequests api={api} requests={requestsState} />
           ) : mode === 'contacts' ? (
-            <Contacts friends={friends} />
+            <Contacts friends={friendsState} />
           ) : selectedConversation ? (
             <>
               <header>
@@ -910,7 +1019,7 @@ export function MessagesExperience({
                 </div>
               </header>
               <div className="message-stream">
-                {messages
+                {liveMessages
                   .filter((message) => message.conversationId === selected)
                   .map((message) => (
                     <p key={message.id} className="message-bubble">
@@ -919,12 +1028,17 @@ export function MessagesExperience({
                     </p>
                   ))}
               </div>
-              <form className="message-composer">
+              <form className="message-composer" onSubmit={send}>
                 <label>
                   <span className="sr-only">输入消息</span>
-                  <textarea disabled placeholder="消息服务正在接入" rows={2} />
+                  <textarea
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    placeholder="输入消息"
+                    rows={2}
+                  />
                 </label>
-                <button type="button" disabled>
+                <button type="submit" disabled={!draft.trim()}>
                   发送
                 </button>
               </form>
@@ -979,34 +1093,98 @@ function Contacts({ friends }: { friends: FriendSummary[] }) {
   );
 }
 
-function AddFriend() {
+function AddFriend({
+  api,
+  onRequest,
+}: {
+  api?: ApiClient | undefined;
+  onRequest: (request: FriendRequest) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<FriendSummary[]>([]);
+  const [message, setMessage] = useState('');
+  const search = () => {
+    if (!api || query.trim().length < 2) return;
+    void api
+      .searchUsers(query.trim())
+      .then((result) => setResults(result.items))
+      .catch((reason) =>
+        setMessage(reason instanceof Error ? reason.message : '搜索失败'),
+      );
+  };
   return (
     <section className="social-panel">
       <h2>添加好友</h2>
       <p>通过用户名或 UID 查找用户。</p>
       <label>
         用户名或 UID
-        <input disabled placeholder="好友搜索后端尚未接入" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="输入用户名"
+        />
       </label>
       <label>
         好友申请说明
-        <textarea disabled rows={3} />
+        <textarea id="friend-note" rows={3} />
       </label>
       <div className="control-group">
-        <button type="button" disabled>
-          搜索并添加
+        <button type="button" onClick={search}>
+          搜索
         </button>
       </div>
-      <CapabilityNotice
-        title="好友服务正在接入"
-        text="搜索、申请发送、屏蔽与举报必须由后端授权并限流。"
-        request="SOCIAL-GRAPH-BACKEND-INTEGRATION-REQUEST"
-      />
+      {message && (
+        <p className="error" role="alert">
+          {message}
+        </p>
+      )}
+      {results.map((user) => (
+        <div key={user.id} className="social-result">
+          <strong>{user.displayName}</strong>
+          <small>@{user.username}</small>
+          <button
+            type="button"
+            onClick={() =>
+              api &&
+              void api
+                .sendFriendRequest(
+                  user.id,
+                  (
+                    document.querySelector(
+                      '#friend-note',
+                    ) as HTMLTextAreaElement
+                  )?.value,
+                )
+                .then(() =>
+                  onRequest({
+                    id: `pending-${user.id}`,
+                    direction: 'SENT',
+                    user,
+                    state: 'PENDING',
+                  }),
+                )
+                .catch((reason) =>
+                  setMessage(
+                    reason instanceof Error ? reason.message : '申请失败',
+                  ),
+                )
+            }
+          >
+            添加好友
+          </button>
+        </div>
+      ))}
     </section>
   );
 }
 
-function FriendRequests({ requests }: { requests: FriendRequest[] }) {
+function FriendRequests({
+  requests,
+  api,
+}: {
+  requests: FriendRequest[];
+  api?: ApiClient | undefined;
+}) {
   return (
     <div className="request-columns">
       <section>
@@ -1017,14 +1195,33 @@ function FriendRequests({ requests }: { requests: FriendRequest[] }) {
         ) : (
           <p>暂无收到的申请</p>
         )}
-        <div className="control-group">
-          <button type="button" disabled>
-            接受
-          </button>
-          <button type="button" className="secondary" disabled>
-            拒绝
-          </button>
-        </div>
+        {requests
+          .filter(
+            (request) =>
+              request.direction === 'RECEIVED' && request.state === 'PENDING',
+          )
+          .map((request) => (
+            <div className="control-group" key={request.id}>
+              <span>{request.user.displayName}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  api && void api.resolveFriendRequest(request.id, 'accept')
+                }
+              >
+                接受
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() =>
+                  api && void api.resolveFriendRequest(request.id, 'reject')
+                }
+              >
+                拒绝
+              </button>
+            </div>
+          ))}
       </section>
       <section>
         <h2>发出的申请</h2>
