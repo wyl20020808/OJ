@@ -31,9 +31,9 @@ No merge and no Lead Integration were performed.
 
 ### Guest Auth Method Layout
 
-Before: guest entry was a separate secondary action below the primary login/register method.
+Before: guest entry was a separate secondary action below the primary login/register method, alongside separate email and phone choices.
 
-After: Login and Register expose one shared same-level segmented control: `邮箱 | 手机号 | 游客登录`. Selecting the guest tab opens the existing Guest panel. Capability loading, unavailable, error, retry, and success semantics remain typed and truthful; no local or fabricated guest session was added.
+After: Login and Register expose one shared two-option segmented control: `邮箱/手机号 | 游客登录`. The identifier field accepts either value, detects a valid email or phone format, selects the corresponding `EMAIL` or `PHONE`/`SMS` backend contract, and normalizes phone destinations before requests. Selecting the guest tab opens the existing Guest panel. Capability loading, unavailable, error, retry, and success semantics remain typed and truthful; no local or fabricated guest session was added.
 
 ### Problem Heading And List
 
@@ -67,7 +67,7 @@ All 80 Goal checks are accounted for:
 
 | IDs | Result | Evidence |
 | --- | --- | --- |
-| WEB-R3-01..10 | PASS | Login/Register use the same three-option segmented control; guest selection opens the existing panel; capability/loading/error/success semantics and no-fake-session rule are preserved; mobile layout remains usable. |
+| WEB-R3-01..10 | PASS | Login/Register use the same two-option `邮箱/手机号 | 游客登录` segmented control; valid email/phone input detection selects the matching backend channel; guest selection opens the existing panel; capability/loading/error/success semantics and no-fake-session rule are preserved; mobile layout remains usable. |
 | WEB-R3-11..20 | PASS | Standalone problem heading and wrapper whitespace removed; transparent breadcrumb, toolbar, modern rows, numeric pagination, ellipsis, URL state, history, mobile condensed controls, and `aria-current` verified by focused tests and browser runtime. |
 | WEB-R3-21..30 | PASS | Problem rows use light surfaces, vertical gaps, title/ID hierarchy, soft tags, tonal difficulty, metadata, hover/focus accent, dense responsive structure, and no card-wall regression. |
 | WEB-R3-31..40 | PASS | Contest heading removed; create action moved into internal nav; authorization/capability gating retained; 1440px, 1024px, and 390px layouts do not overflow. |

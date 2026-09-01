@@ -121,7 +121,9 @@ describe('Product Web Chinese Rich Experience V3', () => {
       />,
     );
     expect(screen.getByText('专注练习，稳步进步。')).toBeInTheDocument();
-    expect(screen.getByText('邮箱')).toBeInTheDocument();
+    expect(
+      screen.getByRole('tab', { name: '邮箱/手机号' }),
+    ).toBeInTheDocument();
   });
   it('WEB-V3-04 register zh-CN', () => {
     render(
@@ -133,7 +135,9 @@ describe('Product Web Chinese Rich Experience V3', () => {
       />,
     );
     expect(screen.getByText('从验证身份开始')).toBeInTheDocument();
-    expect(screen.getByText('手机号')).toBeInTheDocument();
+    expect(
+      screen.getByRole('tab', { name: '邮箱/手机号' }),
+    ).toBeInTheDocument();
   });
   it.each([
     ['WEB-V3-05', '/problems', '题库'],

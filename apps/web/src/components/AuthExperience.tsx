@@ -45,6 +45,22 @@ function messageFor(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+function detectIdentifierType(value: string): 'EMAIL' | 'PHONE' | null {
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return 'EMAIL';
+  if (/^\+?[0-9][0-9\s().-]{5,19}$/.test(normalized)) return 'PHONE';
+  return null;
+}
+
+function normalizePhone(value: string, country?: string) {
+  const normalized = value.trim();
+  const digits = normalized.replace(/\D/g, '');
+  return normalized.startsWith('+')
+    ? `+${digits}`
+    : `${country ?? ''}${digits}`;
+}
+
 function useAuthMethods(api: ApiClient) {
   const [methods, setMethods] = useState<AuthMethods | null>(null);
   const [resolved, setResolved] = useState(false);
@@ -469,11 +485,8 @@ function LoginExperience({
     loading: methodsLoading,
     error: methodsError,
   } = useAuthMethods(api);
-  const [identifierType, setIdentifierType] = useState<'EMAIL' | 'PHONE'>(
-    'EMAIL',
-  );
-  const [authMethod, setAuthMethod] = useState<'email' | 'phone' | 'guest'>(
-    'email',
+  const [authMethod, setAuthMethod] = useState<'identifier' | 'guest'>(
+    'identifier',
   );
   const [authMode, setAuthMode] = useState<'password' | 'code'>('password');
   const [identifier, setIdentifier] = useState('');
@@ -486,6 +499,8 @@ function LoginExperience({
   const [cooldown, setCooldown] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const identifierType = detectIdentifierType(identifier) ?? 'EMAIL';
+  const recognizedIdentifier = detectIdentifierType(identifier) !== null;
   useEffect(() => {
     if (!cooldown) return;
     const timer = window.setInterval(
@@ -503,14 +518,17 @@ function LoginExperience({
       ? methods.login.emailPassword
       : methods.login.phonePassword;
   const sendCode = async () => {
-    if (!identifier.trim()) return setError('请先填写邮箱或手机号。');
+    if (!recognizedIdentifier) return setError('请输入有效的邮箱或手机号。');
     setBusy(true);
     setError('');
     try {
       const next = await api.requestVerification({
         channel: identifierType === 'EMAIL' ? 'EMAIL' : 'SMS',
         purpose: 'LOGIN_CODE',
-        destination: identifier.trim(),
+        destination:
+          identifierType === 'PHONE'
+            ? normalizePhone(identifier)
+            : identifier.trim(),
       });
       setChallenge(next);
       setGrant(null);
@@ -543,13 +561,17 @@ function LoginExperience({
       }
       return;
     }
+    if (!recognizedIdentifier) return setError('请输入有效的邮箱或手机号。');
     if (!passwordEnabled) return setError('该身份类型暂不支持密码登录。');
     setBusy(true);
     try {
       onUser(
         await api.loginPassword({
           identifierType,
-          identifier: identifier.trim(),
+          identifier:
+            identifierType === 'PHONE'
+              ? normalizePhone(identifier)
+              : identifier.trim(),
           password,
         }),
       );
@@ -589,32 +611,16 @@ function LoginExperience({
         <button
           type="button"
           role="tab"
-          aria-selected={authMethod === 'email'}
-          className={authMethod === 'email' ? 'selected' : ''}
+          aria-selected={authMethod === 'identifier'}
+          className={authMethod === 'identifier' ? 'selected' : ''}
           onClick={() => {
-            setAuthMethod('email');
-            setIdentifierType('EMAIL');
+            setAuthMethod('identifier');
             setChallenge(null);
             setGrant(null);
             setError('');
           }}
         >
-          邮箱
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={authMethod === 'phone'}
-          className={authMethod === 'phone' ? 'selected' : ''}
-          onClick={() => {
-            setAuthMethod('phone');
-            setIdentifierType('PHONE');
-            setChallenge(null);
-            setGrant(null);
-            setError('');
-          }}
-        >
-          手机号
+          邮箱/手机号
         </button>
         <button
           type="button"
@@ -659,15 +665,37 @@ function LoginExperience({
           </div>
           <form onSubmit={submit} noValidate>
             <label>
-              {identifierType === 'EMAIL' ? '邮箱地址' : '手机号'}
+              邮箱/手机号
               <input
-                type={identifierType === 'EMAIL' ? 'email' : 'tel'}
+                type={
+                  !identifier.trim()
+                    ? 'text'
+                    : identifierType === 'EMAIL'
+                      ? 'email'
+                      : 'tel'
+                }
                 value={identifier}
-                onChange={(event) => setIdentifier(event.target.value)}
+                onChange={(event) => {
+                  setIdentifier(event.target.value);
+                  setChallenge(null);
+                  setGrant(null);
+                }}
                 autoComplete="username"
+                placeholder="请输入邮箱或手机号"
+                aria-describedby="login-identifier-help"
                 required
               />
             </label>
+            {recognizedIdentifier && (
+              <span
+                id="login-identifier-help"
+                className="field-help"
+                role="status"
+              >
+                已识别为{identifierType === 'EMAIL' ? '邮箱' : '手机号'}
+                ，将使用对应验证通道。
+              </span>
+            )}
             {authMode === 'password' ? (
               <label>
                 密码
@@ -738,11 +766,8 @@ function RegisterExperience({
     loading: methodsLoading,
     error: methodsError,
   } = useAuthMethods(api);
-  const [identifierType, setIdentifierType] = useState<'EMAIL' | 'PHONE'>(
-    'EMAIL',
-  );
-  const [authMethod, setAuthMethod] = useState<'email' | 'phone' | 'guest'>(
-    'email',
+  const [authMethod, setAuthMethod] = useState<'identifier' | 'guest'>(
+    'identifier',
   );
   const [destination, setDestination] = useState('');
   const [country, setCountry] = useState('+1');
@@ -760,6 +785,8 @@ function RegisterExperience({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const identifierType = detectIdentifierType(destination) ?? 'EMAIL';
+  const recognizedIdentifier = detectIdentifierType(destination) !== null;
   useEffect(() => {
     if (!cooldown) return;
     const timer = window.setInterval(
@@ -774,10 +801,10 @@ function RegisterExperience({
       : methods.registration.phone;
   const normalizedDestination =
     identifierType === 'PHONE'
-      ? `${country}${destination.replace(/\D/g, '')}`
+      ? normalizePhone(destination, country)
       : destination.trim();
   const requestCode = async () => {
-    if (!destination.trim()) return setError('请输入要验证的邮箱或手机号。');
+    if (!recognizedIdentifier) return setError('请输入有效的邮箱或手机号。');
     setBusy(true);
     setError('');
     try {
@@ -856,32 +883,16 @@ function RegisterExperience({
         <button
           type="button"
           role="tab"
-          aria-selected={authMethod === 'email'}
-          className={authMethod === 'email' ? 'selected' : ''}
+          aria-selected={authMethod === 'identifier'}
+          className={authMethod === 'identifier' ? 'selected' : ''}
           onClick={() => {
-            setAuthMethod('email');
-            setIdentifierType('EMAIL');
+            setAuthMethod('identifier');
             setChallenge(null);
             setGrant(null);
             setError('');
           }}
         >
-          邮箱
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={authMethod === 'phone'}
-          className={authMethod === 'phone' ? 'selected' : ''}
-          onClick={() => {
-            setAuthMethod('phone');
-            setIdentifierType('PHONE');
-            setChallenge(null);
-            setGrant(null);
-            setError('');
-          }}
-        >
-          手机号
+          邮箱/手机号
         </button>
         <button
           type="button"
@@ -902,7 +913,7 @@ function RegisterExperience({
         <GuestContinue api={api} onUser={onUser} onNavigate={onNavigate} />
       ) : (
         <form onSubmit={submit} noValidate>
-          {identifierType === 'PHONE' && (
+          {identifierType === 'PHONE' && recognizedIdentifier && (
             <label>
               国家/地区代码
               <select
@@ -917,15 +928,37 @@ function RegisterExperience({
             </label>
           )}
           <label>
-            {identifierType === 'EMAIL' ? '邮箱地址' : '手机号'}
+            邮箱/手机号
             <input
-              type={identifierType === 'EMAIL' ? 'email' : 'tel'}
+              type={
+                !destination.trim()
+                  ? 'text'
+                  : identifierType === 'EMAIL'
+                    ? 'email'
+                    : 'tel'
+              }
               value={destination}
-              onChange={(event) => setDestination(event.target.value)}
-              autoComplete="email"
+              onChange={(event) => {
+                setDestination(event.target.value);
+                setChallenge(null);
+                setGrant(null);
+              }}
+              autoComplete="username"
+              placeholder="请输入邮箱或手机号"
+              aria-describedby="register-identifier-help"
               required
             />
           </label>
+          {recognizedIdentifier && (
+            <span
+              id="register-identifier-help"
+              className="field-help"
+              role="status"
+            >
+              已识别为{identifierType === 'EMAIL' ? '邮箱' : '手机号'}
+              ，将使用对应验证通道。
+            </span>
+          )}
           {!grant && !challenge && (
             <button
               type="button"

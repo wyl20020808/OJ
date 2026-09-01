@@ -123,7 +123,7 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-05 provides authenticated continuation callback', async () => {
     const api = apiMock();
     login({ loginPassword: api.loginPassword });
-    fireEvent.change(await screen.findByLabelText('邮箱地址'), {
+    fireEvent.change(await screen.findByLabelText('邮箱/手机号'), {
       target: { value: 'ada@example.com' },
     });
     fireEvent.change(screen.getByLabelText('密码'), {
@@ -153,12 +153,12 @@ describe('Product Web Modern Experience V2', () => {
       (
         await screen.findByRole('tablist', { name: '登录方式' })
       ).querySelectorAll('[role="tab"]'),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
   });
   it('WEB-V2-09 supports email password mode', async () => {
     const api = apiMock();
     login({ loginPassword: api.loginPassword });
-    fireEvent.change(await screen.findByLabelText('邮箱地址'), {
+    fireEvent.change(await screen.findByLabelText('邮箱/手机号'), {
       target: { value: 'a@example.com' },
     });
     fireEvent.change(screen.getByLabelText('密码'), {
@@ -179,8 +179,7 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-10 supports phone password mode', async () => {
     const api = apiMock();
     login({ loginPassword: api.loginPassword });
-    fireEvent.click(await screen.findByRole('tab', { name: '手机号' }));
-    fireEvent.change(screen.getByLabelText('手机号'), {
+    fireEvent.change(await screen.findByLabelText('邮箱/手机号'), {
       target: { value: '+8613800138000' },
     });
     fireEvent.change(screen.getByLabelText('密码'), {
@@ -200,7 +199,7 @@ describe('Product Web Modern Experience V2', () => {
     const api = apiMock();
     login({ requestVerification: api.requestVerification });
     fireEvent.click(await screen.findByRole('tab', { name: '验证码登录' }));
-    fireEvent.change(screen.getByLabelText('邮箱地址'), {
+    fireEvent.change(screen.getByLabelText('邮箱/手机号'), {
       target: { value: 'a@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送验证码' }));
@@ -213,12 +212,19 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-12 supports phone code mode', async () => {
     const api = apiMock();
     login({ requestVerification: api.requestVerification });
-    fireEvent.click(await screen.findByRole('tab', { name: '手机号' }));
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: '验证码登录' })).toBeEnabled(),
+    );
     fireEvent.click(screen.getByRole('tab', { name: '验证码登录' }));
-    fireEvent.change(screen.getByLabelText('手机号'), {
+    fireEvent.change(screen.getByLabelText('邮箱/手机号'), {
       target: { value: '+8613800138000' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '发送验证码' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /发送.*验证码/ }),
+      ).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /发送.*验证码/ }));
     await waitFor(() =>
       expect(api.requestVerification).toHaveBeenCalledWith(
         expect.objectContaining({ channel: 'SMS' }),
@@ -228,7 +234,7 @@ describe('Product Web Modern Experience V2', () => {
   it('WEB-V2-13 shows a resend cooldown', async () => {
     login();
     fireEvent.click(await screen.findByRole('tab', { name: '验证码登录' }));
-    fireEvent.change(screen.getByLabelText('邮箱地址'), {
+    fireEvent.change(screen.getByLabelText('邮箱/手机号'), {
       target: { value: 'a@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送验证码' }));
@@ -238,7 +244,7 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-14 exposes bounded code attempt and expiry information', async () => {
     register();
-    fireEvent.change(await screen.findByLabelText('邮箱地址'), {
+    fireEvent.change(await screen.findByLabelText('邮箱/手机号'), {
       target: { value: 'a@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送邮箱验证码' }));
@@ -280,18 +286,22 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-21 starts email registration in an explicit mode', async () => {
     register();
-    expect(await screen.findByRole('tab', { name: '邮箱' })).toHaveClass(
+    expect(await screen.findByRole('tab', { name: '邮箱/手机号' })).toHaveClass(
       'selected',
     );
   });
   it('WEB-V2-22 starts phone registration in an explicit mode', async () => {
     register();
-    fireEvent.click(await screen.findByRole('tab', { name: '手机号' }));
-    expect(screen.getByLabelText('手机号')).toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText('邮箱/手机号'), {
+      target: { value: '13800138000' },
+    });
+    expect(screen.getByLabelText('邮箱/手机号')).toHaveAttribute('type', 'tel');
   });
   it('WEB-V2-23 exposes country code selection', async () => {
     register();
-    fireEvent.click(await screen.findByRole('tab', { name: '手机号' }));
+    fireEvent.change(await screen.findByLabelText('邮箱/手机号'), {
+      target: { value: '13800138000' },
+    });
     expect(screen.getByLabelText('国家/地区代码')).toBeInTheDocument();
   });
   it('WEB-V2-24 requires a verification grant before account creation', async () => {
@@ -308,11 +318,13 @@ describe('Product Web Modern Experience V2', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: '发送邮箱验证码' }),
     );
-    expect(await screen.findByRole('alert')).toHaveTextContent('请输入要验证');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '请输入有效的邮箱或手机号',
+    );
   });
   it('WEB-V2-26 displays server password policy', async () => {
     register();
-    fireEvent.change(await screen.findByLabelText('邮箱地址'), {
+    fireEvent.change(await screen.findByLabelText('邮箱/手机号'), {
       target: { value: 'a@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送邮箱验证码' }));
@@ -361,7 +373,7 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-33 uses label semantics for fields', async () => {
     login();
-    expect(await screen.findByLabelText('邮箱地址')).toBeInTheDocument();
+    expect(await screen.findByLabelText('邮箱/手机号')).toBeInTheDocument();
   });
   it('WEB-V2-34 exposes provider buttons as buttons', async () => {
     login();
@@ -396,7 +408,7 @@ describe('Product Web Modern Experience V2', () => {
     register({
       requestVerification: vi.fn().mockRejectedValue(new Error('offline')),
     });
-    fireEvent.change(await screen.findByLabelText('邮箱地址'), {
+    fireEvent.change(await screen.findByLabelText('邮箱/手机号'), {
       target: { value: 'a@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: '发送邮箱验证码' }));
@@ -414,15 +426,15 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-41 supports keyboard focusable mode controls', async () => {
     login();
-    const phone = await screen.findByRole('tab', { name: '手机号' });
-    phone.focus();
-    expect(document.activeElement).toBe(phone);
+    const identifier = await screen.findByLabelText('邮箱/手机号');
+    identifier.focus();
+    expect(document.activeElement).toBe(identifier);
   });
   it('WEB-V2-42 uses visible focus classes through native controls', async () => {
     login();
-    const email = await screen.findByLabelText('邮箱地址');
-    email.focus();
-    expect(document.activeElement).toBe(email);
+    const identifier = await screen.findByLabelText('邮箱/手机号');
+    identifier.focus();
+    expect(document.activeElement).toBe(identifier);
   });
   it('WEB-V2-43 declares reduced-motion support in the stylesheet', async () => {
     const css = readFileSync('apps/web/src/app/app.css', 'utf8');
@@ -448,8 +460,9 @@ describe('Product Web Modern Experience V2', () => {
   });
   it('WEB-V2-46 supports narrow phone input type', async () => {
     register();
-    fireEvent.click(await screen.findByRole('tab', { name: '手机号' }));
-    expect(screen.getByLabelText('手机号')).toHaveAttribute('type', 'tel');
+    const identifier = await screen.findByLabelText('邮箱/手机号');
+    fireEvent.change(identifier, { target: { value: '13800138000' } });
+    expect(identifier).toHaveAttribute('type', 'tel');
   });
   it('WEB-V2-47 does not log provider errors by default', async () => {
     const errorSpy = vi

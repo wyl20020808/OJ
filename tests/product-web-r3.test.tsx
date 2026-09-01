@@ -67,10 +67,9 @@ describe('Web V4 R3 layout and information architecture contract', () => {
       const tabs = screen.getByRole('tablist', {
         name: mode === 'login' ? '登录方式' : '注册方式',
       });
-      expect(tabs).toHaveTextContent('邮箱');
-      expect(tabs).toHaveTextContent('手机号');
+      expect(tabs).toHaveTextContent('邮箱/手机号');
       expect(tabs).toHaveTextContent('游客登录');
-      expect(tabs.querySelectorAll('[role="tab"]')).toHaveLength(3);
+      expect(tabs.querySelectorAll('[role="tab"]')).toHaveLength(2);
       fireEvent.click(screen.getByRole('tab', { name: '游客登录' }));
       await screen.findByText(/GUEST-AUTH-BACKEND-INTEGRATION-REQUEST/);
       expect(
