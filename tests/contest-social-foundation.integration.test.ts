@@ -303,6 +303,13 @@ describe('contest and messaging foundation against PostgreSQL and Redis', () => 
         [userB],
       ),
     ).toMatchObject({ rows: [{ count: 4 }] });
+    const conversations = await app.inject({
+      method: 'GET',
+      url: '/api/conversations',
+      headers: { 'x-user-id': userB },
+    });
+    expect(conversations.statusCode).toBe(200);
+    expect(conversations.json().items[0]).toMatchObject({ unreadCount: 4 });
     expect(
       (
         await app.inject({

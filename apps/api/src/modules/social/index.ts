@@ -362,7 +362,7 @@ export async function registerSocialModule(
     try {
       const a = await need(r),
         x = await o.pool.query(
-          'SELECT c.*,u.id peer_id,u.username,u.display_name FROM conversation_members cm JOIN conversations c ON c.id=cm.conversation_id JOIN users u ON u.id=CASE WHEN c.direct_user_low_id=$1 THEN c.direct_user_high_id ELSE c.direct_user_low_id END WHERE cm.user_id=$1 ORDER BY c.last_message_at DESC NULLS LAST,c.id DESC LIMIT 100',
+          'SELECT c.*,u.id peer_id,u.username,u.display_name,(SELECT count(*)::int FROM messages m WHERE m.conversation_id=c.id AND m.sender_user_id<>$1 AND (cm.last_read_at IS NULL OR m.created_at>cm.last_read_at)) unread_count FROM conversation_members cm JOIN conversations c ON c.id=cm.conversation_id JOIN users u ON u.id=CASE WHEN c.direct_user_low_id=$1 THEN c.direct_user_high_id ELSE c.direct_user_low_id END WHERE cm.user_id=$1 ORDER BY c.last_message_at DESC NULLS LAST,c.id DESC LIMIT 100',
           [a.userId],
         );
       return {
@@ -376,6 +376,7 @@ export async function registerSocialModule(
           },
           lastMessageAt:
             v.last_message_at && new Date(v.last_message_at).toISOString(),
+          unreadCount: Number(v.unread_count ?? 0),
         })),
       };
     } catch (e) {

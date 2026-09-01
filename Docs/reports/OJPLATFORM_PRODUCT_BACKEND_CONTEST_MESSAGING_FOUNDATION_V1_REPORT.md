@@ -20,7 +20,7 @@ Migrations are additive and keep Auth V2's `0006` reserved:
 
 `apps/api/src/modules/contest/index.ts` provides contest list/home summary, create/update/publish/cancel, owner/manager checks, problem ordering, registration/withdrawal, participant and own-submission listing, and an honest standings response: `{ available: false, reason: "SCORING_ENGINE_NOT_INTEGRATED" }`.
 
-`apps/api/src/modules/social/index.ts` provides minimal safe user search, friend request lifecycle, canonical friendship/unfriend, direct conversations, text persistence, `clientMessageId` idempotency, cursor pagination, read/unread state, and notification APIs. `RedisFixedWindowLimiter` uses Redis `INCR`/`EXPIRE` atomically and the social module fails closed with `429 RATE_LIMITED` when the limiter fails.
+`apps/api/src/modules/social/index.ts` provides minimal safe user search, friend request lifecycle, canonical friendship/unfriend, direct conversations, text persistence, `clientMessageId` idempotency, cursor pagination, per-conversation and aggregate read/unread state, and notification APIs. `RedisFixedWindowLimiter` uses Redis `INCR`/`EXPIRE` atomically and the social module fails closed with `429 RATE_LIMITED` when the limiter fails.
 
 ## Security, Privacy, and Transactions
 
@@ -52,7 +52,7 @@ The code and focused real integration cover the principal CON-BE and MSG-BE beha
 - CON-BE-34 through CON-BE-37: formal Submission/Judge integration is intentionally unavailable pending `BACKEND-IR-AUTHORITATIVE-CONTEST-SCORING`.
 - CON-BE-42: contest route rate-limit wiring is a composition decision.
 - CON-BE-43 through CON-BE-45: transaction behavior and an isolated fresh database up/down/up lifecycle are verified. Migration-runner registry-order qualification still requires Lead ownership because Auth V2's reserved `0006` is not present in this worktree registry.
-- MSG-BE-47 through MSG-BE-49: real PostgreSQL integration verifies concurrent accept replay, concurrent direct-conversation creation, and concurrent duplicate-message retries. Rollback injection and migration-runner compatibility remain Lead-owned follow-up evidence.
+- MSG-BE-47 through MSG-BE-49: real PostgreSQL integration verifies concurrent accept replay, concurrent direct-conversation creation, and concurrent duplicate-message retries; conversation-level unread counts are also verified. Rollback injection and migration-runner compatibility remain Lead-owned follow-up evidence.
 - MSG-BE-50 through MSG-BE-53: transaction rollback injection and migration-runner compatibility remain to be broadened by Lead; fresh database up/down/up is verified in this worker.
 - Audit hook contracts are invoked for contest and social writes without body/source/session data. Durable audit persistence is owned by the existing Auth/Audit composition and is not independently runtime-qualified here.
 
