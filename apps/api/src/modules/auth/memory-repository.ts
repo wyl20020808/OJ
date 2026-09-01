@@ -32,7 +32,7 @@ export function createMemoryAuthRepository(): AuthRepository {
         [...users.values()].find(
           (u) =>
             u.username.toLowerCase() === value ||
-            u.email.toLowerCase() === value,
+            u.email?.toLowerCase() === value,
         ) ?? null
       );
     },

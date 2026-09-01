@@ -102,7 +102,7 @@ export function createPostgresAuthRepository(pool: {
 const map = (r: Row) => ({
   id: String(r.id),
   username: String(r.username),
-  email: String(r.email),
+  email: r.email === null ? null : String(r.email),
   displayName: String(r.display_name),
   status: r.status as 'active' | 'disabled' | 'deactivated',
   createdAt: new Date(String(r.created_at)).toISOString(),

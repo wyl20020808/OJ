@@ -3,7 +3,7 @@ import type { User } from '../user/model.js';
 export type AuthenticatedUser = Pick<
   User,
   'id' | 'username' | 'email' | 'displayName'
-> & { status: 'active' };
+> & { status: 'active'; guest?: boolean; upgradeHint?: string };
 export type AccountView = AuthenticatedUser & {
   createdAt: string;
   updatedAt: string;
@@ -14,7 +14,7 @@ export type AccountView = AuthenticatedUser & {
 export type AuthContext = {
   userId: string;
   sessionId: string;
-  strength: 'password';
+  strength: 'password' | 'guest';
 };
 export type AuthRepository = {
   createUser(input: {
@@ -51,16 +51,23 @@ export type SessionMetadata = {
   deviceLabel?: string;
 };
 
-export const publicUser = (user: User): AuthenticatedUser => ({
+export const publicUser = (user: User, guest = false): AuthenticatedUser => ({
   id: user.id,
   username: user.username,
   email: user.email,
   displayName: user.displayName,
   status: 'active',
+  ...(guest
+    ? {
+        guest: true,
+        upgradeHint:
+          'Add an email, phone, or social identity to upgrade this guest account.',
+      }
+    : {}),
 });
 
-export const publicAccount = (user: User): AccountView => ({
-  ...publicUser(user),
+export const publicAccount = (user: User, guest = false): AccountView => ({
+  ...publicUser(user, guest),
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
   capabilities: { canManageSessions: user.status === 'active' },

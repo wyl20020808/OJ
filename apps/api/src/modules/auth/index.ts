@@ -13,11 +13,23 @@ import {
   type SessionMetadata,
 } from './types.js';
 import type { AuditHook } from '../authz/types.js';
+import type { User } from '../user/model.js';
+export * from './guest.js';
+export * from './rate-limiter.js';
+import {
+  guestToken,
+  guestTokenHash,
+  type GuestAuthRateLimiter,
+  type GuestAuthStore,
+} from './guest.js';
 export type AuthModuleOptions = {
   repository: AuthRepository;
   production?: boolean;
   sessionTtlMs?: number;
   auditHook?: AuditHook;
+  guestStore?: GuestAuthStore;
+  guestRateLimiter?: GuestAuthRateLimiter;
+  guestResumeTtlMs?: number;
 };
 type AuthBody = {
   username?: unknown;
@@ -37,11 +49,70 @@ const cookie = (request: FastifyRequest) => {
   const raw = request.headers.cookie?.match(/(?:^|; )oj_session=([^;]+)/)?.[1];
   return raw ? decodeURIComponent(raw) : undefined;
 };
+const guestCookie = (request: FastifyRequest) => {
+  const raw = request.headers.cookie?.match(
+    /(?:^|; )oj_guest_resume=([^;]+)/,
+  )?.[1];
+  return raw ? decodeURIComponent(raw) : undefined;
+};
 export async function registerAuthModule(
   app: FastifyInstance,
   options: AuthModuleOptions,
 ) {
   const ttl = options.sessionTtlMs ?? 7 * 24 * 60 * 60 * 1000;
+  const guestTtl = options.guestResumeTtlMs ?? 30 * 24 * 60 * 60 * 1000;
+  const guestAvailable = Boolean(
+    options.guestStore && options.guestRateLimiter,
+  );
+  const setSessionCookie = (reply: FastifyReply, token: string) =>
+    reply.header(
+      'set-cookie',
+      `oj_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${options.production ? '; Secure' : ''}; Max-Age=${Math.floor(ttl / 1000)}`,
+    );
+  const setGuestResumeCookie = (reply: FastifyReply, token: string) =>
+    reply.header(
+      'set-cookie',
+      `oj_guest_resume=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${options.production ? '; Secure' : ''}; Max-Age=${Math.floor(guestTtl / 1000)}`,
+    );
+  const clearGuestResumeCookie = (reply: FastifyReply) =>
+    reply.header(
+      'set-cookie',
+      'oj_guest_resume=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0',
+    );
+  const isGuest = async (userId: string) =>
+    Boolean(options.guestStore && (await options.guestStore.isGuest(userId)));
+  const projectUser = async (user: User) =>
+    publicUser(user, await isGuest(user.id));
+  const resolveUser = async (userId: string) =>
+    (await options.repository.findById(userId)) ??
+    (options.guestStore ? await options.guestStore.findUser(userId) : null);
+  const auditGuest = async (
+    request: FastifyRequest,
+    action: string,
+    userId?: string,
+  ) =>
+    options.auditHook?.record({
+      actorUserId: userId ?? 'anonymous',
+      action,
+      resource: 'guest_auth',
+      ...(userId ? { resourceId: userId } : {}),
+      outcome: 'allowed',
+      requestId: request.id,
+      occurredAt: new Date().toISOString(),
+    });
+  const consumeGuestLimit = async (request: FastifyRequest) => {
+    if (!options.guestRateLimiter) throw new Error('GUEST_UNAVAILABLE');
+    try {
+      if (
+        !(await options.guestRateLimiter.consume(`guest:${request.ip}`, 10, 60))
+      )
+        throw new Error('RATE_LIMITED');
+    } catch (errorValue) {
+      if (errorValue instanceof Error && errorValue.message === 'RATE_LIMITED')
+        throw errorValue;
+      throw new Error('RATE_LIMITED');
+    }
+  };
   const context = async (
     request: FastifyRequest,
   ): Promise<AuthContext | null> => {
@@ -49,13 +120,87 @@ export async function registerAuthModule(
     if (!token) return null;
     const s = await options.repository.findSession(tokenHash(token));
     if (!s) return null;
-    const user = await options.repository.findById(s.userId);
+    const user = await resolveUser(s.userId);
     if (!user || user.status !== 'active') {
       await options.repository.revokeSession(s.id);
       return null;
     }
-    return { userId: user.id, sessionId: s.id, strength: 'password' };
+    return {
+      userId: user.id,
+      sessionId: s.id,
+      strength: (await isGuest(user.id)) ? 'guest' : 'password',
+    };
   };
+  app.get('/api/auth/capabilities', async (_request, reply) =>
+    reply.send({ guestLogin: { available: guestAvailable } }),
+  );
+  app.get('/api/auth/methods', async (_request, reply) =>
+    reply.send({
+      registration: { email: true, phone: false },
+      login: {
+        emailPassword: true,
+        phonePassword: false,
+        emailCode: false,
+        phoneCode: false,
+      },
+      providers: {
+        wechat: 'not_configured',
+        qq: 'not_configured',
+        google: 'not_configured',
+        github: 'not_configured',
+      },
+      passwordPolicy: { minLength: 8 },
+    }),
+  );
+  app.post('/api/auth/guest/continue', async (request, reply) => {
+    try {
+      if (!guestAvailable || !options.guestStore)
+        return error(
+          reply,
+          503,
+          'GUEST_UNAVAILABLE',
+          'Guest login is unavailable',
+        );
+      await consumeGuestLimit(request);
+      const oldToken = guestCookie(request);
+      const resume = guestToken();
+      const session = guestToken();
+      const input = {
+        resumeTokenHash: guestTokenHash(resume),
+        resumeExpiresAt: new Date(Date.now() + guestTtl),
+        sessionTokenHash: guestTokenHash(session),
+        sessionExpiresAt: new Date(Date.now() + ttl),
+      };
+      const result = oldToken
+        ? await options.guestStore.resumeGuest({
+            ...input,
+            oldTokenHash: guestTokenHash(oldToken),
+          })
+        : await options.guestStore.createGuest(input);
+      if (!result)
+        return error(
+          reply,
+          401,
+          'INVALID_GUEST_RESUME',
+          'Guest resume credential is invalid or expired',
+        );
+      setSessionCookie(reply, session);
+      setGuestResumeCookie(reply, resume);
+      await auditGuest(
+        request,
+        oldToken ? 'GUEST_RESUMED' : 'GUEST_CREATED',
+        result.user.id,
+      );
+      return reply.send({
+        ...(await projectUser(result.user)),
+        resumed: Boolean(oldToken),
+      });
+    } catch (errorValue) {
+      if (errorValue instanceof Error && errorValue.message === 'RATE_LIMITED')
+        return error(reply, 429, 'RATE_LIMITED', 'Request rate limited');
+      throw errorValue;
+    }
+  });
   app.post('/api/auth/register', async (request, reply) => {
     const body = request.body as AuthBody;
     if (
@@ -110,11 +255,8 @@ export async function registerAuthModule(
       tokenHash: tokenHash(token),
       expiresAt: new Date(Date.now() + ttl),
     });
-    reply.header(
-      'set-cookie',
-      `oj_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${options.production ? '; Secure' : ''}; Max-Age=${Math.floor(ttl / 1000)}`,
-    );
-    return publicUser(found);
+    setSessionCookie(reply, token);
+    return projectUser(found);
   });
   app.post('/api/auth/logout', async (request, reply) => {
     const token = cookie(request);
@@ -128,14 +270,23 @@ export async function registerAuthModule(
     );
     return reply.status(204).send();
   });
+  app.delete('/api/auth/guest/resume', async (request, reply) => {
+    const token = guestCookie(request);
+    if (token && options.guestStore) {
+      await options.guestStore.revokeResume(guestTokenHash(token));
+      await auditGuest(request, 'GUEST_RESUME_REVOKED');
+    }
+    clearGuestResumeCookie(reply);
+    return reply.status(204).send();
+  });
   app.get('/api/auth/me', async (request, reply) => {
     const ctx = await context(request);
     if (!ctx)
       return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
-    const user = await options.repository.findById(ctx.userId);
+    const user = await resolveUser(ctx.userId);
     if (!user || user.status !== 'active')
       return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
-    return publicUser(user);
+    return projectUser(user);
   });
   const sessions = {
     listForUser: (userId: string): Promise<SessionMetadata[]> =>
@@ -156,10 +307,10 @@ export async function registerAuthModule(
     const ctx = await context(request);
     if (!ctx)
       return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
-    const user = await options.repository.findById(ctx.userId);
+    const user = await resolveUser(ctx.userId);
     if (!user || user.status !== 'active')
       return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
-    return reply.send(publicAccount(user));
+    return reply.send(publicAccount(user, await isGuest(user.id)));
   });
   app.get('/api/auth/sessions', async (request, reply) => {
     const ctx = await context(request);
