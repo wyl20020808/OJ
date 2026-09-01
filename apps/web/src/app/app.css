@@ -1093,7 +1093,7 @@ pre {
 }
 .auth-method-control {
   width: 100%;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .auth-method-control button {
   min-height: 2.35rem;
