@@ -14,3 +14,8 @@ The adapter preserves evaluation and attempt generation, terminal/non-verdict
 taxonomy, duplicate identity, immutable history, and stale rejection enforced
 by the Product repository. Network failures leave the existing Product state
 unchanged; no client-supplied verdict can be published.
+
+Node registry, capacity, heartbeat, scheduling, and assignment metadata remain
+inside the Judge Service boundary. The Product adapter neither selects a node
+nor receives a node credential, lease, Worker identity, or direct Judge
+database access.

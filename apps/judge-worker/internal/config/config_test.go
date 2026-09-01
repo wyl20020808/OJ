@@ -19,4 +19,10 @@ func TestConfigValidation(t *testing.T) {
 	if c, e = Load(map[string]string{"REAL_SUBMISSION_EXECUTION": "true"}); e != nil || !c.RealSubmissionExecution {
 		t.Fatal("valid real execution gate rejected")
 	}
+	if _, e = Load(map[string]string{"JUDGE_SERVICE_URL": "http://127.0.0.1:3100"}); e == nil {
+		t.Fatal("node service without node credential accepted")
+	}
+	if c, e = Load(map[string]string{"JUDGE_SERVICE_URL": "http://127.0.0.1:3100", "JUDGE_NODE_TOKEN": "node-token-for-test"}); e != nil || c.JudgeServiceURL == "" {
+		t.Fatal("valid node service configuration rejected")
+	}
 }

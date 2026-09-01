@@ -14,6 +14,7 @@ import (
 
 	"github.com/ojplatform/judge-worker/internal/config"
 	"github.com/ojplatform/judge-worker/internal/fixture"
+	"github.com/ojplatform/judge-worker/internal/nodeclient"
 	"github.com/ojplatform/judge-worker/internal/protocol"
 	"github.com/ojplatform/judge-worker/internal/queueadapter"
 	"github.com/ojplatform/judge-worker/internal/supervisorclient"
@@ -42,6 +43,7 @@ type Worker struct {
 	Queue        queueadapter.Queue
 	Executor     fixture.Executor
 	Supervisor   *supervisorclient.Client
+	NodeClient   *nodeclient.Client
 	state        atomic.Value
 	active       atomic.Int32
 	shutdownOnce sync.Once
@@ -66,7 +68,11 @@ func New(cfg config.Config, redis *queueadapter.Client, logger *log.Logger) *Wor
 	if cfg.RealSubmissionExecution {
 		supervisor, _ = supervisorclient.New(cfg.SupervisorURL)
 	}
-	w := &Worker{Config: cfg, WorkerID: cfg.WorkerID, InstanceID: instance, Capabilities: protocol.NewCapabilities(cfg.WorkerID, instance, cfg.BuildVersion, cfg.MaxConcurrency, cfg.RealSubmissionExecution), Queue: queueadapter.Queue{Redis: redis, Prefix: cfg.QueuePrefix}, Executor: fixture.Executor{}, Supervisor: supervisor, drain: make(chan struct{}), stop: make(chan struct{}), logger: logger, cancelJobs: make(map[string]context.CancelFunc)}
+	var nodeService *nodeclient.Client
+	if cfg.JudgeServiceURL != "" {
+		nodeService = &nodeclient.Client{BaseURL: cfg.JudgeServiceURL, Token: cfg.JudgeNodeToken}
+	}
+	w := &Worker{Config: cfg, WorkerID: cfg.WorkerID, InstanceID: instance, Capabilities: protocol.NewCapabilities(cfg.WorkerID, instance, cfg.BuildVersion, cfg.MaxConcurrency, cfg.RealSubmissionExecution), Queue: queueadapter.Queue{Redis: redis, Prefix: cfg.QueuePrefix}, Executor: fixture.Executor{}, Supervisor: supervisor, NodeClient: nodeService, drain: make(chan struct{}), stop: make(chan struct{}), logger: logger, cancelJobs: make(map[string]context.CancelFunc)}
 	w.state.Store(State(Starting))
 	return w
 }
@@ -101,6 +107,12 @@ func (w *Worker) Start(ctx context.Context) error {
 	} else {
 		w.setState(Ready)
 	}
+	if w.NodeClient != nil {
+		if err := w.NodeClient.Register(ctx, nodeclient.Registration{NodeID: w.WorkerID, Incarnation: w.InstanceID, RuntimeVersion: w.Config.BuildVersion, MaxConcurrentJobs: w.Config.MaxConcurrency, RealExecution: w.Config.RealSubmissionExecution}); err != nil {
+			w.setState(Degraded)
+			return fmt.Errorf("judge node registration failed: %w", err)
+		}
+	}
 	go w.heartbeat(ctx)
 	go w.claimLoop(ctx)
 	return nil
@@ -121,6 +133,13 @@ func (w *Worker) heartbeat(ctx context.Context) {
 	}
 }
 func (w *Worker) emitHeartbeat() {
+	if w.NodeClient != nil {
+		if err := w.NodeClient.Heartbeat(context.Background(), w.WorkerID, w.InstanceID, int(w.active.Load())); err != nil {
+			w.setState(Degraded)
+			w.logger.Printf(`{"event":"node_heartbeat_error","worker_id":%q}`, w.WorkerID)
+			return
+		}
+	}
 	payload := map[string]any{"worker_id": w.WorkerID, "worker_instance_id": w.InstanceID, "protocol_version": protocol.Version, "build_version": w.Config.BuildVersion, "state": w.State(), "max_concurrency": w.Config.MaxConcurrency, "active_job_count": w.active.Load(), "safe_fixture": true, "real_sandboxed_execution": w.Capabilities.RealSandboxedExecution, "sandbox_qualified": w.Capabilities.SandboxQualified, "language_capabilities": w.Capabilities.LanguageCapabilities, "execution_modes": w.Capabilities.ExecutionModes, "heartbeat_at": time.Now().UTC().Format(time.RFC3339Nano)}
 	if w.Capabilities.RealProtocolVersion != "" {
 		payload["real_execution_protocol_version"] = w.Capabilities.RealProtocolVersion
@@ -156,7 +175,17 @@ func (w *Worker) claimLoop(ctx context.Context) {
 			time.Sleep(backoff)
 			continue
 		}
-		lease, err := w.Queue.Claim(ctx, w.InstanceID, time.Duration(w.Config.LeaseMS)*time.Millisecond)
+		var lease *queueadapter.Lease
+		var err error
+		if w.NodeClient != nil {
+			claim, claimErr := w.NodeClient.Claim(ctx, w.WorkerID, w.InstanceID)
+			err = claimErr
+			if claim != nil {
+				lease = &queueadapter.Lease{Job: claim.Job, Token: claim.LeaseToken, AssignmentID: claim.Assignment.AssignmentID}
+			}
+		} else {
+			lease, err = w.Queue.Claim(ctx, w.InstanceID, time.Duration(w.Config.LeaseMS)*time.Millisecond)
+		}
 		if err != nil {
 			w.setState(Degraded)
 			if w.Queue.Redis != nil {
@@ -203,7 +232,7 @@ func (w *Worker) process(parent context.Context, lease queueadapter.Lease) {
 	}
 	request := protocol.ExecutionRequest{ProtocolVersion: protocol.Version, JudgeJobID: lease.Job.ID, SubmissionID: lease.Job.SubmissionID, Attempt: lease.Job.Attempt, CorrelationID: lease.Job.ID, ProblemRevisionID: lease.Job.ProblemRevisionID, TestdataVersionRef: lease.Job.TestdataVersionRef, LanguageID: lease.Job.LanguageID, SourceSnapshotRef: "opaque:" + lease.Job.SubmissionID, SourceSHA256: protocol.SourceDigest([]byte(lease.Job.SubmissionID)), Limits: protocol.Limits{TimeMS: 5000, MemoryMB: 128, OutputBytes: 1048576, Processes: 1}, ExecutionMode: protocol.SafeFixtureQualification, FixtureID: fixtureID, DeadlineAt: time.Now().Add(5 * time.Second), CancellationGeneration: 0}
 	if err := request.Validate(time.Now(), w.Capabilities); err != nil {
-		_ = w.Queue.FailTerminal(parent, lease, "WORKER_PROTOCOL_ERROR")
+		_ = w.failTerminal(parent, lease, "WORKER_PROTOCOL_ERROR")
 		return
 	}
 	outcome, code, err := w.Executor.Run(ctx, request.FixtureID)
@@ -213,19 +242,19 @@ func (w *Worker) process(parent context.Context, lease queueadapter.Lease) {
 	}
 	switch outcome {
 	case protocol.SafeFixtureSucceeded:
-		_ = w.Queue.Complete(parent, lease)
+		_ = w.completeFixture(parent, lease)
 	case protocol.SafeFixtureFailedRetryable:
-		_ = w.Queue.Retry(parent, lease, code)
+		_ = w.retry(parent, lease, code)
 	case protocol.SafeFixtureFailedTerminal:
-		_ = w.Queue.FailTerminal(parent, lease, code)
+		_ = w.failTerminal(parent, lease, code)
 	default:
-		_ = w.Queue.FailTerminal(parent, lease, "WORKER_PROTOCOL_ERROR")
+		_ = w.failTerminal(parent, lease, "WORKER_PROTOCOL_ERROR")
 	}
 }
 
 func (w *Worker) processReal(ctx, queueCtx context.Context, lease queueadapter.Lease) {
 	if !w.Config.RealSubmissionExecution || w.Supervisor == nil || !w.Capabilities.Supports(protocol.RealSandboxedExecution) {
-		_ = w.Queue.FailTerminal(queueCtx, lease, "WORKER_CAPABILITY_MISMATCH")
+		_ = w.failTerminal(queueCtx, lease, "WORKER_CAPABILITY_MISMATCH")
 		return
 	}
 	if lease.Job.TestcaseSet != nil {
@@ -234,7 +263,7 @@ func (w *Worker) processReal(ctx, queueCtx context.Context, lease queueadapter.L
 	}
 	deadline := lease.Job.LeaseExpiresAt.Add(-100 * time.Millisecond)
 	if !deadline.After(time.Now()) {
-		_ = w.Queue.Retry(queueCtx, lease, "EXECUTION_DEADLINE_UNAVAILABLE")
+		_ = w.retry(queueCtx, lease, "EXECUTION_DEADLINE_UNAVAILABLE")
 		return
 	}
 	request := supervisorclient.Request{
@@ -255,21 +284,21 @@ func (w *Worker) processReal(ctx, queueCtx context.Context, lease queueadapter.L
 		return
 	}
 	if execution.Result.PipelineOutcome == "PIPELINE_INFRA_FAILURE" {
-		_ = w.Queue.Retry(queueCtx, lease, "REAL_EXECUTION_INFRA_FAILURE")
+		_ = w.retry(queueCtx, lease, "REAL_EXECUTION_INFRA_FAILURE")
 		return
 	}
 	if err != nil {
-		_ = w.Queue.Retry(queueCtx, lease, "REAL_EXECUTION_INFRA_FAILURE")
+		_ = w.retry(queueCtx, lease, "REAL_EXECUTION_INFRA_FAILURE")
 		return
 	}
-	if err = w.Queue.CompleteReal(queueCtx, lease, execution.Raw); err != nil {
+	if err = w.completeReal(queueCtx, lease, execution.Raw); err != nil {
 		w.logger.Printf(`{"event":"worker_result_persist_error","worker_id":%q,"job_id":%q,"error":%q}`, w.WorkerID, lease.Job.ID, err.Error())
 	}
 }
 
 func (w *Worker) processRealSet(ctx, queueCtx context.Context, lease queueadapter.Lease) {
 	if lease.Job.TestcaseSet == nil {
-		_ = w.Queue.FailTerminal(queueCtx, lease, "WORKER_PROTOCOL_ERROR")
+		_ = w.failTerminal(queueCtx, lease, "WORKER_PROTOCOL_ERROR")
 		return
 	}
 	if w.cancelRequested(queueCtx, lease.Job.ID) {
@@ -278,7 +307,7 @@ func (w *Worker) processRealSet(ctx, queueCtx context.Context, lease queueadapte
 	}
 	deadline := lease.Job.LeaseExpiresAt.Add(-100 * time.Millisecond)
 	if !deadline.After(time.Now()) {
-		_ = w.Queue.Retry(queueCtx, lease, "EXECUTION_DEADLINE_UNAVAILABLE")
+		_ = w.retry(queueCtx, lease, "EXECUTION_DEADLINE_UNAVAILABLE")
 		return
 	}
 	manifest := supervisorclient.TestcaseSetManifest{
@@ -317,28 +346,71 @@ func (w *Worker) processRealSet(ctx, queueCtx context.Context, lease queueadapte
 			w.cancelLease(queueCtx, lease)
 			return
 		}
-		_ = w.Queue.Retry(queueCtx, lease, "REAL_EXECUTION_SET_INFRA_FAILURE")
+		_ = w.retry(queueCtx, lease, "REAL_EXECUTION_SET_INFRA_FAILURE")
 		return
 	}
 	if !verdictReadyManifest(lease.Job.TestcaseSet) {
-		if err = w.Queue.CompleteReal(queueCtx, lease, execution.Raw); err != nil {
+		if err = w.completeReal(queueCtx, lease, execution.Raw); err != nil {
 			w.logger.Printf(`{"event":"worker_set_result_persist_error","worker_id":%q,"job_id":%q,"error":%q}`, w.WorkerID, lease.Job.ID, err.Error())
 		}
 		return
 	}
 	result, deriveErr := verdict.Derive(verdict.Input{SubmissionID: lease.Job.SubmissionID, ExecutionSetRequestID: lease.Job.ExecutionRequestID, ExecutionSetAttemptID: lease.Job.ExecutionAttemptID, ManifestHash: lease.Job.TestcaseSet.ManifestHash, Attempt: lease.Job.Attempt, Authoritative: true, Entries: verdictEntries(lease.Job.TestcaseSet), Raw: execution.Raw})
 	if deriveErr != nil {
-		_ = w.Queue.Retry(queueCtx, lease, "VERDICT_DERIVATION_INFRA_FAILURE")
+		_ = w.retry(queueCtx, lease, "VERDICT_DERIVATION_INFRA_FAILURE")
 		return
 	}
 	published, err := attachVerdict(execution.Raw, result)
 	if err != nil {
-		_ = w.Queue.Retry(queueCtx, lease, "VERDICT_PUBLICATION_INFRA_FAILURE")
+		_ = w.retry(queueCtx, lease, "VERDICT_PUBLICATION_INFRA_FAILURE")
 		return
 	}
-	if err = w.Queue.CompleteReal(queueCtx, lease, published); err != nil {
+	if err = w.completeReal(queueCtx, lease, published); err != nil {
 		w.logger.Printf(`{"event":"worker_set_result_persist_error","worker_id":%q,"job_id":%q,"error":%q}`, w.WorkerID, lease.Job.ID, err.Error())
 	}
+}
+
+func (w *Worker) completeReal(ctx context.Context, lease queueadapter.Lease, result json.RawMessage) error {
+	if w.NodeClient != nil {
+		if lease.AssignmentID == "" {
+			return errors.New("missing node assignment")
+		}
+		return w.NodeClient.Complete(ctx, w.WorkerID, lease.AssignmentID, w.InstanceID, lease.Token, result)
+	}
+	return w.Queue.CompleteReal(ctx, lease, result)
+}
+
+func (w *Worker) resolve(ctx context.Context, lease queueadapter.Lease, action, reason, fixtureID string) error {
+	if w.NodeClient != nil {
+		if lease.AssignmentID == "" {
+			return errors.New("missing node assignment")
+		}
+		return w.NodeClient.Resolve(ctx, w.WorkerID, lease.AssignmentID, w.InstanceID, lease.Token, action, reason, fixtureID)
+	}
+	switch action {
+	case "SUCCEEDED_FAKE":
+		return w.Queue.Complete(ctx, lease)
+	case "FAILED_RETRYABLE":
+		return w.Queue.Retry(ctx, lease, reason)
+	case "FAILED_TERMINAL":
+		return w.Queue.FailTerminal(ctx, lease, reason)
+	case "CANCELLED":
+		return w.Queue.Cancel(ctx, lease)
+	default:
+		return errors.New("unknown node resolution")
+	}
+}
+
+func (w *Worker) completeFixture(ctx context.Context, lease queueadapter.Lease) error {
+	return w.resolve(ctx, lease, "SUCCEEDED_FAKE", "", lease.Job.FixtureID)
+}
+
+func (w *Worker) retry(ctx context.Context, lease queueadapter.Lease, reason string) error {
+	return w.resolve(ctx, lease, "FAILED_RETRYABLE", reason, "")
+}
+
+func (w *Worker) failTerminal(ctx context.Context, lease queueadapter.Lease, reason string) error {
+	return w.resolve(ctx, lease, "FAILED_TERMINAL", reason, "")
 }
 
 func (w *Worker) cancelRequested(ctx context.Context, jobID string) bool {
@@ -347,7 +419,7 @@ func (w *Worker) cancelRequested(ctx context.Context, jobID string) bool {
 }
 
 func (w *Worker) cancelLease(ctx context.Context, lease queueadapter.Lease) {
-	if err := w.Queue.Cancel(ctx, lease); err != nil {
+	if err := w.resolve(ctx, lease, "CANCELLED", "cancelled", ""); err != nil {
 		w.logger.Printf(`{"event":"worker_cancel_persist_error","worker_id":%q,"job_id":%q,"error":%q}`, w.WorkerID, lease.Job.ID, err.Error())
 	}
 }

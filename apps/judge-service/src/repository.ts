@@ -12,6 +12,7 @@ export interface JudgeServiceStateRepository {
   listByExternalSubmissionId(
     externalSubmissionId: string,
   ): Promise<StoredJudgeServiceJob[]>;
+  listAll(): Promise<StoredJudgeServiceJob[]>;
 }
 
 export class InMemoryJudgeServiceStateRepository implements JudgeServiceStateRepository {
@@ -48,6 +49,13 @@ export class InMemoryJudgeServiceStateRepository implements JudgeServiceStateRep
           left.result.evaluationGeneration -
             right.result.evaluationGeneration ||
           left.result.attemptGeneration - right.result.attemptGeneration,
+      )
+      .map((value) => structuredClone(value));
+  }
+  async listAll() {
+    return [...this.byJobId.values()]
+      .sort((left, right) =>
+        left.result.judgeJobId.localeCompare(right.result.judgeJobId),
       )
       .map((value) => structuredClone(value));
   }
@@ -104,6 +112,12 @@ export class PostgresJudgeServiceStateRepository implements JudgeServiceStateRep
     const result = await this.pool.query(
       'SELECT client_request_id,job_request,result_projection FROM judge_service_jobs WHERE external_submission_id=$1 ORDER BY evaluation_generation,created_at',
       [externalSubmissionId],
+    );
+    return result.rows.map(row);
+  }
+  async listAll() {
+    const result = await this.pool.query(
+      'SELECT client_request_id,job_request,result_projection FROM judge_service_jobs ORDER BY judge_job_id',
     );
     return result.rows.map(row);
   }

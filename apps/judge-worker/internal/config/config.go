@@ -21,6 +21,8 @@ type Config struct {
 	LivenessTimeoutMS       int
 	RealSubmissionExecution bool
 	SupervisorURL           string
+	JudgeServiceURL         string
+	JudgeNodeToken          string
 }
 
 func Load(env map[string]string) (Config, error) {
@@ -61,6 +63,17 @@ func Load(env map[string]string) (Config, error) {
 	}
 	realExecution := get("REAL_SUBMISSION_EXECUTION", "false") == "true"
 	supervisorURL := get("OJPLATFORM_SANDBOX_SUPERVISOR_URL", "http://127.0.0.1:19092")
+	judgeServiceURL := get("JUDGE_SERVICE_URL", "")
+	nodeToken := get("JUDGE_NODE_TOKEN", "")
+	if judgeServiceURL != "" {
+		service, parseErr := url.Parse(judgeServiceURL)
+		if parseErr != nil || (service.Scheme != "http" && service.Scheme != "https") || service.Host == "" || service.User != nil || service.RawQuery != "" || service.Fragment != "" {
+			return Config{}, fmt.Errorf("invalid JUDGE_SERVICE_URL")
+		}
+		if len(nodeToken) < 16 {
+			return Config{}, fmt.Errorf("JUDGE_NODE_TOKEN must be at least 16 characters")
+		}
+	}
 	if realExecution {
 		supervisor, parseErr := url.Parse(supervisorURL)
 		if parseErr != nil || supervisor.Scheme != "http" || supervisor.Host == "" || supervisor.User != nil || supervisor.RawQuery != "" || supervisor.Fragment != "" || (supervisor.Path != "" && supervisor.Path != "/") {
@@ -71,7 +84,7 @@ func Load(env map[string]string) (Config, error) {
 			return Config{}, fmt.Errorf("Supervisor URL must be loopback")
 		}
 	}
-	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", "oj:judge:workers"), LivenessTimeoutMS: liveness, RealSubmissionExecution: realExecution, SupervisorURL: supervisorURL}, nil
+	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", "oj:judge:workers"), LivenessTimeoutMS: liveness, RealSubmissionExecution: realExecution, SupervisorURL: supervisorURL, JudgeServiceURL: judgeServiceURL, JudgeNodeToken: nodeToken}, nil
 }
 
 func FromEnv() (Config, error) {

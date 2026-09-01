@@ -479,8 +479,9 @@ func digest(value []byte) string {
 }
 
 type Lease struct {
-	Job   Job
-	Token string
+	Job          Job
+	Token        string
+	AssignmentID string
 }
 type Client struct {
 	addr   string

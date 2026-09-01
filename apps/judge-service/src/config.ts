@@ -5,6 +5,8 @@ export type JudgeServiceConfig = {
   redisUrl: string;
   redisPrefix: string;
   serviceToken: string;
+  nodeToken: string;
+  nodeUnhealthyTimeoutMs: number;
 };
 
 const validUrl = (name: string, value: string) => {
@@ -27,6 +29,20 @@ export function loadJudgeServiceConfig(
   const token = env.JUDGE_SERVICE_TOKEN;
   if (!token || token.length < 16)
     throw new Error('JUDGE_SERVICE_TOKEN must be at least 16 characters');
+  const nodeToken = env.JUDGE_NODE_TOKEN;
+  if (!nodeToken || nodeToken.length < 16)
+    throw new Error('JUDGE_NODE_TOKEN must be at least 16 characters');
+  if (nodeToken === token)
+    throw new Error('JUDGE_NODE_TOKEN must differ from JUDGE_SERVICE_TOKEN');
+  const nodeUnhealthyTimeoutMs = Number(
+    env.JUDGE_NODE_UNHEALTHY_TIMEOUT_MS ?? '15000',
+  );
+  if (
+    !Number.isInteger(nodeUnhealthyTimeoutMs) ||
+    nodeUnhealthyTimeoutMs < 1000 ||
+    nodeUnhealthyTimeoutMs > 300000
+  )
+    throw new Error('JUDGE_NODE_UNHEALTHY_TIMEOUT_MS must be 1000..300000');
   return {
     host: env.JUDGE_SERVICE_HOST ?? '127.0.0.1',
     port,
@@ -40,6 +56,8 @@ export function loadJudgeServiceConfig(
     ),
     redisPrefix: env.JUDGE_REDIS_PREFIX ?? 'oj:judge-service',
     serviceToken: token,
+    nodeToken,
+    nodeUnhealthyTimeoutMs,
   };
 }
 
