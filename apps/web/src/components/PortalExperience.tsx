@@ -739,10 +739,22 @@ export function MessagesExperience({
     'conversations' | 'contacts' | 'requests' | 'add'
   >('conversations');
   const [selected, setSelected] = useState<string | null>(null);
+  const [conversationQuery, setConversationQuery] = useState('');
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.id === selected),
     [conversations, selected],
   );
+  const visibleConversations = useMemo(() => {
+    const query = conversationQuery.trim().toLocaleLowerCase();
+    if (!query) return conversations;
+    return conversations.filter((conversation) =>
+      [
+        conversation.peer.displayName,
+        conversation.peer.username,
+        conversation.lastMessage ?? '',
+      ].some((value) => value.toLocaleLowerCase().includes(query)),
+    );
+  }, [conversationQuery, conversations]);
   return (
     <section className="messages-page">
       <header className="messages-heading">
@@ -794,8 +806,19 @@ export function MessagesExperience({
       ) : (
         <div className={`messenger-shell ${selected ? 'show-chat' : ''}`}>
           <aside className="conversation-pane" aria-label="会话列表">
-            <h2>最近会话</h2>
-            {conversations.map((conversation) => (
+            <div className="conversation-pane-header">
+              <h2>最近会话</h2>
+              <label className="conversation-search">
+                <span className="sr-only">搜索会话</span>
+                <input
+                  type="search"
+                  value={conversationQuery}
+                  onChange={(event) => setConversationQuery(event.target.value)}
+                  placeholder="搜索会话"
+                />
+              </label>
+            </div>
+            {visibleConversations.map((conversation) => (
               <button
                 key={conversation.id}
                 type="button"
@@ -816,9 +839,11 @@ export function MessagesExperience({
                 )}
               </button>
             ))}
-            {!conversations.length && (
+            {!visibleConversations.length && (
               <p className="empty-copy">
-                暂无会话。通讯后端接入后，真实会话会显示在这里。
+                {conversationQuery
+                  ? '没有匹配的会话。'
+                  : '暂无会话。通讯后端接入后，真实会话会显示在这里。'}
               </p>
             )}
           </aside>
