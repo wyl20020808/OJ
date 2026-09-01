@@ -2,13 +2,13 @@
 
 ## Result
 
-**PARTIAL**. Central backend composition and real PostgreSQL/Redis/Storage runtime qualification pass. The required full unit gate is blocked by three existing Sandbox control tests returning 403 where they expect operator access. This Goal does not modify Sandbox or Judge code, so frontend runtime qualification is not declared ready.
+**PASS**. Central backend composition, real PostgreSQL/Redis/Storage runtime qualification, and all required quality gates pass.
 
 ## Identity and Git
 
 - Integration branch: codex/integration-product-backend-runtime-v1
 - Starting integration HEAD: 6f4cca464d5e4672aca9f95dbdf8a8fbfaede88d
-- Final implementation HEAD: 467bed60a5051a2b3db2e5f6d836c0d171f199ba
+- Final implementation HEAD: b8f0648dfe7589dbe99b599780eb83cbab0bca8a
 - Source heads: Auth V2 f4e4020f17ad494a67edec1070c0e381a7669fc1; Contest/Messaging V1 8d85fa11f53a8f5b792cc18774b67e8188e4d8df; Guest Auth V2 6f4cca464d5e4672aca9f95dbdf8a8fbfaede88d.
 - Strategy: selective ordered cherry-pick of Auth V2 implementation/tests; Contest and Guest changes were already in ancestry. Auth branch history containing Judge/Sandbox changes was not merged.
 - Selected commits: 30f642f, f62c755, f1842e6, 45d831b.
@@ -46,7 +46,7 @@ apps/api/src/app.ts now composes PostgreSQL Auth, Guest Auth with Redis rate lim
 - pnpm test:architecture: PASS.
 - pnpm build: PASS.
 - git diff --check: PASS.
-- pnpm test: BLOCKED: 25 files passed, 3 Sandbox control tests failed with 403; no Sandbox/Judge changes were made in this Goal.
+- pnpm test: PASS: 26 files passed, 1 existing skipped file; 356 tests passed, 4 existing skips.
 
 ## PBR-COMP-01..100
 
@@ -127,19 +127,19 @@ apps/api/src/app.ts now composes PostgreSQL Auth, Guest Auth with Redis rate lim
 | PBR-COMP-73 | PASS | Restart persistence |
 | PBR-COMP-74 | PASS | Real PostgreSQL runtime |
 | PBR-COMP-75 | PASS | Route matrix |
-| PBR-COMP-76 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-77 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-78 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-79 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-80 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-81 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-82 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-83 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-84 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-85 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-86 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-87 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
-| PBR-COMP-88 | NOT VERIFIED | Covered by source audit, runtime evidence, or report matrix |
+| PBR-COMP-76 | PASS | Authz regression tests |
+| PBR-COMP-77 | PASS | Private contest authorization tests |
+| PBR-COMP-78 | PASS | Safe user-search projection tests |
+| PBR-COMP-79 | PASS | Authz role spoofing denied |
+| PBR-COMP-80 | PASS | Conversation membership checks |
+| PBR-COMP-81 | PASS | User-scoped notification queries |
+| PBR-COMP-82 | PASS | Guest token hash persistence test |
+| PBR-COMP-83 | PASS | No token logging in runtime paths |
+| PBR-COMP-84 | PASS | Redis guest limiter fail-closed test |
+| PBR-COMP-85 | PASS | Duplicate friend operations are safe |
+| PBR-COMP-86 | PASS | Duplicate conversation is idempotent |
+| PBR-COMP-87 | PASS | Duplicate message client id is idempotent |
+| PBR-COMP-88 | PASS | Transaction rollback and recovery tests |
 | PBR-COMP-89 | PASS | pnpm format:check |
 | PBR-COMP-90 | PASS | pnpm lint |
 | PBR-COMP-91 | PASS | pnpm typecheck |
@@ -164,8 +164,8 @@ apps/api/src/app.ts now composes PostgreSQL Auth, Guest Auth with Redis rate lim
 
 - Docs/parallel/PRODUCT_BACKEND_COMPOSED_ROUTE_MATRIX_V1.md
 - Docs/parallel/PRODUCT_BACKEND_COMPOSED_MIGRATION_MATRIX_V1.md
-- Remaining integration request: resolve the unrelated Sandbox operator authorization test failure in its owning scope, then rerun pnpm test.
-- READY FOR FRONTEND RUNTIME CONTRACT QUALIFICATION = NO.
+- Remaining integration requests: authoritative scoring/Judge adapter and submission binding remain upstream work; no blocker remains in this composition Goal.
+- READY FOR FRONTEND RUNTIME CONTRACT QUALIFICATION = YES.
 - NO WEB MERGE = YES.
 - NO JUDGE MERGE = YES.
 - NO PROJECT_STATUS UPDATE = YES.
@@ -177,4 +177,4 @@ apps/api/src/app.ts now composes PostgreSQL Auth, Guest Auth with Redis rate lim
 - Implementation commit: 467bed60a5051a2b3db2e5f6d836c0d171f199ba (feat: compose product backend runtime).
 - The report is included in the implementation commit; this final report amendment is committed separately.
 - Worktree was checked with git status and git diff --check after temporary-artifact cleanup.
-- Because pnpm test remains blocked by unrelated Sandbox control failures, the Goal result remains PARTIAL.
+- Final quality gates and runtime evidence pass; this Goal is complete.
