@@ -1092,7 +1092,7 @@ pre {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .auth-method-control {
-  width: min(100%, 25rem);
+  width: 100%;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .auth-method-control button {
