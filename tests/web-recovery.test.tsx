@@ -290,3 +290,70 @@ describe('ApiError contract', () => {
     expect(error.status).toBe(403);
   });
 });
+
+describe('Composed product API client contract', () => {
+  it('uses the composed contest, social, messaging, unread and notification routes', async () => {
+    const calls: Array<{ url: string; method: string }> = [];
+    const fetcher = vi
+      .fn()
+      .mockImplementation(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          calls.push({ url, method: init?.method ?? 'GET' });
+          if (url.includes('/standings')) {
+            return {
+              status: 503,
+              ok: false,
+              json: async () => ({
+                available: false,
+                reason: 'SCORING_ENGINE_NOT_INTEGRATED',
+              }),
+            };
+          }
+          if (url.includes('/api/contests?'))
+            return { status: 200, ok: true, json: async () => ({ items: [] }) };
+          if (url.includes('/api/contests/c1/problems'))
+            return { status: 200, ok: true, json: async () => ({ items: [] }) };
+          if (url.includes('/api/contests/c1'))
+            return { status: 200, ok: true, json: async () => ({ id: 'c1' }) };
+          if (url.includes('/api/friends'))
+            return { status: 200, ok: true, json: async () => ({ items: [] }) };
+          if (url.includes('/api/friend-requests'))
+            return { status: 200, ok: true, json: async () => ({ items: [] }) };
+          if (url.includes('/api/conversations'))
+            return { status: 200, ok: true, json: async () => ({ items: [] }) };
+          if (url.includes('/api/notifications'))
+            return { status: 200, ok: true, json: async () => ({ items: [] }) };
+          return { status: 200, ok: true, json: async () => ({ count: 0 }) };
+        },
+      );
+    const api = createApiClient('', fetcher);
+    await api.contests();
+    await api.contest('c1');
+    await api.contestProblems('c1');
+    await expect(api.contestStandings('c1')).resolves.toMatchObject({
+      available: false,
+      reason: 'SCORING_ENGINE_NOT_INTEGRATED',
+    });
+    await api.friends();
+    await api.friendRequests('incoming');
+    await api.conversations();
+    await api.unreadMessages();
+    await api.notifications();
+    await api.unreadNotifications();
+    expect(calls.map(({ url }) => url)).toEqual(
+      expect.arrayContaining([
+        '/api/contests?limit=20',
+        '/api/contests/c1',
+        '/api/contests/c1/problems',
+        '/api/contests/c1/standings',
+        '/api/friends',
+        '/api/friend-requests?direction=incoming',
+        '/api/conversations',
+        '/api/messages/unread-count',
+        '/api/notifications?limit=50',
+        '/api/notifications/unread-count',
+      ]),
+    );
+  });
+});

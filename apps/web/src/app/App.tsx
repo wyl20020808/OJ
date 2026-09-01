@@ -13,6 +13,7 @@ import {
   createApiClient,
   type ApiClient,
   type AuthenticatedUser,
+  type BackendContest,
   type Language,
   type Problem,
   type Submission,
@@ -31,6 +32,15 @@ import {
   ProfileExperience,
   WrongBookPage,
 } from '../components/PortalExperience.js';
+import type {
+  ContestDetail,
+  ContestProblem,
+  ContestSummary,
+  FriendRequest,
+  FriendSummary,
+  ConversationSummary,
+  NotificationSummary,
+} from '../services/portal-contracts.js';
 import {
   chooseDailyProblem,
   getDailyFortune,
@@ -1919,6 +1929,135 @@ function SubmissionDetail({
 function Profile({ user }: { user: AuthenticatedUser | null }) {
   return <ProfileExperience user={user} navigate={navigate} />;
 }
+
+const contestSummary = (value: BackendContest): ContestSummary => ({
+  id: value.id,
+  title: value.title,
+  lifecycle: value.lifecycle,
+  visibility: value.visibility,
+  registration:
+    value.lifecycle === 'UPCOMING'
+      ? 'REGISTRATION_OPEN'
+      : 'REGISTRATION_CLOSED',
+  format: value.format,
+  startsAt: value.startsAt,
+  endsAt: value.endsAt,
+});
+
+function ContestRoute({
+  api,
+  view,
+  contestId,
+  navigate,
+}: {
+  api: ApiClient;
+  view:
+    | 'list'
+    | 'mine'
+    | 'detail'
+    | 'problems'
+    | 'submissions'
+    | 'standings'
+    | 'settings';
+  contestId?: string;
+  navigate: (path: string) => void;
+}) {
+  const [contests, setContests] = useState<ContestSummary[]>([]);
+  const [detail, setDetail] = useState<ContestDetail>();
+  const [problems, setProblems] = useState<ContestProblem[]>([]);
+  const [standings, setStandings] = useState<never[]>([]);
+  useEffect(() => {
+    if (view === 'list' || view === 'mine') {
+      void api
+        .contests()
+        .then((result) => setContests(result.items.map(contestSummary)))
+        .catch(() => undefined);
+      return;
+    }
+    if (!contestId) return;
+    void Promise.all([api.contest(contestId), api.contestProblems(contestId)])
+      .then(([value, problemResult]) => {
+        setDetail({
+          ...contestSummary(value),
+          description: value.description,
+          canRegister: value.lifecycle === 'UPCOMING',
+          canManage: value.canManage,
+        });
+        setProblems(
+          problemResult.items.map((item) => ({
+            problemId: item.problemId,
+            label: item.label ?? item.problemId,
+            title: item.title,
+            ...(item.score === undefined ? {} : { score: item.score }),
+          })),
+        );
+      })
+      .catch(() => undefined);
+    if (view === 'standings')
+      void api
+        .contestStandings(contestId)
+        .then((result) => {
+          if ('available' in result && result.available) setStandings([]);
+        })
+        .catch(() => setStandings([]));
+  }, [api, contestId, view]);
+  return (
+    <ContestExperience
+      view={view}
+      {...(contestId ? { contestId } : {})}
+      navigate={navigate}
+      {...(view === 'list' || view === 'mine' ? { contests } : {})}
+      {...(detail ? { detail } : {})}
+      {...(view === 'problems' ? { problems } : {})}
+      {...(view === 'standings' ? { standings } : {})}
+    />
+  );
+}
+
+function NotificationsRoute({ api }: { api: ApiClient }) {
+  const [items, setItems] = useState<NotificationSummary[]>([]);
+  useEffect(() => {
+    void api
+      .notifications()
+      .then((result) => setItems(result.items))
+      .catch(() => setItems([]));
+  }, [api]);
+  return <NotificationsPage notifications={items} />;
+}
+
+function MessagesRoute({ api }: { api: ApiClient }) {
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [friends, setFriends] = useState<FriendSummary[]>([]);
+  const [requests, setRequests] = useState<FriendRequest[]>([]);
+  useEffect(() => {
+    void Promise.all([
+      api.conversations(),
+      api.friends(),
+      api.friendRequests('incoming'),
+      api.friendRequests('outgoing'),
+    ])
+      .then(([conversationResult, friendResult, incoming, outgoing]) => {
+        setConversations(
+          conversationResult.items.map((item) => ({
+            ...item,
+            muted: false,
+            pinned: false,
+          })),
+        );
+        setFriends(friendResult.items);
+        setRequests([...incoming.items, ...outgoing.items]);
+      })
+      .catch(() => undefined);
+  }, [api]);
+  return (
+    <MessagesExperience
+      conversations={conversations}
+      friends={friends}
+      requests={requests}
+    />
+  );
+}
+
 export function App() {
   const api = useMemo(
     () => createApiClient(import.meta.env.VITE_API_URL ?? ''),
@@ -1970,25 +2109,28 @@ export function App() {
     ) : current.name === 'problems' ? (
       <ProblemList api={api} />
     ) : current.name === 'contests' ? (
-      <ContestExperience view="list" navigate={navigate} />
+      <ContestRoute api={api} view="list" navigate={navigate} />
     ) : current.name === 'my-contests' ? (
-      <ContestExperience view="mine" navigate={navigate} />
+      <ContestRoute api={api} view="mine" navigate={navigate} />
     ) : current.name === 'contest-new' ? (
       <ContestExperience view="create" navigate={navigate} />
     ) : current.name === 'contest-detail' ? (
-      <ContestExperience
+      <ContestRoute
+        api={api}
         view="detail"
         contestId={current.id ?? ''}
         navigate={navigate}
       />
     ) : current.name === 'contest-problems' ? (
-      <ContestExperience
+      <ContestRoute
+        api={api}
         view="problems"
         contestId={current.id ?? ''}
         navigate={navigate}
       />
     ) : current.name === 'contest-submissions' ? (
-      <ContestExperience
+      <ContestRoute
+        api={api}
         view="submissions"
         contestId={current.id ?? ''}
         navigate={navigate}
@@ -2010,9 +2152,9 @@ export function App() {
     ) : current.name === 'wrong-book' ? (
       <WrongBookPage navigate={navigate} />
     ) : current.name === 'notifications' ? (
-      <NotificationsPage />
+      <NotificationsRoute api={api} />
     ) : current.name === 'messages' ? (
-      <MessagesExperience />
+      <MessagesRoute api={api} />
     ) : current.name === 'submit' ? (
       <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
     ) : current.name === 'submissions' ? (

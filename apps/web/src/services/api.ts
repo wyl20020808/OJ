@@ -7,7 +7,7 @@ export type ApiErrorBody = {
 export type AuthenticatedUser = {
   id: string;
   username: string;
-  email: string;
+  email: string | null;
   displayName: string;
   status: 'active';
   guest?: boolean;
@@ -99,6 +99,22 @@ export type Problem = {
 export type Page = { limit: number; offset: number; total: number };
 export type ProblemList = { items: Problem[]; page: Page };
 export type Home = { recentProblems: Problem[] };
+export type BackendContest = {
+  id: string;
+  title: string;
+  description: string;
+  ownerUserId: string;
+  visibility: 'PUBLIC' | 'PRIVATE';
+  lifecycle: 'DRAFT' | 'UPCOMING' | 'RUNNING' | 'ENDED' | 'CANCELLED';
+  format: 'ICPC' | 'IOI' | 'OI' | 'CUSTOM';
+  startsAt: string;
+  endsAt: string;
+  registrationOpenAt?: string | null;
+  registrationCloseAt?: string | null;
+  canManage: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
 export type Language = {
   id: string;
   name: string;
@@ -208,6 +224,13 @@ export type ProblemInput = Omit<
 > & {
   testdataVersion?: string | null;
 };
+import type {
+  ContestProblem,
+  FriendRequest,
+  FriendSummary,
+  Message,
+  NotificationSummary,
+} from './portal-contracts.js';
 export class ApiError extends Error {
   readonly code: string;
   readonly requestId: string;
@@ -454,6 +477,195 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       );
     },
     home: () => request<Home>(baseUrl, '/api/home', undefined, fetcher),
+    contests: (limit = 20) =>
+      request<{ items: BackendContest[] }>(
+        baseUrl,
+        `/api/contests?limit=${encodeURIComponent(String(limit))}`,
+        undefined,
+        fetcher,
+      ),
+    contest: (id: string) =>
+      request<BackendContest>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}`,
+        undefined,
+        fetcher,
+      ),
+    contestProblems: (id: string) =>
+      request<{ items: ContestProblem[] }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/problems`,
+        undefined,
+        fetcher,
+      ),
+    createContest: (input: {
+      title: string;
+      description?: string;
+      startsAt: string;
+      endsAt: string;
+      visibility: 'PUBLIC' | 'PRIVATE';
+      format?: 'ICPC' | 'IOI' | 'OI' | 'CUSTOM';
+      registrationOpenAt?: string | null;
+      registrationCloseAt?: string | null;
+      privatePassword?: string;
+    }) =>
+      request<BackendContest>(
+        baseUrl,
+        '/api/contests',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    publishContest: (id: string) =>
+      request<BackendContest>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/publish`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    setContestProblems: (
+      id: string,
+      problems: Array<{ problemId: string; score?: number }>,
+    ) =>
+      request<{ items: Array<{ problemId: string; score?: number }> }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/problems`,
+        { method: 'PUT', body: JSON.stringify({ problems }) },
+        fetcher,
+      ),
+    registerContest: (id: string, accessCode?: string) =>
+      request<{
+        contestId: string;
+        userId: string;
+        status: string;
+        registeredAt: string;
+      }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/register`,
+        {
+          method: 'POST',
+          body: JSON.stringify(accessCode ? { accessCode } : {}),
+        },
+        fetcher,
+      ),
+    contestStandings: (id: string) =>
+      request<
+        | { available: true; items: unknown[] }
+        | { available: false; reason: string }
+      >(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/standings`,
+        undefined,
+        fetcher,
+        [503],
+      ),
+    friends: () =>
+      request<{ items: FriendSummary[] }>(
+        baseUrl,
+        '/api/friends',
+        undefined,
+        fetcher,
+      ),
+    searchUsers: (query: string) =>
+      request<{ items: FriendSummary[] }>(
+        baseUrl,
+        `/api/users/search?q=${encodeURIComponent(query)}`,
+        undefined,
+        fetcher,
+      ),
+    sendFriendRequest: (targetUserId: string, note?: string) =>
+      request<{ id: string; state: string }>(
+        baseUrl,
+        '/api/friend-requests',
+        { method: 'POST', body: JSON.stringify({ targetUserId, note }) },
+        fetcher,
+      ),
+    resolveFriendRequest: (id: string, action: 'accept' | 'reject') =>
+      request<{ id: string; state: string }>(
+        baseUrl,
+        `/api/friend-requests/${encodeURIComponent(id)}/${action}`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    friendRequests: (direction: 'incoming' | 'outgoing') =>
+      request<{ items: FriendRequest[] }>(
+        baseUrl,
+        `/api/friend-requests?direction=${direction}`,
+        undefined,
+        fetcher,
+      ),
+    conversations: () =>
+      request<{ items: Array<ConversationSummaryApi> }>(
+        baseUrl,
+        '/api/conversations',
+        undefined,
+        fetcher,
+      ),
+    conversationMessages: (id: string, limit = 50) =>
+      request<{ items: Message[]; nextCursor?: string }>(
+        baseUrl,
+        `/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`,
+        undefined,
+        fetcher,
+      ),
+    createDirectConversation: (userId: string) =>
+      request<{ id: string; kind: 'DIRECT' }>(
+        baseUrl,
+        '/api/conversations/direct',
+        { method: 'POST', body: JSON.stringify({ userId }) },
+        fetcher,
+      ),
+    sendMessage: (id: string, body: string, clientMessageId: string) =>
+      request<Message>(
+        baseUrl,
+        `/api/conversations/${encodeURIComponent(id)}/messages`,
+        { method: 'POST', body: JSON.stringify({ body, clientMessageId }) },
+        fetcher,
+      ),
+    markConversationRead: (id: string, messageId?: string) =>
+      request<void>(
+        baseUrl,
+        `/api/conversations/${encodeURIComponent(id)}/read`,
+        {
+          method: 'POST',
+          body: JSON.stringify(messageId ? { messageId } : {}),
+        },
+        fetcher,
+      ),
+    unreadMessages: () =>
+      request<{ count: number }>(
+        baseUrl,
+        '/api/messages/unread-count',
+        undefined,
+        fetcher,
+      ),
+    notifications: (limit = 50) =>
+      request<{ items: NotificationSummary[]; nextCursor?: string }>(
+        baseUrl,
+        `/api/notifications?limit=${limit}`,
+        undefined,
+        fetcher,
+      ),
+    unreadNotifications: () =>
+      request<{ count: number }>(
+        baseUrl,
+        '/api/notifications/unread-count',
+        undefined,
+        fetcher,
+      ),
+    markNotificationRead: (id: string) =>
+      request<void>(
+        baseUrl,
+        `/api/notifications/${encodeURIComponent(id)}/read`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    markAllNotificationsRead: () =>
+      request<void>(
+        baseUrl,
+        '/api/notifications/read-all',
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
     problem: (idOrSlug: string) =>
       request<Problem>(
         baseUrl,
@@ -591,3 +803,11 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       }>(baseUrl, '/ready', undefined, fetcher, [503]),
   };
 }
+
+type ConversationSummaryApi = {
+  id: string;
+  kind: 'DIRECT';
+  peer: { id: string; username: string; displayName: string };
+  lastMessageAt?: string;
+  unreadCount: number;
+};
