@@ -174,31 +174,15 @@ export async function registerAuthModule(
       occurredAt: new Date().toISOString(),
     });
   };
-  app.get('/api/auth/capabilities', async (_request, reply) =>
-    reply.send({ guestLogin: { available: guestAvailable } }),
-  );
-  app.get('/api/auth/methods', async (_request, reply) =>
-    reply.send({
-      registration: { email: true, phone: false },
-      login: {
-        emailPassword: true,
-        phonePassword: false,
-        emailCode: Boolean(options.emailProvider),
-        phoneCode: Boolean(options.smsProvider),
-      },
-      providers: {
-        wechat: options.socialProviders?.wechat ? 'enabled' : 'not_configured',
-        qq: options.socialProviders?.qq ? 'enabled' : 'not_configured',
-        google: options.socialProviders?.google ? 'enabled' : 'not_configured',
-        github: options.socialProviders?.github ? 'enabled' : 'not_configured',
-      },
-      passwordPolicy: { minLength: 8 },
-    }),
-  );
   app.post('/api/auth/guest/continue', async (request, reply) => {
     try {
       if (!guestAvailable || !options.guestStore)
-        return error(reply, 503, 'GUEST_UNAVAILABLE', 'Guest login is unavailable');
+        return error(
+          reply,
+          503,
+          'GUEST_UNAVAILABLE',
+          'Guest login is unavailable',
+        );
       await consumeGuestLimit(request);
       const oldToken = guestCookie(request);
       const resume = guestToken();
@@ -225,7 +209,11 @@ export async function registerAuthModule(
       setSessionCookie(reply, session);
       setGuestResumeCookie(reply, resume);
       await audit(
-        { userId: result.user.id, sessionId: result.sessionId, strength: 'guest' },
+        {
+          userId: result.user.id,
+          sessionId: result.sessionId,
+          strength: 'guest',
+        },
         oldToken ? 'guest:resume' : 'guest:create',
         'allowed',
         request.id,
@@ -581,6 +569,7 @@ export async function registerAuthModule(
       ? {}
       : { production: options.production }),
     sessionTtlMs: ttl,
+    guestLoginAvailable: guestAvailable,
     ...(options.verificationTtlMs === undefined
       ? {}
       : { verificationTtlMs: options.verificationTtlMs }),

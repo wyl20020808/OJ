@@ -48,6 +48,7 @@ type V2Options = {
   smsProvider?: MessageProvider;
   socialProviders?: Partial<Record<AuthProvider, AuthProviderAdapter>>;
   rateLimiter?: RateLimiter;
+  guestLoginAvailable?: boolean;
   audit?: (
     context: AuthContext | undefined,
     action: string,
@@ -487,7 +488,9 @@ export async function registerAuthV2Routes(
     reply.send(await methods()),
   );
 
-  async function methods(): Promise<AuthMethods> {
+  async function methods(): Promise<
+    AuthMethods & { guestLogin: { available: boolean } }
+  > {
     const providerStates = Object.fromEntries(
       providers.map((provider) => {
         if (providerDisabled(provider, process.env))
@@ -511,6 +514,7 @@ export async function registerAuthV2Routes(
       },
       providers: providerStates,
       passwordPolicy: { minLength: 8 },
+      guestLogin: { available: options.guestLoginAvailable === true },
     };
   }
 

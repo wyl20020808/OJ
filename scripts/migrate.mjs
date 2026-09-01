@@ -17,6 +17,11 @@ try {
     '0003_authz_foundation',
     '0004_problem_authoring_revision',
     '0005_submission_intake',
+    '0006_auth_identity_verification_social',
+    '0007_contest_foundation',
+    '0008_social_messaging_foundation',
+    '0009_notifications_foundation',
+    '0010_guest_auth',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {
