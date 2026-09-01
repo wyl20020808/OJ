@@ -283,7 +283,7 @@ export async function registerAuthModule(
       throw cause;
     }
     await audit(undefined, 'account:register', 'allowed', request.id, user.id);
-    return reply.status(201).send(projectUser(user));
+    return reply.status(201).send(await projectUser(user));
   });
   app.post('/api/auth/login', async (request, reply) => {
     const body = request.body as AuthBody;
