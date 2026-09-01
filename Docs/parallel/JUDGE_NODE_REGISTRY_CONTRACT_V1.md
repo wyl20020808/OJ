@@ -61,6 +61,14 @@ leased job only when that exact node was selected. Assignment persistence binds
 stale incarnation or non-current assignment is rejected before it can affect
 the existing Judge queue/result authority.
 
+`POST /v1/nodes/:nodeId/assignments/:assignmentId/cancellation-status` also
+requires node authentication and the current incarnation. It returns only
+whether the current bound Judge job is already `CANCELLED`. The endpoint is a
+read-only cancellation observation for the active assignment; it does not
+return a lease token or authorize a tokenless cancellation. This lets a
+service-mode Worker observe an external cancellation without depending on a
+Worker-local Redis key prefix.
+
 Node credentials are intentionally separate from the Product-to-Service
 credential. V1 uses an environment-only bootstrap token with constant-time
 comparison; per-node credentials or mTLS are the planned stronger identity

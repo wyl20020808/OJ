@@ -150,6 +150,7 @@ export type JudgeJobRepository = {
   recoverStale(now?: Date): Promise<number>;
   failTerminal(id: string, token: string, reason: string): Promise<JudgeJob>;
   cancel?(id: string): Promise<JudgeJob>;
+  cancelLease?(id: string, token: string): Promise<JudgeJob>;
 };
 export class JudgeJobConflictError extends Error {
   constructor(message = 'Judge job lease conflict') {

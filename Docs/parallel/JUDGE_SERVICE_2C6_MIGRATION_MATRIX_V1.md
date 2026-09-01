@@ -8,7 +8,7 @@
 | Product correlation | Opaque `externalSubmissionId` and returned `judgeJobId`. |
 | Rejudge history | New Judge evaluation generation plus immutable prior service projection. |
 | Terminal publication | Product adapter consumes a safe Service DTO. |
-| Dynamic node registry | Judge-only `judge_nodes` and `judge_node_assignments` from migration `0001_dynamic_judge_node_registry.sql`; no Product schema access. |
+| Dynamic node registry | Judge-only `judge_nodes` and `judge_node_assignments` from migration `0001_dynamic_judge_node_registry.sql`; no Product schema access. When migrations use an administrative owner, `JUDGE_DATABASE_ROLE` makes the runner grant the separate runtime role access to existing and future Judge tables. |
 
 Existing deployments without `JUDGE_SERVICE_URL` and `JUDGE_SERVICE_TOKEN`
 retain the previously qualified local adapter. Service mode is explicit and is

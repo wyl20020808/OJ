@@ -25,6 +25,11 @@ type executionSetRecord struct {
 	Active            bool                         `json:"active"`
 }
 
+// The worker contract permits 64 testcase inputs of up to 64 KiB each and a
+// 256 KiB source snapshot. JSON/base64 encoding needs a finite envelope larger
+// than the raw byte limits while remaining bounded at this trust boundary.
+const maxExecutionSetRequestBytes int64 = 8 << 20
+
 func executionSetRecordRoot(sandboxRoot string) string {
 	if configured := os.Getenv("OJPLATFORM_EXECUTION_SET_RECORD_ROOT"); configured != "" {
 		return configured
@@ -158,7 +163,7 @@ func (s *protocolServer) startExecutionSet(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var request model.RealExecutionSetRequest
-	if err := decodeStrict(w, r, &request, 1<<20); err != nil || supervisor.ValidateRealExecutionSetRequest(request) != nil {
+	if err := decodeStrict(w, r, &request, maxExecutionSetRequestBytes); err != nil || supervisor.ValidateRealExecutionSetRequest(request) != nil {
 		http.Error(w, "real execution-set request rejected", http.StatusBadRequest)
 		return
 	}

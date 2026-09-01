@@ -36,23 +36,24 @@ const (
 )
 
 type Worker struct {
-	Config       config.Config
-	WorkerID     string
-	InstanceID   string
-	Capabilities protocol.Capabilities
-	Queue        queueadapter.Queue
-	Executor     fixture.Executor
-	Supervisor   *supervisorclient.Client
-	NodeClient   *nodeclient.Client
-	state        atomic.Value
-	active       atomic.Int32
-	shutdownOnce sync.Once
-	stopOnce     sync.Once
-	drain        chan struct{}
-	stop         chan struct{}
-	logger       *log.Logger
-	cancelMu     sync.Mutex
-	cancelJobs   map[string]context.CancelFunc
+	Config                        config.Config
+	WorkerID                      string
+	InstanceID                    string
+	Capabilities                  protocol.Capabilities
+	Queue                         queueadapter.Queue
+	Executor                      fixture.Executor
+	Supervisor                    *supervisorclient.Client
+	NodeClient                    *nodeclient.Client
+	state                         atomic.Value
+	active                        atomic.Int32
+	shutdownOnce                  sync.Once
+	stopOnce                      sync.Once
+	drain                         chan struct{}
+	stop                          chan struct{}
+	logger                        *log.Logger
+	cancelMu                      sync.Mutex
+	cancelJobs                    map[string]context.CancelFunc
+	cancellationObservationErrors map[string]struct{}
 }
 
 func New(cfg config.Config, redis *queueadapter.Client, logger *log.Logger) *Worker {
@@ -72,7 +73,7 @@ func New(cfg config.Config, redis *queueadapter.Client, logger *log.Logger) *Wor
 	if cfg.JudgeServiceURL != "" {
 		nodeService = &nodeclient.Client{BaseURL: cfg.JudgeServiceURL, Token: cfg.JudgeNodeToken}
 	}
-	w := &Worker{Config: cfg, WorkerID: cfg.WorkerID, InstanceID: instance, Capabilities: protocol.NewCapabilities(cfg.WorkerID, instance, cfg.BuildVersion, cfg.MaxConcurrency, cfg.RealSubmissionExecution), Queue: queueadapter.Queue{Redis: redis, Prefix: cfg.QueuePrefix}, Executor: fixture.Executor{}, Supervisor: supervisor, NodeClient: nodeService, drain: make(chan struct{}), stop: make(chan struct{}), logger: logger, cancelJobs: make(map[string]context.CancelFunc)}
+	w := &Worker{Config: cfg, WorkerID: cfg.WorkerID, InstanceID: instance, Capabilities: protocol.NewCapabilities(cfg.WorkerID, instance, cfg.BuildVersion, cfg.MaxConcurrency, cfg.RealSubmissionExecution), Queue: queueadapter.Queue{Redis: redis, Prefix: cfg.QueuePrefix}, Executor: fixture.Executor{}, Supervisor: supervisor, NodeClient: nodeService, drain: make(chan struct{}), stop: make(chan struct{}), logger: logger, cancelJobs: make(map[string]context.CancelFunc), cancellationObservationErrors: make(map[string]struct{})}
 	w.state.Store(State(Starting))
 	return w
 }
@@ -217,11 +218,16 @@ func (w *Worker) process(parent context.Context, lease queueadapter.Lease) {
 	}()
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	go w.observeCancellation(ctx, lease.Job.ID, cancel)
+	go w.observeCancellation(ctx, lease, cancel)
 	w.cancelMu.Lock()
 	w.cancelJobs[lease.Job.ID] = cancel
 	w.cancelMu.Unlock()
-	defer func() { w.cancelMu.Lock(); delete(w.cancelJobs, lease.Job.ID); w.cancelMu.Unlock() }()
+	defer func() {
+		w.cancelMu.Lock()
+		delete(w.cancelJobs, lease.Job.ID)
+		delete(w.cancellationObservationErrors, lease.AssignmentID)
+		w.cancelMu.Unlock()
+	}()
 	if lease.Job.ExecutionMode == string(protocol.RealSandboxedExecution) {
 		w.processReal(ctx, parent, lease)
 		return
@@ -301,7 +307,7 @@ func (w *Worker) processRealSet(ctx, queueCtx context.Context, lease queueadapte
 		_ = w.failTerminal(queueCtx, lease, "WORKER_PROTOCOL_ERROR")
 		return
 	}
-	if w.cancelRequested(queueCtx, lease.Job.ID) {
+	if w.cancelRequested(queueCtx, lease) {
 		w.cancelLease(queueCtx, lease)
 		return
 	}
@@ -342,7 +348,12 @@ func (w *Worker) processRealSet(ctx, queueCtx context.Context, lease queueadapte
 		return
 	}
 	if err != nil || execution.Result.PipelineOutcome == "PIPELINE_INFRA_FAILURE" {
-		if w.cancelRequested(queueCtx, lease.Job.ID) {
+		if err != nil {
+			w.logger.Printf(`{"event":"worker_supervisor_execution_set_error","worker_id":%q,"job_id":%q,"assignment_id":%q,"supervisor_url":%q,"error":%q}`, w.WorkerID, lease.Job.ID, lease.AssignmentID, w.Config.SupervisorURL, err.Error())
+		} else {
+			w.logger.Printf(`{"event":"worker_supervisor_execution_set_infra_failure","worker_id":%q,"job_id":%q,"assignment_id":%q,"supervisor_url":%q,"pipeline_outcome":%q}`, w.WorkerID, lease.Job.ID, lease.AssignmentID, w.Config.SupervisorURL, execution.Result.PipelineOutcome)
+		}
+		if w.cancelRequested(queueCtx, lease) {
 			w.cancelLease(queueCtx, lease)
 			return
 		}
@@ -413,8 +424,30 @@ func (w *Worker) failTerminal(ctx context.Context, lease queueadapter.Lease, rea
 	return w.resolve(ctx, lease, "FAILED_TERMINAL", reason, "")
 }
 
-func (w *Worker) cancelRequested(ctx context.Context, jobID string) bool {
-	requested, err := w.Queue.CancellationRequested(ctx, jobID)
+func (w *Worker) cancelRequested(ctx context.Context, lease queueadapter.Lease) bool {
+	if w.NodeClient != nil {
+		if lease.AssignmentID == "" {
+			return false
+		}
+		requested, err := w.NodeClient.CancellationRequested(ctx, w.WorkerID, lease.AssignmentID, w.InstanceID)
+		if err == nil {
+			w.cancelMu.Lock()
+			delete(w.cancellationObservationErrors, lease.AssignmentID)
+			w.cancelMu.Unlock()
+			return requested
+		}
+		w.cancelMu.Lock()
+		_, alreadyReported := w.cancellationObservationErrors[lease.AssignmentID]
+		if !alreadyReported {
+			w.cancellationObservationErrors[lease.AssignmentID] = struct{}{}
+		}
+		w.cancelMu.Unlock()
+		if !alreadyReported {
+			w.logger.Printf(`{"event":"worker_cancellation_observation_error","worker_id":%q,"job_id":%q,"assignment_id":%q,"error_kind":"CANCELLATION_STATUS_UNAVAILABLE"}`, w.WorkerID, lease.Job.ID, lease.AssignmentID)
+		}
+		return false
+	}
+	requested, err := w.Queue.CancellationRequested(ctx, lease.Job.ID)
 	return err == nil && requested
 }
 
@@ -457,7 +490,7 @@ func attachVerdict(raw json.RawMessage, record verdict.AggregateRecord) (json.Ra
 	return json.Marshal(payload)
 }
 
-func (w *Worker) observeCancellation(ctx context.Context, jobID string, cancel context.CancelFunc) {
+func (w *Worker) observeCancellation(ctx context.Context, lease queueadapter.Lease, cancel context.CancelFunc) {
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -465,8 +498,7 @@ func (w *Worker) observeCancellation(ctx context.Context, jobID string, cancel c
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			requested, err := w.Queue.CancellationRequested(ctx, jobID)
-			if err == nil && requested {
+			if w.cancelRequested(ctx, lease) {
 				cancel()
 				return
 			}

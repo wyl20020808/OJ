@@ -22,6 +22,7 @@ Both are environment-only credentials and compared in constant time.
 | `POST /v1/nodes/:nodeId/assignments/claim` | Node-only deterministic, capability-aware assignment claim. |
 | `POST /v1/nodes/:nodeId/assignments/:assignmentId/complete` | Node-only real result completion, bound to node incarnation and lease. |
 | `POST /v1/nodes/:nodeId/assignments/:assignmentId/resolve` | Node-only fixture/retry/failure/cancellation resolution, bound to node incarnation and lease. |
+| `POST /v1/nodes/:nodeId/assignments/:assignmentId/cancellation-status` | Node-only read of cancellation state for that node's current assignment and incarnation. |
 
 Submit requires `clientRequestId`, opaque `externalSubmissionId`, immutable
 problem/testdata references, `cpp20`, and the existing validated execution
@@ -35,3 +36,10 @@ and matching language profile, checker, and execution mode. It orders eligible
 nodes by normalized load, then stable node ID. Stale incarnation heartbeats and
 assignment resolutions are rejected; node credentials, lease tokens, Worker
 identity, source, and execution output remain absent from management/job DTOs.
+
+The assignment-bound cancellation-status endpoint accepts only the current
+`incarnation` and returns `{ "cancelRequested": boolean }`. A stale,
+superseded, or non-current assignment is rejected. It intentionally gives a
+Worker no Redis prefix or tokenless queue-cancellation authority; service-mode
+Workers use this contract rather than assuming their local `QUEUE_PREFIX`
+matches the Judge Service prefix.

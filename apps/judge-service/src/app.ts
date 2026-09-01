@@ -253,11 +253,28 @@ export async function buildJudgeService(
         30_000,
       );
       if (!claim) continue;
-      const assignment = await nodes.assign(
-        selected.node,
-        claim.job.id,
-        claim.job.attempt,
-      );
+      let assignment;
+      try {
+        assignment = await nodes.assign(
+          selected.node,
+          claim.job.id,
+          claim.job.attempt,
+        );
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          error.message !== 'NODE_CAPACITY_UNAVAILABLE'
+        )
+          throw error;
+        // Queue and node capacity are separate durable authorities. Compensate
+        // with the current lease so a reservation race cannot strand a job.
+        await options.queue.retry(
+          claim.job.id,
+          claim.leaseToken,
+          'NODE_CAPACITY_UNAVAILABLE',
+        );
+        continue;
+      }
       return { assignment, job: claim.job, leaseToken: claim.leaseToken };
     }
     return { assignment: null, reason: 'NO_COMPATIBLE_JUDGE_NODE' };
@@ -370,9 +387,12 @@ export async function buildJudgeService(
             );
             break;
           case 'CANCELLED':
-            if (!options.queue.cancel)
+            if (!options.queue.cancelLease)
               return reply.code(501).send({ code: 'CANCELLATION_UNAVAILABLE' });
-            await options.queue.cancel(assignment.judgeJobId);
+            await options.queue.cancelLease(
+              assignment.judgeJobId,
+              body.leaseToken,
+            );
             break;
         }
         await nodes.completeAssignment(assignmentId);
@@ -380,6 +400,39 @@ export async function buildJudgeService(
       } catch {
         return reply.code(409).send({ code: 'ASSIGNMENT_RESOLUTION_REJECTED' });
       }
+    },
+  );
+  app.post(
+    '/v1/nodes/:nodeId/assignments/:assignmentId/cancellation-status',
+    async (request, reply) => {
+      if (!(await denyNode(request, reply))) return;
+      if (!nodes)
+        return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+      const { nodeId, assignmentId } = request.params as {
+        nodeId: string;
+        assignmentId: string;
+      };
+      const body = request.body as { incarnation?: unknown };
+      if (typeof body?.incarnation !== 'string')
+        return reply.code(400).send({ code: 'VALIDATION_ERROR' });
+      const nodeValue = await nodes.get(nodeId);
+      const assignment = await nodes.currentAssignment(
+        assignmentId,
+        nodeId,
+        body.incarnation,
+      );
+      if (
+        !nodeValue ||
+        nodeValue.incarnation !== body.incarnation ||
+        !assignment
+      )
+        return reply.code(409).send({ code: 'STALE_NODE_INCARNATION' });
+      const job = await options.queue.getById(assignment.judgeJobId);
+      if (!job)
+        return reply
+          .code(409)
+          .send({ code: 'ASSIGNMENT_CANCELLATION_STATUS_REJECTED' });
+      return { cancelRequested: job.status === 'CANCELLED' };
     },
   );
   app.post('/v1/jobs', async (request, reply) => {

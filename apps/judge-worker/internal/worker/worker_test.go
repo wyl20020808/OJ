@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ojplatform/judge-worker/internal/config"
+	"github.com/ojplatform/judge-worker/internal/nodeclient"
 	"github.com/ojplatform/judge-worker/internal/protocol"
+	"github.com/ojplatform/judge-worker/internal/queueadapter"
 )
 
 func testWorker() *Worker {
@@ -64,5 +68,45 @@ func TestRequestAndFixtures(t *testing.T) {
 func TestDecodeRejectsInjection(t *testing.T) {
 	if _, err := protocol.DecodeRequest([]byte(`{"protocol_version":"2A.1","command":"/bin/sh"}`)); err == nil {
 		t.Fatal("injection accepted")
+	}
+}
+
+func TestCancellationObservationErrorsAreObservableAndRateLimited(t *testing.T) {
+	responses := []string{`{}`, `{}`, `{"cancelRequested":false}`, `{}`}
+	index := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(responses[index]))
+		if index < len(responses)-1 {
+			index++
+		}
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	w := testWorker()
+	w.logger = log.New(&output, "", 0)
+	w.WorkerID = "node-a"
+	w.InstanceID = "inc-a"
+	w.NodeClient = &nodeclient.Client{BaseURL: server.URL, Token: "node-token", HTTP: server.Client()}
+	lease := queueadapter.Lease{AssignmentID: "assignment-a", Job: queueadapter.Job{ID: "job-a"}}
+
+	if w.cancelRequested(context.Background(), lease) || w.cancelRequested(context.Background(), lease) {
+		t.Fatal("malformed cancellation response reported as requested")
+	}
+	if w.cancelRequested(context.Background(), lease) {
+		t.Fatal("explicit cancellation=false reported as requested")
+	}
+	if w.cancelRequested(context.Background(), lease) {
+		t.Fatal("malformed cancellation response reported as requested after recovery")
+	}
+
+	if got := strings.Count(output.String(), "worker_cancellation_observation_error"); got != 2 {
+		t.Fatalf("observation error count = %d, want 2: %s", got, output.String())
+	}
+	for _, forbidden := range []string{"leaseToken", "source", "postgres://"} {
+		if strings.Contains(strings.ToLower(output.String()), strings.ToLower(forbidden)) {
+			t.Fatalf("observation log leaked %q: %s", forbidden, output.String())
+		}
 	}
 }

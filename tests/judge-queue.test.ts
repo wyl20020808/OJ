@@ -88,6 +88,49 @@ describe('judge queue recovery matrix', () => {
       'SUCCEEDED_FAKE',
     );
   });
+  it('binds Worker cancellation to the current lease without changing external cancellation', async () => {
+    const repository = new InMemoryJudgeJobRepository();
+    const q = new JudgeQueueService(repository);
+    await q.enqueue(input);
+    const first = await q.claim('worker-a');
+    await expect(
+      repository.cancelLease!(first!.job.id, 'wrong-token'),
+    ).rejects.toThrow('conflict');
+    expect(await repository.getById(first!.job.id)).toMatchObject({
+      status: 'LEASED_FAKE',
+      leaseToken: first!.leaseToken,
+    });
+
+    await expect(
+      repository.cancelLease!(first!.job.id, first!.leaseToken),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+
+    await q.enqueue({ ...input, submissionId: 'external-cancel' });
+    const external = await q.claim('worker-b');
+    await expect(q.cancel(external!.job.id)).resolves.toMatchObject({
+      status: 'CANCELLED',
+    });
+  });
+  it('rejects a stale lease cancellation after recovery and accepts the current lease', async () => {
+    const repository = new InMemoryJudgeJobRepository();
+    const q = new JudgeQueueService(repository);
+    const created = await q.enqueue({ ...input, submissionId: 'stale-cancel' });
+    const first = await q.claim('worker-a');
+    await q.recoverStale(new Date(Date.now() + 31_000));
+    const current = await q.claim('worker-b');
+
+    await expect(
+      repository.cancelLease!(created.job.id, first!.leaseToken),
+    ).rejects.toThrow('conflict');
+    expect(await repository.getById(created.job.id)).toMatchObject({
+      status: 'LEASED_FAKE',
+      attempt: 2,
+      leaseToken: current!.leaseToken,
+    });
+    await expect(
+      repository.cancelLease!(created.job.id, current!.leaseToken),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+  });
   it('Q13-Q16 retry increments and terminalizes at cap', async () => {
     const q = create();
     await q.enqueue({ ...input, maxAttempts: 2 });

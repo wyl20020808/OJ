@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -21,13 +23,23 @@ type Registration struct {
 	MaxConcurrentJobs                   int
 	RealExecution                       bool
 }
+type Assignment struct {
+	AssignmentID      string    `json:"assignmentId"`
+	JudgeJobID        string    `json:"judgeJobId"`
+	NodeID            string    `json:"nodeId"`
+	Incarnation       string    `json:"incarnation"`
+	AttemptGeneration int       `json:"attemptGeneration"`
+	Status            string    `json:"status"`
+	AssignedAt        time.Time `json:"assignedAt"`
+}
 type Claim struct {
-	Assignment struct {
-		AssignmentID string `json:"assignmentId"`
-	} `json:"assignment"`
+	Assignment *Assignment      `json:"assignment"`
 	Job        queueadapter.Job `json:"job"`
 	LeaseToken string           `json:"leaseToken"`
+	Reason     string           `json:"reason"`
 }
+
+const maxResponseSize = 8 << 20
 
 func (c Client) request(ctx context.Context, method, path string, body any, output any) error {
 	var reader *bytes.Reader
@@ -60,7 +72,22 @@ func (c Client) request(ctx context.Context, method, path string, body any, outp
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("judge node service %s", resp.Status)
 	}
-	return json.NewDecoder(resp.Body).Decode(output)
+	limited := io.LimitReader(resp.Body, maxResponseSize+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return err
+	}
+	if len(data) > maxResponseSize {
+		return errors.New("judge node service response exceeded limit")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(output); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.New("judge node service response contains multiple values")
+	}
+	return nil
 }
 
 func (c Client) Register(ctx context.Context, value Registration) error {
@@ -84,8 +111,27 @@ func (c Client) Claim(ctx context.Context, nodeID, incarnation string) (*Claim, 
 	if err != nil {
 		return nil, err
 	}
-	if value.Assignment.AssignmentID == "" {
+	if value.Assignment == nil {
+		if value.Reason != "NO_COMPATIBLE_JUDGE_NODE" {
+			return nil, errors.New("invalid judge node no-assignment response")
+		}
 		return nil, nil
+	}
+	if value.Reason != "" || value.Assignment.AssignmentID == "" || value.Assignment.JudgeJobID == "" ||
+		value.Assignment.NodeID != nodeID || value.Assignment.Incarnation != incarnation ||
+		value.Assignment.AttemptGeneration < 1 || value.Assignment.Status != "LEASED" ||
+		value.Assignment.AssignedAt.IsZero() || value.Job.ID == "" ||
+		value.Job.ID != value.Assignment.JudgeJobID || value.Job.SubmissionID == "" ||
+		value.Job.EvaluationGeneration < 1 ||
+		value.Job.Status != "LEASED" && value.Job.Status != "LEASED_FAKE" ||
+		value.Job.ExecutionMode != "REAL_SANDBOXED_EXECUTION" && value.Job.ExecutionMode != "SAFE_FIXTURE_QUALIFICATION" ||
+		value.Job.ExecutionMode == "REAL_SANDBOXED_EXECUTION" && value.Job.Status != "LEASED" ||
+		value.Job.ExecutionMode == "SAFE_FIXTURE_QUALIFICATION" && value.Job.Status != "LEASED_FAKE" ||
+		value.Job.Attempt < 1 || value.Job.Attempt != value.Assignment.AttemptGeneration ||
+		value.Job.LeaseOwner != nodeID+":"+incarnation || value.Job.LeaseToken != value.LeaseToken ||
+		value.Job.LeaseExpiresAt.IsZero() || !value.Job.LeaseExpiresAt.After(time.Now()) ||
+		value.LeaseToken == "" {
+		return nil, errors.New("invalid judge node claim response")
 	}
 	return &value, nil
 }
@@ -99,4 +145,20 @@ func (c Client) Resolve(ctx context.Context, nodeID, assignmentID, incarnation, 
 	return c.request(ctx, http.MethodPost, "/v1/nodes/"+nodeID+"/assignments/"+assignmentID+"/resolve", map[string]any{
 		"incarnation": incarnation, "leaseToken": leaseToken, "action": action, "reason": reason, "fixtureId": fixtureID,
 	}, &ignored)
+}
+
+func (c Client) CancellationRequested(ctx context.Context, nodeID, assignmentID, incarnation string) (bool, error) {
+	var response struct {
+		CancelRequested *bool `json:"cancelRequested"`
+	}
+	err := c.request(ctx, http.MethodPost, "/v1/nodes/"+nodeID+"/assignments/"+assignmentID+"/cancellation-status", map[string]string{
+		"incarnation": incarnation,
+	}, &response)
+	if err != nil {
+		return false, err
+	}
+	if response.CancelRequested == nil {
+		return false, errors.New("invalid judge node cancellation-status response")
+	}
+	return *response.CancelRequested, nil
 }

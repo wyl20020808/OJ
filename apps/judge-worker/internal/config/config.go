@@ -2,9 +2,11 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -23,6 +25,14 @@ type Config struct {
 	SupervisorURL           string
 	JudgeServiceURL         string
 	JudgeNodeToken          string
+}
+
+func loopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func Load(env map[string]string) (Config, error) {
@@ -69,6 +79,9 @@ func Load(env map[string]string) (Config, error) {
 		service, parseErr := url.Parse(judgeServiceURL)
 		if parseErr != nil || (service.Scheme != "http" && service.Scheme != "https") || service.Host == "" || service.User != nil || service.RawQuery != "" || service.Fragment != "" {
 			return Config{}, fmt.Errorf("invalid JUDGE_SERVICE_URL")
+		}
+		if service.Scheme == "http" && !loopbackHost(service.Hostname()) {
+			return Config{}, fmt.Errorf("JUDGE_SERVICE_URL requires https off loopback")
 		}
 		if len(nodeToken) < 16 {
 			return Config{}, fmt.Errorf("JUDGE_NODE_TOKEN must be at least 16 characters")

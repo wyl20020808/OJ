@@ -4,6 +4,8 @@ import pg from 'pg';
 const direction = process.argv[2] ?? 'up';
 const databaseUrl = process.env.JUDGE_DATABASE_URL;
 if (!databaseUrl) throw new Error('JUDGE_DATABASE_URL is required');
+const runtimeRole = process.env.JUDGE_DATABASE_ROLE;
+const quoteIdentifier = (value) => `"${value.replaceAll('"', '""')}"`;
 const client = new pg.Client({ connectionString: databaseUrl });
 await client.connect();
 try {
@@ -20,6 +22,22 @@ try {
     await client.query(
       await readFile(`packages/judge-runtime/migrations/${migration}`, 'utf8'),
     );
+  if (direction === 'up' && runtimeRole) {
+    const role = quoteIdentifier(runtimeRole);
+    await client.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
+    await client.query(
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${role}`,
+    );
+    await client.query(
+      `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${role}`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${role}`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ${role}`,
+    );
+  }
   console.log(`judge service migration ${direction} PASS`);
 } finally {
   await client.end();

@@ -22,7 +22,19 @@ func TestConfigValidation(t *testing.T) {
 	if _, e = Load(map[string]string{"JUDGE_SERVICE_URL": "http://127.0.0.1:3100"}); e == nil {
 		t.Fatal("node service without node credential accepted")
 	}
-	if c, e = Load(map[string]string{"JUDGE_SERVICE_URL": "http://127.0.0.1:3100", "JUDGE_NODE_TOKEN": "node-token-for-test"}); e != nil || c.JudgeServiceURL == "" {
-		t.Fatal("valid node service configuration rejected")
+	for _, serviceURL := range []string{
+		"http://127.0.0.1:3100",
+		"http://[::1]:3100",
+		"http://localhost:3100",
+	} {
+		if c, e = Load(map[string]string{"JUDGE_SERVICE_URL": serviceURL, "JUDGE_NODE_TOKEN": "node-token-for-test"}); e != nil || c.JudgeServiceURL == "" {
+			t.Fatalf("valid loopback node service configuration %q rejected: %v", serviceURL, e)
+		}
+	}
+	if _, e = Load(map[string]string{"JUDGE_SERVICE_URL": "http://192.0.2.10:3100", "JUDGE_NODE_TOKEN": "node-token-for-test"}); e == nil {
+		t.Fatal("cleartext non-loopback node service accepted")
+	}
+	if c, e = Load(map[string]string{"JUDGE_SERVICE_URL": "https://judge.example.test:3100", "JUDGE_NODE_TOKEN": "node-token-for-test"}); e != nil || c.JudgeServiceURL == "" {
+		t.Fatal("TLS node service configuration rejected")
 	}
 }

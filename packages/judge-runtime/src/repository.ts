@@ -876,30 +876,32 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       return { ...x };
     });
   }
-  async cancel(id: string) {
-    return this.atomic(async () => {
-      const j = this.jobs.get(id);
-      if (!j) throw new JudgeJobNotFoundError();
-      if (
-        [
-          'SUCCEEDED_FAKE',
-          'COMPLETED',
-          'FAILED_TERMINAL',
-          'CANCELLED',
-        ].includes(j.status)
+  private cancelUnsafe(id: string, token?: string) {
+    const j = this.jobs.get(id);
+    if (!j) throw new JudgeJobNotFoundError();
+    if (
+      ['SUCCEEDED_FAKE', 'COMPLETED', 'FAILED_TERMINAL', 'CANCELLED'].includes(
+        j.status,
       )
-        return { ...j };
-      const x = clear({
-        ...j,
-        status: 'CANCELLED' as const,
-        failureReason: 'cancelled',
-        cancellationGeneration: (j.cancellationGeneration ?? 0) + 1,
-        completedAt: stamp(),
-        updatedAt: stamp(),
-      });
-      this.jobs.set(id, x);
-      return { ...x };
+    )
+      return { ...j };
+    if (token !== undefined) lease(j, token);
+    const x = clear({
+      ...j,
+      status: 'CANCELLED' as const,
+      failureReason: 'cancelled',
+      cancellationGeneration: (j.cancellationGeneration ?? 0) + 1,
+      completedAt: stamp(),
+      updatedAt: stamp(),
     });
+    this.jobs.set(id, x);
+    return { ...x };
+  }
+  async cancel(id: string) {
+    return this.atomic(() => this.cancelUnsafe(id));
+  }
+  async cancelLease(id: string, token: string) {
+    return this.atomic(() => this.cancelUnsafe(id, token));
   }
 }
 export type RedisJudgeClient = Pick<
@@ -1158,35 +1160,37 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
       return x;
     });
   }
-  async cancel(id: string) {
-    return this.exclusive(async () => {
-      const j = await this.read(id);
-      if (!j) throw new JudgeJobNotFoundError();
-      if (
-        [
-          'SUCCEEDED_FAKE',
-          'COMPLETED',
-          'FAILED_TERMINAL',
-          'CANCELLED',
-        ].includes(j.status)
+  private async cancelUnsafe(id: string, token?: string) {
+    const j = await this.read(id);
+    if (!j) throw new JudgeJobNotFoundError();
+    if (
+      ['SUCCEEDED_FAKE', 'COMPLETED', 'FAILED_TERMINAL', 'CANCELLED'].includes(
+        j.status,
       )
-        return j;
-      const x = clear({
-        ...j,
-        status: 'CANCELLED' as const,
-        failureReason: 'cancelled',
-        cancellationGeneration: (j.cancellationGeneration ?? 0) + 1,
-        completedAt: stamp(),
-        updatedAt: stamp(),
-      });
-      await this.redis.set(this.jobKey(id), JSON.stringify(x));
-      await this.redis.set(
-        `${this.keyPrefix}:cancel:${id}`,
-        new Date().toISOString(),
-        'PX',
-        86_400_000,
-      );
-      return x;
+    )
+      return j;
+    if (token !== undefined) lease(j, token);
+    const x = clear({
+      ...j,
+      status: 'CANCELLED' as const,
+      failureReason: 'cancelled',
+      cancellationGeneration: (j.cancellationGeneration ?? 0) + 1,
+      completedAt: stamp(),
+      updatedAt: stamp(),
     });
+    await this.redis.set(this.jobKey(id), JSON.stringify(x));
+    await this.redis.set(
+      `${this.keyPrefix}:cancel:${id}`,
+      new Date().toISOString(),
+      'PX',
+      86_400_000,
+    );
+    return x;
+  }
+  async cancel(id: string) {
+    return this.exclusive(() => this.cancelUnsafe(id));
+  }
+  async cancelLease(id: string, token: string) {
+    return this.exclusive(() => this.cancelUnsafe(id, token));
   }
 }

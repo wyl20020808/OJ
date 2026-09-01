@@ -143,6 +143,30 @@ describeRedis('real Redis judge queue recovery qualification', () => {
     ]);
   });
 
+  it('rejects stale lease cancellation after Redis recovery', async () => {
+    const repository = new RedisJudgeJobRepository(
+      client,
+      `${keyPrefix}:cancel`,
+    );
+    const queue = new JudgeQueueService(repository);
+    const { job } = await queue.enqueue(input('cancel'));
+    const first = await queue.claim('worker-a');
+    await queue.recoverStale(new Date(Date.now() + 31_000));
+    const current = await queue.claim('worker-b');
+
+    await expect(
+      repository.cancelLease!(job.id, first!.leaseToken),
+    ).rejects.toThrow('conflict');
+    expect(await repository.getById(job.id)).toMatchObject({
+      status: 'LEASED_FAKE',
+      attempt: 2,
+      leaseToken: current!.leaseToken,
+    });
+    await expect(
+      repository.cancelLease!(job.id, current!.leaseToken),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+  });
+
   it('R01/R02/R03/Q27 rejects an unavailable client and resumes without duplicate enqueue', async () => {
     const unavailable = new Redis('redis://127.0.0.1:1', {
       connectTimeout: 100,

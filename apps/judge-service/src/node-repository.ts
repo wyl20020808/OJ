@@ -180,20 +180,28 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
     attemptGeneration: number,
     now = new Date(),
   ) {
+    const current = this.nodes.get(nodeValue.nodeId);
+    if (
+      !current ||
+      current.incarnation !== nodeValue.incarnation ||
+      !['ONLINE', 'BUSY'].includes(current.state) ||
+      current.activeJobs >= current.maxConcurrentJobs
+    )
+      throw new Error('NODE_CAPACITY_UNAVAILABLE');
     const assignmentId = randomUUID();
     const value: JudgeNodeAssignment = {
       assignmentId,
       judgeJobId,
-      nodeId: nodeValue.nodeId,
-      incarnation: nodeValue.incarnation,
+      nodeId: current.nodeId,
+      incarnation: current.incarnation,
       attemptGeneration,
       status: 'LEASED',
       assignedAt: stamp(now),
     };
     this.assignments.set(assignmentId, value);
-    this.nodes.set(nodeValue.nodeId, {
-      ...nodeValue,
-      activeJobs: nodeValue.activeJobs + 1,
+    this.nodes.set(current.nodeId, {
+      ...current,
+      activeJobs: current.activeJobs + 1,
       state: 'BUSY',
     });
     return structuredClone(value);

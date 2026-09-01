@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { buildJudgeService } from '../apps/judge-service/src/app.js';
 import { InMemoryJudgeServiceStateRepository } from '../apps/judge-service/src/repository.js';
-import { InMemoryJudgeNodeRepository } from '../apps/judge-service/src/node-repository.js';
+import {
+  InMemoryJudgeNodeRepository,
+  type JudgeNodeAssignment,
+} from '../apps/judge-service/src/node-repository.js';
+import type { JudgeNodeRegistration } from '../apps/judge-service/src/node-model.js';
 import { InMemoryJudgeJobRepository } from '@ojplatform/judge-runtime';
 
 const serviceToken = 'judge-service-test-token';
 const nodeToken = 'judge-node-test-token-2c7b';
 const serviceHeaders = { 'x-judge-service-token': serviceToken };
 const nodeHeaders = { 'x-judge-node-token': nodeToken };
-const registration = (nodeId: string, incarnation: string) => ({
+const registration = (
+  nodeId: string,
+  incarnation: string,
+): JudgeNodeRegistration => ({
   nodeId,
   incarnation,
   runtimeVersion: '2c7b-v1',
@@ -204,6 +211,218 @@ describe('Phase 2C.7B Judge node service contract', () => {
         })
       ).json(),
     ).toMatchObject({ activeJobs: 0, state: 'ONLINE' });
+    await app.close();
+  });
+
+  it('does not let a node cancel an assignment with a wrong lease token', async () => {
+    const app = await service();
+    await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/register',
+      headers: nodeHeaders,
+      payload: registration('node-a', 'a1'),
+    });
+    const accepted = await app.inject({
+      method: 'POST',
+      url: '/v1/jobs',
+      headers: serviceHeaders,
+      payload: { ...request, clientRequestId: 'node-service-cancel-token' },
+    });
+    const claim = await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/node-a/assignments/claim',
+      headers: nodeHeaders,
+      payload: { incarnation: 'a1' },
+    });
+    const assignmentId = claim.json().assignment.assignmentId as string;
+    const rejected = await app.inject({
+      method: 'POST',
+      url: `/v1/nodes/node-a/assignments/${assignmentId}/resolve`,
+      headers: nodeHeaders,
+      payload: {
+        incarnation: 'a1',
+        leaseToken: 'wrong-token',
+        action: 'CANCELLED',
+      },
+    });
+    expect(rejected.statusCode).toBe(409);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/v1/jobs/${accepted.json().judgeJobId}`,
+          headers: serviceHeaders,
+        })
+      ).json(),
+    ).toMatchObject({ status: 'RUNNING' });
+    await app.close();
+  });
+
+  it('reports cancellation only to the current assignment and releases capacity after service cancellation', async () => {
+    const app = await service();
+    await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/register',
+      headers: nodeHeaders,
+      payload: registration('node-a', 'a1'),
+    });
+    const accepted = await app.inject({
+      method: 'POST',
+      url: '/v1/jobs',
+      headers: serviceHeaders,
+      payload: { ...request, clientRequestId: 'node-service-cancellation' },
+    });
+    const jobId = accepted.json().judgeJobId as string;
+    const claim = await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/node-a/assignments/claim',
+      headers: nodeHeaders,
+      payload: { incarnation: 'a1' },
+    });
+    const assignmentId = claim.json().assignment.assignmentId as string;
+    const status = () =>
+      app.inject({
+        method: 'POST',
+        url: `/v1/nodes/node-a/assignments/${assignmentId}/cancellation-status`,
+        headers: nodeHeaders,
+        payload: { incarnation: 'a1' },
+      });
+
+    expect((await status()).json()).toEqual({ cancelRequested: false });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/v1/jobs/${jobId}/cancel`,
+          headers: serviceHeaders,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await status()).json()).toEqual({ cancelRequested: true });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/v1/nodes/node-a/assignments/${assignmentId}/resolve`,
+          headers: nodeHeaders,
+          payload: {
+            incarnation: 'a1',
+            leaseToken: claim.json().leaseToken,
+            action: 'CANCELLED',
+          },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/v1/nodes/node-a',
+          headers: serviceHeaders,
+        })
+      ).json(),
+    ).toMatchObject({ activeJobs: 0, state: 'ONLINE' });
+    await app.close();
+  });
+
+  it('rejects cancellation status queries from a stale incarnation', async () => {
+    const app = await service();
+    await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/register',
+      headers: nodeHeaders,
+      payload: registration('node-a', 'a1'),
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/v1/jobs',
+      headers: serviceHeaders,
+      payload: {
+        ...request,
+        clientRequestId: 'node-service-stale-cancellation',
+      },
+    });
+    const claim = await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/node-a/assignments/claim',
+      headers: nodeHeaders,
+      payload: { incarnation: 'a1' },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/register',
+      headers: nodeHeaders,
+      payload: registration('node-a', 'a2'),
+    });
+    const stale = await app.inject({
+      method: 'POST',
+      url: `/v1/nodes/node-a/assignments/${claim.json().assignment.assignmentId as string}/cancellation-status`,
+      headers: nodeHeaders,
+      payload: { incarnation: 'a1' },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toEqual({ code: 'STALE_NODE_INCARNATION' });
+    await app.close();
+  });
+
+  it('does not over-reserve in-memory node capacity', async () => {
+    const nodes = new InMemoryJudgeNodeRepository();
+    await nodes.register(registration('node-a', 'a1'));
+    const node = await nodes.get('node-a');
+    if (!node) throw new Error('registered node missing');
+    await nodes.assign(node, 'job-1', 1);
+    await expect(nodes.assign(node, 'job-2', 1)).rejects.toThrow(
+      'NODE_CAPACITY_UNAVAILABLE',
+    );
+  });
+
+  it('compensates a claim when node capacity reservation loses a race', async () => {
+    class RejectingNodeRepository extends InMemoryJudgeNodeRepository {
+      override async assign(
+        ...args: Parameters<InMemoryJudgeNodeRepository['assign']>
+      ): Promise<JudgeNodeAssignment> {
+        void args;
+        throw new Error('NODE_CAPACITY_UNAVAILABLE');
+      }
+    }
+
+    const queue = new InMemoryJudgeJobRepository();
+    const app = await buildJudgeService({
+      queue,
+      state: new InMemoryJudgeServiceStateRepository(),
+      nodes: new RejectingNodeRepository(),
+      serviceToken,
+      nodeToken,
+      logger: false,
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/register',
+      headers: nodeHeaders,
+      payload: registration('node-a', 'a1'),
+    });
+    const accepted = await app.inject({
+      method: 'POST',
+      url: '/v1/jobs',
+      headers: serviceHeaders,
+      payload: { ...request, clientRequestId: 'node-capacity-race' },
+    });
+    const claim = await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/node-a/assignments/claim',
+      headers: nodeHeaders,
+      payload: { incarnation: 'a1' },
+    });
+
+    expect(claim.statusCode).toBe(200);
+    expect(claim.json()).toEqual({
+      assignment: null,
+      reason: 'NO_COMPATIBLE_JUDGE_NODE',
+    });
+    expect(await queue.getById(accepted.json().judgeJobId)).toMatchObject({
+      status: 'FAILED_RETRYABLE',
+      attempt: 1,
+    });
     await app.close();
   });
 });
