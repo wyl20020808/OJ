@@ -115,6 +115,65 @@ export type BackendContest = {
   createdAt: string;
   updatedAt: string;
 };
+export type ProfileCapability =
+  { available: true } | { available: false; reason: string };
+export type ProfileCapabilities = {
+  contractVersion: string;
+  favorites: ProfileCapability;
+  myContests: ProfileCapability;
+  myProblems: ProfileCapability;
+  activity: ProfileCapability;
+  heatmap: ProfileCapability;
+  teams: ProfileCapability;
+  homework: ProfileCapability;
+  wrongbook: ProfileCapability;
+};
+export type PublicProfile = {
+  username: string;
+  displayName: string;
+  createdAt: string;
+  capabilities: ProfileCapabilities;
+};
+export type FavoriteProblem = {
+  problemId: string;
+  slug: string;
+  title: string;
+  timeLimitMs: number;
+  memoryLimitBytes: number;
+  favoritedAt: string;
+};
+export type FavoriteList = {
+  items: FavoriteProblem[];
+  page: { limit: number; total: number; nextCursor?: string };
+};
+export type ProfileContestRelationship = 'CREATED' | 'MANAGED' | 'REGISTERED';
+export type ProfileContest = {
+  id: string;
+  title: string;
+  visibility: BackendContest['visibility'];
+  lifecycle: BackendContest['lifecycle'];
+  startsAt: string;
+  endsAt: string;
+  relationship: ProfileContestRelationship;
+  relationshipAt: string;
+};
+export type ProfileContestList = {
+  items: ProfileContest[];
+  page: { limit: number; nextCursor?: string };
+};
+export type ProfileProblem = {
+  id: string;
+  slug: string;
+  title: string;
+  status: Problem['status'];
+  visibility: Problem['visibility'];
+  createdAt: string;
+  updatedAt: string;
+};
+export type ProfileProblemList = {
+  items: ProfileProblem[];
+  page: { limit: number; total: number; nextCursor?: string };
+};
 export type Language = {
   id: string;
   name: string;
@@ -477,6 +536,69 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       );
     },
     home: () => request<Home>(baseUrl, '/api/home', undefined, fetcher),
+    profileCapabilities: () =>
+      request<ProfileCapabilities>(
+        baseUrl,
+        '/api/profile/capabilities',
+        undefined,
+        fetcher,
+      ),
+    publicProfile: (username: string) =>
+      request<PublicProfile>(
+        baseUrl,
+        `/api/profiles/${encodeURIComponent(username)}`,
+        undefined,
+        fetcher,
+      ),
+    profileFavorites: (limit = 20, cursor?: string) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (cursor) params.set('cursor', cursor);
+      return request<FavoriteList>(
+        baseUrl,
+        `/api/profile/favorites?${params.toString()}`,
+        undefined,
+        fetcher,
+      );
+    },
+    addFavorite: (problemId: string) =>
+      request<{ problemId: string; favorited: true; createdAt?: string }>(
+        baseUrl,
+        `/api/profile/favorites/${encodeURIComponent(problemId)}`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    removeFavorite: (problemId: string) =>
+      request<void>(
+        baseUrl,
+        `/api/profile/favorites/${encodeURIComponent(problemId)}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
+    profileContests: (
+      kind?: ProfileContestRelationship,
+      limit = 20,
+      cursor?: string,
+    ) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (kind) params.set('kind', kind);
+      if (cursor) params.set('cursor', cursor);
+      return request<ProfileContestList>(
+        baseUrl,
+        `/api/profile/contests?${params.toString()}`,
+        undefined,
+        fetcher,
+      );
+    },
+    profileProblems: (limit = 20, cursor?: string) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (cursor) params.set('cursor', cursor);
+      return request<ProfileProblemList>(
+        baseUrl,
+        `/api/profile/problems?${params.toString()}`,
+        undefined,
+        fetcher,
+      );
+    },
     contests: (limit = 20) =>
       request<{ items: BackendContest[] }>(
         baseUrl,
@@ -492,7 +614,14 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         fetcher,
       ),
     contestProblems: (id: string) =>
-      request<{ items: ContestProblem[] }>(
+      request<{
+        items: Array<
+          ContestProblem & {
+            ordinal?: number;
+            pointsConfig?: { score?: number } | null;
+          }
+        >;
+      }>(
         baseUrl,
         `/api/contests/${encodeURIComponent(id)}/problems`,
         undefined,
@@ -554,6 +683,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         },
         fetcher,
       ),
+    unregisterContest: (id: string) =>
+      request<void>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/register`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
     contestRegistration: (id: string) =>
       request<{
         status: string;
@@ -569,9 +705,10 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
     contestParticipants: (id: string) =>
       request<{
         items: Array<{
-          userId: string;
+          id: string;
           username?: string;
           displayName?: string;
+          registeredAt?: string;
         }>;
       }>(
         baseUrl,
@@ -611,14 +748,14 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         fetcher,
       ),
     sendFriendRequest: (targetUserId: string, note?: string) =>
-      request<{ id: string; state: string }>(
+      request<{ id: string; state: FriendRequest['state'] }>(
         baseUrl,
         '/api/friend-requests',
         { method: 'POST', body: JSON.stringify({ targetUserId, note }) },
         fetcher,
       ),
     resolveFriendRequest: (id: string, action: 'accept' | 'reject') =>
-      request<{ id: string; state: string }>(
+      request<{ id: string; state: FriendRequest['state'] }>(
         baseUrl,
         `/api/friend-requests/${encodeURIComponent(id)}/${action}`,
         { method: 'POST', body: '{}' },
@@ -631,6 +768,20 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
+    cancelFriendRequest: (id: string) =>
+      request<void>(
+        baseUrl,
+        `/api/friend-requests/${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
+    removeFriend: (userId: string) =>
+      request<void>(
+        baseUrl,
+        `/api/friends/${encodeURIComponent(userId)}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
     conversations: () =>
       request<{ items: Array<ConversationSummaryApi> }>(
         baseUrl,
@@ -638,10 +789,10 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
-    conversationMessages: (id: string, limit = 50) =>
+    conversationMessages: (id: string, limit = 50, cursor?: string) =>
       request<{ items: Message[]; nextCursor?: string }>(
         baseUrl,
-        `/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}`,
+        `/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
         undefined,
         fetcher,
       ),

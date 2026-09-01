@@ -249,13 +249,18 @@ describe('Product Web Chinese Rich Experience V3', () => {
     ['WEB-V3-24', '比赛'],
     ['WEB-V3-25', '排名'],
     ['WEB-V3-26', '讨论'],
-  ])('%s optional capability is not fabricated', (_id, value) => {
+  ])('%s optional capability is not fabricated', async (_id, value) => {
     renderApp();
     if (value === '比赛') {
       expect(
         screen.getByRole('heading', { name: '比赛与排名' }),
       ).toBeInTheDocument();
-      expect(screen.getByText(/不展示虚构赛程或名次/)).toBeInTheDocument();
+      expect(
+        await screen.findByText(/比赛摘要暂时不可用|正在加载真实比赛摘要/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('table', { name: '比赛排名' }),
+      ).not.toBeInTheDocument();
     } else expect(screen.queryByText(value)).not.toBeInTheDocument();
   });
   it('WEB-V3-27 list compact desktop', async () => {

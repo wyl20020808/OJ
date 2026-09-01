@@ -453,10 +453,13 @@ async function verifyContest(id: number) {
       return;
     }
     if (id === 80) {
-      expect(screen.getByRole('button', { name: '发布比赛' })).toBeDisabled();
+      expect(
+        screen.queryByRole('button', { name: '发布比赛' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '创建比赛' })).toBeEnabled();
       return;
     }
-    const submit = screen.getByRole('button', { name: '保存本地未提交草稿' });
+    const submit = screen.getByRole('button', { name: '创建比赛' });
     if (id === 77) {
       fireEvent.click(submit);
       expect(screen.getByRole('alert')).toHaveTextContent('请输入比赛名称');
@@ -502,8 +505,8 @@ async function verifyContest(id: number) {
       target: { value: id === 79 ? '2026-09-01T10:00' : '2026-09-02T12:00' },
     });
     fireEvent.click(submit);
-    expect(screen.getByRole(id === 79 ? 'alert' : 'status')).toHaveTextContent(
-      id === 79 ? '结束时间必须晚于开始时间' : '未发布到平台',
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      id === 79 ? '结束时间必须晚于开始时间' : '比赛服务暂不可用',
     );
     return;
   }
@@ -607,8 +610,7 @@ async function verifyCommunication(id: number) {
   if (id === 108) expect(screen.getByText('测试消息')).toBeInTheDocument();
   if (id === 109) expect(screen.getByLabelText('聊天内容')).toBeInTheDocument();
   if (id === 110) expect(screen.getByText('选择一个会话')).toBeInTheDocument();
-  if (id === 111)
-    expect(screen.getByPlaceholderText('消息服务正在接入')).toBeDisabled();
+  if (id === 111) expect(screen.getByPlaceholderText('输入消息')).toBeEnabled();
   if (id === 114) {
     fireEvent.click(screen.getByRole('tab', { name: '通讯录' }));
     expect(
@@ -617,7 +619,7 @@ async function verifyCommunication(id: number) {
   }
   if (id === 115 || id === 117) {
     fireEvent.click(screen.getByRole('tab', { name: '添加好友' }));
-    expect(screen.getByRole('button', { name: '搜索并添加' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '搜索' })).toBeEnabled();
   }
   if (id === 116) {
     fireEvent.click(screen.getByRole('tab', { name: '新的朋友' }));
@@ -666,10 +668,10 @@ async function verifyRegression(id: number) {
     const expected: Record<number, string> = {
       128: '作业功能正在接入',
       129: '错题集数据暂不可用',
-      131: '比赛服务正在接入',
-      132: '排行榜暂不可用',
-      133: '通知服务正在接入',
-      134: '暂无会话。通讯后端接入后，真实会话会显示在这里。',
+      131: '比赛列表不存在或当前不可用。',
+      132: '比赛数据不存在或当前不可用。',
+      133: '通知不存在或当前不可用。',
+      134: '通讯数据不存在或当前不可用。',
       137: '作业功能正在接入',
     };
     renderApp(paths[id]);

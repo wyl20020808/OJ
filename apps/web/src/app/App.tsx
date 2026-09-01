@@ -16,6 +16,7 @@ import {
   type BackendContest,
   type Language,
   type Problem,
+  type ProfileContest,
   type Submission,
   type SubmissionStatus,
 } from '../services/api.js';
@@ -34,6 +35,7 @@ import {
 } from '../components/PortalExperience.js';
 import type {
   ContestDetail,
+  ContestListItem,
   ContestProblem,
   ContestSummary,
   FriendRequest,
@@ -66,6 +68,7 @@ type Route = {
     | 'submissions'
     | 'submission'
     | 'profile'
+    | 'public-profile'
     | 'settings'
     | 'contests'
     | 'contest-new'
@@ -96,12 +99,18 @@ function route(path = window.location.pathname): Route {
   if (path === '/403' || path === '/forbidden') return { name: 'forbidden' };
   if (path === '/error') return { name: 'error' };
   if (path === '/profile' || path === '/account') return { name: 'profile' };
+  if (path.startsWith('/profiles/'))
+    return {
+      name: 'public-profile',
+      id: decodeURIComponent(path.slice('/profiles/'.length)),
+    };
   if (path === '/settings' || path === '/account/settings')
     return { name: 'settings' };
   if (path === '/contests' || path === '/contests/')
     return { name: 'contests' };
   if (path === '/contests/new') return { name: 'contest-new' };
-  if (path === '/me/contests') return { name: 'my-contests' };
+  if (path === '/me/contests' || path === '/contests/mine')
+    return { name: 'my-contests' };
   if (path.startsWith('/contests/')) {
     const parts = path.split('/').filter(Boolean);
     const id = decodeURIComponent(parts[1] ?? '');
@@ -175,6 +184,7 @@ function Breadcrumbs({ current }: { current: Route }) {
     submissions: '提交记录',
     submission: '提交详情',
     profile: '个人主页',
+    'public-profile': '公开个人主页',
     settings: '账户与安全',
     contests: '比赛',
     'contest-new': '新建比赛',
@@ -436,6 +446,12 @@ function Home({
 }) {
   const [recentProblems, setRecentProblems] = useState<Problem[] | null>(null);
   const [error, setError] = useState(false);
+  const [contestSummary, setContestSummary] = useState<{
+    running: BackendContest[];
+    upcoming: BackendContest[];
+    recentEnded: BackendContest[];
+  }>();
+  const [contestError, setContestError] = useState(false);
   const [fortuneVisible, setFortuneVisible] = useState(false);
   const fortune = useMemo(() => {
     const seed =
@@ -462,8 +478,27 @@ function Home({
         ),
       )
       .catch(() => setError(true));
+    void api
+      .contestHomeSummary()
+      .then((summary) => {
+        if (
+          !Array.isArray(summary?.running) ||
+          !Array.isArray(summary?.upcoming) ||
+          !Array.isArray(summary?.recentEnded)
+        )
+          throw new Error('Invalid contest home summary response');
+        setContestSummary(summary);
+      })
+      .catch(() => setContestError(true));
   }, [api]);
   const dailyProblem = chooseDailyProblem(recentProblems ?? []);
+  const contestGroups: Array<[string, BackendContest[]]> = contestSummary
+    ? [
+        ['进行中', contestSummary.running],
+        ['即将开始', contestSummary.upcoming],
+        ['最近结束', contestSummary.recentEnded],
+      ]
+    : [];
   return (
     <section className="home-page home-v4">
       <section className="home-columns home-v4-columns">
@@ -600,9 +635,37 @@ function Home({
               </div>
               <Link to="/contests">全部比赛</Link>
             </div>
-            <p className="unavailable-note" role="note">
-              比赛和排行榜后端尚未接入；当前不展示虚构赛程或名次。
-            </p>
+            {contestSummary ? (
+              <div className="home-contest-summary" aria-label="比赛摘要">
+                {contestGroups.map(([label, items]) => (
+                  <div key={label}>
+                    <span className="eyebrow">{label}</span>
+                    {items.length ? (
+                      <ul>
+                        {items.slice(0, 3).map((contest) => (
+                          <li key={contest.id}>
+                            <Link to={`/contests/${contest.id}`}>
+                              {contest.title}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="muted">暂无比赛</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p
+                className="unavailable-note"
+                role={contestError ? 'alert' : 'note'}
+              >
+                {contestError
+                  ? '比赛摘要暂时不可用，请稍后重试。当前不展示虚构赛程或名次。'
+                  : '正在加载真实比赛摘要…'}
+              </p>
+            )}
           </section>
         </aside>
       </section>
@@ -1926,11 +1989,28 @@ function SubmissionDetail({
   );
 }
 
-function Profile({ user }: { user: AuthenticatedUser | null }) {
-  return <ProfileExperience user={user} navigate={navigate} />;
+function Profile({
+  api,
+  user,
+  username,
+}: {
+  api: ApiClient;
+  user: AuthenticatedUser | null;
+  username?: string;
+}) {
+  return (
+    <ProfileExperience
+      user={user}
+      api={api}
+      {...(username === undefined ? {} : { username })}
+      navigate={navigate}
+    />
+  );
 }
 
-const contestSummary = (value: BackendContest): ContestSummary => ({
+const contestSummary = (
+  value: BackendContest,
+): ContestSummary & Pick<ContestDetail, 'format' | 'registration'> => ({
   id: value.id,
   title: value.title,
   lifecycle: value.lifecycle,
@@ -1942,6 +2022,44 @@ const contestSummary = (value: BackendContest): ContestSummary => ({
   format: value.format,
   startsAt: value.startsAt,
   endsAt: value.endsAt,
+});
+
+const profileContestSummary = (value: ProfileContest): ContestListItem => ({
+  id: value.id,
+  title: value.title,
+  visibility: value.visibility,
+  lifecycle: value.lifecycle,
+  startsAt: value.startsAt,
+  endsAt: value.endsAt,
+  relationship: value.relationship,
+});
+
+function routeErrorText(error: unknown, feature: string) {
+  if (error instanceof ApiError) {
+    if (error.code === 'GUEST_ACCOUNT_REQUIRES_UPGRADE')
+      return '游客账号需要升级为正式账号后才能使用此能力。';
+    if (error.status === 401) return `请先登录后查看${feature}。`;
+    if (error.status === 403) return `当前账号没有权限查看${feature}。`;
+    if (error.status === 404) return `${feature}不存在或当前不可用。`;
+    if (error.status === 409) return `${feature}状态已发生变化，请刷新后重试。`;
+    if (error.status === 429) return '请求过于频繁，请稍后重试。';
+  }
+  return `${feature}暂时不可用，请稍后重试。`;
+}
+
+const contestProblemSummary = (value: {
+  problemId: string;
+  label?: string;
+  title: string;
+  score?: number;
+  pointsConfig?: { score?: number } | null;
+}): ContestProblem => ({
+  problemId: value.problemId,
+  label: value.label ?? value.problemId,
+  title: value.title,
+  ...(value.pointsConfig?.score === undefined && value.score === undefined
+    ? {}
+    : { score: value.pointsConfig?.score ?? value.score }),
 });
 
 function ContestRoute({
@@ -1962,75 +2080,149 @@ function ContestRoute({
   contestId?: string;
   navigate: (path: string) => void;
 }) {
-  const [contests, setContests] = useState<ContestSummary[]>([]);
+  const [contests, setContests] = useState<ContestListItem[]>([]);
   const [detail, setDetail] = useState<ContestDetail>();
   const [problems, setProblems] = useState<ContestProblem[]>([]);
   const [standings, setStandings] = useState<never[]>([]);
+  const [standingsUnavailableReason, setStandingsUnavailableReason] =
+    useState<string>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+    setStandingsUnavailableReason(undefined);
     if (view === 'list' || view === 'mine') {
-      void api
-        .contests()
-        .then((result) => setContests(result.items.map(contestSummary)))
-        .catch(() => undefined);
-      return;
+      const request =
+        view === 'mine'
+          ? api
+              .profileContests()
+              .then((result) => result.items.map(profileContestSummary))
+          : api.contests().then((result) => result.items.map(contestSummary));
+      void request
+        .then((items) => {
+          if (active) setContests(items);
+        })
+        .catch((reason: unknown) => {
+          if (active)
+            setError(
+              routeErrorText(reason, view === 'mine' ? '我的比赛' : '比赛列表'),
+            );
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+      return () => {
+        active = false;
+      };
     }
-    if (!contestId) return;
-    void Promise.all([api.contest(contestId), api.contestProblems(contestId)])
-      .then(([value, problemResult]) => {
+    if (!contestId) {
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+    const standingsRequest =
+      view === 'standings'
+        ? api.contestStandings(contestId)
+        : Promise.resolve(undefined);
+    void Promise.all([
+      api.contest(contestId),
+      api.contestProblems(contestId),
+      standingsRequest,
+    ])
+      .then(([value, problemResult, standingResult]) => {
+        if (!active) return;
         setDetail({
           ...contestSummary(value),
           description: value.description,
           canRegister: value.lifecycle === 'UPCOMING',
           canManage: value.canManage,
         });
-        setProblems(
-          problemResult.items.map((item) => ({
-            problemId: item.problemId,
-            label: item.label ?? item.problemId,
-            title: item.title,
-            ...(item.score === undefined ? {} : { score: item.score }),
-          })),
-        );
+        setProblems(problemResult.items.map(contestProblemSummary));
+        if (standingResult && 'available' in standingResult) {
+          if (standingResult.available) setStandings([]);
+          else setStandingsUnavailableReason(standingResult.reason);
+        }
       })
-      .catch(() => undefined);
-    if (view === 'standings')
-      void api
-        .contestStandings(contestId)
-        .then((result) => {
-          if ('available' in result && result.available) setStandings([]);
-        })
-        .catch(() => setStandings([]));
-  }, [api, contestId, view]);
+      .catch((reason: unknown) => {
+        if (active) setError(routeErrorText(reason, '比赛数据'));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, contestId, reload, view]);
   return (
     <ContestExperience
       view={view}
       {...(contestId ? { contestId } : {})}
       navigate={navigate}
       api={api}
+      loading={loading}
+      error={error || undefined}
+      onRetry={() => setReload((value) => value + 1)}
       {...(view === 'list' || view === 'mine' ? { contests } : {})}
       {...(detail ? { detail } : {})}
       {...(view === 'problems' ? { problems } : {})}
       {...(view === 'standings' ? { standings } : {})}
+      {...(view === 'standings' && standingsUnavailableReason
+        ? { standingsUnavailableReason }
+        : {})}
     />
   );
 }
 
 function NotificationsRoute({ api }: { api: ApiClient }) {
   const [items, setItems] = useState<NotificationSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
     void api
       .notifications()
-      .then((result) => setItems(result.items))
-      .catch(() => setItems([]));
-  }, [api]);
-  return <NotificationsPage notifications={items} api={api} />;
+      .then((result) => {
+        if (active) setItems(result.items);
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(routeErrorText(reason, '通知'));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, reload]);
+  return (
+    <NotificationsPage
+      notifications={items}
+      api={api}
+      loading={loading}
+      loadError={error || undefined}
+      onRetry={() => setReload((value) => value + 1)}
+    />
+  );
 }
 
 function MessagesRoute({ api }: { api: ApiClient }) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [friends, setFriends] = useState<FriendSummary[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
     void Promise.all([
       api.conversations(),
       api.friends(),
@@ -2038,6 +2230,7 @@ function MessagesRoute({ api }: { api: ApiClient }) {
       api.friendRequests('outgoing'),
     ])
       .then(([conversationResult, friendResult, incoming, outgoing]) => {
+        if (!active) return;
         setConversations(
           conversationResult.items.map((item) => ({
             ...item,
@@ -2048,14 +2241,25 @@ function MessagesRoute({ api }: { api: ApiClient }) {
         setFriends(friendResult.items);
         setRequests([...incoming.items, ...outgoing.items]);
       })
-      .catch(() => undefined);
-  }, [api]);
+      .catch((reason: unknown) => {
+        if (active) setError(routeErrorText(reason, '通讯数据'));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, reload]);
   return (
     <MessagesExperience
       api={api}
       conversations={conversations}
       friends={friends}
       requests={requests}
+      loading={loading}
+      loadError={error || undefined}
+      onRetry={() => setReload((value) => value + 1)}
     />
   );
 }
@@ -2115,7 +2319,7 @@ export function App() {
     ) : current.name === 'my-contests' ? (
       <ContestRoute api={api} view="mine" navigate={navigate} />
     ) : current.name === 'contest-new' ? (
-      <ContestExperience view="create" navigate={navigate} />
+      <ContestExperience view="create" navigate={navigate} api={api} />
     ) : current.name === 'contest-detail' ? (
       <ContestRoute
         api={api}
@@ -2138,16 +2342,18 @@ export function App() {
         navigate={navigate}
       />
     ) : current.name === 'contest-standings' ? (
-      <ContestExperience
+      <ContestRoute
         view="standings"
         contestId={current.id ?? ''}
         navigate={navigate}
+        api={api}
       />
     ) : current.name === 'contest-settings' ? (
-      <ContestExperience
+      <ContestRoute
         view="settings"
         contestId={current.id ?? ''}
         navigate={navigate}
+        api={api}
       />
     ) : current.name === 'homework' || current.name === 'homework-detail' ? (
       <HomeworkPage navigate={navigate} />
@@ -2183,8 +2389,14 @@ export function App() {
       )
     ) : current.name === 'sandbox' ? (
       <SandboxOperationsPage api={api} authorized={Boolean(user)} />
+    ) : current.name === 'public-profile' ? (
+      <Profile
+        api={api}
+        user={user}
+        {...(current.id === undefined ? {} : { username: current.id })}
+      />
     ) : current.name === 'profile' ? (
-      <Profile user={user} />
+      <Profile api={api} user={user} />
     ) : current.name === 'settings' ? (
       user ? (
         <AccountSettings api={api} user={user} />
@@ -2304,7 +2516,7 @@ export function App() {
           >
             通讯
           </Link>
-          <NotificationBell navigate={navigate} />
+          <NotificationBell navigate={navigate} api={api} />
           {user ? (
             <>
               {user.guest && (

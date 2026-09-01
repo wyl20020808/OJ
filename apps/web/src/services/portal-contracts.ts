@@ -41,7 +41,11 @@ export type ContestSummary = {
   format: ContestFormat;
   startsAt: string;
   endsAt: string;
+  relationship?: 'CREATED' | 'MANAGED' | 'REGISTERED';
 };
+
+export type ContestListItem = Omit<ContestSummary, 'format' | 'registration'> &
+  Partial<Pick<ContestSummary, 'format' | 'registration'>>;
 
 export type ContestDetail = ContestSummary & {
   description: string;
@@ -114,7 +118,7 @@ export type Message = {
   type: 'TEXT';
   content: string;
   sentAt: string;
-  readState: 'SENT' | 'DELIVERED' | 'READ';
+  readState?: 'SENT' | 'DELIVERED' | 'READ';
   clientCorrelationId: string;
 };
 
@@ -135,7 +139,14 @@ export type FriendRequest = {
 
 export type NotificationSummary = {
   id: string;
-  category: 'SYSTEM' | 'CONTEST' | 'HOMEWORK' | 'SOCIAL';
+  category:
+    | 'SYSTEM'
+    | 'CONTEST'
+    | 'HOMEWORK'
+    | 'SOCIAL'
+    | 'FRIEND_REQUEST'
+    | 'FRIEND_ACCEPTED'
+    | 'DIRECT_MESSAGE';
   title: string;
   body: string;
   createdAt: string;
