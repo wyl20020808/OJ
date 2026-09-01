@@ -17,6 +17,7 @@ import {
   createStorage,
   ensureBucket,
 } from '../../packages/storage/src/index.js';
+import { PostgresSubmissionRepository } from '../../apps/api/src/modules/submission/repository.js';
 
 const config = loadConfig();
 const database = createDatabase({ url: config.databaseUrl });
@@ -92,5 +93,40 @@ describe('real local infrastructure', () => {
       dependencies: { postgres: 'ok', redis: 'ok', storage: 'ok' },
     });
     await app.close();
+  });
+
+  it('persists authoritative evaluation history and current projection', async () => {
+    const repository = new PostgresSubmissionRepository(database.pool);
+    const submission = await repository.create({
+      ownerUserId: `integration-${crypto.randomUUID()}`,
+      problemId: 'integration-problem',
+      problemRevisionId: 'integration-revision',
+      testdataVersionRef: 'integration-testdata',
+      languageId: 'cpp20',
+      source: 'integration-source',
+    });
+    await repository.beginEvaluation!(submission.id, 'integration-job-1');
+    await repository.publishEvaluation!({
+      submissionId: submission.id,
+      judgeJobId: 'integration-job-1',
+      evaluationGeneration: 1,
+      attemptGeneration: 1,
+      status: 'COMPLETED_WITH_VERDICT',
+      verdict: 'AC',
+      evaluationRecordDigest: 'integration-evaluation-1',
+      verdictRecordDigest: 'b'.repeat(64),
+    });
+    const rejudge = await repository.startRejudge!(
+      submission.id,
+      'integration-job-2',
+    );
+    expect(rejudge.evaluationGeneration).toBe(2);
+    const history = await repository.listEvaluationHistory!(submission.id);
+    expect(history).toHaveLength(2);
+    expect(await repository.getEvaluation!(submission.id)).toMatchObject({
+      evaluationGeneration: 2,
+      status: 'REJUDGE_PENDING',
+      current: true,
+    });
   });
 });

@@ -4,3 +4,5 @@ export * from './validation.js';
 export * from './repository.js';
 export * from './service.js';
 export * from './routes.js';
+export * from './outcome.js';
+export * from './publication.js';

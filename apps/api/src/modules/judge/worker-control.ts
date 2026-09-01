@@ -9,6 +9,7 @@ import {
   type WorkerStatusReference,
 } from '../authz/worker.js';
 import type { AuthContext } from '../submission/model.js';
+import type { SubmissionRepository } from '../submission/repository.js';
 import type { JudgeJob, JudgeJobRepository } from './model.js';
 
 type WorkerControlOptions = {
@@ -19,6 +20,7 @@ type WorkerControlOptions = {
   resolveSubmission: (
     submissionId: string,
   ) => Promise<{ ownerUserId: string } | undefined>;
+  submissionRepository?: SubmissionRepository;
   operatorUserIds?: ReadonlySet<string>;
 };
 
@@ -264,6 +266,7 @@ export async function registerWorkerControlRoutes(
         requestId: request.id,
       });
     const cancelled = await options.judgeRepository.cancel(job.id);
+    await options.submissionRepository?.cancelEvaluation?.(id, cancelled.id);
     return reply.send({
       judgeJobId: cancelled.id,
       status: cancelled.status,

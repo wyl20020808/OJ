@@ -60,6 +60,7 @@ export type RawExecutionResult = {
 export type JudgeJob = {
   id: string;
   submissionId: string;
+  evaluationGeneration?: number;
   idempotencyKey: string;
   ownerUserId: string;
   problemId: string;
@@ -98,6 +99,7 @@ export type JudgeJob = {
 };
 export type JudgeJobCreateInput = {
   submissionId: string;
+  evaluationGeneration?: number;
   ownerUserId: string;
   problemId: string;
   problemRevisionId: string;

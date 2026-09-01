@@ -81,17 +81,11 @@ function publicStage(value: Record<string, unknown> | undefined) {
     ...(value.termination_signal
       ? { terminationSignal: value.termination_signal }
       : {}),
-    stdout: value.stdout,
-    stderr: value.stderr,
     stdoutBytes: value.stdout_bytes,
     stderrBytes: value.stderr_bytes,
     stdoutSha256: value.stdout_sha256,
     stderrSha256: value.stderr_sha256,
     setupTimeMs: value.setup_time_ms,
-    cpuTimeUsec: value.cpu_time_usec,
-    cpuTimeSource: value.cpu_time_source,
-    memoryPeakBytes: value.memory_peak_bytes,
-    memoryPeakSource: value.memory_peak_source,
     stdoutTruncated: value.stdout_truncated,
     stderrTruncated: value.stderr_truncated,
     wallTimeMs: value.wall_time_ms,

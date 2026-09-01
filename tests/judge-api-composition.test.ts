@@ -249,7 +249,7 @@ describe('Lead Judge API composition', () => {
     });
     expect(encoded).not.toContain('must-not-leak');
     expect(encoded).not.toMatch(
-      /lease-secret|worker-secret|expected_output|actual_stdout/i,
+      /lease-secret|worker-secret|expected_output|actual_stdout|compiler output|cpuTimeUsec|memoryPeakBytes/i,
     );
   });
 });

@@ -8,6 +8,45 @@ export type IntakeStatus =
   | 'EXECUTION_COMPLETED'
   | 'SYNTHETIC_COMPLETED';
 
+export type SubmissionVerdict = 'AC' | 'WA' | 'CE' | 'RE' | 'TLE' | 'MLE';
+export type SubmissionEvaluationStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'COMPLETED_WITH_VERDICT'
+  | 'CANCELLED'
+  | 'INFRA_FAILED'
+  | 'NO_VERDICT'
+  | 'INCOMPLETE'
+  | 'REJUDGE_PENDING'
+  | 'REJUDGING';
+
+export type SubmissionEvaluation = {
+  submissionId: string;
+  evaluationGeneration: number;
+  attemptGeneration: number;
+  judgeJobId: string;
+  testcaseSetId?: string;
+  manifestHash?: string;
+  verdictRecordDigest?: string;
+  evaluationRecordDigest: string;
+  status: SubmissionEvaluationStatus;
+  verdict?: SubmissionVerdict;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  current: boolean;
+};
+
+export type SubmissionOutcome = Pick<
+  SubmissionEvaluation,
+  'submissionId' | 'evaluationGeneration' | 'status' | 'verdict' | 'completedAt'
+> & {
+  problemId: string;
+  problemRevisionId: string;
+  testdataVersionRef: string;
+  languageId: string;
+};
+
 export type Submission = {
   id: string;
   ownerUserId: string;

@@ -12,6 +12,7 @@ import {
 } from './repository.js';
 import { SubmissionService } from './service.js';
 import { LANGUAGE_CATALOG } from './languages.js';
+import { publicSubmissionEvaluation } from './outcome.js';
 
 export type SubmissionModuleContext = {
   repository?: SubmissionRepository;
@@ -22,6 +23,14 @@ export type SubmissionModuleContext = {
   ) => AuthContext | undefined | Promise<AuthContext | undefined>;
   projectJudge?: (submission: Submission) => Promise<Partial<Submission>>;
   onCreated?: (submission: Submission) => Promise<void> | void;
+  onRejudge?: (submission: Submission) => Promise<void> | void;
+  evaluationHistory?: (
+    submissionId: string,
+  ) => Promise<
+    Awaited<
+      ReturnType<NonNullable<SubmissionRepository['listEvaluationHistory']>>
+    >
+  >;
 };
 const error = (
   reply: FastifyReply,
@@ -147,6 +156,83 @@ export async function registerSubmissionModule(
           403,
           'FORBIDDEN',
           'Submission is forbidden',
+        );
+      throw e;
+    }
+  });
+  app.post('/api/submissions/:id/rejudge', async (request, reply) => {
+    try {
+      const submission = await service.detail(
+        (request.params as { id: string }).id,
+        await auth(request),
+      );
+      if (!context.onRejudge)
+        return error(
+          reply,
+          request,
+          501,
+          'NOT_IMPLEMENTED',
+          'Rejudge is unavailable',
+        );
+      await context.onRejudge(submission);
+      return reply.send(await project(submission));
+    } catch (e) {
+      if (e instanceof SubmissionNotFoundError)
+        return error(reply, request, 404, 'NOT_FOUND', e.message);
+      if (e instanceof Error && e.message === 'UNAUTHENTICATED')
+        return error(
+          reply,
+          request,
+          401,
+          'UNAUTHENTICATED',
+          'Authentication required',
+        );
+      if (e instanceof Error && e.message === 'FORBIDDEN')
+        return error(reply, request, 403, 'FORBIDDEN', 'Rejudge is forbidden');
+      if (
+        e instanceof Error &&
+        /EVALUATION_ALREADY_EXISTS|CONFLICT/.test(e.message)
+      )
+        return error(
+          reply,
+          request,
+          409,
+          'CONFLICT',
+          'Rejudge conflicts with current evaluation',
+        );
+      throw e;
+    }
+  });
+  app.get('/api/submissions/:id/evaluations', async (request, reply) => {
+    try {
+      const submission = await service.detail(
+        (request.params as { id: string }).id,
+        await auth(request),
+      );
+      const history = context.evaluationHistory
+        ? await context.evaluationHistory(submission.id)
+        : [];
+      return reply.send({
+        items: history.map(publicSubmissionEvaluation),
+      });
+    } catch (e) {
+      if (e instanceof SubmissionNotFoundError)
+        return error(reply, request, 404, 'NOT_FOUND', e.message);
+      if (e instanceof Error && e.message === 'UNAUTHENTICATED')
+        return error(
+          reply,
+          request,
+          401,
+          'UNAUTHENTICATED',
+          'Authentication required',
+        );
+      if (e instanceof Error && e.message === 'FORBIDDEN')
+        return error(
+          reply,
+          request,
+          403,
+          'FORBIDDEN',
+          'Submission history is forbidden',
         );
       throw e;
     }

@@ -17,6 +17,8 @@ try {
     '0003_authz_foundation',
     '0004_problem_authoring_revision',
     '0005_submission_intake',
+    '0006_submission_evaluation_history',
+    '0007_submission_status_lifecycle',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {

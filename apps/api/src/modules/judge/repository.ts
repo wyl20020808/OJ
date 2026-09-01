@@ -521,7 +521,10 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
   return {
     id: randomUUID(),
     submissionId: i.submissionId,
-    idempotencyKey: i.idempotencyKey ?? `submission:${i.submissionId}`,
+    evaluationGeneration: i.evaluationGeneration ?? 1,
+    idempotencyKey:
+      i.idempotencyKey ??
+      `submission:${i.submissionId}:evaluation:${i.evaluationGeneration ?? 1}`,
     ownerUserId: i.ownerUserId,
     problemId: i.problemId,
     problemRevisionId: i.problemRevisionId,
@@ -580,6 +583,8 @@ export function assertPayload(v: unknown): asserts v is JudgeJob {
     typeof j.id !== 'string' ||
     typeof j.submissionId !== 'string' ||
     typeof j.idempotencyKey !== 'string' ||
+    !Number.isSafeInteger(j.evaluationGeneration) ||
+    Number(j.evaluationGeneration) < 1 ||
     typeof j.ownerUserId !== 'string' ||
     typeof j.problemId !== 'string' ||
     typeof j.problemRevisionId !== 'string' ||
@@ -687,9 +692,11 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
   }
   async enqueue(i: JudgeJobCreateInput) {
     return this.atomic(() => {
-      const k = i.idempotencyKey ?? `submission:${i.submissionId}`,
-        existing =
-          this.keys.get(k) ?? this.keys.get(`submission:${i.submissionId}`);
+      const generation = i.evaluationGeneration ?? 1;
+      const k =
+          i.idempotencyKey ??
+          `submission:${i.submissionId}:evaluation:${generation}`,
+        existing = this.keys.get(k);
       if (existing)
         return { job: { ...this.jobs.get(existing)! }, created: false };
       const j = normalize({ ...i, idempotencyKey: k });
@@ -947,7 +954,9 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
   }
   async enqueue(i: JudgeJobCreateInput) {
     return this.exclusive(async () => {
-      const existing = await this.redis.get(this.submissionKey(i.submissionId));
+      const generation = i.evaluationGeneration ?? 1;
+      const identityKey = `${this.submissionKey(i.submissionId)}:evaluation:${generation}`;
+      const existing = await this.redis.get(identityKey);
       if (existing) {
         const j = await this.read(existing);
         if (!j) throw new JudgeJobPayloadError('Broken idempotency index');
@@ -959,15 +968,9 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
         'OK'
       )
         throw new JudgeJobConflictError();
-      if (
-        (await this.redis.set(
-          this.submissionKey(i.submissionId),
-          j.id,
-          'NX',
-        )) !== 'OK'
-      ) {
+      if ((await this.redis.set(identityKey, j.id, 'NX')) !== 'OK') {
         await this.redis.del(this.jobKey(j.id));
-        const id = await this.redis.get(this.submissionKey(i.submissionId)),
+        const id = await this.redis.get(identityKey),
           winner = id ? await this.read(id) : undefined;
         if (!winner)
           throw new JudgeJobConflictError(
@@ -975,6 +978,7 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
           );
         return { job: winner, created: false };
       }
+      await this.redis.set(this.submissionKey(i.submissionId), j.id);
       await this.redis.lpush(this.queueKey, j.id);
       return { job: j, created: true };
     });

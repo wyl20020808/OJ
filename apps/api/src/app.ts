@@ -36,6 +36,8 @@ import {
   PostgresSubmissionRepository,
   InMemorySubmissionRepository,
   registerSubmissionModule,
+  publicationFromJudgeJob,
+  publicSubmissionEvaluation,
   type ProblemRevisionResolver,
   type Submission,
 } from './modules/submission/index.js';
@@ -276,13 +278,40 @@ export async function buildApp(options: AppOptions = {}) {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       onCreated: async (submission) => {
-        await judgeRepository.enqueue(
+        const { job } = await judgeRepository.enqueue(
           judgeInputForSubmission(submission, realSubmissionExecution),
         );
+        await submissionRepository.beginEvaluation?.(submission.id, job.id);
       },
+      onRejudge: async (submission) => {
+        const current = await submissionRepository.getEvaluation?.(
+          submission.id,
+        );
+        if (
+          current &&
+          ['REJUDGE_PENDING', 'REJUDGING'].includes(current.status)
+        )
+          return;
+        const evaluationGeneration = (current?.evaluationGeneration ?? 0) + 1;
+        const { job } = await judgeRepository.enqueue({
+          ...judgeInputForSubmission(submission, realSubmissionExecution),
+          evaluationGeneration,
+          idempotencyKey: `submission:${submission.id}:evaluation:${evaluationGeneration}`,
+        });
+        await submissionRepository.startRejudge?.(submission.id, job.id);
+      },
+      evaluationHistory: async (submissionId) =>
+        (await submissionRepository.listEvaluationHistory?.(submissionId)) ??
+        [],
       projectJudge: async (submission) => {
         const job = await judgeRepository.getBySubmissionId(submission.id);
         if (!job) return {};
+        const publication = publicationFromJudgeJob(job);
+        if (publication)
+          await submissionRepository.publishEvaluation?.(publication);
+        const evaluation = await submissionRepository.getEvaluation?.(
+          submission.id,
+        );
         const status =
           job.status === 'QUEUED'
             ? 'QUEUED'
@@ -319,6 +348,9 @@ export async function buildApp(options: AppOptions = {}) {
                         : job.status === 'CANCELLED'
                           ? 'CANCELLED'
                           : 'FAILED_TERMINAL',
+          ...(publicSubmissionEvaluation(evaluation)
+            ? { evaluation: publicSubmissionEvaluation(evaluation) }
+            : {}),
         };
       },
     });
@@ -332,6 +364,7 @@ export async function buildApp(options: AppOptions = {}) {
       judgeRepository,
       resolveSubmission: async (submissionId) =>
         (await submissionRepository.get(submissionId)) ?? undefined,
+      submissionRepository,
       operatorUserIds: configuredOperatorUserIds,
     });
     const sandboxRuntime = await createSandboxRuntime();
@@ -464,13 +497,40 @@ export async function buildApp(options: AppOptions = {}) {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       onCreated: async (submission) => {
-        await judgeRepository.enqueue(
+        const { job } = await judgeRepository.enqueue(
           judgeInputForSubmission(submission, realSubmissionExecution),
         );
+        await submissionRepository.beginEvaluation?.(submission.id, job.id);
       },
+      onRejudge: async (submission) => {
+        const current = await submissionRepository.getEvaluation?.(
+          submission.id,
+        );
+        if (
+          current &&
+          ['REJUDGE_PENDING', 'REJUDGING'].includes(current.status)
+        )
+          return;
+        const evaluationGeneration = (current?.evaluationGeneration ?? 0) + 1;
+        const { job } = await judgeRepository.enqueue({
+          ...judgeInputForSubmission(submission, realSubmissionExecution),
+          evaluationGeneration,
+          idempotencyKey: `submission:${submission.id}:evaluation:${evaluationGeneration}`,
+        });
+        await submissionRepository.startRejudge?.(submission.id, job.id);
+      },
+      evaluationHistory: async (submissionId) =>
+        (await submissionRepository.listEvaluationHistory?.(submissionId)) ??
+        [],
       projectJudge: async (submission) => {
         const job = await judgeRepository.getBySubmissionId(submission.id);
         if (!job) return {};
+        const publication = publicationFromJudgeJob(job);
+        if (publication)
+          await submissionRepository.publishEvaluation?.(publication);
+        const evaluation = await submissionRepository.getEvaluation?.(
+          submission.id,
+        );
         const status =
           job.status === 'QUEUED'
             ? 'QUEUED'
@@ -507,6 +567,9 @@ export async function buildApp(options: AppOptions = {}) {
                         : job.status === 'CANCELLED'
                           ? 'CANCELLED'
                           : 'FAILED_TERMINAL',
+          ...(publicSubmissionEvaluation(evaluation)
+            ? { evaluation: publicSubmissionEvaluation(evaluation) }
+            : {}),
         };
       },
     });
@@ -516,6 +579,7 @@ export async function buildApp(options: AppOptions = {}) {
       judgeRepository,
       resolveSubmission: async (submissionId) =>
         (await submissionRepository.get(submissionId)) ?? undefined,
+      submissionRepository,
       operatorUserIds: configuredOperatorUserIds,
     });
     const sandboxRuntime = await createSandboxRuntime();
