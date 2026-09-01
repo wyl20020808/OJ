@@ -171,8 +171,7 @@ Web may compose Favorites, My Contests, My Problems and Profile Capabilities thr
 
 ## Final
 
-- Implementation commit: `17b729cd821ab79cb191c6bdd6fa4eb4efbf656a` (`feat: close profile runtime gaps`).
-- Final report amendment is committed after this evidence update.
+- Implementation commit: `feat: close profile runtime gaps`; final SHA is verified by the final Git audit after this report amendment.
 - Worktree is checked clean after temporary Goal artifact removal.
 - READY FOR WEB POST-PARALLEL REQUALIFICATION = YES.
 - No Web merge, Judge merge, or Lead Integration was performed.
