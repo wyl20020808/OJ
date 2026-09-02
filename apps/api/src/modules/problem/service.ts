@@ -56,7 +56,7 @@ export class ProblemService {
     if (!row) throw new ProblemNotFoundError();
     if (row.visibility === 'public' && row.status === 'published') return row;
     if (
-      row.authorId !== context?.userId ||
+      !context ||
       !(await this.policy.can('read', 'problem', context, {
         id: row.id,
         type: 'problem',
@@ -92,7 +92,6 @@ export class ProblemService {
     if (!current) throw new ProblemNotFoundError();
     if (
       !context ||
-      current.authorId !== context.userId ||
       !(await this.policy.can('update', 'problem', context, {
         id: current.id,
         type: 'problem',
@@ -127,7 +126,6 @@ export class ProblemService {
     if (!current) throw new ProblemNotFoundError();
     if (
       !context ||
-      current.authorId !== context.userId ||
       !(await this.policy.can('transition', 'problem', context, {
         id: current.id,
         type: 'problem',
@@ -169,7 +167,6 @@ export class ProblemService {
     if (!row) throw new ProblemNotFoundError();
     if (
       !context ||
-      row.authorId !== context.userId ||
       !(await this.policy.can('read', 'problem', context, {
         id: row.id,
         type: 'problem',

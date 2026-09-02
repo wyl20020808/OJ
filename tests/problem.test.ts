@@ -44,7 +44,9 @@ describe('problem foundation', () => {
 
   it('enforces ownership through the public policy boundary', async () => {
     const repo = new InMemoryProblemRepository();
-    const service = new ProblemService(repo, allow);
+    const service = new ProblemService(repo, {
+      can: (_action, _resource, context) => context?.userId === 'owner',
+    });
     const created = await service.create(
       { ...input, status: 'draft', visibility: 'private' },
       { userId: 'owner' },
@@ -55,6 +57,31 @@ describe('problem foundation', () => {
     await expect(
       service.history(created.id, { userId: 'other' }),
     ).rejects.toThrow('FORBIDDEN');
+  });
+
+  it('allows a policy-authorized manager to maintain a non-owned problem', async () => {
+    const repo = new InMemoryProblemRepository();
+    const service = new ProblemService(repo, {
+      can: (_action, _resource, context) =>
+        context?.userId === 'owner' || context?.userId === 'manager',
+    });
+    const created = await service.create(
+      { ...input, status: 'draft', visibility: 'private' },
+      { userId: 'owner' },
+    );
+    await expect(
+      service.detail(created.id, { userId: 'manager' }),
+    ).resolves.toBe(created);
+    await expect(
+      service.update(
+        created.id,
+        { title: 'Manager update' },
+        { userId: 'manager' },
+      ),
+    ).resolves.toMatchObject({ title: 'Manager update' });
+    await expect(
+      service.history(created.id, { userId: 'manager' }),
+    ).resolves.toHaveLength(1);
   });
 
   it('creates, lists, updates, transitions and hides drafts', async () => {
@@ -117,6 +144,28 @@ describe('problem foundation', () => {
       code: 'VALIDATION_ERROR',
       requestId: expect.any(String),
     });
+    await app.close();
+  });
+
+  it('maps a database duplicate-key failure to a problem conflict', async () => {
+    const app = Fastify();
+    await registerProblemModule(app, {
+      repository: {
+        create: async () => {
+          throw Object.assign(new Error('duplicate key'), { code: '23505' });
+        },
+      } as never,
+      authorizationPolicy: allow,
+      getAuthContext: () => ({ userId: 'u1' }),
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/problems',
+      headers: { 'x-csrf-token': 'csrf', cookie: 'oj_csrf=csrf' },
+      payload: input,
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ code: 'CONFLICT' });
     await app.close();
   });
 

@@ -48,6 +48,11 @@ const csrf = (request: FastifyRequest) => {
       .some((cookie) => cookie.trim() === `oj_csrf=${token}`)
   );
 };
+const isUniqueViolation = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  error.code === '23505';
 export async function registerProblemModule(
   app: FastifyInstance,
   context: ProblemModuleContext,
@@ -163,8 +168,16 @@ export async function registerProblemModule(
           e.message,
           e.details,
         );
-      if (e instanceof ProblemConflictError)
-        return error(reply, request, 409, 'CONFLICT', e.message);
+      if (e instanceof ProblemConflictError || isUniqueViolation(e))
+        return error(
+          reply,
+          request,
+          409,
+          'CONFLICT',
+          e instanceof ProblemConflictError
+            ? e.message
+            : 'Problem identifier or slug already exists',
+        );
       if (e instanceof Error && e.message === 'VALIDATION_ERROR')
         return error(
           reply,
@@ -212,8 +225,16 @@ export async function registerProblemModule(
           e.message,
           e.details,
         );
-      if (e instanceof ProblemConflictError)
-        return error(reply, request, 409, 'CONFLICT', e.message);
+      if (e instanceof ProblemConflictError || isUniqueViolation(e))
+        return error(
+          reply,
+          request,
+          409,
+          'CONFLICT',
+          e instanceof ProblemConflictError
+            ? e.message
+            : 'Problem identifier or slug already exists',
+        );
       if (e instanceof Error && e.message === 'FORBIDDEN')
         return error(
           reply,
