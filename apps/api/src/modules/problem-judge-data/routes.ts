@@ -23,12 +23,28 @@ export async function registerProblemJudgeDataRoutes(
         return reply
           .status(e.status)
           .send({ code: e.code, message: e.message, requestId: request.id });
+      const code = (e as { code?: unknown })?.code;
+      if (
+        code === 'ECONNREFUSED' ||
+        code === 'ETIMEDOUT' ||
+        (typeof code === 'string' && code.startsWith('08'))
+      )
+        return reply.status(503).send({
+          code: 'DB_UNAVAILABLE',
+          message: 'Database unavailable',
+          requestId: request.id,
+        });
       throw e;
     }
   };
   const csrf = (r: FastifyRequest) => {
     const t = r.headers['x-csrf-token'];
-    return typeof t === 'string' && r.headers.cookie?.includes(`oj_csrf=${t}`);
+    return (
+      typeof t === 'string' &&
+      r.headers.cookie
+        ?.split(';')
+        .some((cookie) => cookie.trim() === `oj_csrf=${t}`)
+    );
   };
   const mutate = async (r: any, reply: any, fn: () => Promise<unknown>) =>
     csrf(r)

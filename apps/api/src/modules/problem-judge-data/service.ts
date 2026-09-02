@@ -16,6 +16,7 @@ import {
 } from './model.js';
 import type { ByteStorage } from './storage.js';
 import { parseZip } from './zip.js';
+import { TESTCASE_SET_MAX_SIZE } from '../judge/testcase-set.js';
 
 type PublicObjectRef = Omit<ObjectRef, 'key'>;
 const publicRef = (ref: ObjectRef): PublicObjectRef => ({
@@ -144,7 +145,21 @@ export class ProblemJudgeDataService {
       status: 'DRAFT',
       revision: old?.revision ?? 0,
       defaults,
-      testcases: old?.testcases ?? [],
+      testcases: (old?.testcases ?? []).map((testcase) => ({
+        ...testcase,
+        effectiveTimeLimitMs: effective(
+          testcase.timeLimitMsOverride,
+          defaults.timeLimitMs,
+        ),
+        effectiveMemoryLimitBytes: effective(
+          testcase.memoryLimitBytesOverride,
+          defaults.memoryLimitBytes,
+        ),
+        effectiveOutputLimitBytes: effective(
+          testcase.outputLimitBytesOverride,
+          defaults.outputLimitBytes,
+        ),
+      })),
       updatedAt: now(),
       updatedBy: (user as { userId: string }).userId,
     };
@@ -176,9 +191,9 @@ export class ProblemJudgeDataService {
           checker: 'EXACT_BYTES',
           allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
         }),
-      testcases: [...(old?.testcases ?? []), c].sort(
-        (a, b) => a.ordinal - b.ordinal,
-      ),
+      testcases: [...(old?.testcases ?? []), c]
+        .sort((a, b) => a.ordinal - b.ordinal)
+        .map((testcase, ordinal) => ({ ...testcase, ordinal })),
       updatedAt: now(),
       updatedBy: (user as { userId: string }).userId,
     };
@@ -188,6 +203,8 @@ export class ProblemJudgeDataService {
     await this.auth('manage', user, problemId);
     const b = body as Record<string, unknown>;
     const old = await this.repo.getDraft(problemId);
+    if ((old?.testcases.length ?? 0) >= TESTCASE_SET_MAX_SIZE)
+      throw new JudgeDataError('VALIDATION_FAILED', 'Too many testcases');
     const defaults =
       old?.defaults ??
       validateDefaults({
@@ -270,6 +287,9 @@ export class ProblemJudgeDataService {
     user: unknown,
   ) {
     await this.auth('manage', user, problemId);
+    const old = await this.repo.getDraft(problemId);
+    if ((old?.testcases.length ?? 0) >= TESTCASE_SET_MAX_SIZE)
+      throw new JudgeDataError('VALIDATION_FAILED', 'Too many testcases');
     if (
       input.byteLength > 16 * 1024 * 1024 ||
       output.byteLength > 16 * 1024 * 1024
@@ -296,7 +316,6 @@ export class ProblemJudgeDataService {
       base,
       fileNames,
     );
-    const old = await this.repo.getDraft(problemId);
     const ordinal = old?.testcases.length ?? 0;
     const c: DraftTestcase = {
       testcaseId: id(),
@@ -358,6 +377,8 @@ export class ProblemJudgeDataService {
     await this.auth('manage', user, problemId);
     const pairs = parseZip(bytes);
     const old = await this.repo.getDraft(problemId);
+    if ((old?.testcases.length ?? 0) + pairs.length > TESTCASE_SET_MAX_SIZE)
+      throw new JudgeDataError('VALIDATION_FAILED', 'Too many testcases');
     const defaults =
       old?.defaults ??
       validateDefaults({
@@ -503,7 +524,8 @@ export class ProblemJudgeDataService {
     };
     draft.testcases = draft.testcases
       .map((c) => (c.testcaseId === testcaseId ? next : c))
-      .sort((a, b) => a.ordinal - b.ordinal);
+      .sort((a, b) => a.ordinal - b.ordinal)
+      .map((testcase, ordinal) => ({ ...testcase, ordinal }));
     draft.status = 'DRAFT';
     delete draft.manifestSha256;
     draft.updatedBy = (user as { userId: string }).userId;
@@ -531,6 +553,13 @@ export class ProblemJudgeDataService {
         'VALIDATION_FAILED',
         'At least one testcase required',
       );
+    if (
+      d.testcases.length > TESTCASE_SET_MAX_SIZE ||
+      d.testcases.some((testcase, index) => testcase.ordinal !== index) ||
+      new Set(d.testcases.map((testcase) => testcase.testcaseId)).size !==
+        d.testcases.length
+    )
+      throw new JudgeDataError('VALIDATION_FAILED', 'Invalid testcase order');
     for (const c of d.testcases) {
       this.assertDraftRef(problemId, c.input);
       this.assertDraftRef(problemId, c.expectedOutput);

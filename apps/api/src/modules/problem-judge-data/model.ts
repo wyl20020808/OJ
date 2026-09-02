@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  BUILTIN_CHECKER_VERSION,
+  builtinCheckerConfigSha256,
   testcaseSetManifestHash,
   TESTCASE_SET_PROTOCOL_VERSION,
 } from '../judge/testcase-set.js';
@@ -195,13 +197,15 @@ export const validateObjectRef = (value: unknown): ObjectRef => {
   };
 };
 export const canonicalManifestHash = (
-  identity: {
-    problemId: string;
-    problemRevisionId: string;
-    testdataVersionId: string;
-    testcaseSetId: string;
-    executionProfileId: ExecutionProfileId;
-  },
+  identity: Pick<
+    JudgeDraft,
+    | 'problemId'
+    | 'problemRevisionId'
+    | 'testdataVersionId'
+    | 'testcaseSetId'
+    | 'executionProfileId'
+    | 'defaults'
+  >,
   cases: readonly DraftTestcase[],
 ) =>
   testcaseSetManifestHash({
@@ -220,6 +224,12 @@ export const canonicalManifestHash = (
         input: '',
         inputSha256: c.input.sha256,
         executionProfileId: identity.executionProfileId,
+        expectedOutputSha256: c.expectedOutput.sha256,
+        checkerType: identity.defaults.checker,
+        checkerVersion: BUILTIN_CHECKER_VERSION,
+        checkerConfigSha256: builtinCheckerConfigSha256(
+          identity.defaults.checker,
+        ),
       })),
   });
 export const manifestProtocolVersion = TESTCASE_SET_PROTOCOL_VERSION;

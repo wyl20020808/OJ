@@ -1,4 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import Fastify from 'fastify';
+import {
+  builtinCheckerConfigSha256,
+  BUILTIN_CHECKER_VERSION,
+  testcaseSetManifestHash,
+} from '@ojplatform/judge-runtime';
 import {
   InMemoryJudgeDataRepository,
   MemoryByteStorage,
@@ -6,6 +12,7 @@ import {
   JudgeDataError,
   canonicalManifestHash,
   parseZip,
+  registerProblemJudgeDataRoutes,
 } from '../apps/api/src/modules/problem-judge-data/index.js';
 
 const user = { userId: 'author-1', strength: 'password' };
@@ -167,6 +174,31 @@ describe('problem judge data backend', () => {
         persisted?.testcases ?? [],
       ),
     );
+    const persistedCase = persisted?.testcases[0];
+    if (!persistedCase) throw new Error('draft testcase was not persisted');
+    expect(draft.manifestSha256).toBe(
+      testcaseSetManifestHash({
+        problemId: 'p-1',
+        problemRevisionId: identity.problemRevisionId,
+        testdataVersionId: identity.testdataVersionId,
+        testcaseSetId: identity.testcaseSetId,
+        executionProfileId: identity.executionProfileId,
+        entries: [
+          {
+            index: 0,
+            testcaseId: persistedCase.testcaseId,
+            testdataVersionId: identity.testdataVersionId,
+            input: '',
+            inputSha256: persistedCase.input.sha256,
+            expectedOutputSha256: persistedCase.expectedOutput.sha256,
+            executionProfileId: identity.executionProfileId,
+            checkerType: 'EXACT_BYTES',
+            checkerVersion: BUILTIN_CHECKER_VERSION,
+            checkerConfigSha256: builtinCheckerConfigSha256('EXACT_BYTES'),
+          },
+        ],
+      }),
+    );
     await expect(
       svc.publish('p-1', user, draft.revision - 1),
     ).rejects.toMatchObject({ code: 'STALE_PUBLISH_CONFLICT' });
@@ -207,5 +239,118 @@ describe('problem judge data backend', () => {
         ]),
       ),
     ).toThrow('Duplicate input pair');
+    expect(() =>
+      parseZip(makeZip([{ name: '1.in', data: Uint8Array.of(1) }])),
+    ).toThrow('Missing input/output pair');
+    expect(() =>
+      parseZip(
+        makeZip([
+          { name: '/1.in', data: Uint8Array.of(1) },
+          { name: '/1.out', data: Uint8Array.of(2) },
+        ]),
+      ),
+    ).toThrow('Unsafe archive path');
+    expect(() => parseZip(Uint8Array.of(1, 2, 3))).toThrow('Invalid archive');
+  });
+
+  it('recomputes inherited limits when defaults change and fails closed for storage', async () => {
+    const { svc, storage } = service();
+    const [input, output] = await Promise.all([
+      storage.put(
+        Uint8Array.of(1),
+        'judge-data/problems/p-1/draft/i',
+        '1.in',
+        'p-1',
+      ),
+      storage.put(
+        Uint8Array.of(2),
+        'judge-data/problems/p-1/draft/o',
+        '1.out',
+        'p-1',
+      ),
+    ]);
+    await svc.addTestcase('p-1', { input, expectedOutput: output }, user);
+    const changed = await svc.saveConfig(
+      'p-1',
+      {
+        timeLimitMs: 3000,
+        memoryLimitBytes: 4096,
+        outputLimitBytes: 512,
+        checker: 'TOKEN_WHITESPACE',
+        allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
+      },
+      user,
+    );
+    expect(changed.testcases[0]).toMatchObject({
+      effectiveTimeLimitMs: 3000,
+      effectiveMemoryLimitBytes: 4096,
+      effectiveOutputLimitBytes: 512,
+    });
+
+    const unavailable = new ProblemJudgeDataService(
+      new InMemoryJudgeDataRepository(),
+      new MemoryByteStorage(true),
+      async () => true,
+      async () => true,
+      async () => identity,
+    );
+    await expect(
+      unavailable.addPair(
+        'p-1',
+        Uint8Array.of(1),
+        Uint8Array.of(2),
+        { input: '1.in', output: '1.out' },
+        user,
+      ),
+    ).rejects.toMatchObject({ code: 'STORAGE_UNAVAILABLE', status: 503 });
+  });
+
+  it('requires an exact CSRF cookie match for mutations', async () => {
+    const { svc } = service();
+    const app = Fastify();
+    await registerProblemJudgeDataRoutes(app, {
+      service: svc,
+      getAuth: async () => user,
+    });
+    const body = {
+      timeLimitMs: 1000,
+      memoryLimitBytes: 1024,
+      outputLimitBytes: 128,
+      checker: 'EXACT_BYTES',
+      allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
+    };
+    try {
+      expect(
+        (
+          await app.inject({
+            method: 'PUT',
+            url: '/api/problems/p-1/judge-data/draft/config',
+            payload: body,
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await app.inject({
+            method: 'PUT',
+            url: '/api/problems/p-1/judge-data/draft/config',
+            headers: { 'x-csrf-token': 'token', cookie: 'oj_csrf=token' },
+            payload: body,
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await app.inject({
+            method: 'PUT',
+            url: '/api/problems/p-1/judge-data/draft/config',
+            headers: { 'x-csrf-token': 'token', cookie: 'xoj_csrf=token' },
+            payload: body,
+          })
+        ).statusCode,
+      ).toBe(403);
+    } finally {
+      await app.close();
+    }
   });
 });

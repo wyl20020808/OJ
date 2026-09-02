@@ -350,6 +350,10 @@ export class PostgresJudgeDataRepository implements JudgeDataRepository {
   }
   async publish(draft: JudgeDraft, actor: string, expectedRevision?: number) {
     return this.transaction(async (db) => {
+      await db.query(
+        'SELECT problem_id FROM problem_judge_drafts WHERE problem_id=$1 FOR UPDATE',
+        [draft.problemId],
+      );
       const current = await this.readDraft(db, draft.problemId);
       if (
         expectedRevision !== undefined &&
@@ -419,7 +423,7 @@ export class PostgresJudgeDataRepository implements JudgeDataRepository {
       for (const testcase of v.testcases)
         for (const ref of [testcase.input, testcase.expectedOutput])
           await db.query(
-            'INSERT INTO problem_judge_data_objects(object_id,problem_id,version_id,object_key,file_name,size_bytes,sha256) VALUES($1,$2,$3,$4,$5,$6,$7)',
+            'INSERT INTO problem_judge_data_objects(object_id,problem_id,version_id,object_key,file_name,size_bytes,sha256) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(version_id,object_id) DO NOTHING',
             [
               ref.objectId,
               v.problemId,
@@ -430,6 +434,10 @@ export class PostgresJudgeDataRepository implements JudgeDataRepository {
               ref.sha256,
             ],
           );
+      await db.query(
+        'DELETE FROM problem_judge_draft_testcases WHERE problem_id=$1',
+        [draft.problemId],
+      );
       const removed = await db.query(
         expectedRevision === undefined
           ? 'DELETE FROM problem_judge_drafts WHERE problem_id=$1'

@@ -95,6 +95,7 @@ export type AppOptions = {
   config?: RuntimeConfig;
   operatorUserIds?: ReadonlySet<string>;
   operatorUsernames?: ReadonlySet<string>;
+  judgeAdminPermissions?: ReadonlyMap<string, ReadonlySet<string>>;
   realSubmissionExecution?: boolean;
 };
 type Owned = {

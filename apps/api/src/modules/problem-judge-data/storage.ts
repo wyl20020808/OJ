@@ -32,7 +32,6 @@ export class S3ByteStorage implements ByteStorage {
     fileName: string,
     problemId: string,
   ) {
-    void problemId;
     const digest = sha256(bytes);
     try {
       await this.client.send(
@@ -41,7 +40,7 @@ export class S3ByteStorage implements ByteStorage {
           Key: key,
           Body: bytes,
           ContentType: 'application/octet-stream',
-          Metadata: { sha256: digest },
+          Metadata: { sha256: digest, problemid: problemId },
         }),
       );
     } catch (error) {
@@ -61,8 +60,16 @@ export class S3ByteStorage implements ByteStorage {
       h = await this.client.send(
         new HeadObjectCommand({ Bucket: this.bucket, Key: ref.key }),
       );
-    } catch {
-      throw new JudgeDataError('INTEGRITY_MISMATCH', 'Object unavailable', 409);
+    } catch (error) {
+      const status = (error as { $metadata?: { httpStatusCode?: number } })
+        .$metadata?.httpStatusCode;
+      if (status === 404)
+        throw new JudgeDataError(
+          'INTEGRITY_MISMATCH',
+          'Object unavailable',
+          409,
+        );
+      throw storageFailure(error);
     }
     if (
       Number(h.ContentLength) !== ref.sizeBytes ||
