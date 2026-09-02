@@ -361,8 +361,11 @@ export class LocalJudgeHostAgent {
           OJ_JUDGE_LAUNCH_NONCE: nonce,
         },
         stdio: 'ignore',
+        // A Host Agent restart must not terminate an active Judge Worker.
+        detached: true,
         windowsHide: true,
       });
+      child.unref();
       try {
         await new Promise<void>((resolve, reject) => {
           const onSpawn = () => {
