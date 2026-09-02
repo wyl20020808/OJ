@@ -11,6 +11,11 @@ import { JUDGE_SERVICE_API_VERSION } from './model.js';
 import type { JudgeServiceStateRepository } from './repository.js';
 import type { JudgeNodeRepository } from './node-repository.js';
 import type { RequiredNodeCapabilities } from './node-model.js';
+import {
+  assertJudgePoolPolicy,
+  decideJudgePool,
+  type JudgePoolSnapshot,
+} from './pool-autoscaler.js';
 
 export type JudgeServiceAppOptions = {
   queue: JudgeJobRepository;
@@ -20,22 +25,39 @@ export type JudgeServiceAppOptions = {
   nodes?: JudgeNodeRepository;
   ready?: () => Promise<boolean>;
   logger?: boolean;
+  /** Enables the in-process autoscaler loop when greater than zero. */
+  autoscalerIntervalMs?: number;
+  /** Optional queue metrics supplied by the concrete queue adapter. */
+  autoscalerMetrics?: () => Promise<{
+    pendingJobs?: number;
+    averageQueueWaitMs?: number;
+    p95QueueWaitMs?: number;
+  }>;
   hostAgent?: {
-    listTemplates(): unknown;
-    hostCapacity(): unknown;
-    listOwned(): unknown;
-    operationsHistory(): unknown;
+    listTemplates(): Promise<unknown>;
+    hostCapacity(): Promise<unknown>;
+    listOwned(): Promise<unknown>;
+    operationsHistory(): Promise<unknown>;
     start(input: {
       templateId: string;
       nodeId: string;
     }): Promise<{ operationId: string; incarnation?: string }>;
-    stop(input: { nodeId: string }): Promise<{ operationId: string }>;
+    stop(input: {
+      nodeId: string;
+      expectedIncarnation?: string;
+      activeJobs?: number;
+    }): Promise<{ operationId: string }>;
     restart(input: {
       templateId: string;
       nodeId: string;
+      expectedIncarnation?: string;
+      activeJobs?: number;
     }): Promise<{ operationId: string; incarnation?: string }>;
   };
 };
+
+const numericFrom = (value: unknown, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
 const capabilities: JudgeServiceCapabilities = {
   apiVersion: JUDGE_SERVICE_API_VERSION,
@@ -200,6 +222,11 @@ export async function buildJudgeService(
   };
   const lifecycleHistory: unknown[] = [];
   const autoscalerHistory: unknown[] = [];
+  let lastScaleUpAt: Date | undefined;
+  let lastScaleDownAt: Date | undefined;
+  let idleSince: Date | undefined;
+  let autoscalerRunning = false;
+  let autoscalerTimer: ReturnType<typeof setInterval> | undefined;
   app.get('/v1/admin/pool/policy', async (request, reply) => {
     if (!(await deny(request, reply))) return;
     return poolPolicy;
@@ -207,18 +234,18 @@ export async function buildJudgeService(
   app.get('/v1/admin/pool/templates', async (request, reply) => {
     if (!(await deny(request, reply))) return;
     return {
-      items: options.hostAgent?.listTemplates() ?? [],
+      items: options.hostAgent ? await options.hostAgent.listTemplates() : [],
       nextCursor: null,
     };
   });
   app.get('/v1/admin/pool/host-capacity', async (request, reply) => {
     if (!(await deny(request, reply))) return;
-    return (
-      options.hostAgent?.hostCapacity() ?? {
-        available: false,
-        reason: 'HOST_AGENT_NOT_AVAILABLE',
-      }
-    );
+    return options.hostAgent
+      ? await options.hostAgent.hostCapacity()
+      : {
+          available: false,
+          reason: 'HOST_AGENT_NOT_AVAILABLE',
+        };
   });
   app.get('/v1/admin/lifecycle/capabilities', async (request, reply) => {
     if (!(await deny(request, reply))) return;
@@ -231,14 +258,246 @@ export async function buildJudgeService(
   app.get('/v1/admin/lifecycle/operations', async (request, reply) => {
     if (!(await deny(request, reply))) return;
     return {
-      items:
-        options.hostAgent?.operationsHistory() ?? lifecycleHistory.slice(-100),
+      items: options.hostAgent
+        ? await options.hostAgent.operationsHistory()
+        : lifecycleHistory.slice(-100),
       nextCursor: null,
     };
   });
   app.get('/v1/admin/autoscaler/decisions', async (request, reply) => {
     if (!(await deny(request, reply))) return;
     return { items: autoscalerHistory.slice(-100), nextCursor: null };
+  });
+  const reconcileAutoscaler = async (body: Record<string, unknown> = {}) => {
+    if (!nodes) throw new Error('NODE_REGISTRY_UNAVAILABLE');
+    const numeric = (key: string, fallback = 0) =>
+      typeof body[key] === 'number' && Number.isFinite(body[key])
+        ? Number(body[key])
+        : fallback;
+    const now = new Date();
+    const currentNodes = await nodes.list(now);
+    const ownedRaw = options.hostAgent
+      ? await options.hostAgent.listOwned()
+      : [];
+    const ownedItems = Array.isArray(ownedRaw)
+      ? ownedRaw
+      : ownedRaw &&
+          typeof ownedRaw === 'object' &&
+          Array.isArray((ownedRaw as { items?: unknown }).items)
+        ? (ownedRaw as { items: unknown[] }).items
+        : [];
+    const ownedCount = ownedItems.length;
+    const hostRaw = options.hostAgent
+      ? await options.hostAgent.hostCapacity()
+      : undefined;
+    const host =
+      hostRaw && typeof hostRaw === 'object'
+        ? (hostRaw as Record<string, unknown>)
+        : undefined;
+    const configuredCpu = numericFrom(
+      host?.configuredCpuUnits ?? host?.configuredCpu,
+      0,
+    );
+    const remainingCpu = numericFrom(
+      host?.availableCpuUnits ?? host?.remainingCpu,
+      0,
+    );
+    const configuredMemory = numericFrom(
+      host?.configuredMemoryMb ?? host?.configuredMemoryBytes,
+      0,
+    );
+    const remainingMemory = numericFrom(
+      host?.availableMemoryMb ?? host?.remainingMemoryBytes,
+      0,
+    );
+    const queueMetrics = (await options.autoscalerMetrics?.()) ?? {};
+    const running = currentNodes.filter((n) => n.desiredState !== 'OFFLINE');
+    const active = running.reduce(
+      (sum, n) => sum + Math.max(0, n.activeJobs),
+      0,
+    );
+    const schedulable = running
+      .filter(
+        (n) =>
+          (n.desiredState ?? 'ONLINE') === 'ONLINE' &&
+          ['ONLINE', 'BUSY'].includes(n.observedState ?? n.state),
+      )
+      .reduce(
+        (sum, n) => sum + Math.max(0, n.maxConcurrentJobs - n.activeJobs),
+        0,
+      );
+    const maxCapacity = running.reduce(
+      (sum, n) => sum + n.maxConcurrentJobs,
+      0,
+    );
+    const pendingJobs = Math.max(
+      0,
+      Math.floor(
+        numeric('pendingJobs', numericFrom(queueMetrics.pendingJobs, 0)),
+      ),
+    );
+    const activeJobs = Math.max(0, Math.floor(numeric('activeJobs', active)));
+    const schedulableCapacity = Math.max(
+      0,
+      Math.floor(numeric('schedulableCapacity', schedulable)),
+    );
+    const utilization = Math.max(
+      0,
+      Math.min(
+        1,
+        numeric('utilization', maxCapacity ? active / maxCapacity : 0),
+      ),
+    );
+    const averageQueueWaitMs = Math.max(
+      0,
+      numeric(
+        'averageQueueWaitMs',
+        numericFrom(queueMetrics.averageQueueWaitMs, 0),
+      ),
+    );
+    const p95QueueWaitMs = Math.max(
+      0,
+      numeric('p95QueueWaitMs', numericFrom(queueMetrics.p95QueueWaitMs, 0)),
+    );
+    if (
+      pendingJobs === 0 &&
+      utilization <= poolPolicy.scaleDownUtilizationThreshold
+    )
+      idleSince ??= now;
+    else idleSince = undefined;
+    const snapshot: JudgePoolSnapshot = {
+      now,
+      // Include Host Agent-owned processes that have not registered yet. This
+      // prevents each interval tick from launching another copy while a
+      // worker is still starting and registering its incarnation.
+      runningNodes: Math.max(running.length, ownedCount),
+      pendingJobs,
+      activeJobs,
+      schedulableCapacity,
+      utilization,
+      averageQueueWaitMs,
+      p95QueueWaitMs,
+      host: {
+        configuredCpu,
+        remainingCpu,
+        configuredMemoryBytes: configuredMemory,
+        remainingMemoryBytes: remainingMemory,
+        maxAdditionalNodes: Math.max(
+          0,
+          Math.floor(numericFrom(host?.maxAdditionalNodes, 0)),
+        ),
+        nodeCpu: Math.max(
+          1,
+          numericFrom(host?.nodeCpuUnits ?? host?.nodeCpu, 1),
+        ),
+        nodeMemoryBytes: Math.max(
+          1,
+          numericFrom(host?.nodeMemoryMb ?? host?.nodeMemoryBytes, 1),
+        ),
+        available: Boolean(options.hostAgent && host && hostRaw),
+      },
+      ...(typeof body.idleSince === 'string' &&
+      Number.isFinite(Date.parse(body.idleSince))
+        ? { idleSince: new Date(body.idleSince) }
+        : idleSince
+          ? { idleSince }
+          : {}),
+      ...(lastScaleUpAt ? { lastScaleUpAt } : {}),
+      ...(lastScaleDownAt ? { lastScaleDownAt } : {}),
+      ...(typeof body.correlationId === 'string'
+        ? { correlationId: body.correlationId }
+        : {}),
+    };
+    const decision = decideJudgePool(snapshot, poolPolicy);
+    autoscalerHistory.push(decision.audit);
+    while (autoscalerHistory.length > 200) autoscalerHistory.shift();
+    const operations: unknown[] = [];
+    try {
+      if (decision.action === 'SCALE_UP' && options.hostAgent) {
+        const count = Math.max(
+          0,
+          decision.resultingNodeCount - snapshot.runningNodes,
+        );
+        for (let i = 0; i < count; i++)
+          operations.push(
+            await options.hostAgent.start({
+              templateId: poolPolicy.templateId,
+              nodeId: `${poolPolicy.templateId}-${Date.now()}-${i + 1}`,
+            }),
+          );
+      } else if (decision.action === 'SCALE_DOWN' && options.hostAgent) {
+        const count = Math.max(
+          0,
+          snapshot.runningNodes - decision.requestedNodeCount,
+        );
+        const candidates = currentNodes
+          .filter((n) => n.desiredState !== 'OFFLINE' && n.activeJobs === 0)
+          .sort((a, b) => a.nodeId.localeCompare(b.nodeId));
+        for (const candidate of candidates.slice(0, count)) {
+          const drained = await nodes.drain(
+            candidate.nodeId,
+            candidate.incarnation,
+            candidate.controlVersion,
+          );
+          if (drained.activeJobs !== 0) continue;
+          await nodes.offline(
+            candidate.nodeId,
+            drained.incarnation,
+            drained.controlVersion,
+          );
+          operations.push(
+            await options.hostAgent.stop({
+              nodeId: candidate.nodeId,
+              expectedIncarnation: candidate.incarnation,
+              activeJobs: 0,
+            }),
+          );
+        }
+      }
+      if (decision.action === 'SCALE_UP') lastScaleUpAt = now;
+      if (decision.action === 'SCALE_DOWN') lastScaleDownAt = now;
+    } catch (error) {
+      throw Object.assign(
+        new Error(
+          error instanceof Error ? error.message : 'HOST_AGENT_UNAVAILABLE',
+        ),
+        { decision, operations },
+      );
+    }
+    return { decision, operations };
+  };
+  app.post('/v1/admin/autoscaler/reconcile', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    if (!nodes)
+      return reply.code(503).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+    try {
+      return await reconcileAutoscaler(
+        (request.body ?? {}) as Record<string, unknown>,
+      );
+    } catch (error) {
+      const value = error as { decision?: unknown; operations?: unknown[] };
+      return reply.code(503).send({
+        code: error instanceof Error ? error.message : 'HOST_AGENT_UNAVAILABLE',
+        ...(value.decision ? { decision: value.decision } : {}),
+        ...(value.operations ? { operations: value.operations } : {}),
+      });
+    }
+  });
+  const intervalMs = Math.max(0, Math.floor(options.autoscalerIntervalMs ?? 0));
+  if (intervalMs > 0 && nodes) {
+    autoscalerTimer = setInterval(() => {
+      if (autoscalerRunning || poolPolicy.mode !== 'AUTOMATIC') return;
+      autoscalerRunning = true;
+      void reconcileAutoscaler({ correlationId: 'autoscaler-loop' })
+        .catch(() => undefined)
+        .finally(() => {
+          autoscalerRunning = false;
+        });
+    }, intervalMs);
+    autoscalerTimer.unref?.();
+  }
+  app.addHook('onClose', async () => {
+    if (autoscalerTimer) clearInterval(autoscalerTimer);
   });
   app.post('/v1/admin/nodes', async (request, reply) => {
     if (!(await deny(request, reply))) return;
@@ -272,19 +531,64 @@ export async function buildJudgeService(
       const body = request.body as { templateId?: unknown };
       if (action !== 'stop' && typeof body?.templateId !== 'string')
         return reply.code(400).send({ code: 'INVALID_TRUSTED_TEMPLATE' });
-      const result =
-        action === 'stop'
-          ? await options.hostAgent.stop({
-              nodeId: (request.params as { nodeId: string }).nodeId,
-            })
-          : await options.hostAgent[action]({
-              templateId: String(body.templateId),
-              nodeId: (request.params as { nodeId: string }).nodeId,
-            });
+      const nodeId = (request.params as { nodeId: string }).nodeId;
+      const current = nodes ? await nodes.get(nodeId) : undefined;
+      if ((action === 'stop' || action === 'restart') && nodes) {
+        if (!current) return reply.code(404).send({ code: 'SLOT_NOT_FOUND' });
+        if (current.activeJobs > 0) {
+          try {
+            await nodes.drain(
+              nodeId,
+              current.incarnation,
+              current.controlVersion,
+            );
+          } catch {
+            return reply.code(409).send({ code: 'LIFECYCLE_CONFLICT' });
+          }
+          return reply.code(409).send({
+            code: 'ACTIVE_JOBS',
+            message: 'Node is draining; active jobs must finish before stop',
+            activeJobs: current.activeJobs,
+          });
+        }
+        try {
+          await nodes.offline(
+            nodeId,
+            current.incarnation,
+            current.controlVersion,
+          );
+        } catch {
+          return reply.code(409).send({ code: 'LIFECYCLE_CONFLICT' });
+        }
+      }
+      let result;
+      try {
+        result =
+          action === 'stop'
+            ? await options.hostAgent.stop({
+                nodeId,
+                ...(current?.incarnation
+                  ? { expectedIncarnation: current.incarnation }
+                  : {}),
+                activeJobs: 0,
+              })
+            : await options.hostAgent[action]({
+                templateId: String(body.templateId),
+                nodeId,
+                ...(current?.incarnation
+                  ? { expectedIncarnation: current.incarnation }
+                  : {}),
+                activeJobs: 0,
+              });
+      } catch (error) {
+        return reply.code(409).send({
+          code: error instanceof Error ? error.message : 'LIFECYCLE_FAILED',
+        });
+      }
       lifecycleHistory.push({
         operationId: result.operationId,
         action,
-        nodeId: (request.params as { nodeId: string }).nodeId,
+        nodeId,
         status: 'ACCEPTED',
         timestamp: new Date().toISOString(),
       });
@@ -293,13 +597,49 @@ export async function buildJudgeService(
   app.post('/v1/admin/pool/policy', async (request, reply) => {
     if (!(await deny(request, reply))) return;
     const body = request.body as Record<string, unknown>;
+    const expectedVersion = body?.expectedControlVersion;
     if (
-      !body ||
-      typeof body.templateId !== 'string' ||
-      !Number.isInteger(body.minNodes) ||
-      !Number.isInteger(body.maxNodes) ||
-      Number(body.minNodes) < 0 ||
-      Number(body.maxNodes) < Number(body.minNodes)
+      expectedVersion !== undefined &&
+      expectedVersion !== poolPolicy.controlVersion
+    )
+      return reply.code(409).send({ code: 'CONTROL_VERSION_CONFLICT' });
+    const candidate = {
+      ...poolPolicy,
+      ...body,
+      controlVersion: poolPolicy.controlVersion,
+    };
+    delete (candidate as Record<string, unknown>).reason;
+    delete (candidate as Record<string, unknown>).idempotencyKey;
+    delete (candidate as Record<string, unknown>).expectedControlVersion;
+    try {
+      assertJudgePoolPolicy(candidate);
+    } catch {
+      return reply.code(400).send({ code: 'INVALID_POOL_POLICY' });
+    }
+    const allowed = new Set([
+      'mode',
+      'templateId',
+      'minNodes',
+      'maxNodes',
+      'targetQueueWaitMs',
+      'fastScaleQueueWaitMs',
+      'pendingJobsScaleUpThreshold',
+      'scaleUpStep',
+      'fastScaleUpStep',
+      'scaleDownStep',
+      'scaleDownUtilizationThreshold',
+      'scaleDownIdleWindowMs',
+      'scaleUpCooldownMs',
+      'scaleDownCooldownMs',
+      'hostCpuReserve',
+      'hostMemoryReserve',
+    ]);
+    if (
+      Object.keys(body ?? {}).some(
+        (key) =>
+          !allowed.has(key) &&
+          !['reason', 'idempotencyKey', 'expectedControlVersion'].includes(key),
+      )
     )
       return reply.code(400).send({ code: 'INVALID_POOL_POLICY' });
     Object.assign(poolPolicy, body, {
@@ -309,9 +649,17 @@ export async function buildJudgeService(
   });
   app.post('/v1/admin/pool/mode', async (request, reply) => {
     if (!(await deny(request, reply))) return;
-    const body = request.body as { mode?: unknown };
+    const body = request.body as {
+      mode?: unknown;
+      expectedControlVersion?: unknown;
+    };
     if (body?.mode !== 'MANUAL' && body?.mode !== 'AUTOMATIC')
       return reply.code(400).send({ code: 'INVALID_POOL_POLICY' });
+    if (
+      body.expectedControlVersion !== undefined &&
+      body.expectedControlVersion !== poolPolicy.controlVersion
+    )
+      return reply.code(409).send({ code: 'CONTROL_VERSION_CONFLICT' });
     poolPolicy.mode = body.mode;
     poolPolicy.controlVersion += 1;
     return poolPolicy;

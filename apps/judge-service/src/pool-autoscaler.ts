@@ -282,6 +282,7 @@ export function decideJudgePool(
 
   const current = Math.max(0, Math.floor(snapshot.runningNodes));
   const upPressure =
+    current < policy.minNodes ||
     snapshot.pendingJobs >= policy.pendingJobsScaleUpThreshold ||
     snapshot.averageQueueWaitMs > policy.targetQueueWaitMs ||
     snapshot.p95QueueWaitMs > policy.targetQueueWaitMs ||
@@ -345,13 +346,15 @@ export function decideJudgePool(
       'SCALE_UP',
       requested,
       resulting,
-      fastPressure
-        ? 'FAST_SCALE_BACKLOG'
-        : snapshot.pendingJobs >= policy.pendingJobsScaleUpThreshold
-          ? 'PENDING_QUEUE_THRESHOLD_EXCEEDED'
-          : snapshot.p95QueueWaitMs > policy.targetQueueWaitMs
-            ? 'P95_QUEUE_WAIT_TARGET_EXCEEDED'
-            : 'QUEUE_WAIT_TARGET_EXCEEDED',
+      current < policy.minNodes
+        ? 'PENDING_QUEUE_THRESHOLD_EXCEEDED'
+        : fastPressure
+          ? 'FAST_SCALE_BACKLOG'
+          : snapshot.pendingJobs >= policy.pendingJobsScaleUpThreshold
+            ? 'PENDING_QUEUE_THRESHOLD_EXCEEDED'
+            : snapshot.p95QueueWaitMs > policy.targetQueueWaitMs
+              ? 'P95_QUEUE_WAIT_TARGET_EXCEEDED'
+              : 'QUEUE_WAIT_TARGET_EXCEEDED',
     );
   }
 

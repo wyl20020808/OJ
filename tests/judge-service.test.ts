@@ -6,6 +6,7 @@ import {
   JudgeServiceClient,
   productPublication,
 } from '../apps/api/src/modules/submission/judge-service-client.js';
+import { LocalJudgeHostAgent } from '../apps/judge-host-agent/src/agent.js';
 
 const token = 'judge-service-test-token';
 const headers = { 'x-judge-service-token': token };
@@ -30,6 +31,76 @@ async function service() {
 }
 
 describe('standalone Judge Service V1', () => {
+  it('exposes authenticated host-backed lifecycle and autoscaler controls', async () => {
+    const host = new LocalJudgeHostAgent(
+      [
+        {
+          templateId: 'node-v1',
+          displayName: 'Node V1',
+          executable: process.execPath,
+          args: ['-e', 'setTimeout(() => {}, 1000)'],
+          maxConcurrentJobs: 1,
+          cpuUnits: 1,
+          memoryMb: 64,
+          enabled: true,
+        },
+      ],
+      {
+        configuredCpuUnits: 4,
+        availableCpuUnits: 4,
+        configuredMemoryMb: 1024,
+        availableMemoryMb: 1024,
+      },
+    );
+    const app = await buildJudgeService({
+      queue: new InMemoryJudgeJobRepository(),
+      state: new InMemoryJudgeServiceStateRepository(),
+      serviceToken: token,
+      hostAgent: host,
+      logger: false,
+    });
+    expect((await app.inject('/v1/admin/pool/templates')).statusCode).toBe(401);
+    const templates = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/pool/templates',
+      headers,
+    });
+    expect(templates.json()).toMatchObject({
+      items: [{ templateId: 'node-v1' }],
+    });
+    const started = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/nodes',
+      headers,
+      payload: { templateId: 'node-v1', count: 1 },
+    });
+    expect(started.statusCode).toBe(200);
+    const operation = started.json().results[0];
+    expect(operation).toMatchObject({
+      status: 'RUNNING',
+      incarnation: expect.any(String),
+    });
+    const capacity = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/pool/host-capacity',
+      headers,
+    });
+    expect(capacity.json()).toMatchObject({ currentNodes: 1 });
+    const stopped = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/nodes/node-v1-unknown/stop',
+      headers,
+      payload: {},
+    });
+    expect(stopped.statusCode).toBe(409);
+    const owned = await host.listOwned();
+    expect(owned).toHaveLength(1);
+    await host.stop({
+      nodeId: owned[0]!.nodeId,
+      expectedIncarnation: owned[0]!.incarnation,
+    });
+    await app.close();
+  });
   it('requires a service token while leaving health independent', async () => {
     const { app } = await service();
     expect((await app.inject('/health')).statusCode).toBe(200);
@@ -47,6 +118,25 @@ describe('standalone Judge Service V1', () => {
       multiNodeDynamicManagement: 'NOT_YET_QUALIFIED',
       advancedFeatures: { scoring: false, multiLanguage: false },
     });
+    await app.close();
+  });
+
+  it('rejects stale pool mode control versions', async () => {
+    const { app } = await service();
+    const current = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/pool/policy',
+      headers,
+    });
+    const version = current.json().controlVersion as number;
+    const stale = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/pool/mode',
+      headers,
+      payload: { mode: 'AUTOMATIC', expectedControlVersion: version + 1 },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toMatchObject({ code: 'CONTROL_VERSION_CONFLICT' });
     await app.close();
   });
 

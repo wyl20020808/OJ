@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@ojplatform/judge-host-agent": "workspace:*",
     "@ojplatform/cache": "workspace:*",
     "@ojplatform/database": "workspace:*",
     "@ojplatform/judge-runtime": "workspace:*",

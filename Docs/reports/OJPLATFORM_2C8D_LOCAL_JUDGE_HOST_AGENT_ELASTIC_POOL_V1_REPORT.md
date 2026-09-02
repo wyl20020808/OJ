@@ -17,15 +17,21 @@
 - Deterministic autoscaler covering MANUAL/AUTOMATIC, queue pressure (pending/average/P95 wait), schedulable capacity, utilization, min/max, normal/fast scale-up, host CPU/RAM ceiling, cooldowns, sustained idle scale-down and bounded audit decisions.
 - Product `/api/admin/judge/*` lifecycle boundary with `judge.lifecycle` RBAC, CSRF, idempotency, safe errors and durable audit integration; existing `judge.manage` operations remain separate.
 - Web Judge Machines controls for mode, Add Node and lifecycle actions with truthful Host Agent unavailable state.
+- Judge Service autoscaler loop with configurable interval, Redis pending-queue metrics, derived node utilization/schedulable capacity, overlap protection and timer cleanup. Host Agent-owned process count prevents repeated scale-up before registration.
+- Host Agent lifecycle hardening: live PID checks, spawn-failure cleanup, per-node serialized restart, expected-incarnation checks and active-job stop rejection.
 
 ## Tested
 
-- Focused Host Agent, autoscaler and Product Judge Admin tests: PASS (13 tests).
-- `pnpm typecheck`: PASS.
+- Focused Host Agent, Judge Service, node registry and autoscaler tests: PASS (25 tests).
+- Web tests: PASS (11 tests).
+- `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test:architecture`, `pnpm build`, `pnpm build:web`, and `git diff --check`: PASS.
+- Full `pnpm test`: 715 passed, 8 skipped; PostgreSQL integration suite is blocked by `ECONNREFUSED 127.0.0.1:55432`.
 
 ## Not verified / blocked
 
-Real Host Agent -> Supervisor -> Worker multi-process lifecycle, real routed jobs, restart stale-incarnation rejection, automatic scale-up/down against live queue, and browser runtime qualification were not executed in this bounded run. No mock node is claimed as runtime evidence. Full gates remain to be run after final integration.
+Real Host Agent -> Supervisor -> Worker multi-process lifecycle, real routed jobs, restart stale-incarnation rejection across a Host Agent process restart, automatic scale-up/down against a live queue, and browser runtime qualification were not executed in this bounded run. Docker/Compose reports no running services and PostgreSQL is unavailable. No mock node is claimed as runtime evidence.
+
+Pool policy and autoscaler history remain process-local in this V1 implementation; durable cross-instance policy persistence is a follow-up risk and is not claimed as qualified.
 
 ## Security and architecture
 
