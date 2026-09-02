@@ -117,6 +117,48 @@ describe('local judge host agent', () => {
     });
   });
 
+  it('subtracts owned template resources before reporting or allocating capacity', async () => {
+    const agent = new LocalJudgeHostAgent(
+      [
+        {
+          templateId: 'node-v1',
+          displayName: 'Node V1',
+          executable: process.execPath,
+          args: ['-e', 'setTimeout(() => {}, 1000)'],
+          maxConcurrentJobs: 1,
+          cpuUnits: 1,
+          memoryMb: 256,
+          enabled: true,
+        },
+      ],
+      {
+        configuredCpuUnits: 4,
+        availableCpuUnits: 4,
+        configuredMemoryMb: 1024,
+        availableMemoryMb: 1024,
+      },
+    );
+    await agent.start({ templateId: 'node-v1', nodeId: 'one' });
+    await agent.start({ templateId: 'node-v1', nodeId: 'two' });
+    expect(await agent.hostCapacity('node-v1')).toMatchObject({
+      availableCpuUnits: 2,
+      availableMemoryMb: 512,
+      maxAdditionalNodes: 2,
+      nodeCpuUnits: 1,
+      nodeMemoryMb: 256,
+    });
+    await agent.start({ templateId: 'node-v1', nodeId: 'three' });
+    await agent.start({ templateId: 'node-v1', nodeId: 'four' });
+    await expect(
+      agent.start({ templateId: 'node-v1', nodeId: 'five' }),
+    ).rejects.toThrow('HOST_CAPACITY_EXHAUSTED');
+    await Promise.all(
+      (await agent.listOwned()).map((node) =>
+        agent.stop({ nodeId: node.nodeId }),
+      ),
+    );
+  });
+
   it('fails closed when a restarted host agent sees persisted live ownership', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'oj-host-agent-'));
     const statePath = join(directory, 'state.json');

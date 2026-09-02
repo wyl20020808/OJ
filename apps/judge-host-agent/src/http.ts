@@ -27,7 +27,18 @@ export async function buildJudgeHostAgentServer(
   app.get('/v1/templates', async () => ({
     items: await agent.listTemplates(),
   }));
-  app.get('/v1/capacity', async () => agent.hostCapacity());
+  app.get('/v1/capacity', async (request, reply) => {
+    const { templateId } = request.query as { templateId?: unknown };
+    if (templateId !== undefined && typeof templateId !== 'string')
+      return reply.code(400).send({ code: 'VALIDATION_ERROR' });
+    try {
+      return await agent.hostCapacity(templateId);
+    } catch (error) {
+      return reply.code(409).send({
+        code: error instanceof Error ? error.message : 'HOST_CAPACITY_FAILED',
+      });
+    }
+  });
   app.get('/v1/owned', async () => ({ items: await agent.listOwned() }));
   app.get('/v1/operations', async () => ({
     items: await agent.operationsHistory(),
@@ -107,7 +118,7 @@ export async function buildJudgeHostAgentServer(
 
 export type JudgeHostAgentHttpClient = {
   listTemplates(): Promise<unknown>;
-  hostCapacity(): Promise<unknown>;
+  hostCapacity(templateId?: string): Promise<unknown>;
   listOwned(): Promise<unknown>;
   operationsHistory(): Promise<unknown>;
   start(input: {
@@ -152,7 +163,12 @@ export function createJudgeHostAgentHttpClient(
   }
   return {
     listTemplates: () => call<unknown>('/v1/templates'),
-    hostCapacity: () => call<unknown>('/v1/capacity'),
+    hostCapacity: (templateId) =>
+      call<unknown>(
+        `/v1/capacity${
+          templateId ? `?templateId=${encodeURIComponent(templateId)}` : ''
+        }`,
+      ),
     listOwned: () => call<unknown>('/v1/owned'),
     operationsHistory: () => call<unknown>('/v1/operations'),
     start: (input) =>

@@ -21,6 +21,9 @@ export type HostCapacity = {
 };
 type Owned = {
   nodeId: string;
+  templateId: string;
+  cpuUnits: number;
+  memoryMb: number;
   generation: number;
   nonce: string;
   pid: number;
@@ -38,6 +41,9 @@ export type HostOperation = {
 
 type PersistedOwned = {
   nodeId: string;
+  templateId: string;
+  cpuUnits: number;
+  memoryMb: number;
   generation: number;
   nonce: string;
   pid: number;
@@ -88,6 +94,10 @@ const validateTemplate = (template: JudgeNodeTemplate) => {
 /** Narrow local process boundary. UI never supplies executable, args or env. */
 export class LocalJudgeHostAgent {
   private readonly owned = new Map<string, Owned>();
+  private readonly starting = new Map<
+    string,
+    Pick<Owned, 'templateId' | 'cpuUnits' | 'memoryMb'>
+  >();
   private readonly operations = new Map<string, HostOperation>();
   private generation = 0;
   private readonly locks = new Map<string, Promise<unknown>>();
@@ -181,6 +191,9 @@ export class LocalJudgeHostAgent {
       version: 1,
       owned: owned.map((value) => ({
         nodeId: value.nodeId,
+        templateId: value.templateId,
+        cpuUnits: value.cpuUnits,
+        memoryMb: value.memoryMb,
         generation: value.generation,
         nonce: value.nonce,
         pid: value.pid,
@@ -204,29 +217,71 @@ export class LocalJudgeHostAgent {
       enabled: template.enabled,
     }));
   }
-  async hostCapacity() {
-    await this.ensureReady();
-    const used = [...this.owned.values()].length;
+  private remainingCapacity() {
+    if (this.unreconciledNodePids.size > 0) return { cpuUnits: 0, memoryMb: 0 };
+    const allocated = [...this.owned.values(), ...this.starting.values()];
     return {
-      ...this.capacity,
-      currentNodes: used,
+      cpuUnits: Math.max(
+        0,
+        this.capacity.availableCpuUnits -
+          allocated.reduce((sum, item) => sum + item.cpuUnits, 0),
+      ),
+      memoryMb: Math.max(
+        0,
+        this.capacity.availableMemoryMb -
+          allocated.reduce((sum, item) => sum + item.memoryMb, 0),
+      ),
+    };
+  }
+  private enabledTemplate(templateId: string) {
+    const template = this.templates.find(
+      (x) => x.templateId === templateId && x.enabled,
+    );
+    if (!template) throw new Error('TEMPLATE_NOT_FOUND_OR_DISABLED');
+    return template;
+  }
+  private hasCapacity(
+    template: Pick<JudgeNodeTemplate, 'cpuUnits' | 'memoryMb'>,
+  ) {
+    const remaining = this.remainingCapacity();
+    return (
+      remaining.cpuUnits >= template.cpuUnits &&
+      remaining.memoryMb >= template.memoryMb
+    );
+  }
+  async hostCapacity(templateId?: string) {
+    await this.ensureReady();
+    const template = templateId ? this.enabledTemplate(templateId) : undefined;
+    const remaining = this.remainingCapacity();
+    return {
+      configuredCpuUnits: this.capacity.configuredCpuUnits,
+      availableCpuUnits: remaining.cpuUnits,
+      configuredMemoryMb: this.capacity.configuredMemoryMb,
+      availableMemoryMb: remaining.memoryMb,
+      currentNodes: this.owned.size,
+      startingNodes: this.starting.size,
+      unreconciledNodes: this.unreconciledNodePids.size,
       maxAdditionalNodes: Math.max(
         0,
         Math.floor(
           Math.min(
-            this.capacity.availableCpuUnits /
-              Math.max(1, this.templates[0]?.cpuUnits ?? 1),
-            this.capacity.availableMemoryMb /
-              Math.max(1, this.templates[0]?.memoryMb ?? 1),
+            template ? remaining.cpuUnits / template.cpuUnits : 0,
+            template ? remaining.memoryMb / template.memoryMb : 0,
           ),
         ),
       ),
+      ...(template
+        ? { nodeCpuUnits: template.cpuUnits, nodeMemoryMb: template.memoryMb }
+        : {}),
     };
   }
   async listOwned() {
     await this.ensureReady();
     return [...this.owned.values()].map((x) => ({
       nodeId: x.nodeId,
+      templateId: x.templateId,
+      cpuUnits: x.cpuUnits,
+      memoryMb: x.memoryMb,
       pid: x.pid,
       generation: x.generation,
       startedAt: new Date(x.startedAt).toISOString(),
@@ -275,10 +330,7 @@ export class LocalJudgeHostAgent {
       if (this.unreconciledNodePids.has(input.nodeId))
         throw new Error('NODE_OWNERSHIP_RECONCILIATION_REQUIRED');
     }
-    const template = this.templates.find(
-      (x) => x.templateId === input.templateId && x.enabled,
-    );
-    if (!template) throw new Error('TEMPLATE_NOT_FOUND_OR_DISABLED');
+    const template = this.enabledTemplate(input.templateId);
     const prior = this.owned.get(input.nodeId);
     if (prior && this.isOwnedProcessAlive(prior))
       return {
@@ -290,86 +342,92 @@ export class LocalJudgeHostAgent {
         status: 'RUNNING',
         incarnation: prior.incarnation,
       };
-    const operationId = randomUUID();
-    const nonce = randomUUID();
-    const incarnation = randomUUID();
-    const child = spawn(
-      template.executable,
-      [
-        ...template.args,
-        `--node-id=${input.nodeId}`,
-        `--incarnation=${incarnation}`,
-        `--launch-nonce=${nonce}`,
-      ],
-      {
+    if (!this.hasCapacity(template)) throw new Error('HOST_CAPACITY_EXHAUSTED');
+    this.starting.set(input.nodeId, {
+      templateId: template.templateId,
+      cpuUnits: template.cpuUnits,
+      memoryMb: template.memoryMb,
+    });
+    try {
+      const operationId = randomUUID();
+      const nonce = randomUUID();
+      const incarnation = randomUUID();
+      const child = spawn(template.executable, template.args, {
         env: {
           ...template.env,
+          WORKER_ID: input.nodeId,
           OJ_JUDGE_NODE_ID: input.nodeId,
           OJ_JUDGE_NODE_INCARNATION: incarnation,
+          OJ_JUDGE_LAUNCH_NONCE: nonce,
         },
         stdio: 'ignore',
         windowsHide: true,
-      },
-    );
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const onSpawn = () => {
-          child.off('error', onError);
-          resolve();
-        };
-        const onError = () => {
-          child.off('spawn', onSpawn);
-          reject(new Error('PROCESS_START_FAILED'));
-        };
-        child.once('spawn', onSpawn);
-        child.once('error', onError);
       });
-    } catch {
-      // A failed spawn may still leave a partially-created child on some hosts.
       try {
-        if (child.pid) child.kill('SIGTERM');
+        await new Promise<void>((resolve, reject) => {
+          const onSpawn = () => {
+            child.off('error', onError);
+            resolve();
+          };
+          const onError = () => {
+            child.off('spawn', onSpawn);
+            reject(new Error('PROCESS_START_FAILED'));
+          };
+          child.once('spawn', onSpawn);
+          child.once('error', onError);
+        });
       } catch {
-        // Ignore cleanup failures; the process was never accepted as owned.
+        // A failed spawn may still leave a partially-created child on some hosts.
+        try {
+          if (child.pid) child.kill('SIGTERM');
+        } catch {
+          // Ignore cleanup failures; the process was never accepted as owned.
+        }
+        throw new Error('PROCESS_START_FAILED');
       }
-      throw new Error('PROCESS_START_FAILED');
-    }
-    if (!child.pid || child.exitCode !== null)
-      throw new Error('PROCESS_START_FAILED');
-    const owned: Owned = {
-      nodeId: input.nodeId,
-      generation: ++this.generation,
-      nonce,
-      pid: child.pid ?? -1,
-      startedAt: Date.now(),
-      executable: template.executable,
-      child,
-      incarnation,
-    };
-    this.owned.set(input.nodeId, owned);
-    try {
-      await this.persistState();
-    } catch {
-      this.owned.delete(input.nodeId);
+      if (!child.pid || child.exitCode !== null)
+        throw new Error('PROCESS_START_FAILED');
+      const owned: Owned = {
+        nodeId: input.nodeId,
+        templateId: template.templateId,
+        cpuUnits: template.cpuUnits,
+        memoryMb: template.memoryMb,
+        generation: ++this.generation,
+        nonce,
+        pid: child.pid ?? -1,
+        startedAt: Date.now(),
+        executable: template.executable,
+        child,
+        incarnation,
+      };
+      this.owned.set(input.nodeId, owned);
       try {
-        child.kill('SIGTERM');
+        await this.persistState();
       } catch {
-        // Best-effort cleanup after a failed ownership commit.
+        this.owned.delete(input.nodeId);
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          // Best-effort cleanup after a failed ownership commit.
+        }
+        throw new Error('HOST_AGENT_STATE_WRITE_FAILED');
       }
-      throw new Error('HOST_AGENT_STATE_WRITE_FAILED');
+      const op: HostOperation = {
+        operationId,
+        nodeId: input.nodeId,
+        status: 'RUNNING',
+        incarnation,
+      };
+      this.operations.set(operationId, op);
+      child.once('exit', () => {
+        if (this.owned.get(input.nodeId)?.nonce !== nonce) return;
+        this.owned.delete(input.nodeId);
+        void this.persistState().catch(() => undefined);
+      });
+      return op;
+    } finally {
+      this.starting.delete(input.nodeId);
     }
-    const op: HostOperation = {
-      operationId,
-      nodeId: input.nodeId,
-      status: 'RUNNING',
-      incarnation,
-    };
-    this.operations.set(operationId, op);
-    child.once('exit', () => {
-      if (this.owned.get(input.nodeId)?.nonce !== nonce) return;
-      this.owned.delete(input.nodeId);
-      void this.persistState().catch(() => undefined);
-    });
-    return op;
   }
   async stop(input: {
     nodeId: string;

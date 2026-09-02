@@ -37,7 +37,7 @@ export type JudgeServiceAppOptions = {
   }>;
   hostAgent?: {
     listTemplates(): Promise<unknown>;
-    hostCapacity(): Promise<unknown>;
+    hostCapacity(templateId?: string): Promise<unknown>;
     listOwned(): Promise<unknown>;
     operationsHistory(): Promise<unknown>;
     start(input: {
@@ -217,6 +217,18 @@ export async function buildJudgeService(
   let idleSince: Date | undefined;
   let autoscalerRunning = false;
   let autoscalerTimer: ReturnType<typeof setInterval> | undefined;
+  const waitForNodeIncarnation = async (
+    nodeId: string,
+    incarnation: string,
+  ) => {
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      const registered = await nodes?.get(nodeId);
+      if (registered?.incarnation === incarnation) return registered;
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error('NODE_REGISTRATION_TIMEOUT');
+  };
   app.get('/v1/admin/pool/policy', async (request, reply) => {
     if (!(await deny(request, reply))) return;
     return poolPolicy;
@@ -278,7 +290,7 @@ export async function buildJudgeService(
         : [];
     const ownedCount = ownedItems.length;
     const hostRaw = options.hostAgent
-      ? await options.hostAgent.hostCapacity()
+      ? await options.hostAgent.hostCapacity(poolPolicy.templateId)
       : undefined;
     const host =
       hostRaw && typeof hostRaw === 'object'
@@ -552,7 +564,7 @@ export async function buildJudgeService(
           return reply.code(409).send({ code: 'LIFECYCLE_CONFLICT' });
         }
       }
-      let result;
+      let result: { operationId: string; incarnation?: string };
       try {
         result =
           action === 'stop'
@@ -571,6 +583,22 @@ export async function buildJudgeService(
                   : {}),
                 activeJobs: 0,
               });
+        if (
+          nodes &&
+          (action === 'start' || action === 'restart') &&
+          result.incarnation
+        ) {
+          const registered = await waitForNodeIncarnation(
+            nodeId,
+            result.incarnation,
+          );
+          if (registered.desiredState !== 'ONLINE')
+            await nodes.enable(
+              nodeId,
+              registered.incarnation,
+              registered.controlVersion,
+            );
+        }
       } catch (error) {
         return reply.code(409).send({
           code: error instanceof Error ? error.message : 'LIFECYCLE_FAILED',

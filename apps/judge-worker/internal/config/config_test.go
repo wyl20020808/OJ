@@ -38,3 +38,20 @@ func TestConfigValidation(t *testing.T) {
 		t.Fatal("TLS node service configuration rejected")
 	}
 }
+
+func TestHostAgentIdentityOverridesTemplateWorkerID(t *testing.T) {
+	c, err := Load(map[string]string{
+		"WORKER_ID":                 "template-worker",
+		"OJ_JUDGE_NODE_ID":          "logical-node-a",
+		"OJ_JUDGE_NODE_INCARNATION": "host-incarnation-a",
+	})
+	if err != nil || c.WorkerID != "logical-node-a" || c.NodeIncarnation != "host-incarnation-a" {
+		t.Fatalf("host identity was not retained: %+v err=%v", c, err)
+	}
+}
+
+func TestRejectsUnsafeHostAgentIncarnation(t *testing.T) {
+	if _, err := Load(map[string]string{"OJ_JUDGE_NODE_INCARNATION": "bad\nidentity"}); err == nil {
+		t.Fatal("unsafe host incarnation accepted")
+	}
+}

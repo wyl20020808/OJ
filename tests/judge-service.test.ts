@@ -7,6 +7,8 @@ import {
   productPublication,
 } from '../apps/api/src/modules/submission/judge-service-client.js';
 import { LocalJudgeHostAgent } from '../apps/judge-host-agent/src/agent.js';
+import { InMemoryJudgeNodeRepository } from '../apps/judge-service/src/node-repository.js';
+import type { JudgeNodeRegistration } from '../apps/judge-service/src/node-model.js';
 
 const token = 'judge-service-test-token';
 const headers = { 'x-judge-service-token': token };
@@ -19,6 +21,23 @@ const request = {
   languageId: 'cpp20',
   sourceBytes: 'int main(){}',
 };
+const nodeRegistration = (
+  nodeId: string,
+  incarnation: string,
+): JudgeNodeRegistration => ({
+  nodeId,
+  incarnation,
+  runtimeVersion: '2c8d-test',
+  maxConcurrentJobs: 1,
+  capabilities: {
+    languageProfiles: ['cpp20-gcc-13-v1'],
+    checkers: ['EXACT_BYTES'],
+    executionModes: ['SAFE_FIXTURE_QUALIFICATION'],
+    sandboxContractVersion: '2C.3',
+    architecture: 'amd64',
+    resourceClass: 'standard-v1',
+  },
+});
 
 async function service() {
   const queue = new InMemoryJudgeJobRepository();
@@ -117,6 +136,47 @@ describe('standalone Judge Service V1', () => {
       checkers: ['EXACT_BYTES', 'TOKEN_WHITESPACE'],
       multiNodeDynamicManagement: 'NOT_YET_QUALIFIED',
       advancedFeatures: { scoring: false, multiLanguage: false },
+    });
+    await app.close();
+  });
+
+  it('only reenables a restarted node after its new incarnation registers', async () => {
+    const nodes = new InMemoryJudgeNodeRepository();
+    await nodes.register(nodeRegistration('node-a', 'old-incarnation'));
+    const host = {
+      listTemplates: async () => [],
+      hostCapacity: async () => ({}),
+      listOwned: async () => [],
+      operationsHistory: async () => [],
+      start: async () => ({
+        operationId: 'start-op',
+        incarnation: 'new-incarnation',
+      }),
+      stop: async () => ({ operationId: 'stop-op' }),
+      restart: async () => {
+        await nodes.register(nodeRegistration('node-a', 'new-incarnation'));
+        return { operationId: 'restart-op', incarnation: 'new-incarnation' };
+      },
+    };
+    const app = await buildJudgeService({
+      queue: new InMemoryJudgeJobRepository(),
+      state: new InMemoryJudgeServiceStateRepository(),
+      nodes,
+      hostAgent: host,
+      serviceToken: token,
+      logger: false,
+    });
+    const restarted = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/nodes/node-a/restart',
+      headers,
+      payload: { templateId: 'node-v1' },
+    });
+    expect(restarted.statusCode).toBe(200);
+    expect(await nodes.get('node-a')).toMatchObject({
+      incarnation: 'new-incarnation',
+      desiredState: 'ONLINE',
+      state: 'ONLINE',
     });
     await app.close();
   });
