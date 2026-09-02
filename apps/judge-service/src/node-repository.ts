@@ -52,6 +52,10 @@ export interface JudgeNodeRepository {
     nodeId: string,
     incarnation: string,
   ): Promise<JudgeNodeAssignment | undefined>;
+  listAssignments(
+    nodeId: string,
+    limit?: number,
+  ): Promise<JudgeNodeAssignment[]>;
   completeAssignment(assignmentId: string): Promise<void>;
 }
 
@@ -130,12 +134,18 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
   async register(value: JudgeNodeRegistration, now = new Date()) {
     assertJudgeNodeRegistration(value);
     const existing = this.nodes.get(value.nodeId);
+    const desiredState = existing?.desiredState ?? 'ONLINE';
     const next: JudgeNode = {
       ...value,
-      state: 'ONLINE',
-      desiredState: 'ONLINE',
+      state:
+        desiredState === 'OFFLINE'
+          ? 'OFFLINE'
+          : desiredState === 'DRAINING'
+            ? 'DRAINING'
+            : 'ONLINE',
+      desiredState,
       observedState: 'ONLINE',
-      controlVersion: 1,
+      controlVersion: existing?.controlVersion ?? 1,
       activeJobs: 0,
       lastHeartbeatAt: stamp(now),
     };
@@ -276,6 +286,7 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
     this.nodes.set(current.nodeId, {
       ...current,
       activeJobs: current.activeJobs + 1,
+      observedState: 'BUSY',
       state: 'BUSY',
     });
     return structuredClone(value);
@@ -302,6 +313,12 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
       value.incarnation === incarnation
       ? structuredClone(value)
       : undefined;
+  }
+  async listAssignments(nodeId: string, limit = 100) {
+    return [...this.assignments.values()]
+      .filter((a) => a.nodeId === nodeId)
+      .slice(0, Math.min(100, limit))
+      .map((a) => structuredClone(a));
   }
   async completeAssignment(assignmentId: string) {
     const value = this.assignments.get(assignmentId);
@@ -340,7 +357,7 @@ export class PostgresJudgeNodeRepository implements JudgeNodeRepository {
     const result = await this.pool.query(
       `INSERT INTO judge_nodes (node_id,incarnation,runtime_version,capabilities,max_concurrent_jobs,active_jobs,state,last_heartbeat_at,metadata)
        VALUES ($1,$2,$3,$4::jsonb,$5,0,'ONLINE',$6,$7::jsonb)
-       ON CONFLICT (node_id) DO UPDATE SET incarnation=EXCLUDED.incarnation,runtime_version=EXCLUDED.runtime_version,capabilities=EXCLUDED.capabilities,max_concurrent_jobs=EXCLUDED.max_concurrent_jobs,active_jobs=CASE WHEN judge_nodes.incarnation=EXCLUDED.incarnation THEN judge_nodes.active_jobs ELSE 0 END,state=CASE WHEN judge_nodes.incarnation=EXCLUDED.incarnation AND judge_nodes.state='OFFLINE' THEN 'OFFLINE' ELSE 'ONLINE' END,last_heartbeat_at=EXCLUDED.last_heartbeat_at,metadata=EXCLUDED.metadata,updated_at=now()
+       ON CONFLICT (node_id) DO UPDATE SET incarnation=EXCLUDED.incarnation,runtime_version=EXCLUDED.runtime_version,capabilities=EXCLUDED.capabilities,max_concurrent_jobs=EXCLUDED.max_concurrent_jobs,active_jobs=CASE WHEN judge_nodes.incarnation=EXCLUDED.incarnation THEN judge_nodes.active_jobs ELSE 0 END,desired_state=judge_nodes.desired_state,observed_state='ONLINE',state=CASE WHEN judge_nodes.desired_state='OFFLINE' THEN 'OFFLINE' WHEN judge_nodes.desired_state='DRAINING' THEN 'DRAINING' ELSE 'ONLINE' END,last_heartbeat_at=EXCLUDED.last_heartbeat_at,metadata=EXCLUDED.metadata,updated_at=now()
        RETURNING *`,
       [
         value.nodeId,
@@ -361,7 +378,7 @@ export class PostgresJudgeNodeRepository implements JudgeNodeRepository {
     now = new Date(),
   ) {
     const result = await this.pool.query(
-      `UPDATE judge_nodes SET active_jobs=GREATEST(active_jobs,$3),state=CASE WHEN GREATEST(active_jobs,$3)=0 THEN 'ONLINE' ELSE 'BUSY' END,last_heartbeat_at=$4,updated_at=now()
+      `UPDATE judge_nodes SET active_jobs=GREATEST(active_jobs,$3),observed_state=CASE WHEN GREATEST(active_jobs,$3)=0 THEN 'ONLINE' ELSE 'BUSY' END,state=CASE WHEN desired_state='OFFLINE' THEN 'OFFLINE' WHEN desired_state='DRAINING' THEN 'DRAINING' WHEN GREATEST(active_jobs,$3)=0 THEN 'ONLINE' ELSE 'BUSY' END,last_heartbeat_at=$4,updated_at=now()
        WHERE node_id=$1 AND incarnation=$2 AND state NOT IN ('OFFLINE','DRAINING') AND $3 BETWEEN 0 AND max_concurrent_jobs RETURNING *`,
       [nodeId, incarnation, activeJobs, stamp(now)],
     );
@@ -424,7 +441,7 @@ export class PostgresJudgeNodeRepository implements JudgeNodeRepository {
     now = new Date(),
   ) {
     const reservation = await this.pool.query(
-      `UPDATE judge_nodes SET active_jobs=active_jobs+1,state='BUSY',updated_at=now()
+      `UPDATE judge_nodes SET active_jobs=active_jobs+1,observed_state='BUSY',state=CASE WHEN desired_state='OFFLINE' THEN 'OFFLINE' WHEN desired_state='DRAINING' THEN 'DRAINING' ELSE 'BUSY' END,updated_at=now()
        WHERE node_id=$1 AND incarnation=$2 AND state IN ('ONLINE','BUSY') AND active_jobs < max_concurrent_jobs RETURNING node_id`,
       [nodeValue.nodeId, nodeValue.incarnation],
     );
@@ -492,6 +509,21 @@ export class PostgresJudgeNodeRepository implements JudgeNodeRepository {
           assignedAt: new Date(value.assigned_at).toISOString(),
         }
       : undefined;
+  }
+  async listAssignments(nodeId: string, limit = 100) {
+    const result = await this.pool.query(
+      `SELECT * FROM judge_node_assignments WHERE node_id=$1 ORDER BY assigned_at DESC LIMIT $2`,
+      [nodeId, Math.min(100, limit)],
+    );
+    return result.rows.map((value) => ({
+      assignmentId: String(value.assignment_id),
+      judgeJobId: String(value.judge_job_id),
+      nodeId: String(value.node_id),
+      incarnation: String(value.incarnation),
+      attemptGeneration: Number(value.attempt_generation),
+      status: value.status,
+      assignedAt: new Date(value.assigned_at).toISOString(),
+    }));
   }
   async completeAssignment(assignmentId: string) {
     await this.pool.query(

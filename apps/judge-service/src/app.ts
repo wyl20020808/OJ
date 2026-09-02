@@ -240,6 +240,90 @@ export async function buildJudgeService(
     const n = await nodes.get((request.params as { nodeId: string }).nodeId);
     return n ? adminDto(n) : reply.code(404).send({ code: 'NOT_FOUND' });
   });
+  app.get('/v1/admin/nodes/:nodeId/assignments', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    if (!nodes)
+      return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+    const { nodeId } = request.params as { nodeId: string };
+    if (!(await nodes.get(nodeId)))
+      return reply.code(404).send({ code: 'NOT_FOUND' });
+    const limit = Math.min(
+      100,
+      Math.max(
+        1,
+        Number((request.query as { limit?: string })?.limit ?? 100) || 100,
+      ),
+    );
+    return {
+      items: await nodes.listAssignments(nodeId, limit),
+      nextCursor: null,
+    };
+  });
+  app.get('/v1/admin/nodes/:nodeId/jobs', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    if (!nodes)
+      return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+    const { nodeId } = request.params as { nodeId: string };
+    if (!(await nodes.get(nodeId)))
+      return reply.code(404).send({ code: 'NOT_FOUND' });
+    const assignments = await nodes.listAssignments(nodeId, 100);
+    const jobs = (
+      await Promise.all(
+        assignments.map(async (a) => {
+          const job = await options.queue.getById(a.judgeJobId);
+          return job
+            ? {
+                judgeJobId: job.id,
+                status: job.status,
+                attempt: job.attempt,
+                updatedAt: job.updatedAt,
+              }
+            : undefined;
+        }),
+      )
+    ).filter(Boolean);
+    return { items: jobs, nextCursor: null };
+  });
+  app.get('/v1/admin/nodes/:nodeId/failures', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    if (!nodes)
+      return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+    const { nodeId } = request.params as { nodeId: string };
+    if (!(await nodes.get(nodeId)))
+      return reply.code(404).send({ code: 'NOT_FOUND' });
+    const assignments = await nodes.listAssignments(nodeId, 100);
+    const failures = (
+      await Promise.all(
+        assignments.map(async (a) => {
+          const job = await options.queue.getById(a.judgeJobId);
+          return job &&
+            ['FAILED_RETRYABLE', 'FAILED_TERMINAL'].includes(job.status)
+            ? {
+                judgeJobId: job.id,
+                status: job.status,
+                attempt: job.attempt,
+                updatedAt: job.updatedAt,
+              }
+            : undefined;
+        }),
+      )
+    ).filter(Boolean);
+    return { items: failures, nextCursor: null };
+  });
+  app.get('/v1/admin/assignments/:assignmentId', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    if (!nodes)
+      return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+    const id = (request.params as { assignmentId: string }).assignmentId;
+    const all = await nodes.list();
+    for (const n of all) {
+      const found = (await nodes.listAssignments(n.nodeId, 100)).find(
+        (a) => a.assignmentId === id,
+      );
+      if (found) return found;
+    }
+    return reply.code(404).send({ code: 'NOT_FOUND' });
+  });
   app.get('/v1/admin/cluster/summary', async (request, reply) => {
     if (!(await deny(request, reply))) return;
     if (!nodes)

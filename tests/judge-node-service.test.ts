@@ -376,6 +376,59 @@ describe('Phase 2C.7B Judge node service contract', () => {
     );
   });
 
+  it('preserves operator intent through completion and requires service auth for admin', async () => {
+    const app = await service();
+    await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/register',
+      headers: nodeHeaders,
+      payload: registration('node-a', 'a1'),
+    });
+    const denied = await app.inject({ method: 'GET', url: '/v1/admin/nodes' });
+    expect(denied.statusCode).toBe(401);
+    const drained = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/nodes/node-a/drain',
+      headers: serviceHeaders,
+    });
+    expect(drained.json()).toMatchObject({ desiredState: 'DRAINING' });
+    const summary = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/cluster/summary',
+      headers: serviceHeaders,
+    });
+    expect(summary.json()).toMatchObject({
+      totalNodes: 1,
+      schedulableCapacity: 0,
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/register',
+      headers: nodeHeaders,
+      payload: registration('node-a', 'a2'),
+    });
+    const detail = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/nodes/node-a',
+      headers: serviceHeaders,
+    });
+    expect(detail.json()).toMatchObject({
+      desiredState: 'DRAINING',
+      observedState: 'ONLINE',
+    });
+    const enabled = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/nodes/node-a/enable',
+      headers: serviceHeaders,
+      payload: { expectedControlVersion: detail.json().controlVersion },
+    });
+    expect(enabled.json()).toMatchObject({
+      desiredState: 'ONLINE',
+      observedState: 'ONLINE',
+    });
+    await app.close();
+  });
+
   it('compensates a claim when node capacity reservation loses a race', async () => {
     class RejectingNodeRepository extends InMemoryJudgeNodeRepository {
       override async assign(
