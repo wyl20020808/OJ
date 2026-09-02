@@ -35,6 +35,13 @@ import {
 } from './modules/judge/index.js';
 import { registerWorkerControlRoutes } from './modules/judge/worker-control.js';
 import {
+  JudgeAdminAdapterClient,
+  MemoryJudgeAdminAuditRepository,
+  PostgresJudgeAdminAuditRepository,
+  registerJudgeAdminRoutes,
+} from './modules/judge-admin/index.js';
+import type { JudgeAdminAdapter } from './modules/judge-admin/model.js';
+import {
   createSandboxRuntime,
   registerSandboxControlRoutes,
 } from './modules/sandbox/control.js';
@@ -88,6 +95,8 @@ export type AppOptions = {
   operatorUserIds?: ReadonlySet<string>;
   operatorUsernames?: ReadonlySet<string>;
   realSubmissionExecution?: boolean;
+  judgeAdminAdapter?: JudgeAdminAdapter;
+  judgeAdminPermissions?: ReadonlyMap<string, ReadonlySet<string>>;
 };
 type Owned = {
   close: () => Promise<void>;
@@ -201,6 +210,33 @@ export async function buildApp(options: AppOptions = {}) {
       guestStore: createPostgresGuestAuthStore(database.pool),
       guestRateLimiter: new RedisGuestRateLimiter(cache),
     });
+    const adminAdapter =
+      options.judgeAdminAdapter ??
+      (process.env.JUDGE_SERVICE_ADMIN_URL &&
+      process.env.JUDGE_SERVICE_ADMIN_TOKEN
+        ? new JudgeAdminAdapterClient(
+            process.env.JUDGE_SERVICE_ADMIN_URL,
+            process.env.JUDGE_SERVICE_ADMIN_TOKEN,
+          )
+        : undefined);
+    if (adminAdapter)
+      await registerJudgeAdminRoutes(app, {
+        adapter: adminAdapter,
+        getAuthContext: async (request) =>
+          (await auth.getAuthContext(request)) ?? undefined,
+        can: async (ctx, permission) => {
+          if (!ctx || ctx.strength !== 'password') return false;
+          if (configuredOperatorUserIds.has(ctx.userId)) return true;
+          if (options.judgeAdminPermissions?.get(ctx.userId)?.has(permission))
+            return true;
+          const result = await database.pool.query(
+            'SELECT 1 FROM auth_user_roles ur JOIN auth_roles r ON r.name = ur.role_name WHERE ur.user_id = $1 AND $2 = ANY(r.permissions) LIMIT 1',
+            [ctx.userId, permission],
+          );
+          return (result as { rowCount?: number }).rowCount === 1;
+        },
+        audit: new PostgresJudgeAdminAuditRepository(database.pool),
+      });
     const submissionRepository = new PostgresSubmissionRepository(
       database.pool,
     );
@@ -510,6 +546,21 @@ export async function buildApp(options: AppOptions = {}) {
     const auth = await registerAuthModule(app, {
       repository: createMemoryAuthRepository(),
       auditHook,
+    });
+    const adminAdapter =
+      options.judgeAdminAdapter ??
+      new JudgeAdminAdapterClient('http://127.0.0.1:0', 'unconfigured');
+    await registerJudgeAdminRoutes(app, {
+      adapter: adminAdapter,
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      can: (ctx, permission) =>
+        Boolean(
+          ctx &&
+          ctx.strength === 'password' &&
+          options.judgeAdminPermissions?.get(ctx.userId)?.has(permission),
+        ),
+      audit: new MemoryJudgeAdminAuditRepository(),
     });
     const submissionRepository = new InMemorySubmissionRepository();
     const judgeRepository = new InMemoryJudgeJobRepository();
