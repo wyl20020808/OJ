@@ -25,6 +25,8 @@ try {
     '0009_notifications_foundation',
     '0010_guest_auth',
     '0011_profile_favorites',
+    '0012_product_judge_admin_audit',
+    '0013_problem_judge_data',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {

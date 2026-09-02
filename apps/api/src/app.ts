@@ -40,6 +40,14 @@ import {
 } from './modules/sandbox/control.js';
 import type { AuditHook as ProblemAuditHook } from './modules/problem/model.js';
 import {
+  ProblemJudgeDataService,
+  InMemoryJudgeDataRepository,
+  PostgresJudgeDataRepository,
+  MemoryByteStorage,
+  S3ByteStorage,
+  registerProblemJudgeDataRoutes,
+} from './modules/problem-judge-data/index.js';
+import {
   PostgresSubmissionRepository,
   InMemorySubmissionRepository,
   registerSubmissionModule,
@@ -247,6 +255,41 @@ export async function buildApp(options: AppOptions = {}) {
           ['read', 'create', 'update', 'transition'].includes(action),
       },
       auditHook: problemAuditHook,
+    });
+    const judgeData = new ProblemJudgeDataService(
+      new PostgresJudgeDataRepository(database.pool),
+      new S3ByteStorage(storage.client, storage.bucket),
+      async (id) => Boolean(await problemRepository.get(id)),
+      async (action, context) => {
+        const permission = (
+          {
+            view: 'problem.judge_data.view',
+            manage: 'problem.judge_data.manage',
+            publish: 'problem.judge_data.publish',
+          } as Record<string, string>
+        )[action];
+        const actor = context as
+          { strength?: string; userId?: string } | undefined;
+        if (
+          !permission ||
+          !actor ||
+          actor.strength !== 'password' ||
+          !actor.userId
+        )
+          return false;
+        if (options.judgeAdminPermissions?.get(actor.userId)?.has(permission))
+          return true;
+        const result = await database.pool.query(
+          'SELECT 1 FROM auth_user_roles ur JOIN auth_roles r ON r.name=ur.role_name WHERE ur.user_id=$1 AND $2=ANY(r.permissions) LIMIT 1',
+          [actor.userId, permission],
+        );
+        return result.rows.length > 0;
+      },
+    );
+    await registerProblemJudgeDataRoutes(app, {
+      service: judgeData,
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
     const submissionPolicy = createSubmissionAuthorizationPolicy();
     const problemResolver: ProblemRevisionResolver = {
@@ -544,6 +587,27 @@ export async function buildApp(options: AppOptions = {}) {
           ['read', 'create', 'update', 'transition'].includes(action),
       },
       auditHook: problemAuditHook,
+    });
+    const judgeData = new ProblemJudgeDataService(
+      new InMemoryJudgeDataRepository(),
+      new MemoryByteStorage(),
+      async (id) => Boolean(await problemRepository.get(id)),
+      async (action, context) => {
+        const actor = context as
+          { strength?: string; userId?: string } | undefined;
+        return Boolean(
+          actor?.strength === 'password' &&
+          actor.userId &&
+          options.judgeAdminPermissions
+            ?.get(actor.userId)
+            ?.has(`problem.judge_data.${action}`),
+        );
+      },
+    );
+    await registerProblemJudgeDataRoutes(app, {
+      service: judgeData,
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
     const submissionPolicy = createSubmissionAuthorizationPolicy();
     await registerSubmissionModule(app, {
