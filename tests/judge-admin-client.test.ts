@@ -32,6 +32,9 @@ describe('Product-facing Judge Admin client', () => {
       expectedControlVersion: 7,
       idempotencyKey: 'key-1',
     });
+    expect(new Headers(init?.headers).get('content-type')).toBe(
+      'application/json',
+    );
     expect(String(url)).not.toContain('/v1/admin');
   });
 
@@ -53,5 +56,27 @@ describe('Product-facing Judge Admin client', () => {
       status: 409,
       code: 'JUDGE_NODE_CONTROL_CONFLICT',
     });
+  });
+
+  it('unwraps the audited pool policy mutation response', async () => {
+    const fetcher = vi.fn<typeof fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            operationId: 'op-2',
+            correlationId: 'corr-2',
+            node: { mode: 'MANUAL', controlVersion: 2 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    await expect(
+      createJudgeAdminClient('', fetcher).setMode({
+        mode: 'MANUAL',
+        reason: 'maintenance',
+        expectedControlVersion: 1,
+        idempotencyKey: 'mode-1',
+      }),
+    ).resolves.toMatchObject({ mode: 'MANUAL', controlVersion: 2 });
   });
 });

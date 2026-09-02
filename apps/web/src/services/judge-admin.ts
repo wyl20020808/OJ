@@ -78,10 +78,11 @@ export function createJudgeAdminClient(
   fetcher: typeof fetch = fetch,
 ) {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    const { headers, ...rest } = init ?? {};
     const response = await fetcher(`${baseUrl}/api/admin/judge${path}`, {
       credentials: 'include',
-      headers: { 'content-type': 'application/json', ...init?.headers },
-      ...init,
+      ...rest,
+      headers: { 'content-type': 'application/json', ...headers },
     });
     if (!response.ok) {
       let body: { code?: string; message?: string; requestId?: string } = {};
@@ -184,19 +185,19 @@ export function createJudgeAdminClient(
     },
     setMode: (body: Record<string, unknown>) => {
       const csrf = csrfToken();
-      return request<JudgePoolPolicy>('/pool/mode', {
+      return request<{ node: JudgePoolPolicy }>('/pool/mode', {
         method: 'POST',
         ...(csrf ? { headers: { 'x-csrf-token': csrf } } : {}),
         body: JSON.stringify(body),
-      });
+      }).then((result) => result.node);
     },
     updatePolicy: (body: Record<string, unknown>) => {
       const csrf = csrfToken();
-      return request<JudgePoolPolicy>('/pool/policy', {
+      return request<{ node: JudgePoolPolicy }>('/pool/policy', {
         method: 'POST',
         ...(csrf ? { headers: { 'x-csrf-token': csrf } } : {}),
         body: JSON.stringify(body),
-      });
+      }).then((result) => result.node);
     },
   };
 }

@@ -359,7 +359,7 @@ export async function registerJudgeAdminRoutes(
     nodeId: string,
     body: Record<string, unknown>,
     invoke: () => Promise<unknown>,
-    expected?: { incarnation?: string; controlVersion?: number },
+    expected?: { incarnation?: unknown; controlVersion?: unknown },
   ) => {
     const ctx = await o.getAuthContext(r);
     const correlationId = String(
@@ -440,7 +440,7 @@ export async function registerJudgeAdminRoutes(
     if (
       expected &&
       (typeof expected.controlVersion !== 'number' ||
-        typeof expected.incarnation !== 'string')
+        ('incarnation' in expected && typeof expected.incarnation !== 'string'))
     ) {
       await o.audit.record({
         ...base,
@@ -485,10 +485,10 @@ export async function registerJudgeAdminRoutes(
         outcome: 'success',
         idempotencyKey,
         reason: body.reason,
-        ...(expected?.incarnation
+        ...(typeof expected?.incarnation === 'string'
           ? { expectedIncarnation: expected.incarnation }
           : {}),
-        ...(expected?.controlVersion !== undefined
+        ...(typeof expected?.controlVersion === 'number'
           ? { expectedControlVersion: expected.controlVersion }
           : {}),
         afterState: result,
@@ -515,13 +515,9 @@ export async function registerJudgeAdminRoutes(
       `/api/admin/judge/nodes/:nodeId/${action}`,
       async (r: any, reply) => {
         const body = (r.body ?? {}) as Partial<LifecycleInput>;
-        const expected: { incarnation?: string; controlVersion?: number } = {
-          ...(typeof body.expectedIncarnation === 'string'
-            ? { incarnation: body.expectedIncarnation }
-            : {}),
-          ...(typeof body.expectedControlVersion === 'number'
-            ? { controlVersion: body.expectedControlVersion }
-            : {}),
+        const expected = {
+          incarnation: body.expectedIncarnation,
+          controlVersion: body.expectedControlVersion,
         };
         if (!o.adapter.lifecycle)
           return reply.status(501).send({
