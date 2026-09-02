@@ -287,7 +287,8 @@ async function verifyBreadcrumb(id: number) {
   renderApp(paths[id]);
   const nav = screen.getByRole('navigation', { name: '面包屑' });
   expect(nav).toBeInTheDocument();
-  if (id === 27) expect(nav.querySelector('a[href="/problems"]')).toBeTruthy();
+  if (id === 27)
+    expect(nav.querySelector('[aria-current="page"]')).toBeTruthy();
   if (id === 28)
     expect(nav.querySelector('[aria-current="page"]')).toBeTruthy();
   if (id === 29) expect(nav).toHaveTextContent('比赛');
@@ -542,17 +543,10 @@ async function verifyProfile(id: number) {
   if (id === 91) expect(screen.getAllByText('收藏').length).toBeGreaterThan(0);
   if (id === 92) expect(screen.getAllByText('团队').length).toBeGreaterThan(0);
   if (id === 93)
-    expect(screen.getAllByText('我的比赛').length).toBeGreaterThan(0);
-  if (id === 94)
-    expect(screen.getAllByText('评测列表').length).toBeGreaterThan(0);
-  if (id === 95)
-    expect(screen.getByLabelText('做题情况热力图')).toBeInTheDocument();
-  if (id === 96)
-    expect(screen.getByText('暂无可用做题统计')).toBeInTheDocument();
-  if (id === 97)
-    expect(screen.getByLabelText('2026-08-31，2 题')).toHaveAttribute('title');
-  if (id === 98)
-    expect(screen.getByRole('status')).toHaveTextContent('2 道题目完成记录');
+    expect(screen.getByRole('tab', { name: '我的题目' })).toBeInTheDocument();
+  if (id === 94) expect(screen.queryByText('评测列表')).not.toBeInTheDocument();
+  if ([95, 96, 97, 98].includes(id))
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载概览');
   if (id === 100) {
     expect(
       screen.queryByRole('button', { name: '编辑资料' }),

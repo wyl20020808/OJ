@@ -434,43 +434,40 @@ describe('Product Web Backend runtime regressions', () => {
     await waitFor(() => expect(unreadMessages).toHaveBeenCalledTimes(2));
   });
 
-  it('retries each password-only profile projection after a temporary failure', async () => {
+  it('retries a failed profile favorite projection', async () => {
     const favoriteCalls = vi
       .fn()
       .mockRejectedValueOnce(userError('INTERNAL_ERROR', 500))
       .mockResolvedValue({ items: [], page: { limit: 20, total: 0 } });
-    const contestCalls = vi
-      .fn()
-      .mockRejectedValueOnce(userError('INTERNAL_ERROR', 500))
-      .mockResolvedValue({ items: [], page: { limit: 20 } });
     const api = {
       profileCapabilities: vi.fn().mockResolvedValue(availableCapabilities),
+      publicProfile: vi.fn().mockResolvedValue({
+        username: 'ada',
+        displayName: 'Ada',
+        createdAt: '2026-01-01T00:00:00Z',
+        capabilities: availableCapabilities,
+        isSelf: true,
+        canCreateProblems: true,
+      }),
+      profileOverview: vi.fn().mockResolvedValue({
+        createdProblemCount: 0,
+        solvedProblemCount: 0,
+        submissionCount: 0,
+        acceptedSubmissionCount: 0,
+        favoriteCount: 0,
+      }),
       profileFavorites: favoriteCalls,
-      profileContests: contestCalls,
     } as unknown as ApiClient;
 
     render(
       <ProfileExperience user={passwordUser} api={api} navigate={vi.fn()} />,
     );
-    await screen.findByText('做题记录暂不可用');
-    expect(
-      screen.getAllByText('该能力依赖权威提交结果，当前上游服务尚未提供。'),
-    ).toHaveLength(2);
-    expect(screen.getAllByText('该产品域尚未实现。')).toHaveLength(2);
-
     fireEvent.click(screen.getByRole('tab', { name: '收藏' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '收藏列表暂时不可用',
     );
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
     await waitFor(() => expect(favoriteCalls).toHaveBeenCalledTimes(2));
-
-    fireEvent.click(screen.getByRole('tab', { name: '我的比赛' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '我的比赛暂时不可用',
-    );
-    fireEvent.click(screen.getByRole('button', { name: '重试' }));
-    await waitFor(() => expect(contestCalls).toHaveBeenCalledTimes(2));
   });
 
   it('keeps the Backend friend-request ID for cancellation', async () => {

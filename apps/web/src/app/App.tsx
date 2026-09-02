@@ -182,6 +182,28 @@ function Link({
   );
 }
 
+type BreadcrumbItem = { label: string; to: string };
+const breadcrumbStorageKey = 'ojplatform:breadcrumb-history:v1';
+const breadcrumbHistory = (): BreadcrumbItem[] => {
+  try {
+    const value = JSON.parse(
+      window.sessionStorage.getItem(breadcrumbStorageKey) ?? '[]',
+    );
+    return Array.isArray(value)
+      ? value
+          .filter(
+            (item): item is BreadcrumbItem =>
+              typeof item?.label === 'string' &&
+              typeof item?.to === 'string' &&
+              item.to.startsWith('/'),
+          )
+          .slice(-5)
+      : [];
+  } catch {
+    return [];
+  }
+};
+
 function Breadcrumbs({ current }: { current: Route }) {
   const leaf: Record<Route['name'], string> = {
     home: '首页',
@@ -207,7 +229,7 @@ function Breadcrumbs({ current }: { current: Route }) {
     'homework-detail': current.id ?? '作业详情',
     'wrong-book': '错题集',
     notifications: '通知',
-    messages: '通讯',
+    messages: '通讯中心',
     'author-new': '创建题目',
     'author-edit': '编辑题目',
     sandbox: 'Sandbox 运维',
@@ -217,56 +239,50 @@ function Breadcrumbs({ current }: { current: Route }) {
     error: '页面加载失败',
     'not-found': '页面不存在',
   };
-  const parents: Array<{ label: string; to: string }> = [];
-  if (['problem', 'submit'].includes(current.name))
-    parents.push({ label: '题库', to: '/problems' });
-  if (
-    [
-      'contest-new',
-      'contest-detail',
-      'contest-problems',
-      'contest-submissions',
-      'contest-standings',
-      'contest-settings',
-      'my-contests',
-    ].includes(current.name)
-  )
-    parents.push({ label: '比赛', to: '/contests' });
-  if (
-    [
-      'contest-problems',
-      'contest-submissions',
-      'contest-standings',
-      'contest-settings',
-    ].includes(current.name)
-  )
-    parents.push({
-      label: current.id ?? '比赛详情',
-      to: `/contests/${encodeURIComponent(current.id ?? '')}`,
+  const currentItem = {
+    label: leaf[current.name],
+    to: window.location.pathname,
+  };
+  const transient = ['login', 'register', 'forbidden', 'error', 'not-found'];
+  const [history, setHistory] = useState<BreadcrumbItem[]>(breadcrumbHistory);
+  useEffect(() => {
+    if (transient.includes(current.name)) return;
+    setHistory((previous) => {
+      const last = previous.at(-1);
+      const next =
+        last?.to === currentItem.to
+          ? [...previous.slice(0, -1), currentItem]
+          : [...previous, currentItem].slice(-5);
+      try {
+        window.sessionStorage.setItem(
+          breadcrumbStorageKey,
+          JSON.stringify(next),
+        );
+      } catch {
+        // Storage can be unavailable in private browsing; in-memory history remains usable.
+      }
+      return next;
     });
-  if (current.name === 'homework-detail')
-    parents.push({ label: '我的作业', to: '/homework' });
-  if (['submission'].includes(current.name))
-    parents.push({ label: '评测列表', to: '/submissions' });
+  }, [current.name, currentItem.label, currentItem.to]);
+  const items = transient.includes(current.name)
+    ? [currentItem]
+    : history.at(-1)?.to === currentItem.to
+      ? history
+      : [...history, currentItem].slice(-5);
   return (
     <nav className="breadcrumbs" aria-label="面包屑">
-      {current.name === 'home' ? (
-        <span aria-current="page">首页</span>
-      ) : (
-        <>
-          <Link to="/">首页</Link>
-          {parents.map((item) => (
-            <span key={`${item.to}-${item.label}`}>
-              <span aria-hidden="true">/</span>
-              <Link to={item.to}>{item.label}</Link>
+      {items.map((item, index) => (
+        <span key={`${index}-${item.to}-${item.label}`}>
+          {index > 0 && <span aria-hidden="true">/</span>}
+          {index === items.length - 1 ? (
+            <span aria-current="page" title={item.label}>
+              {item.label}
             </span>
-          ))}
-          <span aria-hidden="true">/</span>
-          <span aria-current="page" title={leaf[current.name]}>
-            {leaf[current.name]}
-          </span>
-        </>
-      )}
+          ) : (
+            <Link to={item.to}>{item.label}</Link>
+          )}
+        </span>
+      ))}
     </nav>
   );
 }
@@ -2698,12 +2714,6 @@ export function App() {
           >
             评测列表
           </Link>
-          <Link
-            to="/messages"
-            className={current.name === 'messages' ? 'active' : ''}
-          >
-            通讯
-          </Link>
           <NotificationBell navigate={navigate} api={api} />
           {user ? (
             <>
@@ -2715,13 +2725,6 @@ export function App() {
                 className={current.name === 'profile' ? 'active' : ''}
               >
                 {user.displayName}
-              </Link>
-              <Link
-                to="/settings"
-                ariaLabel="Settings"
-                className={current.name === 'settings' ? 'active' : ''}
-              >
-                账户与安全
               </Link>
               <button
                 className="link-button"
