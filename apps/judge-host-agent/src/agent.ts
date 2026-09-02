@@ -413,6 +413,7 @@ export class LocalJudgeHostAgent {
       throw new Error('PROCESS_IDENTITY_MISMATCH');
     if (!this.isOwnedProcessAlive(owned)) {
       this.owned.delete(input.nodeId);
+      await this.persistState();
       op.status = 'STOPPED';
       return op;
     }
