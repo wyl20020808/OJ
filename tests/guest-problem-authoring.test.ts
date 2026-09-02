@@ -216,4 +216,106 @@ describe('guest problem authoring', () => {
       await app.close();
     }
   });
+
+  it('allows an author to submit against a private revision', async () => {
+    const app = await buildApp({ logger: false });
+    try {
+      const registration = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: {
+          username: 'private-author',
+          email: 'private-author@example.test',
+          displayName: 'Private Author',
+          password: 'correct-horse-battery-staple',
+        },
+      });
+      expect(registration.statusCode).toBe(201);
+      const login = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: {
+          identity: 'private-author',
+          password: 'correct-horse-battery-staple',
+        },
+      });
+      expect(login.statusCode).toBe(200);
+      const author = cookies(login);
+      const created = await app.inject({
+        method: 'POST',
+        url: '/api/problems',
+        headers: headers(author),
+        payload: problem('guest-private-submission'),
+      });
+      expect(created.statusCode).toBe(201);
+      const problemId = created.json().id as string;
+      const revisionId = created.json().currentRevisionId as string;
+
+      expect(
+        (
+          await app.inject({
+            method: 'PUT',
+            url: `/api/problems/${problemId}/judge-data/draft/config`,
+            headers: headers(author),
+            payload: {
+              timeLimitMs: 1000,
+              memoryLimitBytes: 256 * 1024 * 1024,
+              outputLimitBytes: 64 * 1024,
+              checker: 'EXACT_BYTES',
+              allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
+            },
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: `/api/problems/${problemId}/judge-data/draft/upload`,
+            headers: headers(author),
+            payload: {
+              inputBase64: Buffer.from('1 2\n').toString('base64'),
+              outputBase64: Buffer.from('3\n').toString('base64'),
+              inputFileName: '01.in',
+              outputFileName: '01.out',
+            },
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: `/api/problems/${problemId}/judge-data/draft/validate`,
+            headers: headers(author),
+            payload: {},
+          })
+        ).statusCode,
+      ).toBe(200);
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: `/api/problems/${problemId}/judge-data/publish`,
+            headers: headers(author),
+            payload: {},
+          })
+        ).statusCode,
+      ).toBe(200);
+      const submission = await app.inject({
+        method: 'POST',
+        url: '/api/submissions',
+        headers: headers(author),
+        payload: {
+          problemId,
+          problemRevisionId: revisionId,
+          languageId: 'cpp20',
+          source: 'int main() { return 0; }',
+        },
+      });
+      expect(submission.statusCode).toBe(201);
+    } finally {
+      await app.close();
+    }
+  });
 });

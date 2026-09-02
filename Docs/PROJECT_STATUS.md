@@ -2,18 +2,20 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: UNIFIED JUDGE RUNTIME INTEGRATION V1 PARTIAL
-Current Status: HISTORY-PRESERVING PRODUCT/WEB + 2C.8D MERGE IMPLEMENTED AND TESTED; FRESH INTEGRATED HOST-AGENT PRODUCT RUNTIME QUALIFICATION NOT YET VERIFIED
+Current Stage: UNIFIED JUDGE RUNTIME INTEGRATION V1 PASS
+Current Status: HISTORY-PRESERVING PRODUCT/WEB + 2C.8D MERGE, CURRENT-SOURCE HOST-AGENT PRODUCT RUNTIME QUALIFICATION, AND BROWSER AC/WA DETAIL SMOKE COMPLETE
 
-Unified Judge Runtime Integration V1: PARTIAL. Product/Web `4df8c2c` and
+Unified Judge Runtime Integration V1: PASS. Product/Web `4df8c2c` and
 Phase 2C.8D `4462fbd` are formally preserved by merge `d4e04ca`, with Product
 and Judge migrations independently passing and TypeScript/Web/Go gates passing
 in their applicable host environments. The current-source Supervisor -> Judge
 Service -> Host Agent -> Worker ONLINE -> Sandbox chain is runtime verified,
-including real direct Judge AC/WA/CE/RE/TLE/MLE and lifecycle evidence. The
-remaining Browser/Product Guest A+B authoring, Product AC/WA and Submission
-Detail smoke is not claimed because its local browser account-creation action
-was awaiting confirmation. See
+including direct Judge AC/WA/CE/RE/TLE/MLE and lifecycle evidence. Authorized
+local Browser/Product Guest A+B authoring, real Judge Data v1 publication,
+Product AC/WA, and Submission Detail per-testcase evidence are also complete:
+AC `24affb4f-92af-424b-9dc2-161610938c07` and WA
+`598a0092-858d-4af8-ad3c-890bae9ed11e` ran through the Host-Agent-owned
+Worker. See
 `OJPLATFORM_UNIFIED_JUDGE_RUNTIME_INTEGRATION_V1_REPORT.md`.
 
 Web UI Polish and Evaluation List V1: PARTIAL. Problem Detail actions are
@@ -125,6 +127,10 @@ READY FOR NEXT PHASE 2C GOAL: YES
 
 ## Next Planned Goal
 
-Resume Phase 3D runtime qualification with a controlled private problem and Browser/Product -> Judge Service -> Worker/Supervisor/Sandbox evidence. Verdict mapping and checker support exist in the qualified Judge slice; Product E2E, multi-language support, Contest, production HA, and production deployment remain not started or not qualified. Phase 2C remains historically in progress and Phase 2D is not started.
+Unified Judge Runtime Integration V1 is closed. The explicitly deferred global
+evaluation-list backend and explicit problem capability projection remain out of
+scope for the next approved Goal. Product E2E multi-language support, Contest,
+production HA, and production deployment are not qualified; Phase 2D is not
+started.
 
 Last Updated: 2026-09-02

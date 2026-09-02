@@ -457,12 +457,7 @@ export async function buildApp(options: AppOptions = {}) {
         const revision = revisions.find(
           (item) => item.revisionId === revisionId,
         );
-        if (
-          !revision ||
-          revision.status !== 'published' ||
-          revision.visibility !== 'public'
-        )
-          return undefined;
+        if (!revision) return undefined;
         return {
           problemId,
           revisionId: revision.revisionId,
@@ -473,16 +468,22 @@ export async function buildApp(options: AppOptions = {}) {
     await registerSubmissionModule(app, {
       repository: submissionRepository,
       authorizationPolicy: {
-        canSubmit: (context, revision) =>
-          submissionPolicy.canSubmit(
+        canSubmit: async (context, reference) => {
+          const revision = (
+            await problemRepository.revisions(reference.problemId)
+          ).find((item) => item.revisionId === reference.revisionId);
+          if (!revision) return false;
+          return submissionPolicy.canSubmit(
             { id: context.userId, status: 'active' },
             {
               id: revision.revisionId,
-              problemId: revision.problemId,
-              status: 'published',
-              visibility: 'public',
+              problemId: reference.problemId,
+              authorId: revision.authorId,
+              status: revision.status,
+              visibility: revision.visibility,
             },
-          ),
+          );
+        },
         canViewSubmission: (context, submission) =>
           submissionPolicy.canViewSubmission(
             { id: context.userId, status: 'active' },
@@ -873,16 +874,22 @@ export async function buildApp(options: AppOptions = {}) {
     await registerSubmissionModule(app, {
       repository: submissionRepository,
       authorizationPolicy: {
-        canSubmit: (context, revision) =>
-          submissionPolicy.canSubmit(
+        canSubmit: async (context, reference) => {
+          const revision = (
+            await problemRepository.revisions(reference.problemId)
+          ).find((item) => item.revisionId === reference.revisionId);
+          if (!revision) return false;
+          return submissionPolicy.canSubmit(
             { id: context.userId, status: 'active' },
             {
               id: revision.revisionId,
-              problemId: revision.problemId,
-              status: 'published',
-              visibility: 'public',
+              problemId: reference.problemId,
+              authorId: revision.authorId,
+              status: revision.status,
+              visibility: revision.visibility,
             },
-          ),
+          );
+        },
         canViewSubmission: (context, submission) =>
           submissionPolicy.canViewSubmission(
             { id: context.userId, status: 'active' },
@@ -906,12 +913,7 @@ export async function buildApp(options: AppOptions = {}) {
           const revision = revisions.find(
             (item) => item.revisionId === revisionId,
           );
-          if (
-            !revision ||
-            revision.status !== 'published' ||
-            revision.visibility !== 'public'
-          )
-            return undefined;
+          if (!revision) return undefined;
           return {
             problemId,
             revisionId: revision.revisionId,

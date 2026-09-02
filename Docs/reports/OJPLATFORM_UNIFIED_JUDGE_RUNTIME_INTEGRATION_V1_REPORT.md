@@ -2,9 +2,9 @@
 
 ## Result
 
-`UNIFIED JUDGE RUNTIME INTEGRATION = PARTIAL`.
+`UNIFIED JUDGE RUNTIME INTEGRATION = PASS`.
 
-The formal history-preserving merge and all executable integration gates completed. The required bounded fresh integrated runtime qualification, including Host-Agent-owned Worker ONLINE and Product/browser AC plus WA, was not run in this session and is therefore not claimed.
+The formal history-preserving merge, executable integration gates, and the required bounded fresh integrated Browser/Product runtime qualification completed on the current unified source tree.
 
 ## Git Evidence
 
@@ -26,7 +26,7 @@ The formal history-preserving merge and all executable integration gates complet
 
 - Focused Judge/Admin/Host Agent/Pool/Submission/Detail: 55 passed.
 - Focused Web regression: 23 passed.
-- `pnpm test`: 771 passed, 5 existing opt-in skips.
+- `pnpm test`: 772 passed, 5 existing opt-in skips (including the private-author submission regression added during this qualification).
 - `pnpm test:web`: 11 passed.
 - `pnpm integration`: 9 passed.
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test:architecture`, `pnpm build`, `pnpm build:web`, and `git diff --check`: PASS.
@@ -38,25 +38,37 @@ The formal history-preserving merge and all executable integration gates complet
 
 ## Runtime Qualification
 
-`RUNTIME VERIFIED (current integrated source, direct Judge path)`: an isolated
-Judge DB and Redis prefix used a current-source Supervisor running as the
-non-root `oj-sandbox` identity, current-source Judge Service, and current-source
-Host Agent. Judge Service Add Node selected the fixed trusted C++20 template;
-the Host Agent created the Worker. The registered node reported
-`desiredState=ONLINE`, `observedState=ONLINE`, a healthy heartbeat,
-`cpp20-gcc-13-v1`, and `REAL_SANDBOXED_EXECUTION`. A real standalone Judge
-runtime matrix then passed AC, WA, CE, RE, TLE, MLE, duplicate dispatch,
-cancellation, and rejudge history through Judge Service -> Scheduler ->
-Host-Agent-owned Worker -> Supervisor -> Sandbox. The Worker was stopped by
-the Judge Service lifecycle API before Goal-owned services were terminated.
+`RUNTIME VERIFIED (current integrated source)`: isolated Product and Judge
+databases plus Redis prefix `oj:unified-runtime:20260902` used a current-source
+Supervisor at `127.0.0.1:19204` running as non-root `oj-sandbox`, current-source
+standalone Judge Service at `127.0.0.1:3210`, and current-source Host Agent at
+`127.0.0.1:3218`. Judge Service Add Node selected the fixed trusted C++20
+template; the Host Agent created Worker node
+`cpp20-gcc-13-v1-1788359772578-1` (incarnation
+`ac0fbea6-5e25-442f-98c9-91899d5413e4`). The registered node reported
+`desiredState=ONLINE`, `observedState=ONLINE`, healthy heartbeat,
+`cpp20-gcc-13-v1`, and `REAL_SANDBOXED_EXECUTION`.
 
-`NOT VERIFIED`: the remaining required current-source Browser/Product smoke:
-Guest creation, private A+B authoring, Judge Data upload/validation/publication,
-Product AC and WA submission, and browser Submission Detail per-testcase rows.
-This session requested the required browser action-time confirmation before
-creating the local test Guest account, but confirmation was not received.
-Historical Phase 2C.8D and 3D/3D.1 browser/runtime records were not reused as
-evidence for this merge.
+The authorized local Browser smoke used Guest `游客 C4F0888B` to create the
+private `Unified Runtime A+B` problem
+`unified-runtime-ab-20260902` (`da411013-32da-470a-9bdf-cfc4a75b0de4`), upload
+the real `1 2` / `3` testcase, validate it, and publish immutable Judge Data
+v1. Product was restarted from the current unified source after correcting the
+private-author submission composition defect; the added regression test covers
+that exact authorization boundary.
+
+- AC submission `24affb4f-92af-424b-9dc2-161610938c07`: Browser/Product ->
+  Judge Service -> Scheduler -> Host-Agent-owned Worker -> Supervisor ->
+  Sandbox -> Product projected `AC`. Browser Submission Detail showed
+  Generation 1, testcase `#1 AC`, `253 ms`, and no memory fact provided.
+- WA submission `598a0092-858d-4af8-ad3c-890bae9ed11e`: the same formal path
+  projected `WA`. Browser Submission Detail showed Generation 1, testcase
+  `#1 WA`, `47 ms`, and `4.5 MB`.
+
+The standalone direct Judge matrix also passed AC, WA, CE, RE, TLE, MLE,
+duplicate dispatch, cancellation, and rejudge history through the same Worker
+and Supervisor chain. Historical runtime records were not used as evidence for
+this merge.
 
 ## Status
 
@@ -66,6 +78,6 @@ evidence for this merge.
 
 `FEATURE TESTED`: YES for the listed automated, build and migration gates.
 
-`FEATURE RUNTIME QUALIFIED`: NO for this newly unified source tree.
+`FEATURE RUNTIME QUALIFIED`: YES for the bounded local integration scope.
 
 `PRODUCTION READY`: NO.
