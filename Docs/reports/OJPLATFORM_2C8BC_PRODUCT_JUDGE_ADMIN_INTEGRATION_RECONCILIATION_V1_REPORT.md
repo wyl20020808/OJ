@@ -1,6 +1,6 @@
 # OJPlatform Phase 2C.8BC Product Judge Admin Integration Reconciliation V1 Report
 
-Final Status: `PARTIAL / PRODUCT_RUNTIME_NOT_STABLE`
+Final Status: `PASS / PRODUCT_AND_JUDGE_READ_RUNTIME_QUALIFIED`
 
 ## Scope and Git Evidence
 
@@ -36,12 +36,14 @@ Both worker branches diverged before the Product baseline merge. Their exact anc
 - `pnpm build:web`: **PASS**.
 - `git diff --check`: **PASS**.
 - Responsive browser smoke: **PASS** at 1440x900, 1024x768, 390x844; no overflow, no unexpected console/page errors.
+- `tests/e2e/judge-admin-product-integration.spec.ts`: **PASS**, authenticated operator read, 502 unavailable mapping, CSRF cookie, anonymous 401, Product-only browser requests and all three viewport overflow checks.
+- `tests/e2e/judge-admin-judge-service-integration.spec.ts`: **PASS**, real Product -> frozen 2C.8A summary/list/metrics/404 mapping with service-token boundary and no browser direct Judge request.
 
 ## Runtime / Blockers
 
-`pnpm infra:up`, `pnpm infra:wait`, and `pnpm db:migrate` initially passed with PostgreSQL, Redis and MinIO healthy. Product API/Web started and unauthenticated Product Judge Admin returned `401 UNAUTHENTICATED`; the UI rendered the safe unavailable state with no browser console errors.
+`pnpm infra:up`, `pnpm infra:wait`, and `pnpm db:migrate` passed with PostgreSQL, Redis and MinIO healthy. A documented Ubuntu WSL `sleep infinity` keepalive was required to preserve Windows localhost forwarding. Product API/Web started; authenticated operator and anonymous browser scenarios passed.
 
-The Windows localhost forwarding then became unavailable. API `/ready` reported `not_ready` for postgres, redis and storage, and `pnpm integration` failed with `ECONNREFUSED 127.0.0.1:55432`. Therefore authenticated Web -> Product Backend runtime qualification is `BLOCKED/NOT VERIFIED`, and Product -> real Judge Service Admin API is `NOT VERIFIED` because no safely available external 2C.8A service/nodes were present. No stub evidence is promoted to real Judge runtime PASS.
+The initial forwarding loss was recovered within the Goal's bounded environment boundary. Final `/ready` was healthy, `pnpm test` completed 705 passed/5 skipped, and `pnpm integration` completed 9/9. A detached worktree at exact frozen 2C.8A commit `63ba05e...` ran a real Judge Service on port 3128 with isolated Judge database/prefix. Its `/ready` was 200; Product read summary/list/metrics and missing-node mapping passed through the server-side token adapter. The real registry was empty, so no node control action was credited.
 
 Worker/Supervisor multi-node runtime, Host Agent, HA and autoscaling remain out of scope and deferred to 2C.8E/future goals.
 
@@ -51,4 +53,4 @@ No Judge token or node token enters browser code. Product session remains the no
 
 ## Result
 
-Product contract integration is implemented and contract-qualified. Overall Goal is `PARTIAL` because the required real Product runtime/browser authenticated path was not stable for complete qualification. Production readiness is not claimed.
+Product contract integration and authenticated Product runtime are PASS. Product -> real Judge Service read connectivity is PASS with an empty real registry. Judge control-action runtime and Worker/Supervisor multi-node qualification remain NOT VERIFIED and deferred to 2C.8E. Production readiness is not claimed.

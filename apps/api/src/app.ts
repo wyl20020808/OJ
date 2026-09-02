@@ -226,6 +226,12 @@ export async function buildApp(options: AppOptions = {}) {
       can: async (ctx, permission) => {
         if (!ctx || ctx.strength !== 'password') return false;
         if (configuredOperatorUserIds.has(ctx.userId)) return true;
+        const operator = await auth.getUser(ctx.userId);
+        if (
+          operator?.username &&
+          configuredOperatorUsernames.has(operator.username.toLowerCase())
+        )
+          return true;
         if (options.judgeAdminPermissions?.get(ctx.userId)?.has(permission))
           return true;
         const result = await database.pool.query(
@@ -554,11 +560,19 @@ export async function buildApp(options: AppOptions = {}) {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       can: (ctx, permission) =>
-        Boolean(
-          ctx &&
-          ctx.strength === 'password' &&
-          options.judgeAdminPermissions?.get(ctx.userId)?.has(permission),
-        ),
+        (async () => {
+          if (!ctx || ctx.strength !== 'password') return false;
+          if (configuredOperatorUserIds.has(ctx.userId)) return true;
+          const operator = await auth.getUser(ctx.userId);
+          if (
+            operator?.username &&
+            configuredOperatorUsernames.has(operator.username.toLowerCase())
+          )
+            return true;
+          return Boolean(
+            options.judgeAdminPermissions?.get(ctx.userId)?.has(permission),
+          );
+        })(),
       audit: new MemoryJudgeAdminAuditRepository(),
     });
     const submissionRepository = new InMemorySubmissionRepository();

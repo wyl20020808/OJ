@@ -1,6 +1,6 @@
 # Product Judge Admin 2C.8BC Reconciliation Matrix V1
 
-Status: `PARTIAL / PRODUCT_RUNTIME_NOT_STABLE`
+Status: `PASS / PRODUCT_AND_JUDGE_READ_RUNTIME_QUALIFIED`
 
 | Area | Evidence | Result |
 | --- | --- | --- |
@@ -14,8 +14,9 @@ Status: `PARTIAL / PRODUCT_RUNTIME_NOT_STABLE`
 | Error mapping | Stable 401/403/404/409/502/504 Product codes | PASS (contract) |
 | Web client | Product-only namespace; typed summary/nodes/history/assignment/metrics/mutations; CSRF header | PASS |
 | Browser responsive | 1440x900, 1024x768, 390x844; no horizontal overflow; no unexpected console errors | PASS |
-| Real Product runtime | Compose initially healthy and migration passed; later Windows forwarding/API readiness lost PostgreSQL/Redis/Storage | BLOCKED |
-| Product -> real Judge | No safely available external 2C.8A service/nodes in this turn | NOT VERIFIED |
+| Real Product runtime | Compose healthy, migration passed, authenticated operator browser E2E and Product API read paths passed | PASS |
+| Product -> real Judge | Detached frozen 2C.8A service `63ba05e...` healthy; service-token summary/list/metrics and missing-node mapping passed; registry empty | PASS (read boundary) |
+| Judge control runtime | No real Worker/Supervisor nodes available; no control success fabricated | NOT VERIFIED |
 | Worker/Supervisor multi-node | Explicitly deferred to 2C.8E | NOT IN SCOPE |
 
 The integration branch does not contain Judge Service implementation history; the 2C.8A contract remains an external frozen authority.

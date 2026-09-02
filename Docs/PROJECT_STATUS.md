@@ -7,7 +7,7 @@ Current Status: PHASE 2C.4 PASS / TESTCASE-SET EXECUTION-FACT AGGREGATION FOUNDA
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 Product Lead Integration V1: PASS / qualified Backend + Web integrated; Judge remains separate; final closure `eb7912e`
-Phase 2C.8BC Product Judge Admin Integration Reconciliation V1: PARTIAL / contract-qualified; Product runtime forwarding unstable; final report `OJPLATFORM_2C8BC_PRODUCT_JUDGE_ADMIN_INTEGRATION_RECONCILIATION_V1_REPORT.md`
+Phase 2C.8BC Product Judge Admin Integration Reconciliation V1: PASS / Product + real frozen Judge read boundary qualified; control/multi-node runtime deferred to 2C.8E; final report `OJPLATFORM_2C8BC_PRODUCT_JUDGE_ADMIN_INTEGRATION_RECONCILIATION_V1_REPORT.md`
 PHASE 1C: PASS
 PHASE 1D: PASS
 PHASE 1E: HISTORICAL PASS / FINAL RERUN PARTIAL
