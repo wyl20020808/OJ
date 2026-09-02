@@ -20,6 +20,21 @@ export type JudgeServiceAppOptions = {
   nodes?: JudgeNodeRepository;
   ready?: () => Promise<boolean>;
   logger?: boolean;
+  hostAgent?: {
+    listTemplates(): unknown;
+    hostCapacity(): unknown;
+    listOwned(): unknown;
+    operationsHistory(): unknown;
+    start(input: {
+      templateId: string;
+      nodeId: string;
+    }): Promise<{ operationId: string; incarnation?: string }>;
+    stop(input: { nodeId: string }): Promise<{ operationId: string }>;
+    restart(input: {
+      templateId: string;
+      nodeId: string;
+    }): Promise<{ operationId: string; incarnation?: string }>;
+  };
 };
 
 const capabilities: JudgeServiceCapabilities = {
@@ -145,6 +160,161 @@ export async function buildJudgeService(
         redis: ready ? 'ok' : 'unavailable',
       },
     });
+  });
+  const poolPolicy: {
+    mode: 'MANUAL' | 'AUTOMATIC';
+    templateId: string;
+    minNodes: number;
+    maxNodes: number;
+    targetQueueWaitMs: number;
+    fastScaleQueueWaitMs: number;
+    pendingJobsScaleUpThreshold: number;
+    scaleUpStep: number;
+    fastScaleUpStep: number;
+    scaleDownStep: number;
+    scaleDownUtilizationThreshold: number;
+    scaleDownIdleWindowMs: number;
+    scaleUpCooldownMs: number;
+    scaleDownCooldownMs: number;
+    hostCpuReserve: number;
+    hostMemoryReserve: number;
+    controlVersion: number;
+  } = {
+    mode: 'MANUAL' as const,
+    templateId: 'cpp20-gcc-13-v1',
+    minNodes: 1,
+    maxNodes: 4,
+    targetQueueWaitMs: 1000,
+    fastScaleQueueWaitMs: 5000,
+    pendingJobsScaleUpThreshold: 3,
+    scaleUpStep: 1,
+    fastScaleUpStep: 2,
+    scaleDownStep: 1,
+    scaleDownUtilizationThreshold: 0.2,
+    scaleDownIdleWindowMs: 30000,
+    scaleUpCooldownMs: 10000,
+    scaleDownCooldownMs: 30000,
+    hostCpuReserve: 0.1,
+    hostMemoryReserve: 0.1,
+    controlVersion: 1,
+  };
+  const lifecycleHistory: unknown[] = [];
+  const autoscalerHistory: unknown[] = [];
+  app.get('/v1/admin/pool/policy', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    return poolPolicy;
+  });
+  app.get('/v1/admin/pool/templates', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    return {
+      items: options.hostAgent?.listTemplates() ?? [],
+      nextCursor: null,
+    };
+  });
+  app.get('/v1/admin/pool/host-capacity', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    return (
+      options.hostAgent?.hostCapacity() ?? {
+        available: false,
+        reason: 'HOST_AGENT_NOT_AVAILABLE',
+      }
+    );
+  });
+  app.get('/v1/admin/lifecycle/capabilities', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    return {
+      available: Boolean(options.hostAgent),
+      actions: options.hostAgent ? ['start', 'stop', 'restart', 'add'] : [],
+      reason: options.hostAgent ? undefined : 'HOST_AGENT_NOT_AVAILABLE',
+    };
+  });
+  app.get('/v1/admin/lifecycle/operations', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    return {
+      items:
+        options.hostAgent?.operationsHistory() ?? lifecycleHistory.slice(-100),
+      nextCursor: null,
+    };
+  });
+  app.get('/v1/admin/autoscaler/decisions', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    return { items: autoscalerHistory.slice(-100), nextCursor: null };
+  });
+  app.post('/v1/admin/nodes', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    if (!options.hostAgent)
+      return reply.code(503).send({ code: 'HOST_AGENT_NOT_AVAILABLE' });
+    const body = request.body as { templateId?: unknown; count?: unknown };
+    if (
+      typeof body?.templateId !== 'string' ||
+      (body.count !== undefined &&
+        (!Number.isInteger(body.count) ||
+          Number(body.count) < 1 ||
+          Number(body.count) > 16))
+    )
+      return reply.code(400).send({ code: 'INVALID_TRUSTED_TEMPLATE' });
+    const count = Number(body.count ?? 1);
+    const results = [];
+    for (let i = 0; i < count; i++)
+      results.push(
+        await options.hostAgent.start({
+          templateId: body.templateId,
+          nodeId: `${body.templateId}-${Date.now()}-${i + 1}`,
+        }),
+      );
+    return { operationId: crypto.randomUUID(), results };
+  });
+  for (const action of ['start', 'stop', 'restart'] as const)
+    app.post(`/v1/admin/nodes/:nodeId/${action}`, async (request, reply) => {
+      if (!(await deny(request, reply))) return;
+      if (!options.hostAgent)
+        return reply.code(503).send({ code: 'HOST_AGENT_NOT_AVAILABLE' });
+      const body = request.body as { templateId?: unknown };
+      if (action !== 'stop' && typeof body?.templateId !== 'string')
+        return reply.code(400).send({ code: 'INVALID_TRUSTED_TEMPLATE' });
+      const result =
+        action === 'stop'
+          ? await options.hostAgent.stop({
+              nodeId: (request.params as { nodeId: string }).nodeId,
+            })
+          : await options.hostAgent[action]({
+              templateId: String(body.templateId),
+              nodeId: (request.params as { nodeId: string }).nodeId,
+            });
+      lifecycleHistory.push({
+        operationId: result.operationId,
+        action,
+        nodeId: (request.params as { nodeId: string }).nodeId,
+        status: 'ACCEPTED',
+        timestamp: new Date().toISOString(),
+      });
+      return result;
+    });
+  app.post('/v1/admin/pool/policy', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    const body = request.body as Record<string, unknown>;
+    if (
+      !body ||
+      typeof body.templateId !== 'string' ||
+      !Number.isInteger(body.minNodes) ||
+      !Number.isInteger(body.maxNodes) ||
+      Number(body.minNodes) < 0 ||
+      Number(body.maxNodes) < Number(body.minNodes)
+    )
+      return reply.code(400).send({ code: 'INVALID_POOL_POLICY' });
+    Object.assign(poolPolicy, body, {
+      controlVersion: poolPolicy.controlVersion + 1,
+    });
+    return poolPolicy;
+  });
+  app.post('/v1/admin/pool/mode', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    const body = request.body as { mode?: unknown };
+    if (body?.mode !== 'MANUAL' && body?.mode !== 'AUTOMATIC')
+      return reply.code(400).send({ code: 'INVALID_POOL_POLICY' });
+    poolPolicy.mode = body.mode;
+    poolPolicy.controlVersion += 1;
+    return poolPolicy;
   });
   app.get('/v1/capabilities', async (request, reply) => {
     if (!(await deny(request, reply))) return;

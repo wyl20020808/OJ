@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiError } from '../services/api.js';
 import {
   createJudgeAdminClient,
+  type JudgePoolPolicy,
   type JudgeAction,
   type JudgeNode,
   type JudgeSummary,
@@ -127,11 +128,13 @@ function NodeCard({
 function Detail({
   node,
   canManage,
+  hostAvailable,
   onBack,
   onAction,
 }: {
   node: JudgeNode;
   canManage: boolean;
+  hostAvailable: boolean;
   onBack: () => void;
   onAction: (a: JudgeAction) => void;
 }) {
@@ -191,18 +194,20 @@ function Detail({
           )}
           <div
             className="unavailable-actions"
-            aria-label="Host Agent lifecycle unavailable"
+            aria-label="Host Agent lifecycle"
           >
-            <button type="button" disabled title="HOST_AGENT_NOT_AVAILABLE">
-              Start
-            </button>
-            <button type="button" disabled title="HOST_AGENT_NOT_AVAILABLE">
-              Stop
-            </button>
-            <button type="button" disabled title="HOST_AGENT_NOT_AVAILABLE">
-              Restart
-            </button>
-            <small>HOST_AGENT_NOT_AVAILABLE</small>
+            {(['start', 'stop', 'restart'] as const).map((action) => (
+              <button
+                key={action}
+                type="button"
+                disabled={!canManage || !hostAvailable}
+                title={!hostAvailable ? 'HOST_AGENT_NOT_AVAILABLE' : undefined}
+                onClick={() => onAction(action)}
+              >
+                {action[0]!.toUpperCase() + action.slice(1)}
+              </button>
+            ))}
+            {!hostAvailable && <small>HOST_AGENT_NOT_AVAILABLE</small>}
           </div>
         </div>
       </div>
@@ -298,6 +303,8 @@ export function JudgeMachinesPage({
   const [error, setError] = useState<unknown>(null);
   const [stale, setStale] = useState(false);
   const [notice, setNotice] = useState('');
+  const [policy, setPolicy] = useState<JudgePoolPolicy | null>(null);
+  const [hostAvailable, setHostAvailable] = useState(false);
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -332,9 +339,18 @@ export function JudgeMachinesPage({
           generatedAt: new Date().toISOString(),
         });
       } else {
-        const [s, n] = await Promise.all([client.summary(), client.nodes()]);
+        const [s, n, p, cap] = await Promise.all([
+          client.summary(),
+          client.nodes(),
+          client.policy().catch(() => null),
+          client
+            .lifecycleCapabilities()
+            .catch(() => ({ available: false, actions: [] })),
+        ]);
         setSummary(s);
         setNodes(n.items);
+        setPolicy(p);
+        setHostAvailable(cap.available);
       }
     } catch (e) {
       setError(e);
@@ -375,12 +391,31 @@ export function JudgeMachinesPage({
         setNotice(`已提交 ${a}（fixture contract only）`);
         return;
       }
-      const result = await client.mutate(target.nodeId, a, {
-        reason,
-        expectedIncarnation: target.incarnation,
-        expectedControlVersion: target.controlVersion,
-        idempotencyKey: crypto.randomUUID(),
-      });
+      if (['start', 'stop', 'restart'].includes(a)) {
+        await client.lifecycle(
+          target.nodeId,
+          a as 'start' | 'stop' | 'restart',
+          {
+            templateId: policy?.templateId ?? 'cpp20-gcc-13-v1',
+            reason,
+            expectedIncarnation: target.incarnation,
+            expectedControlVersion: target.controlVersion,
+            idempotencyKey: crypto.randomUUID(),
+          },
+        );
+        setNotice(`操作已提交：${a}`);
+        return;
+      }
+      const result = await client.mutate(
+        target.nodeId,
+        a as 'drain' | 'offline' | 'enable',
+        {
+          reason,
+          expectedIncarnation: target.incarnation,
+          expectedControlVersion: target.controlVersion,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      );
       setSelected(result.node);
       setNotice(`操作已接受：${result.operationId}`);
     } catch (e) {
@@ -419,6 +454,7 @@ export function JudgeMachinesPage({
         <Detail
           node={selected}
           canManage={canManage}
+          hostAvailable={hostAvailable}
           onBack={() => setSelected(null)}
           onAction={action}
         />
@@ -458,6 +494,60 @@ export function JudgeMachinesPage({
             />
             <Metric label="Schedulable" value={summary.schedulableCapacity} />
           </>
+        )}
+      </div>
+      <div className="judge-toolbar pool-controls">
+        <strong>Pool mode: {policy?.mode ?? 'UNAVAILABLE'}</strong>
+        <span className="muted">
+          Host Agent: {hostAvailable ? 'available' : 'HOST_AGENT_NOT_AVAILABLE'}
+        </span>
+        {canManage && policy && (
+          <button
+            type="button"
+            onClick={() => {
+              const mode = policy.mode === 'MANUAL' ? 'AUTOMATIC' : 'MANUAL';
+              void client
+                .setMode({
+                  mode,
+                  reason: 'admin mode change',
+                  expectedControlVersion: policy.controlVersion,
+                  idempotencyKey: crypto.randomUUID(),
+                })
+                .then((next) => {
+                  setPolicy(next);
+                  setNotice(`模式已切换为 ${next.mode}`);
+                })
+                .catch((e) =>
+                  setNotice(e instanceof Error ? e.message : '模式切换失败'),
+                );
+            }}
+          >
+            切换到 {policy.mode === 'MANUAL' ? 'AUTOMATIC' : 'MANUAL'}
+          </button>
+        )}
+        {canManage && hostAvailable && (
+          <button
+            type="button"
+            onClick={() => {
+              const templateId = policy?.templateId ?? 'cpp20-gcc-13-v1';
+              void client
+                .addNode({
+                  templateId,
+                  count: 1,
+                  reason: 'admin add node',
+                  idempotencyKey: crypto.randomUUID(),
+                })
+                .then(() => {
+                  setNotice('节点添加已提交');
+                  void load();
+                })
+                .catch((e) =>
+                  setNotice(e instanceof Error ? e.message : '添加节点失败'),
+                );
+            }}
+          >
+            Add Node
+          </button>
         )}
       </div>
       <div className="judge-toolbar">

@@ -23,7 +23,6 @@ export type JudgePoolPolicy = {
   controlVersion: number;
 };
 
-
 export type JudgePoolHostCapacity = {
   configuredCpu: number;
   remainingCpu: number;

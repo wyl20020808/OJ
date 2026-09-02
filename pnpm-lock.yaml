@@ -141,6 +141,8 @@ importers:
         specifier: ^5.12.1
         version: 5.12.1
 
+  apps/judge-host-agent: {}
+
   apps/judge-service:
     dependencies:
       '@ojplatform/cache':
