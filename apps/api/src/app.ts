@@ -113,6 +113,7 @@ const bounded = async (
 };
 
 export async function buildApp(options: AppOptions = {}) {
+  const config = options.config ?? loadConfig();
   const realSubmissionExecution =
     options.realSubmissionExecution ??
     process.env.REAL_SUBMISSION_EXECUTION === 'true';
@@ -130,7 +131,10 @@ export async function buildApp(options: AppOptions = {}) {
         : crypto.randomUUID();
     },
   });
-  await app.register(cors, { origin: true });
+  await app.register(cors, {
+    origin: config.corsOrigins,
+    credentials: true,
+  });
   app.addHook('onSend', async (request, reply) => {
     reply.header('x-request-id', request.id);
   });
@@ -165,7 +169,6 @@ export async function buildApp(options: AppOptions = {}) {
   if (options.withInfrastructure) {
     const qualificationMode =
       process.env.OJPLATFORM_PHASE1E_QUALIFICATION === 'true';
-    const config = options.config ?? loadConfig();
     const database = createDatabase({ url: config.databaseUrl });
     const cache = createCache({ url: config.redisUrl });
     const storage = createStorage({

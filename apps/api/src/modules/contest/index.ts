@@ -39,6 +39,16 @@ const page = (q: Record<string, unknown>) => {
   return limit;
 };
 const fail = (code: string) => Object.assign(new Error(code), { code });
+const validContestId = (id: unknown): string => {
+  if (
+    typeof id !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+  )
+    throw fail('VALIDATION_ERROR');
+  return id;
+};
+const contestId = (r: FastifyRequest) =>
+  validContestId((r.params as { id?: unknown }).id);
 const state = (r: Row) =>
   r.lifecycle === 'CANCELLED'
     ? 'CANCELLED'
@@ -65,7 +75,9 @@ const json = (r: Row, auth?: Auth) => ({
   registrationCloseAt:
     r.registration_close_at &&
     new Date(String(r.registration_close_at)).toISOString(),
-  canManage: Boolean(auth && String(r.owner_user_id) === auth.userId),
+  canManage: Boolean(
+    auth && (String(r.owner_user_id) === auth.userId || r.can_manage),
+  ),
   createdAt: new Date(String(r.created_at)).toISOString(),
   updatedAt: new Date(String(r.updated_at)).toISOString(),
 });
@@ -107,7 +119,10 @@ export async function registerContestModule(
     return reply.status(s).send({ code, message: m, requestId: r.id });
   };
   const get = async (id: string, a?: Auth, manage = false) => {
-    const x = await o.pool.query('SELECT * FROM contests WHERE id=$1', [id]);
+    const validId = validContestId(id);
+    const x = await o.pool.query('SELECT * FROM contests WHERE id=$1', [
+      validId,
+    ]);
     const r = x.rows[0];
     if (!r) throw fail('CONTEST_NOT_FOUND');
     const own = a && String(r.owner_user_id) === a.userId;
@@ -115,13 +130,13 @@ export async function registerContestModule(
       a &&
       (await o.pool.query(
         "SELECT 1 FROM contest_roles WHERE contest_id=$1 AND user_id=$2 AND role IN ('OWNER','MANAGER')",
-        [id, a.userId],
+        [validId, a.userId],
       ));
     const registered =
       a &&
       (await o.pool.query(
         "SELECT 1 FROM contest_registrations WHERE contest_id=$1 AND user_id=$2 AND status='ACTIVE'",
-        [id, a.userId],
+        [validId, a.userId],
       ));
     if (manage && !(own || role?.rowCount)) throw fail('CONTEST_FORBIDDEN');
     if (
@@ -130,7 +145,7 @@ export async function registerContestModule(
       !(own || role?.rowCount || registered?.rowCount)
     )
       throw fail('CONTEST_FORBIDDEN');
-    return r;
+    return { ...r, can_manage: Boolean(own || role?.rowCount) } as Row;
   };
   const audit = async (
     a: Auth,
@@ -153,8 +168,8 @@ export async function registerContestModule(
         limit = page(q),
         a = await auth(r);
       const x = await o.pool.query(
-        "SELECT * FROM contests WHERE lifecycle='PUBLISHED' AND visibility='PUBLIC' ORDER BY starts_at ASC,id ASC LIMIT $1",
-        [limit],
+        "SELECT c.*,EXISTS(SELECT 1 FROM contest_roles cr WHERE cr.contest_id=c.id AND cr.user_id=$2 AND cr.role IN ('OWNER','MANAGER')) can_manage FROM contests c WHERE lifecycle='PUBLISHED' AND visibility='PUBLIC' ORDER BY starts_at ASC,id ASC LIMIT $1",
+        [limit, a?.userId ?? null],
       );
       return { items: x.rows.map((v: Row) => json(v, a)) };
     } catch (e) {
@@ -165,7 +180,8 @@ export async function registerContestModule(
     try {
       const a = await auth(r);
       const x = await o.pool.query(
-        "SELECT * FROM contests WHERE lifecycle='PUBLISHED' AND visibility='PUBLIC' ORDER BY starts_at ASC,id ASC LIMIT 18",
+        "SELECT c.*,EXISTS(SELECT 1 FROM contest_roles cr WHERE cr.contest_id=c.id AND cr.user_id=$1 AND cr.role IN ('OWNER','MANAGER')) can_manage FROM contests c WHERE lifecycle='PUBLISHED' AND visibility='PUBLIC' ORDER BY starts_at ASC,id ASC LIMIT 18",
+        [a?.userId ?? null],
       );
       const all = x.rows.map((v: Row) => json(v, a));
       return {
@@ -231,10 +247,7 @@ export async function registerContestModule(
   });
   app.get('/api/contests/:id', async (r, reply) => {
     try {
-      return json(
-        await get((r.params as any).id, await auth(r)),
-        await auth(r),
-      );
+      return json(await get(contestId(r), await auth(r)), await auth(r));
     } catch (e) {
       return err(e, reply, r);
     }
@@ -243,7 +256,7 @@ export async function registerContestModule(
     try {
       const a = await auth(r);
       if (!a) throw fail('UNAUTHENTICATED');
-      const old = await get((r.params as any).id, a, true);
+      const old = await get(contestId(r), a, true);
       if (state(old) !== 'DRAFT') throw fail('CONTEST_NOT_OPEN');
       const b = r.body as any;
       if (
@@ -287,7 +300,7 @@ export async function registerContestModule(
         ),
       );
       await audit(a, 'contest:update', String(old.id), r);
-      return json(updated, a);
+      return json({ ...updated, can_manage: true }, a);
     } catch (e) {
       return err(e, reply, r);
     }
@@ -296,7 +309,7 @@ export async function registerContestModule(
     try {
       const a = await auth(r);
       if (!a) throw fail('UNAUTHENTICATED');
-      const c = await get((r.params as any).id, a, true);
+      const c = await get(contestId(r), a, true);
       if (
         c.lifecycle !== 'DRAFT' ||
         !(
@@ -314,7 +327,7 @@ export async function registerContestModule(
         ),
       );
       await audit(a, 'contest:publish', String(c.id), r);
-      return json(updated, a);
+      return json({ ...updated, can_manage: true }, a);
     } catch (e) {
       return err(e, reply, r);
     }
@@ -323,7 +336,7 @@ export async function registerContestModule(
     try {
       const a = await auth(r);
       if (!a) throw fail('UNAUTHENTICATED');
-      const c = await get((r.params as any).id, a, true);
+      const c = await get(contestId(r), a, true);
       const updated = row(
         await o.pool.query(
           "UPDATE contests SET lifecycle='CANCELLED',updated_at=now() WHERE id=$1 RETURNING *",
@@ -331,7 +344,7 @@ export async function registerContestModule(
         ),
       );
       await audit(a, 'contest:cancel', String(c.id), r);
-      return json(updated, a);
+      return json({ ...updated, can_manage: true }, a);
     } catch (e) {
       return err(e, reply, r);
     }
@@ -341,7 +354,7 @@ export async function registerContestModule(
     try {
       const a = await auth(r);
       if (!a) throw fail('UNAUTHENTICATED');
-      const c = await get((r.params as any).id, a, true);
+      const c = await get(contestId(r), a, true);
       if (state(c) !== 'DRAFT') throw fail('CONTEST_NOT_OPEN');
       const items = (r.body as any)?.problems;
       if (
@@ -383,7 +396,7 @@ export async function registerContestModule(
   });
   app.get('/api/contests/:id/problems', async (r, reply) => {
     try {
-      const c = await get((r.params as any).id, await auth(r));
+      const c = await get(contestId(r), await auth(r));
       const x = await o.pool.query(
         'SELECT cp.problem_id,cp.ordinal,cp.label,cp.points_config,p.title FROM contest_problems cp JOIN problems p ON p.id=cp.problem_id WHERE cp.contest_id=$1 ORDER BY cp.ordinal',
         [c.id],
@@ -406,7 +419,7 @@ export async function registerContestModule(
       const a = await auth(r);
       if (!a) throw fail('UNAUTHENTICATED');
       const x = await o.pool.query('SELECT * FROM contests WHERE id=$1', [
-        (r.params as any).id,
+        contestId(r),
       ]);
       const c = x.rows[0];
       if (!c) throw fail('CONTEST_NOT_FOUND');
@@ -449,7 +462,7 @@ export async function registerContestModule(
     try {
       const a = await auth(r);
       if (!a) throw fail('UNAUTHENTICATED');
-      const id = (r.params as any).id;
+      const id = contestId(r);
       if (
         !(await o.pool.query('SELECT 1 FROM contests WHERE id=$1', [id]))
           .rowCount
@@ -470,7 +483,7 @@ export async function registerContestModule(
       if (!a) throw fail('UNAUTHENTICATED');
       const x = await o.pool.query(
         'SELECT * FROM contest_registrations WHERE contest_id=$1 AND user_id=$2',
-        [(r.params as any).id, a.userId],
+        [contestId(r), a.userId],
       );
       if (!x.rows[0]) return { status: 'NOT_REGISTERED' };
       return {
@@ -487,7 +500,7 @@ export async function registerContestModule(
     try {
       const a = await auth(r);
       if (!a) throw fail('UNAUTHENTICATED');
-      const c = await get((r.params as any).id, a, true);
+      const c = await get(contestId(r), a, true);
       const limit = page(r.query as Record<string, unknown>);
       const x = await o.pool.query(
         "SELECT u.id,u.username,u.display_name,cr.registered_at FROM contest_registrations cr JOIN users u ON u.id=cr.user_id WHERE cr.contest_id=$1 AND cr.status='ACTIVE' ORDER BY cr.registered_at,u.id LIMIT $2",
@@ -509,7 +522,7 @@ export async function registerContestModule(
     try {
       const a = await auth(r);
       if (!a) throw fail('UNAUTHENTICATED');
-      const c = await get((r.params as any).id, a);
+      const c = await get(contestId(r), a);
       const limit = page(r.query as Record<string, unknown>);
       const x = await o.pool.query(
         'SELECT s.* FROM contest_submission_bindings b JOIN submissions s ON s.id=b.submission_id WHERE b.contest_id=$1 AND b.user_id=$2 ORDER BY b.created_at DESC,b.submission_id DESC LIMIT $3',
@@ -539,7 +552,7 @@ export async function registerContestModule(
         throw fail('SUBMISSION_BINDING_NOT_INTEGRATED');
       const c = row(
         await o.pool.query('SELECT * FROM contests WHERE id=$1', [
-          (r.params as any).id,
+          contestId(r),
         ]),
       );
       if (state(c) !== 'RUNNING') throw fail('CONTEST_NOT_OPEN');
@@ -582,7 +595,7 @@ export async function registerContestModule(
   });
   app.get('/api/contests/:id/standings', async (r, reply) => {
     try {
-      await get((r.params as any).id, await auth(r));
+      await get(contestId(r), await auth(r));
       return reply.status(503).send({
         available: false,
         reason: 'SCORING_ENGINE_NOT_INTEGRATED',

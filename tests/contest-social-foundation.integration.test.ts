@@ -103,6 +103,7 @@ describe('contest and messaging foundation against PostgreSQL and Redis', () => 
       },
     });
     expect(create.statusCode).toBe(201);
+    expect(create.json().canManage).toBe(true);
     const contestId = create.json().id as string;
     expect(
       await pool.query(
@@ -110,6 +111,43 @@ describe('contest and messaging foundation against PostgreSQL and Redis', () => 
         [contestId, userA],
       ),
     ).toMatchObject({ rowCount: 1 });
+    const malformed = await app.inject('/api/contests/not-a-real-id');
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json()).toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(malformed.body).not.toContain('22P02');
+    const absent = await app.inject(`/api/contests/${randomUUID()}`);
+    expect(absent.statusCode).toBe(404);
+    expect(absent.json()).toMatchObject({ code: 'CONTEST_NOT_FOUND' });
+
+    await pool.query(
+      "INSERT INTO contest_roles(contest_id,user_id,role) VALUES($1,$2,'MANAGER')",
+      [contestId, userC],
+    );
+    const managerDetail = await app.inject({
+      method: 'GET',
+      url: `/api/contests/${contestId}`,
+      headers: { 'x-user-id': userC },
+    });
+    expect(managerDetail.statusCode).toBe(200);
+    expect(managerDetail.json().canManage).toBe(true);
+    const managerEdit = await app.inject({
+      method: 'PATCH',
+      url: `/api/contests/${contestId}`,
+      headers: { 'x-user-id': userC },
+      payload: { description: 'Managed fixture', visibility: 'PUBLIC' },
+    });
+    expect(managerEdit.statusCode).toBe(200);
+    expect(managerEdit.json().canManage).toBe(true);
+    expect(
+      (
+        await app.inject({
+          method: 'PATCH',
+          url: `/api/contests/${contestId}`,
+          headers: { 'x-user-id': userB },
+          payload: { description: 'Unauthorized edit' },
+        })
+      ).statusCode,
+    ).toBe(403);
     const invisible = await app.inject({
       method: 'GET',
       url: `/api/contests/${contestId}`,
@@ -150,6 +188,31 @@ describe('contest and messaging foundation against PostgreSQL and Redis', () => 
         })
       ).statusCode,
     ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/contests/${contestId}`,
+          headers: { 'x-user-id': userB },
+        })
+      ).json().canManage,
+    ).toBe(false);
+    expect(
+      (await app.inject(`/api/contests/${contestId}`)).json().canManage,
+    ).toBe(false);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/contests',
+          headers: { 'x-user-id': userC },
+        })
+      ).json().items,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: contestId, canManage: true }),
+      ]),
+    );
     const restarted = Fastify();
     await registerContestModule(restarted, options);
     expect(
