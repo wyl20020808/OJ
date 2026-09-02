@@ -2,7 +2,7 @@
 
 ## Status
 
-`PARTIAL / IMPLEMENTED_AND_TESTED_RUNTIME_NOT_VERIFIED`
+`PARTIAL / SAFE_FIXTURE_RUNTIME_VERIFIED`
 
 ## Git evidence
 
@@ -27,13 +27,14 @@
 - Web tests: PASS (11 tests).
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test:architecture`, `pnpm build`, `pnpm build:web`, and `git diff --check`: PASS.
 - `go test ./...` in `apps/judge-worker`, `pnpm test:architecture` and `pnpm build`: PASS.
-- Full `pnpm test`: 719 passed, 8 skipped; one pre-existing PostgreSQL integration suite failed during setup/cleanup because `127.0.0.1:55432` refused connections. This is `TEST BLOCKED`, not a full-suite PASS.
+- Full `pnpm test`: PASS, 722 passed and 5 skipped, with PostgreSQL/Redis available through the Goal-owned local Compose stack.
+- Judge Admin Playwright E2E launched a real Product API, Vite preview and Chromium but is `BLOCKED_BY_RBAC_FIXTURE`: the freshly migrated `phase2b-operator` account returned the intended `无权访问 Judge Machines / 需要 judge.view 权限` state. It could not exercise the administrator controls or viewport assertions without fabricating an authorization grant.
 
 ## Not verified / blocked
 
-The following controlled runtime evidence was obtained before the final capacity correction: a real local Host Agent started two Windows Go Workers from the trusted template; both registered under Host Agent-issued node IDs/incarnations; eight `SAFE_FIXTURE_QUALIFICATION` jobs routed across both nodes; draining node A routed three subsequent jobs to B; restarting A produced incarnation `590d0c2b-987c-4962-8507-995d33e61bb5`, restored it to `ONLINE`, and the old incarnation heartbeat returned `409 STALE_NODE_INCARNATION`. This is genuine process/registration/routing evidence, but it is not Supervisor/C++ execution evidence and does not qualify the final capacity calculation at runtime.
+`RUNTIME VERIFIED (SAFE_FIXTURE_QUALIFICATION)`: a clean isolated Judge database and Redis prefix were used with a real local Host Agent, two Windows Go Workers and the current trusted template. A real autoscaler fast-backlog decision started two processes; both registered `ONLINE`; Host capacity moved from `2 CPU / 512 MB / maxAdditionalNodes=2` to `0 / 0 / 0`. A second backlog decision was blocked first by `MAX_NODES_REACHED`, then by `HOST_CAPACITY_EXHAUSTED` after raising maxNodes. Eight real Worker claims completed through the scheduler, with five assignments on one logical node and three on the other. Two sustained-idle reconciliations each performed `SCALE_DOWN / LOW_UTILIZATION_IDLE_WINDOW`, draining, offlining and Host-Agent-stopping one node; final Host owned count was zero. Manual Start -> register -> Restart produced new incarnations (`0abef...` to `c603...`) and restored `ONLINE`; an old heartbeat returned `409 STALE_NODE_INCARNATION`.
 
-Real Host Agent -> Supervisor -> Worker multi-process lifecycle, Host Agent restart ownership recovery, automatic scale-up/down against a live queue, final capacity-ceiling runtime behavior, and browser runtime qualification remain not verified. The in-app browser connector could not initialize because its local runtime asset path was unavailable; existing responsive E2E remains code-level evidence only. No mock node is claimed as runtime evidence.
+This evidence verifies Host Agent lifecycle, template capacity accounting, autoscaler decision/action flow, scheduler A/B routing, scale-down ordering and stale-incarnation rejection for the Safe Fixture path. It does not qualify Supervisor/C++ execution, Host Agent restart ownership recovery, or production readiness. Browser desktop/tablet/mobile administrator interaction remains `BLOCKED_BY_RBAC_FIXTURE`; the in-app browser connector itself also could not initialize because its local runtime asset path was unavailable. No mock node is claimed as runtime evidence.
 
 Host Agent operation history remains bounded process-local observability; a restarted Agent retains live persisted ownership as an unreconciled block and does not adopt or kill the process, so cross-restart process reconciliation still requires runtime qualification and is not claimed.
 
