@@ -25,6 +25,7 @@ import { JudgeMachinesPage } from '../components/JudgeMachinesPage.js';
 import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
+import { ProblemEditor } from '../components/ProblemEditor.js';
 import {
   ContestExperience,
   HomeworkPage,
@@ -2446,7 +2447,7 @@ export function App() {
       )
     ) : current.name === 'author-edit' ? (
       user && current.id ? (
-        <AuthorForm api={api} id={current.id} />
+        <ProblemEditor api={api} problemId={current.id} canEdit={!user.guest} canManage={!user.guest} canPublish={!user.guest} />
       ) : (
         <State
           title="请先登录"
