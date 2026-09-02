@@ -297,7 +297,7 @@ describe('Product Web Chinese Rich Experience V3', () => {
   });
   it.each([
     ['WEB-V3-37', '提交代码'],
-    ['WEB-V3-38', '提交记录'],
+    ['WEB-V3-38', '评测列表'],
     ['WEB-V3-39', '原始状态'],
     ['WEB-V3-40', '不会伪造判题结论'],
     ['WEB-V3-41', '基础设施'],

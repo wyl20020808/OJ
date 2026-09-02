@@ -15,7 +15,6 @@ import type {
   ProfileCapabilities,
   ProfileContest,
   ProfileContestRelationship,
-  ProfileProblem,
   PublicProfile,
 } from '../services/api.js';
 import type {
@@ -1176,7 +1175,7 @@ export function ActivityHeatmap({
     <div className="heatmap-block">
       <div className="heatmap-summary" role="status">
         最近一年共 {total}{' '}
-        {metric === 'SOLVED_PROBLEMS' ? '道题目完成记录' : '次提交记录'}，共{' '}
+        {metric === 'SOLVED_PROBLEMS' ? '道题目完成记录' : '次评测记录'}，共{' '}
         {days.filter((day) => day.count > 0).length} 个活跃日。
       </div>
       <div className="heatmap-scroll">
@@ -1309,22 +1308,8 @@ export function ProfileExperience({
   const [contestLoaded, setContestLoaded] = useState(false);
   const [contestLoading, setContestLoading] = useState(false);
   const [contestError, setContestError] = useState('');
-  const [problemItems, setProblemItems] = useState<ProfileProblem[]>([]);
-  const [problemNextCursor, setProblemNextCursor] = useState<string>();
-  const [problemTotal, setProblemTotal] = useState(0);
-  const [problemLoaded, setProblemLoaded] = useState(false);
-  const [problemLoading, setProblemLoading] = useState(false);
-  const [problemError, setProblemError] = useState('');
   const isPublic = Boolean(username);
-  const tabs = [
-    '概览',
-    '做题记录',
-    '收藏',
-    '团队',
-    '我的比赛',
-    '我的题目',
-    '提交记录',
-  ];
+  const tabs = ['概览', '做题记录', '收藏', '团队', '我的比赛', '评测列表'];
 
   useEffect(() => {
     if (!api) return;
@@ -1464,35 +1449,6 @@ export function ProfileExperience({
     setContestLoaded(false);
     setContestError('');
   };
-
-  const loadProblems = useCallback(
-    (append = false) => {
-      if (!api || !capabilities?.myProblems.available) return;
-      const cursor = append ? problemNextCursor : undefined;
-      if (append && !cursor) return;
-      setProblemLoading(true);
-      setProblemError('');
-      void api
-        .profileProblems(20, cursor)
-        .then((result) => {
-          setProblemItems((items) =>
-            append ? [...items, ...result.items] : result.items,
-          );
-          setProblemTotal(result.page.total);
-          setProblemNextCursor(result.page.nextCursor);
-          setProblemLoaded(true);
-        })
-        .catch((error: unknown) =>
-          setProblemError(profileErrorText(error, '我的题目')),
-        )
-        .finally(() => setProblemLoading(false));
-    },
-    [api, capabilities, problemNextCursor],
-  );
-
-  useEffect(() => {
-    if (tab === '我的题目' && !problemLoaded) loadProblems();
-  }, [loadProblems, problemLoaded, tab]);
 
   const displayName = isPublic ? publicProfile?.displayName : user?.displayName;
   const displayUsername = isPublic ? publicProfile?.username : user?.username;
@@ -1711,85 +1667,9 @@ export function ProfileExperience({
     );
   };
 
-  const renderProblems = () => {
-    const problemCapability = capability('myProblems');
-    if (!api)
-      return (
-        <CapabilityNotice
-          title="我的题目功能正在接入"
-          text="当前没有真实出题归属数据。"
-          request="AUTHORING-BACKEND-INTEGRATION-REQUEST"
-        />
-      );
-    if (!problemCapability)
-      return <p className="muted">正在加载个人资料能力…</p>;
-    if (!problemCapability.available)
-      return (
-        <ProfileCapabilityNotice
-          title="我的题目暂不可用"
-          capability={problemCapability}
-        />
-      );
-    return (
-      <div className="profile-data-panel">
-        {problemError && (
-          <p className="error" role="alert">
-            {problemError}
-            <button
-              type="button"
-              className="secondary"
-              disabled={problemLoading}
-              onClick={() => loadProblems()}
-            >
-              重试
-            </button>
-          </p>
-        )}
-        {problemLoading && !problemItems.length ? (
-          <p className="muted">正在加载我的题目…</p>
-        ) : problemItems.length ? (
-          <>
-            <p className="muted">共 {problemTotal} 道题目</p>
-            <ul className="profile-data-list">
-              {problemItems.map((item) => (
-                <li key={item.id}>
-                  <div>
-                    <PortalLink
-                      to={`/problems/${encodeURIComponent(item.slug || item.id)}`}
-                      navigate={navigate}
-                    >
-                      <strong>{item.title}</strong>
-                    </PortalLink>
-                    <small>
-                      {item.status} · {item.visibility} · 更新于{' '}
-                      {profileDate(item.updatedAt)}
-                    </small>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {problemNextCursor && (
-              <button
-                type="button"
-                className="secondary"
-                disabled={problemLoading}
-                onClick={() => loadProblems(true)}
-              >
-                {problemLoading ? '加载中…' : '加载更多'}
-              </button>
-            )}
-          </>
-        ) : (
-          <p className="muted">暂无已归属题目。</p>
-        )}
-      </div>
-    );
-  };
-
   const renderTab = () => {
     if (tab === '收藏') return renderFavorites();
     if (tab === '我的比赛') return renderContests();
-    if (tab === '我的题目') return renderProblems();
     if (tab === '团队') {
       const teamCapability = capability('teams');
       return teamCapability && !teamCapability.available ? (
@@ -1805,11 +1685,11 @@ export function ProfileExperience({
         />
       );
     }
-    if (tab === '提交记录')
+    if (tab === '评测列表')
       return (
         <CapabilityNotice
-          title="提交记录请前往提交记录页"
-          text="提交记录由独立的提交服务提供，个人主页不会生成重复或虚构数据。"
+          title="评测列表请前往评测列表页"
+          text="评测列表由独立的提交服务提供，个人主页不会生成重复或虚构数据。"
           request="SUBMISSIONS-SERVICE-ROUTE"
         />
       );
@@ -1912,7 +1792,6 @@ export function ProfileExperience({
             ['团队', 'teams', 'TEAM'],
             ['作业', 'homework', 'HOMEWORK'],
             ['我的比赛', 'myContests', 'CONTEST'],
-            ['我的题目', 'myProblems', 'AUTHORING'],
           ].map(([label, key, code]) => {
             const item = capability(key as keyof ProfileCapabilities);
             return (

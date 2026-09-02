@@ -223,10 +223,14 @@ describe('PHASE 2A Worker operations UI matrix', () => {
       });
     vi.stubGlobal('fetch', fetcher);
     render(<App />);
-    expect(await screen.findByText('phase2a-submission')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('link', { name: '查看评测 phase2a-submission' }),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
     await waitFor(() =>
-      expect(screen.queryByText('phase2a-submission')).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole('link', { name: '查看评测 phase2a-submission' }),
+      ).not.toBeInTheDocument(),
     );
   });
   it('W2A-17 renders a 401 as sign-in-required without protected content', async () => {

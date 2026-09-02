@@ -1754,6 +1754,16 @@ footer {
   border-radius: var(--radius);
   background: var(--surface);
 }
+.problem-filter-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.problem-filter-toolbar .button-link {
+  flex: 0 0 auto;
+}
 .problem-filters .search-field {
   width: 100%;
 }
@@ -1772,6 +1782,53 @@ footer {
   grid-template-columns: 10rem minmax(0, 1fr) 8rem auto;
   min-height: 5rem;
   padding-block: var(--space-5);
+}
+.evaluation-list {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.evaluation-list-header,
+.evaluation-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.8fr) minmax(8rem, 1.2fr) minmax(
+      6rem,
+      0.8fr
+    ) minmax(9rem, 1.4fr) minmax(10rem, 1.3fr);
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+}
+.evaluation-list-header {
+  border-bottom: 1px solid var(--line);
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+.evaluation-row {
+  color: inherit;
+  text-decoration: none;
+}
+.evaluation-row + .evaluation-row {
+  border-top: 1px solid var(--line);
+}
+.evaluation-row:hover,
+.evaluation-row:focus-visible {
+  background: var(--state-hover);
+  text-decoration: none;
+}
+.evaluation-row .judge-status {
+  min-width: 0;
+}
+.evaluation-row .judge-note {
+  display: none;
+}
+.evaluation-row time {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 .problem-title-cell {
   min-width: 0;
@@ -1915,6 +1972,16 @@ footer {
   margin-top: 0.45rem;
   font-size: 2.6rem;
 }
+.problem-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.problem-header-actions a,
+.problem-header-actions button {
+  width: auto;
+}
 .problem-aside {
   position: sticky;
   top: 1rem;
@@ -1923,15 +1990,6 @@ footer {
   border-top: 3px solid var(--accent);
   border-radius: var(--radius);
   background: var(--surface);
-}
-.problem-aside-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-2);
-}
-.problem-aside-actions a,
-.problem-aside-actions button {
-  width: 100%;
 }
 .problem-facts {
   display: grid;
@@ -1980,10 +2038,20 @@ footer {
   }
   .problem-aside {
     position: static;
-    grid-row: 1;
   }
   .problem-list-v4 .problem-table article {
     grid-template-columns: 8rem minmax(0, 1fr) auto;
+  }
+  .evaluation-list-header,
+  .evaluation-row {
+    grid-template-columns: minmax(6rem, 0.8fr) minmax(0, 1fr) minmax(
+        7rem,
+        1fr
+      ) auto;
+  }
+  .evaluation-list-header > :nth-child(3),
+  .evaluation-row > :nth-child(3) {
+    display: none;
   }
   .problem-list-v4 .difficulty-label {
     display: inline-flex;
@@ -1997,6 +2065,14 @@ footer {
   .problem-filters {
     grid-template-columns: 1fr;
     padding: var(--space-3);
+  }
+  .problem-filter-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .problem-filter-toolbar .button-link {
+    width: 100%;
+    text-align: center;
   }
   .problem-filter-disclosure > summary {
     display: flex;
@@ -2035,6 +2111,23 @@ footer {
   }
   .problem-list-v4 .problem-table article {
     grid-template-columns: 1fr auto;
+  }
+  .evaluation-list-header {
+    display: none;
+  }
+  .evaluation-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2) var(--space-3);
+  }
+  .evaluation-row > :nth-child(2) {
+    grid-column: 1;
+  }
+  .evaluation-row > :nth-child(4) {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .evaluation-row time {
+    grid-column: 1;
   }
   .problem-list-v4 .difficulty-label {
     display: inline-flex;

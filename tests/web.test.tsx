@@ -122,7 +122,7 @@ describe('Web platform shell', () => {
     );
     expect(screen.getByRole('alert')).toHaveTextContent('应用未能正常渲染');
   });
-  it('protects the authoring workspace when unauthenticated', async () => {
+  it('retires the former authoring dashboard route', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
@@ -145,11 +145,11 @@ describe('Web platform shell', () => {
     window.history.pushState({}, '', '/author');
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: '请先登录' }),
+      await screen.findByRole('heading', { name: '页面不存在' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '登录' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '返回首页' })).toHaveAttribute(
       'href',
-      '/login',
+      '/',
     );
   });
   it('validates and saves a new draft through the typed client', async () => {
@@ -387,9 +387,9 @@ describe('Web platform shell', () => {
     window.history.pushState({}, '', '/submissions');
     render(<App />);
     expect(
-      await screen.findByRole('heading', { name: '我的提交' }),
+      await screen.findByRole('heading', { name: '评测列表' }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('link', { name: 'sub-x' }));
+    fireEvent.click(screen.getByRole('link', { name: '查看评测 sub-x' }));
     expect(
       await screen.findByRole('heading', { name: 'Submission #sub-x' }),
     ).toBeInTheDocument();

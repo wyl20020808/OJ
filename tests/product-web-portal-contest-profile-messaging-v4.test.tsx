@@ -544,7 +544,7 @@ async function verifyProfile(id: number) {
   if (id === 93)
     expect(screen.getAllByText('我的比赛').length).toBeGreaterThan(0);
   if (id === 94)
-    expect(screen.getAllByText('我的题目').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('评测列表').length).toBeGreaterThan(0);
   if (id === 95)
     expect(screen.getByLabelText('做题情况热力图')).toBeInTheDocument();
   if (id === 96)

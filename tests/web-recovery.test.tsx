@@ -173,12 +173,16 @@ describe('PHASE 1E-R Web recovery matrix', () => {
       });
     vi.stubGlobal('fetch', fetcher);
     render(<App />);
-    return screen.findByText('s-recovery').then(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
-      await waitFor(() =>
-        expect(screen.queryByText('s-recovery')).not.toBeInTheDocument(),
-      );
-    });
+    return screen
+      .findByRole('link', { name: '查看评测 s-recovery' })
+      .then(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
+        await waitFor(() =>
+          expect(
+            screen.queryByRole('link', { name: '查看评测 s-recovery' }),
+          ).not.toBeInTheDocument(),
+        );
+      });
   });
   it('W15 keeps network errors outside protocol states', async () => {
     await expect(

@@ -2,8 +2,19 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 3D.1 PASS
-Current Status: PHASE 3D.1 PASS / SUBMISSION DETAIL AND PER-TESTCASE PRODUCT PROJECTION QUALIFIED FOR THE LOCAL PRODUCT-TO-SANDBOX SCOPE
+Current Stage: WEB UI POLISH AND EVALUATION LIST V1 PARTIAL
+Current Status: WEB UI POLISH IMPLEMENTED AND TESTED / GLOBAL EVALUATION LIST BACKEND SUPPORT NOT AVAILABLE
+
+Web UI Polish and Evaluation List V1: PARTIAL. Problem Detail actions are
+consolidated below the title with owner/Guest-owner edit entry; duplicate Web
+"我的题目" surfaces are retired and the existing create flow is available from
+the problem library. "提交记录" is now "评测列表" and uses the actual
+owner-scoped Product submission contract without source expansion. The Product
+Backend does not provide a global evaluation-list capability, safe submitter
+projection, or descending-time ordering, so no global data was fabricated.
+Statement-editor refresh/problem-publication controls were removed while Judge
+Data validation/publication remains. See
+`OJPLATFORM_WEB_UI_POLISH_EVALUATION_LIST_V1_REPORT.md`.
 
 Phase 3D.1 Submission Detail + Per-Testcase Results V1: PASS for the qualified local scope. Terminal Judge facts are reduced to a safe durable per-generation Product projection; no Product verdict engine was added. The selected-generation API, immutable historical detail, bounded scrubbed CE diagnostics, responsive detail UI, and strict stale/duplicate/backfill protections are implemented and tested. Existing real Phase 3D AC/WA/CE/RE/TLE/MLE records and Generation 1 -> 2 were projected and persisted locally; owner browser details were checked at desktop/tablet/mobile without overflow or console errors. Generation-selector browser behavior is covered by focused Web tests; this session could not authenticate as the historical Generation 1 -> 2 owner. No production or unsupported Judge/Product features are claimed; see `OJPLATFORM_PHASE_3D1_SUBMISSION_DETAIL_PER_TESTCASE_RESULTS_V1_REPORT.md`.
 

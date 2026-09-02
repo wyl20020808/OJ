@@ -2,7 +2,7 @@ export const zhCN = {
   nav: {
     home: '首页',
     problems: '题库',
-    submissions: '提交记录',
+    submissions: '评测列表',
     authoring: '出题工作台',
     profile: '个人主页',
     settings: '账户与安全',

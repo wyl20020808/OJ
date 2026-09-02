@@ -57,7 +57,6 @@ import {
   translateJudgeLabel,
   translateJudgeNote,
   translateProblemStatus,
-  translateVisibility,
   zhCN,
 } from './locale.js';
 
@@ -87,7 +86,6 @@ type Route = {
     | 'wrong-book'
     | 'notifications'
     | 'messages'
-    | 'author'
     | 'author-new'
     | 'author-edit'
     | 'sandbox'
@@ -141,7 +139,6 @@ function route(path = window.location.pathname): Route {
     };
   if (path === '/problems' || path === '/problems/')
     return { name: 'problems' };
-  if (path === '/author' || path === '/author/') return { name: 'author' };
   if (path === '/author/problems/new') return { name: 'author-new' };
   if (path.startsWith('/author/problems/') && path.endsWith('/edit'))
     return { name: 'author-edit', id: decodeURIComponent(path.slice(17, -5)) };
@@ -193,7 +190,7 @@ function Breadcrumbs({ current }: { current: Route }) {
     problems: '题库',
     problem: current.id ?? '题目',
     submit: '提交代码',
-    submissions: '提交记录',
+    submissions: '评测列表',
     submission: '提交详情',
     profile: '个人主页',
     'public-profile': '公开个人主页',
@@ -211,7 +208,6 @@ function Breadcrumbs({ current }: { current: Route }) {
     'wrong-book': '错题集',
     notifications: '通知',
     messages: '通讯',
-    author: '出题工作台',
     'author-new': '创建题目',
     'author-edit': '编辑题目',
     sandbox: 'Sandbox 运维',
@@ -251,7 +247,7 @@ function Breadcrumbs({ current }: { current: Route }) {
   if (current.name === 'homework-detail')
     parents.push({ label: '我的作业', to: '/homework' });
   if (['submission'].includes(current.name))
-    parents.push({ label: '提交记录', to: '/submissions' });
+    parents.push({ label: '评测列表', to: '/submissions' });
   return (
     <nav className="breadcrumbs" aria-label="面包屑">
       {current.name === 'home' ? (
@@ -808,7 +804,13 @@ function Pagination({
   );
 }
 
-function ProblemList({ api }: { api: ApiClient }) {
+function ProblemList({
+  api,
+  user,
+}: {
+  api: ApiClient;
+  user: AuthenticatedUser | null;
+}) {
   const pageSize = 20;
   const [data, setData] = useState<{
     items: Problem[];
@@ -964,6 +966,14 @@ function ProblemList({ api }: { api: ApiClient }) {
       <details className="problem-filter-disclosure" open>
         <summary>筛选题目</summary>
         <div className="problem-filters" aria-label="题库筛选">
+          <div className="problem-filter-toolbar">
+            <strong>搜索与筛选</strong>
+            {user && (
+              <Link to="/author/problems/new" className="button-link">
+                新建题目
+              </Link>
+            )}
+          </div>
           <label className="search-field">
             关键词
             <input
@@ -1167,86 +1177,6 @@ const emptyDraft: Draft = {
   status: 'draft' as const,
 };
 
-function AuthorDashboard({ api }: { api: ApiClient }) {
-  const [data, setData] = useState<{
-    items: Problem[];
-    page: { total: number; offset: number; limit: number };
-  } | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-  const load = () => {
-    setError(null);
-    void api
-      .problems(0, 100)
-      .then(setData)
-      .catch((e) =>
-        setError(
-          e instanceof ApiError
-            ? e
-            : new ApiError(
-                {
-                  code: 'NETWORK_ERROR',
-                  message: '无法加载题目草稿。',
-                  requestId: 'unknown',
-                },
-                0,
-              ),
-        ),
-      );
-  };
-  useEffect(load, [api]);
-  if (error)
-    return (
-      <State
-        title={
-          error.code === 'FORBIDDEN'
-            ? '无权访问出题工作台'
-            : '出题工作台暂不可用'
-        }
-        text={error.message}
-        action={<button onClick={load}>重试</button>}
-      />
-    );
-  if (!data)
-    return <State title="正在加载出题工作台" text="正在获取你的题目草稿…" />;
-  return (
-    <section>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">出题工作台</p>
-          <h1>我的题目</h1>
-        </div>
-        <Link to="/author/problems/new">
-          <button type="button">新建题目</button>
-        </Link>
-      </div>
-      {data.items.length === 0 ? (
-        <State
-          title="暂无草稿"
-          text="创建第一道题目草稿，开始出题。"
-          action={<Link to="/author/problems/new">创建草稿</Link>}
-        />
-      ) : (
-        <div className="problem-list">
-          {data.items.map((p) => (
-            <article key={p.id}>
-              <div>
-                <h2>{p.title}</h2>
-                <p>
-                  <span className={`status status-${p.status}`}>
-                    {translateProblemStatus(p.status)}
-                  </span>{' '}
-                  · {translateVisibility(p.visibility)}
-                </p>
-              </div>
-              <Link to={`/author/problems/${p.slug || p.id}/edit`}>编辑</Link>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
   const [form, setForm] = useState<Draft>(emptyDraft);
   const [loading, setLoading] = useState(Boolean(id));
@@ -1375,7 +1305,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     );
   return (
     <section className="editor">
-      <Link to="/author">← 返回我的题目</Link>
+      <Link to="/problems">← 返回题库</Link>
       <div className="page-heading">
         <div>
           <p className="eyebrow">{id ? '编辑草稿' : '新建草稿'}</p>
@@ -1550,7 +1480,15 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     </section>
   );
 }
-function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
+function ProblemDetail({
+  api,
+  id,
+  user,
+}: {
+  api: ApiClient;
+  id: string;
+  user: AuthenticatedUser | null;
+}) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
@@ -1580,12 +1518,30 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
       <State title="题目暂不可用" text={error.message} />
     );
   if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
+  const canEdit = problem.authorId === user?.id;
   return (
     <article className="problem-detail-v4">
       <div className="problem-main">
         <header className="problem-heading">
           <span className="problem-id">{problem.slug || problem.id}</span>
           <h1>{problem.title}</h1>
+          <div className="problem-header-actions" aria-label="题目操作">
+            <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
+              <button type="button">提交代码</button>
+            </Link>
+            {canEdit && (
+              <Link
+                to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
+              >
+                <button type="button" className="secondary">
+                  编辑题目
+                </button>
+              </Link>
+            )}
+            <button type="button" className="secondary" disabled>
+              收藏
+            </button>
+          </div>
           <p className="muted">
             {problem.currentRevisionId
               ? `版本 ${problem.currentRevisionId}`
@@ -1632,14 +1588,6 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
         {problem.notes && <Section title="说明与提示">{problem.notes}</Section>}
       </div>
       <aside className="problem-aside" aria-label="题目信息">
-        <div className="problem-aside-actions">
-          <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
-            <button type="button">提交代码</button>
-          </Link>
-          <button type="button" className="secondary" disabled>
-            收藏
-          </button>
-        </div>
         <dl className="problem-facts">
           <div>
             <dt>难度</dt>
@@ -1770,7 +1718,7 @@ function SubmissionForm({
       <State
         title="提交已接收"
         text={error}
-        action={<Link to="/submissions">查看提交记录</Link>}
+        action={<Link to="/submissions">查看评测列表</Link>}
       />
     );
   return (
@@ -1838,7 +1786,7 @@ function SubmissionHistory({
       })
       .catch((e) => {
         if (version !== requestVersion.current) return;
-        setError(e instanceof ApiError ? e.message : '无法加载提交记录。');
+        setError(e instanceof ApiError ? e.message : '无法加载评测列表。');
       });
   };
   useEffect(load, [api, cursor]);
@@ -1852,45 +1800,52 @@ function SubmissionHistory({
     return (
       <State
         title="请先登录"
-        text="登录后才能查看提交记录。"
+        text="登录后才能查看评测列表。"
         action={<Link to="/login">登录</Link>}
       />
     );
   if (error)
     return (
       <State
-        title="提交记录暂不可用"
+        title="评测列表暂不可用"
         text={error}
         action={<button onClick={load}>重试</button>}
       />
     );
   if (!items)
-    return <State title="正在加载提交记录" text="正在获取你的提交接收记录…" />;
+    return <State title="正在加载评测列表" text="正在获取你的评测记录…" />;
   return (
     <section>
       <div className="page-heading">
         <div>
-          <p className="eyebrow">提交记录</p>
-          <h1>我的提交</h1>
+          <p className="eyebrow">评测</p>
+          <h1>评测列表</h1>
         </div>
       </div>
       {items.length === 0 ? (
-        <State title="暂无提交" text="你提交的源代码会显示在这里。" />
+        <State title="暂无评测记录" text="你的提交评测会显示在这里。" />
       ) : (
-        <div className="problem-list">
+        <div className="evaluation-list" role="table" aria-label="评测列表">
+          <div className="evaluation-list-header" role="row">
+            <span role="columnheader">评测 ID</span>
+            <span role="columnheader">题目</span>
+            <span role="columnheader">语言</span>
+            <span role="columnheader">状态</span>
+            <span role="columnheader">时间</span>
+          </div>
           {items.map((s) => (
-            <article key={s.id}>
-              <div>
-                <h2>
-                  <Link to={`/submissions/${s.id}`}>{s.id}</Link>
-                </h2>
-                <p>
-                  {s.languageId} · {formatDate(s.createdAt)}
-                </p>
-                <JudgeStatus submission={s} />
-              </div>
-              <Link to={`/submissions/${s.id}`}>查看详情</Link>
-            </article>
+            <Link
+              key={s.id}
+              to={`/submissions/${encodeURIComponent(s.id)}`}
+              className="evaluation-row"
+              ariaLabel={`查看评测 ${s.id}`}
+            >
+              <span>#{s.id}</span>
+              <span>{s.problemId}</span>
+              <span>{s.languageId}</span>
+              <JudgeStatus submission={s} />
+              <time>{formatDate(s.createdAt)}</time>
+            </Link>
           ))}
         </div>
       )}
@@ -1985,7 +1940,7 @@ export function SubmissionDetail({
     return (
       <State
         title="请先登录"
-        text="登录后才能查看这条提交记录。"
+        text="登录后才能查看这条评测记录。"
         action={<Link to="/login">登录</Link>}
       />
     );
@@ -2034,7 +1989,7 @@ export function SubmissionDetail({
     : false;
   return (
     <article className="detail submission-detail">
-      <Link to="/submissions">← 返回提交记录</Link>
+      <Link to="/submissions">← 返回评测列表</Link>
       <p className="eyebrow">提交详情</p>
       <div className="submission-heading">
         <div>
@@ -2550,7 +2505,7 @@ export function App() {
     ) : current.name === 'error' ? (
       <GenericError />
     ) : current.name === 'problems' ? (
-      <ProblemList api={api} />
+      <ProblemList api={api} user={user} />
     ) : current.name === 'contests' ? (
       <ContestRoute api={api} view="list" navigate={navigate} />
     ) : current.name === 'my-contests' ? (
@@ -2620,7 +2575,7 @@ export function App() {
       ) : (
         <State
           title="请先登录"
-          text="登录后才能查看这条提交记录。"
+          text="登录后才能查看这条评测记录。"
           action={<Link to="/login">登录</Link>}
         />
       )
@@ -2650,16 +2605,6 @@ export function App() {
           action={<Link to="/login">登录</Link>}
         />
       )
-    ) : current.name === 'author' ? (
-      user ? (
-        <AuthorDashboard api={api} />
-      ) : (
-        <State
-          title="请先登录"
-          text="登录后才能管理题目草稿。"
-          action={<Link to="/login">登录</Link>}
-        />
-      )
     ) : current.name === 'author-new' ? (
       user ? (
         <AuthorForm api={api} />
@@ -2681,7 +2626,7 @@ export function App() {
         />
       )
     ) : current.name === 'problem' ? (
-      <ProblemDetail api={api} id={current.id ?? ''} />
+      <ProblemDetail api={api} id={current.id ?? ''} user={user} />
     ) : (
       <NotFound />
     );
@@ -2751,7 +2696,7 @@ export function App() {
                 : ''
             }
           >
-            提交记录
+            评测列表
           </Link>
           <Link
             to="/messages"
@@ -2777,9 +2722,6 @@ export function App() {
                 className={current.name === 'settings' ? 'active' : ''}
               >
                 账户与安全
-              </Link>
-              <Link to="/author" ariaLabel="Authoring">
-                出题工作台
               </Link>
               <button
                 className="link-button"

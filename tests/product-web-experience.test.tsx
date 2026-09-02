@@ -230,12 +230,12 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
       }),
     ).toBeInTheDocument();
   });
-  it('WEB-PROD-18 authoring remains a dedicated workspace', () => {
+  it('WEB-PROD-18 retires the dedicated authoring workspace', () => {
     vi.stubGlobal('fetch', appFetch({ me: user }));
     window.history.pushState({}, '', '/author');
     render(<App />);
     expect(
-      screen.getByRole('heading', { name: /出题工作台|请先登录/i }),
+      screen.getByRole('heading', { name: '页面不存在' }),
     ).toBeInTheDocument();
   });
   it('WEB-PROD-19 authoring form has unsaved protection support', async () => {

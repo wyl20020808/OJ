@@ -443,15 +443,10 @@ describe('Product Web Backend runtime regressions', () => {
       .fn()
       .mockRejectedValueOnce(userError('INTERNAL_ERROR', 500))
       .mockResolvedValue({ items: [], page: { limit: 20 } });
-    const problemCalls = vi
-      .fn()
-      .mockRejectedValueOnce(userError('INTERNAL_ERROR', 500))
-      .mockResolvedValue({ items: [], page: { limit: 20, total: 0 } });
     const api = {
       profileCapabilities: vi.fn().mockResolvedValue(availableCapabilities),
       profileFavorites: favoriteCalls,
       profileContests: contestCalls,
-      profileProblems: problemCalls,
     } as unknown as ApiClient;
 
     render(
@@ -476,13 +471,6 @@ describe('Product Web Backend runtime regressions', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
     await waitFor(() => expect(contestCalls).toHaveBeenCalledTimes(2));
-
-    fireEvent.click(screen.getByRole('tab', { name: '我的题目' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      '我的题目暂时不可用',
-    );
-    fireEvent.click(screen.getByRole('button', { name: '重试' }));
-    await waitFor(() => expect(problemCalls).toHaveBeenCalledTimes(2));
   });
 
   it('keeps the Backend friend-request ID for cancellation', async () => {

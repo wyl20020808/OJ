@@ -287,24 +287,6 @@ export function ProblemEditor({
       setSaving(false);
     }
   };
-  const publishProblem = async () => {
-    if (!problem || problem.status !== 'draft') return;
-    setSaving(true);
-    setNotice('');
-    try {
-      setProblem(
-        await api.transitionProblem(problemId, {
-          status: 'published',
-          visibility: problem.visibility,
-        }),
-      );
-      setNotice('题目已发布。');
-    } catch (e) {
-      setNotice(errorText(e));
-    } finally {
-      setSaving(false);
-    }
-  };
   const validate = async () => {
     if (!draft || !canManage) return;
     setSaving(true);
@@ -432,22 +414,6 @@ export function ProblemEditor({
             {new Date(draft.updatedAt).toLocaleString('zh-CN')}
           </p>
         </div>
-        <button
-          className="secondary"
-          onClick={load}
-          disabled={saving || uploading}
-        >
-          刷新
-        </button>
-        {problem.status === 'draft' && (
-          <button
-            type="button"
-            onClick={publishProblem}
-            disabled={!canEdit || saving || uploading}
-          >
-            发布题目
-          </button>
-        )}
       </header>
       <nav className="editor-tabs" aria-label="题目编辑分区">
         {(
