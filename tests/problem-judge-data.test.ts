@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import {
   builtinCheckerConfigSha256,
   BUILTIN_CHECKER_VERSION,
+  TESTCASE_SET_MAX_INPUT_BYTES,
   testcaseSetManifestHash,
 } from '@ojplatform/judge-runtime';
 import {
@@ -168,6 +169,20 @@ describe('problem judge data backend', () => {
     expect(
       (await svc.versions('p-1', user)).map((v) => v.versionNumber),
     ).toEqual([2, 1]);
+  });
+
+  it('rejects testcase data that the Judge manifest cannot execute', async () => {
+    const { svc } = service();
+    await svc.addPair(
+      'p-1',
+      Buffer.alloc(TESTCASE_SET_MAX_INPUT_BYTES + 1),
+      Uint8Array.of(3),
+      { input: '01.in', output: '01.out' },
+      user,
+    );
+    await expect(svc.validate('p-1', user)).rejects.toMatchObject({
+      code: 'TESTCASE_SIZE_EXCEEDED',
+    });
   });
 
   it('uses the canonical 2C.4 manifest hash and rejects stale revisions', async () => {

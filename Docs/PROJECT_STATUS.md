@@ -3,7 +3,18 @@
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: UNIFIED JUDGE RUNTIME INTEGRATION V1 PASS
-Current Status: HISTORY-PRESERVING PRODUCT/WEB + 2C.8D MERGE, CURRENT-SOURCE HOST-AGENT PRODUCT RUNTIME QUALIFICATION, AND BROWSER AC/WA DETAIL SMOKE COMPLETE
+Current Status: PRODUCT/JUDGE DEFECT REMEDIATION COMPLETE; CURRENT-SOURCE HOST-AGENT BROWSER AC/WA/CE/RE, SAFE JUDGE DATA ERRORS, AND DETAIL SMOKE PASS
+
+Product Judge Runtime Defect Remediation V1: PASS. The local Product path now
+rejects non-executable Judge Data before publication, verifies fetched object
+integrity during validation, maps historic manifest-contract failures to a safe
+409 rather than 500, and preserves safe Product error messages in the
+submission route. Browser evidence on the current unified source covers fresh
+private authoring, Judge Data upload/Validate/Publish, AC/WA/CE/RE and
+per-testcase detail, oversized-data validation failure, unpublished submission
+failure, and duplicate-slug UI handling. The established `EXACT_BYTES` A+B
+trailing-newline behavior was proved and deliberately not changed. See
+`OJPLATFORM_PRODUCT_JUDGE_RUNTIME_DEFECT_REMEDIATION_V1_REPORT.md`.
 
 Unified Judge Runtime Integration V1: PASS. Product/Web `4df8c2c` and
 Phase 2C.8D `4462fbd` are formally preserved by merge `d4e04ca`, with Product

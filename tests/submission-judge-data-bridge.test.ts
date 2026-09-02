@@ -179,8 +179,8 @@ describe('Product Judge Data submission bridge', () => {
     ).toMatchObject({ manifestHash: manifest.manifestHash });
   });
 
-  it('binds a Guest-owned API submission before constructing the Judge payload', async () => {
-    const { bridge } = await published();
+  it('binds a Guest-owned API submission and safely rejects invalid or absent Judge Data', async () => {
+    const { bridge, storage, version, versions } = await published();
     const app = Fastify();
     const repository = new InMemorySubmissionRepository();
     let dispatchedManifest = '';
@@ -226,6 +226,44 @@ describe('Product Judge Data submission bridge', () => {
       testdataVersionRef: 'testdata-v1',
     });
     expect(dispatchedManifest).toHaveLength(64);
+
+    const oversizedInput = await storage.put(
+      Buffer.alloc(65_537),
+      'private/oversized-input',
+      'oversized.in',
+      'problem-1',
+    );
+    version.testcases[0]!.input = oversizedInput;
+    const oversized = await app.inject({
+      method: 'POST',
+      url: '/api/submissions',
+      payload: {
+        problemId: 'problem-1',
+        problemRevisionId: 'revision-1',
+        languageId: 'cpp20',
+        source: 'int main() {}',
+      },
+    });
+    expect(oversized.statusCode).toBe(409);
+    expect(oversized.json()).toMatchObject({
+      code: 'JUDGE_DATA_MANIFEST_INVALID',
+    });
+
+    versions.splice(0);
+    const unavailable = await app.inject({
+      method: 'POST',
+      url: '/api/submissions',
+      payload: {
+        problemId: 'problem-1',
+        problemRevisionId: 'revision-1',
+        languageId: 'cpp20',
+        source: 'int main() {}',
+      },
+    });
+    expect(unavailable.statusCode).toBe(409);
+    expect(unavailable.json()).toMatchObject({
+      code: 'JUDGE_DATA_UNAVAILABLE',
+    });
     await app.close();
   });
 });

@@ -142,7 +142,7 @@ export async function registerSubmissionModule(
           request,
           e.status,
           e.code,
-          'Judge Data unavailable',
+          e instanceof Error ? e.message : 'Judge Data unavailable',
         );
       if (e instanceof Error && e.message === 'VALIDATION_ERROR')
         return error(

@@ -244,6 +244,68 @@ describe('Web platform shell', () => {
       ),
     );
   });
+
+  it('explains duplicate problem identifiers without disguising the conflict', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockImplementation(
+          async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            if (url.endsWith('/api/auth/me'))
+              return {
+                status: 200,
+                json: async () => ({
+                  id: 'u1',
+                  username: 'author',
+                  email: 'a@example.com',
+                  displayName: 'Author',
+                  status: 'active',
+                }),
+              };
+            if (url.endsWith('/ready'))
+              return {
+                status: 200,
+                json: async () => ({ status: 'ok', dependencies: {} }),
+              };
+            if (url.endsWith('/api/problems') && init?.method === 'POST')
+              return {
+                status: 409,
+                json: async () => ({
+                  code: 'CONFLICT',
+                  message: 'Problem identifier or slug already exists',
+                  requestId: 'r409',
+                }),
+              };
+            return {
+              status: 200,
+              json: async () => ({
+                items: [],
+                page: { total: 0, offset: 0, limit: 100 },
+              }),
+            };
+          },
+        ),
+    );
+    window.history.pushState({}, '', '/author/problems/new');
+    render(<App />);
+    await screen.findByRole('heading', { name: '创建题目' });
+    const duplicateFields: Array<[string, string]> = [
+      ['题目标题', 'Duplicate'],
+      ['题目标识', 'duplicate'],
+      ['题面', 's'],
+      ['输入说明', 'i'],
+      ['输出说明', 'o'],
+      ['数据范围', 'c'],
+    ];
+    for (const [label, value] of duplicateFields)
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '题目编号已存在，请更换题目标识。',
+    );
+  });
   it('submits source through intake contract without presenting a verdict', async () => {
     const fetcher = vi
       .fn()

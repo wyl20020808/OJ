@@ -2,6 +2,7 @@ import {
   BUILTIN_CHECKER_VERSION,
   builtinCheckerConfigSha256,
   createTestcaseSetManifest,
+  TestcaseSetContractError,
   type TestcaseSetManifest,
 } from '@ojplatform/judge-runtime';
 import {
@@ -150,14 +151,25 @@ export class ProductJudgeDataSubmissionBridge {
         };
       }),
     );
-    const manifest = createTestcaseSetManifest({
-      problemId: version.problemId,
-      problemRevisionId: version.problemRevisionId,
-      testdataVersionId: version.testdataVersionId,
-      testcaseSetId: version.testcaseSetId,
-      executionProfileId: version.executionProfileId,
-      entries,
-    });
+    let manifest: TestcaseSetManifest;
+    try {
+      manifest = createTestcaseSetManifest({
+        problemId: version.problemId,
+        problemRevisionId: version.problemRevisionId,
+        testdataVersionId: version.testdataVersionId,
+        testcaseSetId: version.testcaseSetId,
+        executionProfileId: version.executionProfileId,
+        entries,
+      });
+    } catch (error) {
+      if (error instanceof TestcaseSetContractError)
+        throw new JudgeDataError(
+          'JUDGE_DATA_MANIFEST_INVALID',
+          'Published Judge Data cannot be executed',
+          409,
+        );
+      throw error;
+    }
     if (manifest.manifestHash !== version.manifestSha256)
       throw new JudgeDataError(
         'INTEGRITY_MISMATCH',

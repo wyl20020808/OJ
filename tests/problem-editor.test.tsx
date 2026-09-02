@@ -343,6 +343,30 @@ describe('ProblemEditor judge-data contract UI', () => {
     );
   });
 
+  it('shows Judge Data validation errors and keeps publication unavailable', async () => {
+    const api = makeApi({
+      validateJudgeData: vi.fn().mockRejectedValue(
+        new ApiError(
+          {
+            code: 'TESTCASE_SIZE_EXCEEDED',
+            message: 'Testcase #1 exceeds the Judge execution byte limit',
+            requestId: 'r400',
+          },
+          400,
+        ),
+      ),
+    });
+    render(<ProblemEditor api={api} problemId="p1" />);
+    fireEvent.click(await screen.findByRole('button', { name: '评测数据' }));
+    fireEvent.click(screen.getByRole('button', { name: '校验草稿' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Testcase #1 exceeds the Judge execution byte limit',
+    );
+    expect(
+      screen.getByRole('button', { name: '发布新数据版本' }),
+    ).toBeDisabled();
+  });
+
   it('surfaces stale publish conflicts instead of claiming success', async () => {
     const api = makeApi({
       validateJudgeData: vi

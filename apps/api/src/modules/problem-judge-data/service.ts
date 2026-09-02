@@ -3,6 +3,7 @@ import {
   now,
   canonicalManifestHash,
   effective,
+  sha256,
   validateDefaults,
   validateLimit,
   validateObjectRef,
@@ -16,7 +17,11 @@ import {
 } from './model.js';
 import type { ByteStorage } from './storage.js';
 import { parseZip } from './zip.js';
-import { TESTCASE_SET_MAX_SIZE } from '../judge/testcase-set.js';
+import {
+  TESTCASE_SET_MAX_EXPECTED_OUTPUT_BYTES,
+  TESTCASE_SET_MAX_INPUT_BYTES,
+  TESTCASE_SET_MAX_SIZE,
+} from '../judge/testcase-set.js';
 
 type PublicObjectRef = Omit<ObjectRef, 'key'>;
 const publicRef = (ref: ObjectRef): PublicObjectRef => ({
@@ -586,6 +591,35 @@ export class ProblemJudgeDataService {
       this.assertDraftRef(problemId, c.expectedOutput);
       await this.storage.verify(c.input);
       await this.storage.verify(c.expectedOutput);
+      if (
+        c.input.sizeBytes > TESTCASE_SET_MAX_INPUT_BYTES ||
+        c.expectedOutput.sizeBytes > TESTCASE_SET_MAX_EXPECTED_OUTPUT_BYTES
+      )
+        throw new JudgeDataError(
+          'TESTCASE_SIZE_EXCEEDED',
+          `Testcase #${c.ordinal + 1} exceeds the Judge execution byte limit`,
+        );
+      if (!this.storage.get)
+        throw new JudgeDataError(
+          'STORAGE_UNAVAILABLE',
+          'Judge Data retrieval is unavailable',
+          503,
+        );
+      const [input, expectedOutput] = await Promise.all([
+        this.storage.get(c.input),
+        this.storage.get(c.expectedOutput),
+      ]);
+      if (
+        input.byteLength !== c.input.sizeBytes ||
+        expectedOutput.byteLength !== c.expectedOutput.sizeBytes ||
+        sha256(input) !== c.input.sha256 ||
+        sha256(expectedOutput) !== c.expectedOutput.sha256
+      )
+        throw new JudgeDataError(
+          'INTEGRITY_MISMATCH',
+          'Judge Data object integrity mismatch',
+          409,
+        );
     }
     const hash = canonicalManifestHash(d, d.testcases);
     d.status = 'VALIDATED';

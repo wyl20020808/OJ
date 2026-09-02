@@ -1253,16 +1253,26 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       if (!id) navigate(`/author/problems/${result.slug || result.id}/edit`);
     } catch (e) {
       setError(
-        e instanceof ApiError
-          ? e
-          : new ApiError(
+        e instanceof ApiError && e.code === 'CONFLICT'
+          ? new ApiError(
               {
-                code: 'NETWORK_ERROR',
-                message: '无法保存草稿。',
-                requestId: 'unknown',
+                code: e.code,
+                requestId: e.requestId,
+                ...(e.details === undefined ? {} : { details: e.details }),
+                message: '题目编号已存在，请更换题目标识。',
               },
-              0,
-            ),
+              e.status,
+            )
+          : e instanceof ApiError
+            ? e
+            : new ApiError(
+                {
+                  code: 'NETWORK_ERROR',
+                  message: '无法保存草稿。',
+                  requestId: 'unknown',
+                },
+                0,
+              ),
       );
     } finally {
       setSaving(false);
