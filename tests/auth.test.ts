@@ -53,7 +53,7 @@ describe('auth foundation', () => {
     });
     expect(login.statusCode).toBe(200);
     const cookie = login.headers['set-cookie'];
-    expect(cookie).toContain('HttpOnly');
+    expect(String(cookie)).toContain('HttpOnly');
     expect(login.json()).not.toHaveProperty('password');
     const me = await server.inject({
       method: 'GET',

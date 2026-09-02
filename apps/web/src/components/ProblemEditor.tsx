@@ -32,7 +32,7 @@ const fallbackDefaults: ProblemJudgeDefaults = {
   memoryLimitBytes: 256 * 1024 * 1024,
   outputLimitBytes: 64 * 1024 * 1024,
   checker: 'EXACT_BYTES',
-  allowedLanguageProfiles: ['cpp17', 'python3'],
+  allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
 };
 const emptyValidation = { state: 'UNKNOWN' as const, errors: [], warnings: [] };
 
@@ -278,23 +278,7 @@ export function ProblemEditor({
     setNotice('');
     try {
       const next = await api.saveJudgeConfig(problemId, draft.defaults);
-      setDraft((d) =>
-        d
-          ? {
-              ...d,
-              ...next,
-              testcases: d.testcases.map((t) => ({
-                ...t,
-                effectiveTimeLimitMs:
-                  t.timeLimitMsOverride ?? next.defaults.timeLimitMs,
-                effectiveMemoryLimitBytes:
-                  t.memoryLimitBytesOverride ?? next.defaults.memoryLimitBytes,
-                effectiveOutputLimitBytes:
-                  t.outputLimitBytesOverride ?? next.defaults.outputLimitBytes,
-              })),
-            }
-          : d,
-      );
+      setDraft(next);
       setDirty(false);
       setNotice('评测设置已保存。');
     } catch (e) {
@@ -760,7 +744,7 @@ export function ProblemEditor({
           </label>
           <fieldset>
             <legend>允许的语言配置</legend>
-            {['cpp17', 'python3', 'java21', 'rust2021'].map((profile) => (
+            {['cpp20-gcc-13-v1'].map((profile) => (
               <label className="checkbox" key={profile}>
                 <input
                   type="checkbox"

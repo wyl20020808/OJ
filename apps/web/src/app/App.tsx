@@ -2447,7 +2447,7 @@ export function App() {
       )
     ) : current.name === 'author-edit' ? (
       user && current.id ? (
-        <ProblemEditor api={api} problemId={current.id} canEdit={!user.guest} canManage={!user.guest} canPublish={!user.guest} />
+        <ProblemEditor api={api} problemId={current.id} />
       ) : (
         <State
           title="请先登录"

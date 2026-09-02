@@ -2,8 +2,10 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 2C IN PROGRESS
-Current Status: PHASE 2C.4 PASS / TESTCASE-SET EXECUTION-FACT AGGREGATION FOUNDATION QUALIFIED
+Current Stage: PHASE 3C COMPLETE
+Current Status: PHASE 3C PASS / PROBLEM JUDGE DATA LEAD INTEGRATION AND GUEST AUTHORING RUNTIME QUALIFIED
+
+Phase 3C Problem Judge Data Lead Integration + Guest Authoring V1: PASS / 3A Backend and 3B Web histories integrated on 2C.8BC; Guest server-side create/edit-own/Judge Data authorization, CSRF, rate limits, Product upload-contract reconciliation, complete gates, and real PostgreSQL/MinIO Product/browser G1/G2 E2E qualified. v1/v2 history, per-testcase overrides, responsive editor, and G2/Judge Admin denials are evidenced in `OJPLATFORM_PHASE_3C_PROBLEM_JUDGE_DATA_LEAD_INTEGRATION_GUEST_AUTHORING_V1_REPORT.md`.
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 Product Lead Integration V1: PASS / qualified Backend + Web integrated; Judge remains separate; final closure `eb7912e`
@@ -46,6 +48,7 @@ READY FOR NEXT PHASE 2C GOAL: YES
 - PHASE 2C.2 — Real Execution Lifecycle, Integrity & Reliability Qualification: PASS
 - PHASE 2C.3 — Deterministic Testcase Execution & Runtime Measurement Contract: PASS
 - PHASE 2C.4 — Testcase Set Execution & Aggregation Foundation: PASS
+- PHASE 3C — Problem Judge Data Lead Integration & Guest Authoring: PASS
 
 ## Current Project State
 
@@ -56,6 +59,7 @@ READY FOR NEXT PHASE 2C GOAL: YES
 - Phase 2C.2 qualification commits: `26cc692`, `9e17d7e`
 - Phase 2C.4 implementation commit: `a3af407` (`feat: add phase 2c4 testcase-set execution foundation`)
 - Phase 2C.4 qualification commit: `4856438` (`test: qualify phase 2c4 testcase-set reliability`)
+- Phase 3C: 3A and 3B history-preserving merges `f9b3549` and `89dd6bf`; final Goal commit records Product/PostgreSQL/MinIO and Guest G1/G2 qualification.
 - Product Lead Integration V1: `100e9f4` integration baseline plus `58c6b10` real browser smoke; final report records the closure commit. Judge history remains separate from this Product integration.
 - Business implementation: Phase 1 product foundations, Phase 2A Worker foundation, Phase 2B trusted-probe Sandbox boundary, and the Phase 2C.1/2C.2/2C.3 qualification-only C++20 execution foundation implemented
 - Framework/toolchain: initialized and qualified through the current Phase 2C.1 scope
@@ -93,6 +97,6 @@ READY FOR NEXT PHASE 2C GOAL: YES
 
 ## Next Planned Goal
 
-Continue with the next separately approved Phase 2C Goal. Verdict mapping, expected-output comparison, checker support, multi-language support, Contest, production HA, and production deployment remain not started or not qualified. Phase 2C is IN PROGRESS and Phase 2D is NOT STARTED.
+Await the next separately approved Goal. Verdict mapping, expected-output comparison, checker support, multi-language support, Contest, production HA, and production deployment remain not started or not qualified. Phase 2C remains historically in progress and Phase 2D is not started.
 
 Last Updated: 2026-09-02

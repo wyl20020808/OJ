@@ -8,9 +8,14 @@ export async function registerProblemJudgeDataRoutes(
   options: {
     service: ProblemJudgeDataService;
     getAuth: (r: FastifyRequest) => Promise<AuthContext | undefined>;
+    resolveProblemId?: (key: string) => Promise<string | undefined>;
   },
 ) {
   const auth = options.getAuth;
+  const problemId = async (request: FastifyRequest) => {
+    const key = String((request.params as { problemId?: unknown }).problemId);
+    return (await options.resolveProblemId?.(key)) ?? key;
+  };
   const run = async (
     fn: () => Promise<unknown>,
     reply: any,
@@ -56,28 +61,32 @@ export async function registerProblemJudgeDataRoutes(
         });
   app.get('/api/problems/:problemId/judge-data', async (r, reply) =>
     run(
-      () => options.service.draft((r.params as any).problemId, auth(r)),
+      async () =>
+        (await options.service.draft(await problemId(r), await auth(r))) ??
+        null,
       reply,
       r,
     ),
   );
   app.get('/api/problems/:problemId/judge-data/metadata', async (r, reply) =>
     run(
-      () => options.service.metadata((r.params as any).problemId, auth(r)),
+      async () => options.service.metadata(await problemId(r), await auth(r)),
       reply,
       r,
     ),
   );
   app.get('/api/problems/:problemId/judge-data/draft', async (r, reply) =>
     run(
-      () => options.service.draft((r.params as any).problemId, auth(r)),
+      async () =>
+        (await options.service.draft(await problemId(r), await auth(r))) ??
+        null,
       reply,
       r,
     ),
   );
   app.get('/api/problems/:problemId/judge-data/versions', async (r, reply) =>
     run(
-      () => options.service.versions((r.params as any).problemId, auth(r)),
+      async () => options.service.versions(await problemId(r), await auth(r)),
       reply,
       r,
     ),
@@ -86,9 +95,13 @@ export async function registerProblemJudgeDataRoutes(
     '/api/problems/:problemId/judge-data/versions/:versionId',
     async (r, reply) =>
       run(
-        () => {
+        async () => {
           const x = r.params as any;
-          return options.service.version(x.problemId, x.versionId, auth(r));
+          return options.service.version(
+            await problemId(r),
+            x.versionId,
+            await auth(r),
+          );
         },
         reply,
         r,
@@ -99,7 +112,12 @@ export async function registerProblemJudgeDataRoutes(
     async (r, reply) => {
       const x = r.params as any;
       return run(
-        () => options.service.testcase(x.problemId, x.testcaseId, auth(r)),
+        async () =>
+          options.service.testcase(
+            await problemId(r),
+            x.testcaseId,
+            await auth(r),
+          ),
         reply,
         r,
       );
@@ -108,20 +126,16 @@ export async function registerProblemJudgeDataRoutes(
   app.put(
     '/api/problems/:problemId/judge-data/draft/config',
     async (r, reply) =>
-      mutate(r, reply, () =>
-        options.service.saveConfig(
-          (r.params as any).problemId,
-          r.body,
-          auth(r),
-        ),
+      mutate(r, reply, async () =>
+        options.service.saveConfig(await problemId(r), r.body, await auth(r)),
       ),
   );
   app.post(
     '/api/problems/:problemId/judge-data/draft/testcases',
     async (r, reply) => {
-      const p = (r.params as any).problemId;
-      return mutate(r, reply, () =>
-        options.service.addTestcase(p, r.body, auth(r)),
+      const p = await problemId(r);
+      return mutate(r, reply, async () =>
+        options.service.addTestcase(p, r.body, await auth(r)),
       );
     },
   );
@@ -129,12 +143,12 @@ export async function registerProblemJudgeDataRoutes(
     '/api/problems/:problemId/judge-data/draft/testcases/:testcaseId',
     async (r, reply) => {
       const x = r.params as any;
-      return mutate(r, reply, () =>
+      return mutate(r, reply, async () =>
         options.service.updateTestcase(
-          x.problemId,
+          await problemId(r),
           x.testcaseId,
           r.body,
-          auth(r),
+          await auth(r),
         ),
       );
     },
@@ -143,8 +157,12 @@ export async function registerProblemJudgeDataRoutes(
     '/api/problems/:problemId/judge-data/draft/testcases/:testcaseId',
     async (r, reply) => {
       const x = r.params as any;
-      return mutate(r, reply, () =>
-        options.service.deleteTestcase(x.problemId, x.testcaseId, auth(r)),
+      return mutate(r, reply, async () =>
+        options.service.deleteTestcase(
+          await problemId(r),
+          x.testcaseId,
+          await auth(r),
+        ),
       );
     },
   );
@@ -152,16 +170,16 @@ export async function registerProblemJudgeDataRoutes(
     '/api/problems/:problemId/judge-data/draft/upload',
     async (r, reply) => {
       const b = r.body as any;
-      return mutate(r, reply, () =>
+      return mutate(r, reply, async () =>
         options.service.addPair(
-          (r.params as any).problemId,
+          await problemId(r),
           Buffer.from(String(b?.inputBase64 ?? ''), 'base64'),
           Buffer.from(String(b?.outputBase64 ?? ''), 'base64'),
           {
             input: String(b?.inputFileName ?? 'input.in'),
             output: String(b?.outputFileName ?? 'output.out'),
           },
-          auth(r),
+          await auth(r),
         ),
       );
     },
@@ -170,11 +188,11 @@ export async function registerProblemJudgeDataRoutes(
     '/api/problems/:problemId/judge-data/draft/upload-zip',
     async (r, reply) => {
       const b = r.body as any;
-      return mutate(r, reply, () =>
+      return mutate(r, reply, async () =>
         options.service.addZip(
-          (r.params as any).problemId,
+          await problemId(r),
           Buffer.from(String(b?.zipBase64 ?? ''), 'base64'),
-          auth(r),
+          await auth(r),
         ),
       );
     },
@@ -182,15 +200,15 @@ export async function registerProblemJudgeDataRoutes(
   app.post(
     '/api/problems/:problemId/judge-data/draft/validate',
     async (r, reply) =>
-      mutate(r, reply, () =>
-        options.service.validate((r.params as any).problemId, auth(r)),
+      mutate(r, reply, async () =>
+        options.service.validate(await problemId(r), await auth(r)),
       ),
   );
   app.post('/api/problems/:problemId/judge-data/publish', async (r, reply) =>
-    mutate(r, reply, () =>
+    mutate(r, reply, async () =>
       options.service.publish(
-        (r.params as any).problemId,
-        auth(r),
+        await problemId(r),
+        await auth(r),
         (r.body as any)?.revision,
       ),
     ),

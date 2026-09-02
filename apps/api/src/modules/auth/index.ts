@@ -114,6 +114,11 @@ export async function registerAuthModule(
       'set-cookie',
       `oj_guest_resume=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${options.production ? '; Secure' : ''}; Max-Age=${Math.floor(guestTtl / 1000)}`,
     );
+  const setCsrfCookie = (reply: FastifyReply) =>
+    reply.header(
+      'set-cookie',
+      `oj_csrf=${encodeURIComponent(guestToken())}; Path=/; SameSite=Lax${options.production ? '; Secure' : ''}; Max-Age=${Math.floor(ttl / 1000)}`,
+    );
   const clearGuestResumeCookie = (reply: FastifyReply) =>
     reply.header(
       'set-cookie',
@@ -208,6 +213,7 @@ export async function registerAuthModule(
         );
       setSessionCookie(reply, session);
       setGuestResumeCookie(reply, resume);
+      setCsrfCookie(reply);
       await audit(
         {
           userId: result.user.id,
@@ -318,6 +324,7 @@ export async function registerAuthModule(
       found.id,
     );
     setSessionCookie(reply, token);
+    setCsrfCookie(reply);
     return projectUser(found);
   });
   app.post('/api/auth/logout', async (request, reply) => {

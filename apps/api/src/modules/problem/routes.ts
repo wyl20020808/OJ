@@ -17,6 +17,10 @@ export type ProblemModuleContext = {
   repository?: ProblemRepository;
   authorizationPolicy: AuthorizationPolicy;
   auditHook?: AuditHook;
+  guardGuestMutation?: (
+    action: 'create' | 'update' | 'transition',
+    context: AuthContext,
+  ) => Promise<void>;
   getAuthContext?: (
     request: FastifyRequest,
   ) => AuthContext | undefined | Promise<AuthContext | undefined>;
@@ -35,6 +39,15 @@ const error = (
     requestId: request.id,
     ...(details === undefined ? {} : { details }),
   });
+const csrf = (request: FastifyRequest) => {
+  const token = request.headers['x-csrf-token'];
+  return (
+    typeof token === 'string' &&
+    request.headers.cookie
+      ?.split(';')
+      .some((cookie) => cookie.trim() === `oj_csrf=${token}`)
+  );
+};
 export async function registerProblemModule(
   app: FastifyInstance,
   context: ProblemModuleContext,
@@ -43,6 +56,7 @@ export async function registerProblemModule(
     context.repository ?? new InMemoryProblemRepository(),
     context.authorizationPolicy,
     context.auditHook,
+    context.guardGuestMutation,
   );
   const auth = async (request: FastifyRequest) =>
     context.getAuthContext ? await context.getAuthContext(request) : undefined;
@@ -133,6 +147,8 @@ export async function registerProblemModule(
     }
   });
   app.post('/api/problems', async (request, reply) => {
+    if (!csrf(request))
+      return error(reply, request, 403, 'FORBIDDEN', 'CSRF validation failed');
     try {
       return reply
         .status(201)
@@ -165,11 +181,21 @@ export async function registerProblemModule(
           'FORBIDDEN',
           'Problem authoring is forbidden',
         );
+      if (e instanceof Error && e.message === 'RATE_LIMITED')
+        return error(
+          reply,
+          request,
+          429,
+          'RATE_LIMITED',
+          'Request rate limited',
+        );
       throw e;
     }
   });
   app.patch('/api/problems/:idOrSlug', async (request, reply) => {
     const key = (request.params as { idOrSlug: string }).idOrSlug;
+    if (!csrf(request))
+      return error(reply, request, 403, 'FORBIDDEN', 'CSRF validation failed');
     try {
       return reply.send(
         await service.update(key, request.body, await auth(request)),
@@ -196,11 +222,21 @@ export async function registerProblemModule(
           'FORBIDDEN',
           'Problem update is forbidden',
         );
+      if (e instanceof Error && e.message === 'RATE_LIMITED')
+        return error(
+          reply,
+          request,
+          429,
+          'RATE_LIMITED',
+          'Request rate limited',
+        );
       throw e;
     }
   });
   app.post('/api/problems/:idOrSlug/transition', async (request, reply) => {
     const key = (request.params as { idOrSlug: string }).idOrSlug;
+    if (!csrf(request))
+      return error(reply, request, 403, 'FORBIDDEN', 'CSRF validation failed');
     try {
       return reply.send(
         await service.transition(
@@ -222,6 +258,14 @@ export async function registerProblemModule(
           403,
           'FORBIDDEN',
           'Problem transition is forbidden',
+        );
+      if (e instanceof Error && e.message === 'RATE_LIMITED')
+        return error(
+          reply,
+          request,
+          429,
+          'RATE_LIMITED',
+          'Request rate limited',
         );
       if (e instanceof Error && e.message === 'VALIDATION_ERROR')
         return error(

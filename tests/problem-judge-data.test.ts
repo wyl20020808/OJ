@@ -311,6 +311,7 @@ describe('problem judge data backend', () => {
     await registerProblemJudgeDataRoutes(app, {
       service: svc,
       getAuth: async () => user,
+      resolveProblemId: async (key) => (key === 'p-slug' ? 'p-1' : undefined),
     });
     const body = {
       timeLimitMs: 1000,
@@ -324,7 +325,7 @@ describe('problem judge data backend', () => {
         (
           await app.inject({
             method: 'PUT',
-            url: '/api/problems/p-1/judge-data/draft/config',
+            url: '/api/problems/p-slug/judge-data/draft/config',
             payload: body,
           })
         ).statusCode,
@@ -333,7 +334,7 @@ describe('problem judge data backend', () => {
         (
           await app.inject({
             method: 'PUT',
-            url: '/api/problems/p-1/judge-data/draft/config',
+            url: '/api/problems/p-slug/judge-data/draft/config',
             headers: { 'x-csrf-token': 'token', cookie: 'oj_csrf=token' },
             payload: body,
           })

@@ -54,6 +54,10 @@ export class ProblemJudgeDataService {
       testcaseSetId: string;
       executionProfileId: 'cpp20-gcc-13-v1';
     }>,
+    private readonly guardGuestMutation?: (
+      action: 'manage' | 'publish',
+      user: unknown,
+    ) => Promise<void>,
   ) {}
   private assertDraftRef(problemId: string, ref: { key: string }) {
     const prefix = `judge-data/problems/${problemId}/draft/`;
@@ -75,6 +79,12 @@ export class ProblemJudgeDataService {
       throw new JudgeDataError('UNAUTHORIZED', 'Authentication required', 401);
     if (!(await this.can(action, user, p)))
       throw new JudgeDataError('FORBIDDEN', 'Forbidden', 403);
+    if (action === 'manage' || action === 'publish')
+      try {
+        await this.guardGuestMutation?.(action, user);
+      } catch {
+        throw new JudgeDataError('RATE_LIMITED', 'Request rate limited', 429);
+      }
     if (!(await this.problemExists(p)))
       throw new JudgeDataError('NOT_FOUND', 'Problem not found', 404);
   }
@@ -166,7 +176,6 @@ export class ProblemJudgeDataService {
     return publicDraft(await this.repo.saveDraft(draft, old?.revision));
   }
   private async saveCase(problemId: string, c: DraftTestcase, user: unknown) {
-    await this.auth('manage', user, problemId);
     const old = await this.repo.getDraft(problemId);
     if (old?.testcases.some((x) => x.testcaseId === c.testcaseId))
       throw new JudgeDataError('DUPLICATE', 'Duplicate testcase', 409);

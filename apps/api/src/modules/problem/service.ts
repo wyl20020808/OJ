@@ -16,6 +16,10 @@ export class ProblemService {
     private readonly repository: ProblemRepository,
     private readonly policy: AuthorizationPolicy,
     private readonly audit?: AuditHook,
+    private readonly guardGuestMutation?: (
+      action: 'create' | 'update' | 'transition',
+      context: AuthContext,
+    ) => Promise<void>,
   ) {}
   async list(query: {
     limit: number;
@@ -25,7 +29,9 @@ export class ProblemService {
     status?: Problem['status'];
     visibility?: Problem['visibility'];
   }) {
-    const filter = query.context ? {} : { publicOnly: true as const };
+    const filter = query.context
+      ? { ownedOrPublicBy: query.context.userId }
+      : { publicOnly: true as const };
     return this.repository.list({
       limit: query.limit,
       ...(query.offset === undefined ? {} : { offset: query.offset }),
@@ -50,8 +56,11 @@ export class ProblemService {
     if (!row) throw new ProblemNotFoundError();
     if (row.visibility === 'public' && row.status === 'published') return row;
     if (
-      !(await this.policy.can('read', 'problem', context)) ||
-      row.authorId !== context?.userId
+      row.authorId !== context?.userId ||
+      !(await this.policy.can('read', 'problem', context, {
+        id: row.id,
+        type: 'problem',
+      }))
     )
       throw new ProblemNotFoundError();
     return row;
@@ -59,6 +68,7 @@ export class ProblemService {
   async create(raw: unknown, context?: AuthContext) {
     if (!context || !(await this.policy.can('create', 'problem', context)))
       throw new Error('FORBIDDEN');
+    await this.guardGuestMutation?.('create', context);
     const input = validateCreate(raw);
     if (input.status === 'published' && input.visibility !== 'public')
       throw new Error('VALIDATION_ERROR');
@@ -83,9 +93,13 @@ export class ProblemService {
     if (
       !context ||
       current.authorId !== context.userId ||
-      !(await this.policy.can('update', 'problem', context))
+      !(await this.policy.can('update', 'problem', context, {
+        id: current.id,
+        type: 'problem',
+      }))
     )
       throw new Error('FORBIDDEN');
+    await this.guardGuestMutation?.('update', context);
     const patch = validateUpdate(raw);
     const result =
       current.status === 'published'
@@ -114,9 +128,13 @@ export class ProblemService {
     if (
       !context ||
       current.authorId !== context.userId ||
-      !(await this.policy.can('transition', 'problem', context))
+      !(await this.policy.can('transition', 'problem', context, {
+        id: current.id,
+        type: 'problem',
+      }))
     )
       throw new Error('FORBIDDEN');
+    await this.guardGuestMutation?.('transition', context);
     const allowed: Record<ProblemStatus, ProblemStatus[]> = {
       draft: ['published', 'archived'],
       published: ['archived'],

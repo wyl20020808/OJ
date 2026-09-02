@@ -153,6 +153,17 @@ export type JudgeDraft = {
   };
   updatedAt: string;
 };
+type BackendJudgeDraft = Omit<JudgeDraft, 'validation'> & {
+  status: 'DRAFT' | 'VALIDATED';
+};
+const normalizeJudgeDraft = (draft: BackendJudgeDraft): JudgeDraft => ({
+  ...draft,
+  validation: {
+    state: draft.status === 'VALIDATED' ? 'VALID' : 'UNKNOWN',
+    errors: [],
+    warnings: [],
+  },
+});
 export type Page = { limit: number; offset: number; total: number };
 export type ProblemList = { items: Problem[]; page: Page };
 export type Home = { recentProblems: Problem[] };
@@ -369,13 +380,26 @@ async function request<T>(
   fetcher: typeof fetch = fetch,
   acceptedStatuses: number[] = [],
 ): Promise<T> {
+  const headers = {
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  if (!(init?.body instanceof FormData) && !headers['content-type'])
+    headers['content-type'] = 'application/json';
+  if (
+    init?.method &&
+    !['GET', 'HEAD'].includes(init.method.toUpperCase()) &&
+    typeof document !== 'undefined'
+  ) {
+    const csrf = document.cookie
+      .split('; ')
+      .find((value) => value.startsWith('oj_csrf='))
+      ?.slice('oj_csrf='.length);
+    if (csrf) headers['x-csrf-token'] = decodeURIComponent(csrf);
+  }
   const response = await fetcher(`${baseUrl}${path}`, {
     credentials: 'include',
-    headers:
-      init?.body instanceof FormData
-        ? { ...init?.headers }
-        : { 'content-type': 'application/json', ...init?.headers },
     ...init,
+    headers,
   });
   if (
     !response.ok &&
@@ -949,20 +973,24 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'POST', body: JSON.stringify(transition) },
         fetcher,
       ),
-    judgeData: (problemId: string) =>
-      request<JudgeDraft>(
-        baseUrl,
-        `/api/problems/${encodeURIComponent(problemId)}/judge-data`,
-        undefined,
-        fetcher,
+    judgeData: async (problemId: string) =>
+      normalizeJudgeDraft(
+        await request<BackendJudgeDraft>(
+          baseUrl,
+          `/api/problems/${encodeURIComponent(problemId)}/judge-data`,
+          undefined,
+          fetcher,
+        ),
       ),
-    judgeDraft: (problemId: string) =>
-      request<JudgeDraft>(
+    judgeDraft: async (problemId: string) => {
+      const draft = await request<BackendJudgeDraft | null>(
         baseUrl,
         `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft`,
         undefined,
         fetcher,
-      ),
+      );
+      return draft ? normalizeJudgeDraft(draft) : null;
+    },
     judgeVersions: (problemId: string) =>
       request<JudgeDataVersionSummary[]>(
         baseUrl,
@@ -984,23 +1012,20 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
-    saveJudgeConfig: (problemId: string, config: ProblemJudgeDefaults) =>
+    saveJudgeConfig: async (problemId: string, config: ProblemJudgeDefaults) =>
+      normalizeJudgeDraft(
+        await request<BackendJudgeDraft>(
+          baseUrl,
+          `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/config`,
+          { method: 'PUT', body: JSON.stringify(config) },
+          fetcher,
+        ),
+      ),
+    addJudgeTestcase: (problemId: string, input: Record<string, unknown>) =>
       request<JudgeDraft>(
         baseUrl,
-        `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/config`,
-        { method: 'PUT', body: JSON.stringify(config) },
-        fetcher,
-      ),
-    addJudgeTestcase: (
-      problemId: string,
-      input: FormData | Record<string, unknown>,
-    ) =>
-      request<JudgeDraftTestcase>(
-        baseUrl,
         `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/testcases`,
-        input instanceof FormData
-          ? { method: 'POST', body: input }
-          : { method: 'POST', body: JSON.stringify(input) },
+        { method: 'POST', body: JSON.stringify(input) },
         fetcher,
       ),
     updateJudgeTestcase: (
@@ -1008,7 +1033,7 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       testcaseId: string,
       input: Record<string, unknown>,
     ) =>
-      request<JudgeDraftTestcase>(
+      request<JudgeDraft>(
         baseUrl,
         `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/testcases/${encodeURIComponent(testcaseId)}`,
         { method: 'PATCH', body: JSON.stringify(input) },
@@ -1021,24 +1046,63 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'DELETE' },
         fetcher,
       ),
-    uploadJudgeData: (problemId: string, file: File | File[], zip = false) => {
-      const data = new FormData();
-      for (const item of Array.isArray(file) ? file : [file])
-        data.append('file', item);
-      return request<JudgeDraft>(
+    uploadJudgeData: async (
+      problemId: string,
+      file: File | File[],
+      zip = false,
+    ) => {
+      const files = Array.isArray(file) ? file : [file];
+      const encode = async (item: File) => {
+        const bytes = new Uint8Array(await item.arrayBuffer());
+        let binary = '';
+        for (let offset = 0; offset < bytes.length; offset += 0x8000)
+          binary += String.fromCharCode(
+            ...bytes.subarray(offset, offset + 0x8000),
+          );
+        return btoa(binary);
+      };
+      const body = zip
+        ? files.length === 1
+          ? { zipBase64: await encode(files[0]!) }
+          : (() => {
+              throw new Error('Select exactly one ZIP file');
+            })()
+        : (() => {
+            const input = files.find((item) => /\.in$/i.test(item.name));
+            const output = files.find((item) => /\.out$/i.test(item.name));
+            if (!input || !output || files.length !== 2)
+              throw new Error('Select one .in and one .out file');
+            return Promise.all([encode(input), encode(output)]).then(
+              ([inputBase64, outputBase64]) => ({
+                inputBase64,
+                outputBase64,
+                inputFileName: input.name,
+                outputFileName: output.name,
+              }),
+            );
+          })();
+      const payload = await body;
+      const response = await request<
+        BackendJudgeDraft | { draft: BackendJudgeDraft }
+      >(
         baseUrl,
         `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/${zip ? 'upload-zip' : 'upload'}`,
-        { method: 'POST', body: data, headers: {} },
+        { method: 'POST', body: JSON.stringify(payload) },
         fetcher,
       );
+      return normalizeJudgeDraft(
+        'draft' in response ? response.draft : response,
+      );
     },
-    validateJudgeData: (problemId: string) =>
-      request<JudgeDraft['validation']>(
-        baseUrl,
-        `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/validate`,
-        { method: 'POST', body: '{}' },
-        fetcher,
-      ),
+    validateJudgeData: async (problemId: string) =>
+      normalizeJudgeDraft(
+        await request<BackendJudgeDraft>(
+          baseUrl,
+          `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/validate`,
+          { method: 'POST', body: '{}' },
+          fetcher,
+        ),
+      ).validation,
     publishJudgeData: (problemId: string) =>
       request<JudgeDataVersionSummary>(
         baseUrl,

@@ -7,10 +7,11 @@ import { Type } from '@sinclair/typebox';
 import { createDatabase, checkDatabase } from '@ojplatform/database';
 import { createCache, checkCache } from '@ojplatform/cache';
 import { createRedisRateLimiter } from './modules/auth/rate-limiter.js';
-import { createStorage, checkStorage } from '@ojplatform/storage';
+import { createStorage, checkStorage, ensureBucket } from '@ojplatform/storage';
 import { loadConfig, type RuntimeConfig } from './config.js';
 import {
   createPostgresGuestAuthStore,
+  createMemoryGuestAuthStore,
   RedisGuestRateLimiter,
   createMemoryAuthRepository,
   createPostgresAuthRepository,
@@ -105,12 +106,52 @@ export type AppOptions = {
   judgeAdminPermissions?: ReadonlyMap<string, ReadonlySet<string>>;
   realSubmissionExecution?: boolean;
   judgeAdminAdapter?: JudgeAdminAdapter;
-  judgeAdminPermissions?: ReadonlyMap<string, ReadonlySet<string>>;
 };
 type Owned = {
   close: () => Promise<void>;
   checks: Record<string, () => Promise<void>>;
 };
+
+type GuestAuthoringLimiter = {
+  consume(key: string, limit: number, windowSeconds: number): Promise<boolean>;
+};
+
+function createMemoryGuestAuthoringLimiter(): GuestAuthoringLimiter {
+  const buckets = new Map<string, { count: number; expiresAt: number }>();
+  return {
+    async consume(key, limit, windowSeconds) {
+      const now = Date.now();
+      const bucket = buckets.get(key);
+      if (!bucket || bucket.expiresAt <= now) {
+        buckets.set(key, { count: 1, expiresAt: now + windowSeconds * 1000 });
+        return true;
+      }
+      bucket.count += 1;
+      return bucket.count <= limit;
+    },
+  };
+}
+
+async function guardGuestAuthoring(
+  limiter: GuestAuthoringLimiter,
+  actor: { strength?: string; userId?: string },
+  scope: string,
+) {
+  if (actor.strength !== 'guest' || !actor.userId) return;
+  try {
+    const create = scope === 'create';
+    if (
+      !(await limiter.consume(
+        `guest:${actor.userId}:${scope}`,
+        create ? 5 : 60,
+        create ? 3600 : 60,
+      ))
+    )
+      throw new Error('RATE_LIMITED');
+  } catch {
+    throw new Error('RATE_LIMITED');
+  }
+}
 
 const bounded = async (
   task: () => Promise<void>,
@@ -201,6 +242,11 @@ export async function buildApp(options: AppOptions = {}) {
       secretKey: config.s3SecretKey,
       bucket: config.s3Bucket,
     });
+    await ensureBucket(storage);
+    const guestAuthoringLimiter = new RedisFixedWindowLimiter(
+      cache,
+      'ojplatform:guest-authoring:rate',
+    );
     const auditHook = createMemoryAuditHook();
     const problemAuditHook: ProblemAuditHook = {
       record: (event) =>
@@ -281,28 +327,55 @@ export async function buildApp(options: AppOptions = {}) {
         process.env.OJPLATFORM_PHASE1E_QUALIFICATION_CONTROL_KEY,
     });
     const problemRepository = new PostgresProblemRepository(database.pool);
+    const hasProblemPermissions = async (
+      userId: string,
+      required: readonly string[],
+    ) => {
+      if (
+        required.every((permission) =>
+          options.judgeAdminPermissions?.get(userId)?.has(permission),
+        )
+      )
+        return true;
+      const result = await database.pool.query(
+        'SELECT COUNT(DISTINCT p.permission)::int AS matched FROM auth_user_roles ur JOIN auth_roles r ON r.name=ur.role_name CROSS JOIN LATERAL unnest(r.permissions) p(permission) WHERE ur.user_id=$1 AND p.permission = ANY($2::text[])',
+        [userId, required],
+      );
+      return Number(result.rows[0]?.matched ?? 0) === required.length;
+    };
     await registerProblemModule(app, {
       repository: problemRepository,
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       authorizationPolicy: {
-        can: async (action, resource, context, target) =>
-          resource === 'problem' &&
-          Boolean(
-            context?.userId &&
-            context.sessionId &&
-            context.strength === 'password',
-          ) &&
-          Boolean(target?.id || !target) &&
-          ['read', 'create', 'update', 'transition'].includes(action),
+        can: async (action, resource, context, target) => {
+          if (
+            resource !== 'problem' ||
+            !context?.userId ||
+            !context.sessionId ||
+            !['read', 'create', 'update', 'transition'].includes(action)
+          )
+            return false;
+          if (action === 'create') return true;
+          if (!target?.id) return false;
+          const problem = await problemRepository.get(target.id);
+          if (!problem) return false;
+          if (problem.authorId === context.userId) return true;
+          return (
+            context.strength === 'password' &&
+            (await hasProblemPermissions(context.userId, ['problem.edit']))
+          );
+        },
       },
       auditHook: problemAuditHook,
+      guardGuestMutation: (action, context) =>
+        guardGuestAuthoring(guestAuthoringLimiter, context, action),
     });
     const judgeData = new ProblemJudgeDataService(
       new PostgresJudgeDataRepository(database.pool),
       new S3ByteStorage(storage.client, storage.bucket),
       async (id) => Boolean(await problemRepository.get(id)),
-      async (action, context) => {
+      async (action, context, problemId) => {
         const permission = (
           {
             view: 'problem.judge_data.view',
@@ -312,14 +385,12 @@ export async function buildApp(options: AppOptions = {}) {
         )[action];
         const actor = context as
           { strength?: string; userId?: string } | undefined;
-        if (
-          !permission ||
-          !actor ||
-          actor.strength !== 'password' ||
-          !actor.userId
-        )
-          return false;
+        if (!permission || !actor || !actor.userId) return false;
         const actorId: string = actor.userId;
+        const problem = await problemRepository.get(problemId);
+        if (!problem) return false;
+        if (problem.authorId === actorId) return true;
+        if (actor.strength !== 'password') return false;
         const required: string[] =
           action === 'view' ? [permission] : [permission, 'problem.edit'];
         if (
@@ -342,9 +413,9 @@ export async function buildApp(options: AppOptions = {}) {
           (item) => item.revisionId === problem.currentRevisionId,
         );
         const testdataVersionId =
-          revision?.testdataVersion ?? problem.testdataVersion;
-        if (!testdataVersionId)
-          throw new Error('Problem testdata identity unavailable');
+          revision?.testdataVersion ??
+          problem.testdataVersion ??
+          `judge-data-${problem.currentRevisionId}`;
         return {
           problemRevisionId: problem.currentRevisionId,
           testdataVersionId,
@@ -352,11 +423,23 @@ export async function buildApp(options: AppOptions = {}) {
           executionProfileId: 'cpp20-gcc-13-v1' as const,
         };
       },
+      async (action, user) => {
+        try {
+          await guardGuestAuthoring(
+            guestAuthoringLimiter,
+            user as { strength?: string; userId?: string },
+            action,
+          );
+        } catch {
+          throw new Error('RATE_LIMITED');
+        }
+      },
     );
     await registerProblemJudgeDataRoutes(app, {
       service: judgeData,
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
+      resolveProblemId: async (key) => (await problemRepository.get(key))?.id,
     });
     const submissionPolicy = createSubmissionAuthorizationPolicy();
     const problemResolver: ProblemRevisionResolver = {
@@ -617,9 +700,13 @@ export async function buildApp(options: AppOptions = {}) {
           requestId: event.requestId ?? 'internal',
         }),
     };
+    const memoryAuthRepository = createMemoryAuthRepository();
+    const memoryGuestLimiter = createMemoryGuestAuthoringLimiter();
     const auth = await registerAuthModule(app, {
-      repository: createMemoryAuthRepository(),
+      repository: memoryAuthRepository,
       auditHook,
+      guestStore: createMemoryGuestAuthStore(memoryAuthRepository),
+      guestRateLimiter: memoryGuestLimiter,
     });
     const adminAdapter =
       options.judgeAdminAdapter ??
@@ -661,40 +748,63 @@ export async function buildApp(options: AppOptions = {}) {
         process.env.OJPLATFORM_PHASE1E_QUALIFICATION_CONTROL_KEY,
     });
     const problemRepository = new InMemoryProblemRepository();
+    const guestAuthoringLimiter = createMemoryGuestAuthoringLimiter();
+    const hasProblemPermissions = (
+      userId: string,
+      required: readonly string[],
+    ) =>
+      required.every((permission) =>
+        options.judgeAdminPermissions?.get(userId)?.has(permission),
+      );
     await registerProblemModule(app, {
       repository: problemRepository,
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       authorizationPolicy: {
-        can: async (action, resource, context, target) =>
-          resource === 'problem' &&
-          Boolean(
-            context?.userId &&
-            context.sessionId &&
-            context.strength === 'password',
-          ) &&
-          Boolean(target?.id || !target) &&
-          ['read', 'create', 'update', 'transition'].includes(action),
+        can: async (action, resource, context, target) => {
+          if (
+            resource !== 'problem' ||
+            !context?.userId ||
+            !context.sessionId ||
+            !['read', 'create', 'update', 'transition'].includes(action)
+          )
+            return false;
+          if (action === 'create') return true;
+          if (!target?.id) return false;
+          const problem = await problemRepository.get(target.id);
+          if (!problem) return false;
+          if (problem.authorId === context.userId) return true;
+          return (
+            context.strength === 'password' &&
+            hasProblemPermissions(context.userId, ['problem.edit'])
+          );
+        },
       },
       auditHook: problemAuditHook,
+      guardGuestMutation: (action, context) =>
+        guardGuestAuthoring(guestAuthoringLimiter, context, action),
     });
     const judgeData = new ProblemJudgeDataService(
       new InMemoryJudgeDataRepository(),
       new MemoryByteStorage(),
       async (id) => Boolean(await problemRepository.get(id)),
-      async (action, context) => {
+      async (action, context, problemId) => {
         const actor = context as
           { strength?: string; userId?: string } | undefined;
+        if (!actor?.userId) return false;
+        const actorId = actor.userId;
+        const problem = await problemRepository.get(problemId);
+        if (!problem) return false;
+        if (problem.authorId === actorId) return true;
+        if (actor.strength !== 'password') return false;
         const required =
           action === 'view'
             ? [`problem.judge_data.${action}`]
             : [`problem.judge_data.${action}`, 'problem.edit'];
         return Boolean(
-          actor?.strength === 'password' &&
-          actor.userId &&
-          options.judgeAdminPermissions?.get(actor.userId) &&
+          options.judgeAdminPermissions?.get(actorId) &&
           required.every((permission) =>
-            options.judgeAdminPermissions?.get(actor.userId!)?.has(permission),
+            options.judgeAdminPermissions?.get(actorId)?.has(permission),
           ),
         );
       },
@@ -706,9 +816,9 @@ export async function buildApp(options: AppOptions = {}) {
           (item) => item.revisionId === problem.currentRevisionId,
         );
         const testdataVersionId =
-          revision?.testdataVersion ?? problem.testdataVersion;
-        if (!testdataVersionId)
-          throw new Error('Problem testdata identity unavailable');
+          revision?.testdataVersion ??
+          problem.testdataVersion ??
+          `judge-data-${problem.currentRevisionId}`;
         return {
           problemRevisionId: problem.currentRevisionId,
           testdataVersionId,
@@ -716,11 +826,19 @@ export async function buildApp(options: AppOptions = {}) {
           executionProfileId: 'cpp20-gcc-13-v1' as const,
         };
       },
+      async (action, user) => {
+        await guardGuestAuthoring(
+          guestAuthoringLimiter,
+          user as { strength?: string; userId?: string },
+          action,
+        );
+      },
     );
     await registerProblemJudgeDataRoutes(app, {
       service: judgeData,
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
+      resolveProblemId: async (key) => (await problemRepository.get(key))?.id,
     });
     const submissionPolicy = createSubmissionAuthorizationPolicy();
     await registerSubmissionModule(app, {

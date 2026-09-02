@@ -15,6 +15,7 @@ export type ProblemListQuery = {
   limit: number;
   offset?: number;
   publicOnly?: boolean;
+  ownedOrPublicBy?: string;
   authorId?: string;
   search?: string;
   status?: Problem['status'];
@@ -64,6 +65,9 @@ export class InMemoryProblemRepository implements ProblemRepository {
       .filter(
         (p) =>
           (!query.publicOnly ||
+            (p.visibility === 'public' && p.status === 'published')) &&
+          (!query.ownedOrPublicBy ||
+            p.authorId === query.ownedOrPublicBy ||
             (p.visibility === 'public' && p.status === 'published')) &&
           (!query.authorId || p.authorId === query.authorId) &&
           (!query.status || p.status === query.status) &&
@@ -201,6 +205,12 @@ export class PostgresProblemRepository implements ProblemRepository {
       ? ["visibility='public'", "status='published'"]
       : [];
     const params: unknown[] = [];
+    if (query.ownedOrPublicBy) {
+      params.push(query.ownedOrPublicBy);
+      clauses.push(
+        `((visibility='public' AND status='published') OR author_id = $${params.length})`,
+      );
+    }
     if (query.authorId) {
       params.push(query.authorId);
       clauses.push(`author_id = $${params.length}`);
