@@ -429,6 +429,17 @@ describe('Phase 2C.7B Judge node service contract', () => {
     await app.close();
   });
 
+  it('does not revive draining intent when the same worker re-registers', async () => {
+    const nodes = new InMemoryJudgeNodeRepository();
+    await nodes.register(registration('node-a', 'a1'));
+    await nodes.drain('node-a');
+    const current = await nodes.register(registration('node-a', 'a1'));
+    expect(current).toMatchObject({
+      desiredState: 'DRAINING',
+      state: 'DRAINING',
+    });
+  });
+
   it('compensates a claim when node capacity reservation loses a race', async () => {
     class RejectingNodeRepository extends InMemoryJudgeNodeRepository {
       override async assign(

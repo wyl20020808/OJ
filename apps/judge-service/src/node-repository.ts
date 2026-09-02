@@ -162,7 +162,12 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
         ...existing,
         ...value,
         lastHeartbeatAt: stamp(now),
-        state: existing.desiredState === 'OFFLINE' ? 'OFFLINE' : 'ONLINE',
+        state:
+          (existing.desiredState ?? 'ONLINE') === 'OFFLINE'
+            ? 'OFFLINE'
+            : (existing.desiredState ?? 'ONLINE') === 'DRAINING'
+              ? 'DRAINING'
+              : 'ONLINE',
         desiredState: existing.desiredState ?? 'ONLINE',
         observedState: 'ONLINE',
         controlVersion: existing.controlVersion ?? 1,
