@@ -35,29 +35,42 @@ const service = (allowed = true) => {
   return { repo, storage, svc };
 };
 
-const makeZip = (entries: { name: string; data: Uint8Array }[]) => {
+const makeZip = (
+  entries: { name: string; data: Uint8Array; dataDescriptor?: boolean }[],
+) => {
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
   for (const entry of entries) {
     const name = Buffer.from(entry.name, 'utf8');
     const data = Buffer.from(entry.data);
-    const local = Buffer.alloc(30 + name.length + data.length);
+    const descriptorLength = entry.dataDescriptor ? 16 : 0;
+    const local = Buffer.alloc(
+      30 + name.length + data.length + descriptorLength,
+    );
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(entry.dataDescriptor ? 0x08 : 0, 6);
     local.writeUInt16LE(0, 8);
-    local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(data.length, 22);
+    if (!entry.dataDescriptor) {
+      local.writeUInt32LE(data.length, 18);
+      local.writeUInt32LE(data.length, 22);
+    }
     local.writeUInt16LE(name.length, 26);
     name.copy(local, 30);
     data.copy(local, 30 + name.length);
+    if (entry.dataDescriptor) {
+      const descriptorOffset = 30 + name.length + data.length;
+      local.writeUInt32LE(0x08074b50, descriptorOffset);
+      local.writeUInt32LE(data.length, descriptorOffset + 8);
+      local.writeUInt32LE(data.length, descriptorOffset + 12);
+    }
     locals.push(local);
     const central = Buffer.alloc(46 + name.length);
     central.writeUInt32LE(0x02014b50, 0);
     central.writeUInt16LE(20, 4);
     central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(0, 8);
+    central.writeUInt16LE(entry.dataDescriptor ? 0x08 : 0, 8);
     central.writeUInt16LE(0, 10);
     central.writeUInt32LE(data.length, 20);
     central.writeUInt32LE(data.length, 24);
@@ -222,6 +235,14 @@ describe('problem judge data backend', () => {
     ]);
     expect(parseZip(archive)).toHaveLength(1);
     expect((await svc.addZip('p-1', archive, user)).imported).toBe(1);
+    expect(
+      parseZip(
+        makeZip([
+          { name: '02.in', data: Uint8Array.from([1]), dataDescriptor: true },
+          { name: '02.out', data: Uint8Array.from([2]), dataDescriptor: true },
+        ]),
+      ),
+    ).toHaveLength(1);
     expect(() =>
       parseZip(
         makeZip([

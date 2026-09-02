@@ -86,6 +86,11 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
       const localMethod = b.readUInt16LE(localOffset + 8);
       const localCompressedSize = b.readUInt32LE(localOffset + 18);
       const localSize = b.readUInt32LE(localOffset + 22);
+      const usesDataDescriptor = Boolean(flags & 0x08);
+      const localSizesMatch =
+        localCompressedSize === csize && localSize === usize;
+      const deferredLocalSizes =
+        usesDataDescriptor && localCompressedSize === 0 && localSize === 0;
       const localName = b
         .subarray(localOffset + 30, localOffset + 30 + localNameLength)
         .toString('utf8')
@@ -93,8 +98,7 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
       if (
         localName !== name ||
         localMethod !== method ||
-        localCompressedSize !== csize ||
-        localSize !== usize
+        (!localSizesMatch && !deferredLocalSizes)
       )
         throw unsafe('Header mismatch');
       const start = localOffset + 30 + localNameLength + localExtraLength;
