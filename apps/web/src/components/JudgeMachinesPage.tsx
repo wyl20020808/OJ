@@ -360,10 +360,10 @@ export function JudgeMachinesPage({
       ),
     [nodes, query],
   );
-  const action = async (a: JudgeAction) => {
-    if (!selected) return;
+  const action = async (a: JudgeAction, target: JudgeNode | null = selected) => {
+    if (!target) return;
     const reason = window.prompt(
-      `确认 ${a} ${selected.nodeId}，请输入原因`,
+      `确认 ${a} ${target.nodeId}，请输入原因`,
       'maintenance',
     );
     if (!reason) return;
@@ -372,10 +372,10 @@ export function JudgeMachinesPage({
         setNotice(`已提交 ${a}（fixture contract only）`);
         return;
       }
-      const result = await client.mutate(selected.nodeId, a, {
+      const result = await client.mutate(target.nodeId, a, {
         reason,
-        expectedIncarnation: selected.incarnation,
-        expectedControlVersion: selected.controlVersion,
+        expectedIncarnation: target.incarnation,
+        expectedControlVersion: target.controlVersion,
         idempotencyKey: crypto.randomUUID(),
       });
       setSelected(result.node);
@@ -482,7 +482,7 @@ export function JudgeMachinesPage({
               canManage={canManage}
               onAction={(a) => {
                 setSelected(n);
-                void action(a);
+                void action(a, n);
               }}
             />
           ))}

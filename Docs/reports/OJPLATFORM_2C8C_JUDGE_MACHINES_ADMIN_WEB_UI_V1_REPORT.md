@@ -10,4 +10,4 @@ Status: PARTIAL (contract-qualified; Product runtime not available for final E2E
 - HOST AGENT ACTIONS TRUTHFULLY UNAVAILABLE = YES
 - READY FOR 2.8E REAL INTEGRATION = PARTIAL
 
-Implemented `/admin/judge/nodes` and node detail, summary/list/detail/history projections, typed Product client, permissions, guarded mutations, responsive layout, and unavailable lifecycle controls. `pnpm typecheck` and `pnpm test:web` pass. Real Product Backend and browser runtime qualification were not executed because 2C.8B/required shared runtime is not available; fixture behavior is explicitly labeled contract-only.
+Implemented `/admin/judge/nodes` and node detail, summary/list/detail/history projections, typed Product client, permissions, guarded mutations, responsive layout, and unavailable lifecycle controls. `pnpm typecheck`, `pnpm test:web`, `pnpm vitest run tests/judge-admin-client.test.ts`, and `pnpm build:web` pass. Real Product Backend and browser runtime qualification were not executed because 2C.8B/required shared runtime is not available; fixture behavior is explicitly labeled contract-only.
