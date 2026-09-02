@@ -1090,9 +1090,22 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
             })()
         : (() => {
             const input = files.find((item) => /\.in$/i.test(item.name));
-            const output = files.find((item) => /\.out$/i.test(item.name));
-            if (!input || !output || files.length !== 2)
-              throw new Error('Select one .in and one .out file');
+            const output = files.find((item) =>
+              /\.(?:out|ans|txt)$/i.test(item.name),
+            );
+            const inputStem = input?.name.replace(/\.in$/i, '').toLowerCase();
+            const outputStem = output?.name
+              .replace(/\.(?:out|ans|txt)$/i, '')
+              .toLowerCase();
+            if (
+              !input ||
+              !output ||
+              files.length !== 2 ||
+              inputStem !== outputStem
+            )
+              throw new Error(
+                'Select matching .in and .out, .ans, or .txt files',
+              );
             return Promise.all([encode(input), encode(output)]).then(
               ([inputBase64, outputBase64]) => ({
                 inputBase64,

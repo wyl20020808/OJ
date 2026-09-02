@@ -296,6 +296,18 @@ export class ProblemJudgeDataService {
     user: unknown,
   ) {
     await this.auth('manage', user, problemId);
+    const inputMatch = /^(.*)\.in$/i.exec(fileNames.input);
+    const outputMatch = /^(.*)\.(?:out|ans|txt)$/i.exec(fileNames.output);
+    if (
+      !inputMatch?.[1] ||
+      !outputMatch?.[1] ||
+      inputMatch[1].normalize('NFKC').toLowerCase() !==
+        outputMatch[1].normalize('NFKC').toLowerCase()
+    )
+      throw new JudgeDataError(
+        'INVALID_PAIR',
+        'Input and output files must use matching testcase names',
+      );
     const old = await this.repo.getDraft(problemId);
     if ((old?.testcases.length ?? 0) >= TESTCASE_SET_MAX_SIZE)
       throw new JudgeDataError('VALIDATION_FAILED', 'Too many testcases');

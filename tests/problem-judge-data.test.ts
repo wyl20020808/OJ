@@ -36,7 +36,12 @@ const service = (allowed = true) => {
 };
 
 const makeZip = (
-  entries: { name: string; data: Uint8Array; dataDescriptor?: boolean }[],
+  entries: {
+    name: string;
+    data: Uint8Array;
+    dataDescriptor?: boolean;
+    directory?: boolean;
+  }[],
 ) => {
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
@@ -75,6 +80,7 @@ const makeZip = (
     central.writeUInt32LE(data.length, 20);
     central.writeUInt32LE(data.length, 24);
     central.writeUInt16LE(name.length, 28);
+    if (entry.directory) central.writeUInt32LE(0x10, 38);
     central.writeUInt32LE(offset, 42);
     name.copy(central, 46);
     centrals.push(central);
@@ -243,6 +249,27 @@ describe('problem judge data backend', () => {
         ]),
       ),
     ).toHaveLength(1);
+    expect(
+      parseZip(
+        makeZip([
+          { name: '__MACOSX/', data: new Uint8Array(), directory: true },
+          { name: '__MACOSX/info.txt', data: Uint8Array.of(1) },
+          { name: 'notes.md', data: Uint8Array.of(2) },
+          { name: '03.in', data: Uint8Array.of(3) },
+          { name: '03.out', data: Uint8Array.of(4) },
+        ]),
+      ).map((pair) => pair.name),
+    ).toEqual(['3']);
+    expect(
+      parseZip(
+        makeZip([
+          { name: '04.in', data: Uint8Array.of(1) },
+          { name: '04.ans', data: Uint8Array.of(2) },
+          { name: '05.in', data: Uint8Array.of(3) },
+          { name: '05.txt', data: Uint8Array.of(4) },
+        ]),
+      ).map((pair) => pair.name),
+    ).toEqual(['4', '5']);
     expect(() =>
       parseZip(
         makeZip([
@@ -272,6 +299,27 @@ describe('problem judge data backend', () => {
       ),
     ).toThrow('Unsafe archive path');
     expect(() => parseZip(Uint8Array.of(1, 2, 3))).toThrow('Invalid archive');
+  });
+
+  it('accepts matching answer suffixes for a single testcase pair', async () => {
+    const { svc } = service();
+    const draft = await svc.addPair(
+      'p-1',
+      Uint8Array.of(1),
+      Uint8Array.of(2),
+      { input: 'single.in', output: 'single.ans' },
+      user,
+    );
+    expect(draft.testcases[0]?.expectedOutput.fileName).toBe('single.ans');
+    await expect(
+      svc.addPair(
+        'p-1',
+        Uint8Array.of(1),
+        Uint8Array.of(2),
+        { input: 'single.in', output: 'other.txt' },
+        user,
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_PAIR' });
   });
 
   it('recomputes inherited limits when defaults change and fails closed for storage', async () => {

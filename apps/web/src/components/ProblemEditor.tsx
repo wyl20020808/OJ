@@ -46,12 +46,12 @@ function errorText(e: unknown) {
 }
 
 function fileStem(name: string) {
-  return name.replace(/\.(?:in|out)$/i, '').toLowerCase();
+  return name.replace(/\.(?:in|out|ans|txt)$/i, '').toLowerCase();
 }
 function pairPreview(files: File[]) {
   const outputs = new Map(
     files
-      .filter((file) => /\.out$/i.test(file.name))
+      .filter((file) => /\.(?:out|ans|txt)$/i.test(file.name))
       .map((file) => [fileStem(file.name), file.name]),
   );
   return files
@@ -640,7 +640,7 @@ export function ProblemEditor({
               id="judge-data-upload"
               ref={fileRef}
               type="file"
-              accept=".zip,.in,.out"
+              accept=".zip,.in,.out,.ans,.txt"
               multiple
               onChange={onUploadChange}
               disabled={!canManage || uploading}
@@ -669,7 +669,7 @@ export function ProblemEditor({
                 <ul>
                   {pairPreview(selectedFiles).map((pair) => (
                     <li key={pair.input}>
-                      {pair.input} / {pair.output ?? '缺少 .out'}
+                      {pair.input} / {pair.output ?? '缺少结果文件'}
                     </li>
                   ))}
                   {selectedFiles.filter((file) => /\.in$/i.test(file.name))
@@ -705,7 +705,10 @@ export function ProblemEditor({
             {draft.testcases.length === 0 ? (
               <div className="empty-data">
                 <h3>暂无测试点</h3>
-                <p>上传 .in/.out 文件或 ZIP 后，测试点会出现在这里。</p>
+                <p>
+                  上传 .in 与 .out、.ans 或 .txt 文件，或 ZIP
+                  后，测试点会出现在这里。
+                </p>
               </div>
             ) : (
               draft.testcases.map((t) => (

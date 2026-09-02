@@ -203,7 +203,9 @@ describe('ProblemEditor judge-data contract UI', () => {
     expect(
       screen.getByRole('heading', { name: '暂无测试点' }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/上传 \.in\/.out 文件或 ZIP/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/上传 \.in 与 \.out、\.ans 或 \.txt 文件，或 ZIP/),
+    ).toBeInTheDocument();
     expect(screen.queryByText('in-hash')).not.toBeInTheDocument();
     expect(screen.queryByText('out-hash')).not.toBeInTheDocument();
   });
@@ -286,13 +288,17 @@ describe('ProblemEditor judge-data contract UI', () => {
       'input[type="file"]',
     ) as HTMLInputElement;
     expect(input).toBeInTheDocument();
-    fireEvent.change(input, { target: { files: [new File(['in'], '01.in')] } });
-    expect(await screen.findByText('01.in / 缺少 .out')).toBeInTheDocument();
+    fireEvent.change(input, {
+      target: {
+        files: [new File(['in'], '01.in'), new File(['ans'], '01.ans')],
+      },
+    });
+    expect(await screen.findByText('01.in / 01.ans')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '上传选中的数据' }));
     await waitFor(() =>
       expect(uploadJudgeData).toHaveBeenCalledWith(
         'p1',
-        expect.any(File),
+        expect.any(Array),
         false,
       ),
     );

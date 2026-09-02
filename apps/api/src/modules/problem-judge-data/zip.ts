@@ -6,6 +6,7 @@ const MAX_FILE = 16 * 1024 * 1024;
 const MAX_TOTAL = 128 * 1024 * 1024;
 const MAX_DEPTH = 8;
 const MAX_RATIO = 1000;
+const testcaseFile = /^(.*)\.(in|out|ans|txt)$/i;
 export type ZipPair = { name: string; input: Uint8Array; output: Uint8Array };
 
 const unsafe = (message = 'Unsafe archive') =>
@@ -40,10 +41,8 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
     let total = 0;
     let compressedTotal = 0;
     const seen = new Set<string>();
-    const pairs = new Map<
-      string,
-      { input?: Uint8Array; output?: Uint8Array }
-    >();
+    const inputs = new Map<string, Uint8Array>();
+    const outputs = new Map<string, Uint8Array[]>();
     for (let i = 0; i < count; i++) {
       if (p + 46 > b.length || b.readUInt32LE(p) !== 0x02014b50) throw unsafe();
       const madeBy = b.readUInt16LE(p + 4);
@@ -56,9 +55,9 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
       const clen = b.readUInt16LE(p + 32);
       const external = b.readUInt32LE(p + 38);
       const localOffset = b.readUInt32LE(p + 42);
-      const name = normalizedName(
-        b.subarray(p + 46, p + 46 + nlen).toString('utf8'),
-      );
+      const rawName = b.subarray(p + 46, p + 46 + nlen).toString('utf8');
+      const isDirectory = rawName.endsWith('/');
+      const name = normalizedName(isDirectory ? rawName.slice(0, -1) : rawName);
       const collisionKey = name.toLocaleLowerCase('en-US');
       if (seen.has(collisionKey))
         throw new JudgeDataError('DUPLICATE', 'Duplicate archive entry');
@@ -66,8 +65,10 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
       const unixType = (external >>> 16) & 0xf000;
       if (
         flags & 1 ||
-        external & 0x10 ||
-        (madeBy >> 8 === 3 && unixType !== 0x8000)
+        (!isDirectory && external & 0x10) ||
+        (madeBy >> 8 === 3 &&
+          unixType !== 0x8000 &&
+          !(isDirectory && unixType === 0x4000))
       )
         throw unsafe('Unsupported archive entry');
       if (csize > MAX_FILE || usize > MAX_FILE || usize > MAX_TOTAL - total)
@@ -91,10 +92,14 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
         localCompressedSize === csize && localSize === usize;
       const deferredLocalSizes =
         usesDataDescriptor && localCompressedSize === 0 && localSize === 0;
-      const localName = b
+      const localNameRaw = b
         .subarray(localOffset + 30, localOffset + 30 + localNameLength)
-        .toString('utf8')
-        .normalize('NFKC');
+        .toString('utf8');
+      const localName = (
+        isDirectory && localNameRaw.endsWith('/')
+          ? localNameRaw.slice(0, -1)
+          : localNameRaw
+      ).normalize('NFKC');
       if (
         localName !== name ||
         localMethod !== method ||
@@ -104,6 +109,13 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
       const start = localOffset + 30 + localNameLength + localExtraLength;
       const end = start + csize;
       if (end > b.length) throw unsafe('Truncated archive');
+      total += usize;
+      compressedTotal += csize;
+      const match = isDirectory ? null : testcaseFile.exec(name);
+      if (!match) {
+        p += 46 + nlen + elen + clen;
+        continue;
+      }
       const compressed = b.subarray(start, end);
       const data =
         method === 0
@@ -113,34 +125,30 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
             : null;
       if (!data || data.length !== usize)
         throw unsafe('Unsupported or corrupt archive');
-      total += data.length;
-      compressedTotal += csize;
-      const match = /^(.*)\.(in|out)$/i.exec(name);
-      if (match) {
-        if (!match[1])
-          throw new JudgeDataError('INVALID_PAIR', 'Invalid testcase name');
-        const key = (match[1] ?? '').replace(/^0+/, '') || '0';
-        const pair = pairs.get(key) ?? {};
-        if (match[2]!.toLowerCase() === 'in') {
-          if (pair.input)
-            throw new JudgeDataError('DUPLICATE', 'Duplicate input pair');
-          pair.input = Uint8Array.from(data);
-        } else {
-          if (pair.output)
-            throw new JudgeDataError('DUPLICATE', 'Duplicate output pair');
-          pair.output = Uint8Array.from(data);
-        }
-        pairs.set(key, pair);
+      if (!match[1])
+        throw new JudgeDataError('INVALID_PAIR', 'Invalid testcase name');
+      const key = (match[1] ?? '').replace(/^0+/, '') || '0';
+      if (match[2]!.toLowerCase() === 'in') {
+        if (inputs.has(key))
+          throw new JudgeDataError('DUPLICATE', 'Duplicate input pair');
+        inputs.set(key, Uint8Array.from(data));
+      } else {
+        const candidates = outputs.get(key) ?? [];
+        candidates.push(Uint8Array.from(data));
+        outputs.set(key, candidates);
       }
       p += 46 + nlen + elen + clen;
     }
     if (p !== centralOffset + centralSize)
       throw unsafe('Invalid central directory');
     const result: ZipPair[] = [];
-    for (const [name, pair] of pairs) {
-      if (!pair.input || !pair.output)
+    for (const [name, input] of inputs) {
+      const output = outputs.get(name);
+      if (!output?.length)
         throw new JudgeDataError('INVALID_PAIR', 'Missing input/output pair');
-      result.push({ name, input: pair.input, output: pair.output });
+      if (output.length > 1)
+        throw new JudgeDataError('DUPLICATE', 'Duplicate output pair');
+      result.push({ name, input, output: output[0]! });
     }
     if (!result.length)
       throw new JudgeDataError('INVALID_PAIR', 'No testcase pairs');
