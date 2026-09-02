@@ -74,8 +74,9 @@ Browser evidence:
 ## Commits and Status
 
 - Browser implementation commit: `58c6b10` (`test: qualify product lead integration browser smoke`)
-- Phase closure commit: documentation commit following this report
-- Final HEAD: recorded after the closure commit
+- Phase closure commit: `eb7912e` (`docs: close product lead integration`)
+- Final evidence commit: recorded after this report update
+- Final HEAD: recorded after the final evidence commit
 - Product Lead Integration V1: **PASS**
 - Ready for next Product phase: **YES**
 
