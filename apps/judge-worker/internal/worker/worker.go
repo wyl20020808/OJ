@@ -62,6 +62,9 @@ func New(cfg config.Config, redis *queueadapter.Client, logger *log.Logger) *Wor
 		panic("worker instance identity unavailable")
 	}
 	instance := fmt.Sprintf("%x", bytes[:])
+	if cfg.NodeIncarnation != "" {
+		instance = cfg.NodeIncarnation
+	}
 	if logger == nil {
 		logger = log.Default()
 	}

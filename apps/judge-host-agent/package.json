@@ -1,0 +1,11 @@
+{
+  "name": "@ojplatform/judge-host-agent",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "tsx src/server.ts"
+  }
+}

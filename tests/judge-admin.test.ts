@@ -186,4 +186,43 @@ describe('judge admin adapter and product boundary', () => {
     });
     await app.close();
   });
+
+  it('accepts a pool mode change with its control-version guard', async () => {
+    const app = Fastify();
+    let input: unknown;
+    await registerJudgeAdminRoutes(app, {
+      adapter: {
+        summary: async () => ({}),
+        nodes: async () => ({ items: [] }),
+        node: async () => node,
+        assignments: async () => ({ items: [] }),
+        jobs: async () => ({ items: [] }),
+        failures: async () => ({ items: [] }),
+        assignment: async () => ({}),
+        metrics: async () => ({}),
+        mutate: async () => node,
+        setMode: async (value) => {
+          input = value;
+          return { mode: value.mode, controlVersion: 3 };
+        },
+      },
+      getAuthContext: async () => ctx,
+      can: async (_ctx, permission) => permission === 'judge.lifecycle',
+      audit: new MemoryJudgeAdminAuditRepository(),
+      csrf: () => true,
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/admin/judge/pool/mode',
+      payload: {
+        mode: 'MANUAL',
+        reason: 'browser control',
+        expectedControlVersion: 2,
+        idempotencyKey: 'mode-1',
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(input).toMatchObject({ mode: 'MANUAL' });
+    await app.close();
+  });
 });

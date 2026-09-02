@@ -907,7 +907,8 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
 export type RedisJudgeClient = Pick<
   Redis,
   'set' | 'get' | 'del' | 'keys' | 'lpush' | 'rpop'
->;
+> &
+  Partial<Pick<Redis, 'llen' | 'lrange'>>;
 export class RedisJudgeJobRepository implements JudgeJobRepository {
   constructor(
     private redis: RedisJudgeClient,
@@ -924,6 +925,30 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
   }
   private get mutationLockKey() {
     return `${this.keyPrefix}:mutation-lock`;
+  }
+  async autoscalerMetrics() {
+    if (!this.redis.lrange)
+      return {
+        pendingJobs: this.redis.llen ? await this.redis.llen(this.queueKey) : 0,
+      };
+    const ids = await this.redis.lrange(this.queueKey, 0, -1);
+    const waits: number[] = [];
+    for (const id of ids) {
+      const job = await this.read(id);
+      if (!job || !['QUEUED', 'FAILED_RETRYABLE'].includes(job.status))
+        continue;
+      const created = Date.parse(job.createdAt);
+      if (Number.isFinite(created))
+        waits.push(Math.max(0, Date.now() - created));
+    }
+    waits.sort((a, b) => a - b);
+    const averageQueueWaitMs = waits.length
+      ? waits.reduce((sum, value) => sum + value, 0) / waits.length
+      : 0;
+    const p95QueueWaitMs = waits.length
+      ? waits[Math.min(waits.length - 1, Math.ceil(waits.length * 0.95) - 1)]!
+      : 0;
+    return { pendingJobs: waits.length, averageQueueWaitMs, p95QueueWaitMs };
   }
   private async exclusive<T>(work: () => Promise<T>): Promise<T> {
     const token = randomUUID();

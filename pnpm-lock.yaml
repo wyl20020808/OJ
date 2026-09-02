@@ -141,6 +141,8 @@ importers:
         specifier: ^5.12.1
         version: 5.12.1
 
+  apps/judge-host-agent: {}
+
   apps/judge-service:
     dependencies:
       '@ojplatform/cache':
@@ -149,6 +151,9 @@ importers:
       '@ojplatform/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@ojplatform/judge-host-agent':
+        specifier: workspace:*
+        version: link:../judge-host-agent
       '@ojplatform/judge-runtime':
         specifier: workspace:*
         version: link:../../packages/judge-runtime

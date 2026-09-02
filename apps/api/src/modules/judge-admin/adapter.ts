@@ -1,9 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {
+  AddNodeInput,
   JudgeAdminAdapter,
+  LifecycleInput,
   MutationInput,
   PageQuery,
+  PolicyMutationInput,
   RequestHeaders,
+  ModeMutationInput,
 } from './model.js';
 
 export class JudgeAdminUpstreamError extends Error {
@@ -96,6 +100,24 @@ export class JudgeAdminAdapterClient implements JudgeAdminAdapter {
   metrics() {
     return this.call('/v1/admin/metrics');
   }
+  policy() {
+    return this.call('/v1/admin/pool/policy');
+  }
+  templates() {
+    return this.call('/v1/admin/pool/templates');
+  }
+  hostCapacity() {
+    return this.call('/v1/admin/pool/host-capacity');
+  }
+  lifecycleCapabilities() {
+    return this.call('/v1/admin/lifecycle/capabilities');
+  }
+  lifecycleHistory(q?: PageQuery) {
+    return this.list('/v1/admin/lifecycle/operations', q);
+  }
+  autoscalerHistory(q?: PageQuery) {
+    return this.list('/v1/admin/autoscaler/decisions', q);
+  }
   private list(path: string, q: PageQuery = {}) {
     const p = new URLSearchParams({
       limit: String(Math.min(100, Math.max(1, q.limit ?? 25))),
@@ -122,6 +144,63 @@ export class JudgeAdminAdapterClient implements JudgeAdminAdapter {
       },
       body: JSON.stringify(input),
     });
+  }
+  private command(path: string, input: unknown, headers: RequestHeaders) {
+    return this.call(path, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': headers.requestId,
+        'x-correlation-id': headers.correlationId,
+        'idempotency-key':
+          typeof input === 'object' && input && 'idempotencyKey' in input
+            ? String((input as { idempotencyKey: string }).idempotencyKey)
+            : '',
+      },
+      body: JSON.stringify(input),
+    });
+  }
+  addNode(
+    input: AddNodeInput,
+    headers: RequestHeaders = {
+      requestId: crypto.randomUUID(),
+      correlationId: crypto.randomUUID(),
+    },
+  ) {
+    return this.command('/v1/admin/nodes', input, headers);
+  }
+  lifecycle(
+    action: 'start' | 'stop' | 'restart',
+    id: string,
+    input: LifecycleInput,
+    headers: RequestHeaders = {
+      requestId: crypto.randomUUID(),
+      correlationId: crypto.randomUUID(),
+    },
+  ) {
+    return this.command(
+      `/v1/admin/nodes/${encodeURIComponent(id)}/${action}`,
+      input,
+      headers,
+    );
+  }
+  updatePolicy(
+    input: PolicyMutationInput,
+    headers: RequestHeaders = {
+      requestId: crypto.randomUUID(),
+      correlationId: crypto.randomUUID(),
+    },
+  ) {
+    return this.command('/v1/admin/pool/policy', input, headers);
+  }
+  setMode(
+    input: ModeMutationInput,
+    headers: RequestHeaders = {
+      requestId: crypto.randomUUID(),
+      correlationId: crypto.randomUUID(),
+    },
+  ) {
+    return this.command('/v1/admin/pool/mode', input, headers);
   }
 }
 

@@ -25,6 +25,7 @@ type Config struct {
 	SupervisorURL           string
 	JudgeServiceURL         string
 	JudgeNodeToken          string
+	NodeIncarnation         string
 }
 
 func loopbackHost(host string) bool {
@@ -47,9 +48,13 @@ func Load(env map[string]string) (Config, error) {
 	if err != nil || u.Scheme != "redis" || u.Host == "" {
 		return Config{}, fmt.Errorf("invalid REDIS_URL")
 	}
-	worker := get("WORKER_ID", "local-judge-worker")
+	worker := get("OJ_JUDGE_NODE_ID", get("WORKER_ID", "local-judge-worker"))
 	if worker == "" {
 		return Config{}, fmt.Errorf("WORKER_ID required")
+	}
+	incarnation := get("OJ_JUDGE_NODE_INCARNATION", "")
+	if len(incarnation) > 128 || strings.ContainsAny(incarnation, "\x00\r\n") {
+		return Config{}, fmt.Errorf("invalid OJ_JUDGE_NODE_INCARNATION")
 	}
 	max, err := strconv.Atoi(get("MAX_CONCURRENCY", "1"))
 	if err != nil || max < 1 || max > 64 {
@@ -97,7 +102,7 @@ func Load(env map[string]string) (Config, error) {
 			return Config{}, fmt.Errorf("Supervisor URL must be loopback")
 		}
 	}
-	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", "oj:judge:workers"), LivenessTimeoutMS: liveness, RealSubmissionExecution: realExecution, SupervisorURL: supervisorURL, JudgeServiceURL: judgeServiceURL, JudgeNodeToken: nodeToken}, nil
+	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", "oj:judge:workers"), LivenessTimeoutMS: liveness, RealSubmissionExecution: realExecution, SupervisorURL: supervisorURL, JudgeServiceURL: judgeServiceURL, JudgeNodeToken: nodeToken, NodeIncarnation: incarnation}, nil
 }
 
 func FromEnv() (Config, error) {

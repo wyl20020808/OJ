@@ -32,6 +32,14 @@ func TestIdentityAndCapabilities(t *testing.T) {
 		t.Fatal("capability manifest")
 	}
 }
+
+func TestHostAgentIncarnationIsUsedWhenConfigured(t *testing.T) {
+	c, _ := config.Load(map[string]string{"OJ_JUDGE_NODE_INCARNATION": "host-incarnation-a"})
+	w := New(c, nil, log.New(&bytes.Buffer{}, "", 0))
+	if w.InstanceID != "host-incarnation-a" {
+		t.Fatalf("instance id = %q", w.InstanceID)
+	}
+}
 func TestHeartbeatSafePayload(t *testing.T) {
 	var output bytes.Buffer
 	c, _ := config.Load(map[string]string{})

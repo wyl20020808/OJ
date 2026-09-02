@@ -51,17 +51,38 @@ export type JudgeMutation = {
   correlationId: string;
   node: JudgeNode;
 };
-export type JudgeAction = 'drain' | 'offline' | 'enable';
+export type JudgeAction =
+  'drain' | 'offline' | 'enable' | 'start' | 'stop' | 'restart';
+export type JudgePoolPolicy = {
+  mode: 'MANUAL' | 'AUTOMATIC';
+  templateId: string;
+  minNodes: number;
+  maxNodes: number;
+  targetQueueWaitMs: number;
+  fastScaleQueueWaitMs: number;
+  pendingJobsScaleUpThreshold: number;
+  scaleUpStep: number;
+  fastScaleUpStep: number;
+  scaleDownStep: number;
+  scaleDownUtilizationThreshold: number;
+  scaleDownIdleWindowMs: number;
+  scaleUpCooldownMs: number;
+  scaleDownCooldownMs: number;
+  hostCpuReserve: number;
+  hostMemoryReserve: number;
+  controlVersion: number;
+};
 
 export function createJudgeAdminClient(
   baseUrl = '',
   fetcher: typeof fetch = fetch,
 ) {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    const { headers, ...rest } = init ?? {};
     const response = await fetcher(`${baseUrl}/api/admin/judge${path}`, {
       credentials: 'include',
-      headers: { 'content-type': 'application/json', ...init?.headers },
-      ...init,
+      ...rest,
+      headers: { 'content-type': 'application/json', ...headers },
     });
     if (!response.ok) {
       let body: { code?: string; message?: string; requestId?: string } = {};
@@ -105,6 +126,20 @@ export function createJudgeAdminClient(
         `/assignments/${encodeURIComponent(id)}`,
       ),
     metrics: () => request<JudgeMetrics>('/metrics'),
+    policy: () => request<JudgePoolPolicy>('/pool/policy'),
+    templates: () =>
+      request<{
+        items: Array<{
+          templateId: string;
+          displayName?: string;
+          enabled: boolean;
+        }>;
+      }>('/pool/templates'),
+    hostCapacity: () => request<Record<string, unknown>>('/pool/host-capacity'),
+    lifecycleCapabilities: () =>
+      request<{ available: boolean; actions: string[]; reason?: string }>(
+        '/lifecycle/capabilities',
+      ),
     mutate: (
       id: string,
       action: JudgeAction,
@@ -124,6 +159,45 @@ export function createJudgeAdminClient(
           body: JSON.stringify(body),
         },
       );
+    },
+    lifecycle: (
+      id: string,
+      action: 'start' | 'stop' | 'restart',
+      body: Record<string, unknown>,
+    ) => {
+      const csrf = csrfToken();
+      return request<Record<string, unknown>>(
+        `/nodes/${encodeURIComponent(id)}/${action}`,
+        {
+          method: 'POST',
+          ...(csrf ? { headers: { 'x-csrf-token': csrf } } : {}),
+          body: JSON.stringify(body),
+        },
+      );
+    },
+    addNode: (body: Record<string, unknown>) => {
+      const csrf = csrfToken();
+      return request<Record<string, unknown>>('/nodes', {
+        method: 'POST',
+        ...(csrf ? { headers: { 'x-csrf-token': csrf } } : {}),
+        body: JSON.stringify(body),
+      });
+    },
+    setMode: (body: Record<string, unknown>) => {
+      const csrf = csrfToken();
+      return request<{ node: JudgePoolPolicy }>('/pool/mode', {
+        method: 'POST',
+        ...(csrf ? { headers: { 'x-csrf-token': csrf } } : {}),
+        body: JSON.stringify(body),
+      }).then((result) => result.node);
+    },
+    updatePolicy: (body: Record<string, unknown>) => {
+      const csrf = csrfToken();
+      return request<{ node: JudgePoolPolicy }>('/pool/policy', {
+        method: 'POST',
+        ...(csrf ? { headers: { 'x-csrf-token': csrf } } : {}),
+        body: JSON.stringify(body),
+      }).then((result) => result.node);
     },
   };
 }
