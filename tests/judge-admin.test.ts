@@ -130,4 +130,60 @@ describe('judge admin adapter and product boundary', () => {
     ).toHaveLength(2);
     await app.close();
   });
+
+  it('normalizes Judge summary and wraps Product mutation metadata', async () => {
+    const app = Fastify();
+    await registerJudgeAdminRoutes(app, {
+      adapter: {
+        summary: async () => ({
+          totalNodes: 2,
+          countsByState: { ONLINE: 1, DRAINING: 1 },
+          activeJobs: 1,
+          totalCapacity: 4,
+          schedulableCapacity: 2,
+          staleNodeCount: 0,
+          generatedAt: '2026-09-02T10:00:00.000Z',
+        }),
+        nodes: async () => ({ items: [] }),
+        node: async () => node,
+        assignments: async () => ({ items: [] }),
+        jobs: async () => ({ items: [] }),
+        failures: async () => ({ items: [] }),
+        assignment: async () => ({}),
+        metrics: async () => ({}),
+        mutate: async () => node,
+      },
+      getAuthContext: async () => ctx,
+      can: async () => true,
+      audit: new MemoryJudgeAdminAuditRepository(),
+      csrf: () => true,
+    });
+    const summary = await app.inject({
+      method: 'GET',
+      url: '/api/admin/judge/summary',
+    });
+    expect(summary.json()).toMatchObject({
+      onlineCount: 1,
+      busyCount: 0,
+      drainingCount: 1,
+      offlineCount: 0,
+      unhealthyCount: 0,
+    });
+    const mutation = await app.inject({
+      method: 'POST',
+      url: '/api/admin/judge/nodes/judge-a/enable',
+      payload: {
+        reason: 'maintenance complete',
+        expectedIncarnation: 'inc-1',
+        expectedControlVersion: 2,
+        idempotencyKey: 'normalize-1',
+      },
+    });
+    expect(mutation.json()).toMatchObject({
+      correlationId: expect.any(String),
+      operationId: expect.any(String),
+      node,
+    });
+    await app.close();
+  });
 });

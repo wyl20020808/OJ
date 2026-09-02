@@ -218,25 +218,24 @@ export async function buildApp(options: AppOptions = {}) {
             process.env.JUDGE_SERVICE_ADMIN_URL,
             process.env.JUDGE_SERVICE_ADMIN_TOKEN,
           )
-        : undefined);
-    if (adminAdapter)
-      await registerJudgeAdminRoutes(app, {
-        adapter: adminAdapter,
-        getAuthContext: async (request) =>
-          (await auth.getAuthContext(request)) ?? undefined,
-        can: async (ctx, permission) => {
-          if (!ctx || ctx.strength !== 'password') return false;
-          if (configuredOperatorUserIds.has(ctx.userId)) return true;
-          if (options.judgeAdminPermissions?.get(ctx.userId)?.has(permission))
-            return true;
-          const result = await database.pool.query(
-            'SELECT 1 FROM auth_user_roles ur JOIN auth_roles r ON r.name = ur.role_name WHERE ur.user_id = $1 AND $2 = ANY(r.permissions) LIMIT 1',
-            [ctx.userId, permission],
-          );
-          return (result as { rowCount?: number }).rowCount === 1;
-        },
-        audit: new PostgresJudgeAdminAuditRepository(database.pool),
-      });
+        : new JudgeAdminAdapterClient('http://127.0.0.1:0', 'unconfigured'));
+    await registerJudgeAdminRoutes(app, {
+      adapter: adminAdapter,
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      can: async (ctx, permission) => {
+        if (!ctx || ctx.strength !== 'password') return false;
+        if (configuredOperatorUserIds.has(ctx.userId)) return true;
+        if (options.judgeAdminPermissions?.get(ctx.userId)?.has(permission))
+          return true;
+        const result = await database.pool.query(
+          'SELECT 1 FROM auth_user_roles ur JOIN auth_roles r ON r.name = ur.role_name WHERE ur.user_id = $1 AND $2 = ANY(r.permissions) LIMIT 1',
+          [ctx.userId, permission],
+        );
+        return (result as { rowCount?: number }).rowCount === 1;
+      },
+      audit: new PostgresJudgeAdminAuditRepository(database.pool),
+    });
     const submissionRepository = new PostgresSubmissionRepository(
       database.pool,
     );

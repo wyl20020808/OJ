@@ -45,6 +45,26 @@ const errorMap = (e: unknown) => {
     message: 'Judge Service unavailable',
   };
 };
+const stateCount = (counts: unknown, state: string) =>
+  counts && typeof counts === 'object' && !Array.isArray(counts)
+    ? Number((counts as Record<string, unknown>)[state] ?? 0)
+    : 0;
+const productSummary = (value: any) => {
+  if (!value || typeof value !== 'object') return value;
+  const counts = value.countsByState;
+  return {
+    ...value,
+    onlineCount: Number(value.onlineCount ?? stateCount(counts, 'ONLINE')),
+    busyCount: Number(value.busyCount ?? stateCount(counts, 'BUSY')),
+    drainingCount: Number(
+      value.drainingCount ?? stateCount(counts, 'DRAINING'),
+    ),
+    offlineCount: Number(value.offlineCount ?? stateCount(counts, 'OFFLINE')),
+    unhealthyCount: Number(
+      value.unhealthyCount ?? stateCount(counts, 'UNHEALTHY'),
+    ),
+  };
+};
 export async function registerJudgeAdminRoutes(
   app: FastifyInstance,
   o: JudgeAdminRouteOptions,
@@ -61,6 +81,12 @@ export async function registerJudgeAdminRoutes(
         message: 'Authentication required',
         requestId: request.id,
       });
+    if (!request.headers.cookie?.match(/(?:^|; )oj_csrf=([^;]+)/)) {
+      reply.header(
+        'set-cookie',
+        `oj_csrf=${encodeURIComponent(crypto.randomUUID())}; Path=/; SameSite=Lax`,
+      );
+    }
     return ctx;
   };
   const query = (r: any) => ({
@@ -68,7 +94,7 @@ export async function registerJudgeAdminRoutes(
     ...(typeof r.query?.cursor === 'string' ? { cursor: r.query.cursor } : {}),
   });
   const routes: Array<[string, (a: any) => Promise<unknown>]> = [
-    ['/summary', () => o.adapter.summary()],
+    ['/summary', async () => productSummary(await o.adapter.summary())],
     ['/nodes', (r) => o.adapter.nodes(query(r))],
     ['/metrics', () => o.adapter.metrics()],
   ];
@@ -211,12 +237,17 @@ export async function registerJudgeAdminRoutes(
           return reply.send(prior.result);
         }
         try {
-          const result = await o.adapter.mutate(
+          const node = await o.adapter.mutate(
             action,
             r.params.nodeId,
             body as MutationInput,
             { requestId: r.id, correlationId },
           );
+          const result = {
+            operationId: crypto.randomUUID(),
+            correlationId,
+            node,
+          };
           idempotent.set(body.idempotencyKey, { fingerprint, result });
           await o.audit.record({
             ...base,

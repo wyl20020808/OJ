@@ -131,7 +131,11 @@ function route(path = window.location.pathname): Route {
   if (path === '/messages') return { name: 'messages' };
   if (path === '/operations/sandbox') return { name: 'sandbox' };
   if (path === '/admin/judge/nodes') return { name: 'judge-nodes' };
-  if (path.startsWith('/admin/judge/nodes/')) return { name: 'judge-node-detail', id: decodeURIComponent(path.slice('/admin/judge/nodes/'.length)) };
+  if (path.startsWith('/admin/judge/nodes/'))
+    return {
+      name: 'judge-node-detail',
+      id: decodeURIComponent(path.slice('/admin/judge/nodes/'.length)),
+    };
   if (path === '/problems' || path === '/problems/')
     return { name: 'problems' };
   if (path === '/author' || path === '/author/') return { name: 'author' };
@@ -2396,8 +2400,12 @@ export function App() {
       )
     ) : current.name === 'sandbox' ? (
       <SandboxOperationsPage api={api} authorized={Boolean(user)} />
-    ) : current.name === 'judge-nodes' || current.name === 'judge-node-detail' ? (
-      <JudgeMachinesPage {...(current.id ? { nodeId: current.id } : {})} canManage={Boolean(user && !user.guest)} />
+    ) : current.name === 'judge-nodes' ||
+      current.name === 'judge-node-detail' ? (
+      <JudgeMachinesPage
+        {...(current.id ? { nodeId: current.id } : {})}
+        canManage={Boolean(user && !user.guest)}
+      />
     ) : current.name === 'public-profile' ? (
       <Profile
         api={api}

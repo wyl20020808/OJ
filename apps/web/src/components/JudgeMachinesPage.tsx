@@ -360,7 +360,10 @@ export function JudgeMachinesPage({
       ),
     [nodes, query],
   );
-  const action = async (a: JudgeAction, target: JudgeNode | null = selected) => {
+  const action = async (
+    a: JudgeAction,
+    target: JudgeNode | null = selected,
+  ) => {
     if (!target) return;
     const reason = window.prompt(
       `确认 ${a} ${target.nodeId}，请输入原因`,
