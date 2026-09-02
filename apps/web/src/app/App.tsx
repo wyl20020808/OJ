@@ -21,6 +21,7 @@ import {
   type SubmissionStatus,
 } from '../services/api.js';
 import './app.css';
+import { JudgeMachinesPage } from '../components/JudgeMachinesPage.js';
 import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
@@ -87,6 +88,8 @@ type Route = {
     | 'author-new'
     | 'author-edit'
     | 'sandbox'
+    | 'judge-nodes'
+    | 'judge-node-detail'
     | 'forbidden'
     | 'error'
     | 'not-found';
@@ -127,6 +130,8 @@ function route(path = window.location.pathname): Route {
   if (path === '/notifications') return { name: 'notifications' };
   if (path === '/messages') return { name: 'messages' };
   if (path === '/operations/sandbox') return { name: 'sandbox' };
+  if (path === '/admin/judge/nodes') return { name: 'judge-nodes' };
+  if (path.startsWith('/admin/judge/nodes/')) return { name: 'judge-node-detail', id: decodeURIComponent(path.slice('/admin/judge/nodes/'.length)) };
   if (path === '/problems' || path === '/problems/')
     return { name: 'problems' };
   if (path === '/author' || path === '/author/') return { name: 'author' };
@@ -203,6 +208,8 @@ function Breadcrumbs({ current }: { current: Route }) {
     'author-new': '创建题目',
     'author-edit': '编辑题目',
     sandbox: 'Sandbox 运维',
+    'judge-nodes': 'Judge Machines',
+    'judge-node-detail': current.id ?? '节点详情',
     forbidden: '无权访问',
     error: '页面加载失败',
     'not-found': '页面不存在',
@@ -2389,6 +2396,8 @@ export function App() {
       )
     ) : current.name === 'sandbox' ? (
       <SandboxOperationsPage api={api} authorized={Boolean(user)} />
+    ) : current.name === 'judge-nodes' || current.name === 'judge-node-detail' ? (
+      <JudgeMachinesPage {...(current.id ? { nodeId: current.id } : {})} canManage={Boolean(user && !user.guest)} />
     ) : current.name === 'public-profile' ? (
       <Profile
         api={api}
