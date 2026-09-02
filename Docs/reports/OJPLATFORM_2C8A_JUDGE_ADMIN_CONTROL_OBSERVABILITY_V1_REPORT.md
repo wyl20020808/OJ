@@ -2,7 +2,7 @@
 
 Final Status: `PARTIAL / RUNTIME_NOT_REQUALIFIED`
 
-Baseline `4e3f682b101252641086d48e51825e4d8064fa74`; branch `codex/phase2c8a-judge-admin-control-observability`; final HEAD recorded at delivery as `e7f8b7cd0fe7ed08d190a8ca39f55efcaf81cf4d`.
+Baseline `4e3f682b101252641086d48e51825e4d8064fa74`; branch `codex/phase2c8a-judge-admin-control-observability`; final implementation HEAD before this report metadata commit: `5a0cf9a707eb393d715a0f1f55f4f943cec3b50e`.
 
 Implemented: desired/observed state and controlVersion model; scheduler intent/health gating; registration, heartbeat, claim and completion preservation for DRAINING/OFFLINE; service-authenticated bounded Admin node/summary/metrics/assignment/job/failure read APIs; drain/offline/enable controls with stale conflict handling; migration `0002`; frozen contracts in `Docs/parallel`.
 
