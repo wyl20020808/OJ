@@ -25,6 +25,7 @@ export function authoritativeSubmissionOutcome(
 
 export function publicSubmissionEvaluation(
   evaluation: SubmissionEvaluation | undefined,
+  withDetail = false,
 ) {
   if (!evaluation) return undefined;
   return {
@@ -35,6 +36,7 @@ export function publicSubmissionEvaluation(
       ? { verdict: evaluation.verdict }
       : {}),
     ...(evaluation.completedAt ? { completedAt: evaluation.completedAt } : {}),
+    ...(withDetail && evaluation.detail ? { detail: evaluation.detail } : {}),
     current: evaluation.current,
   };
 }

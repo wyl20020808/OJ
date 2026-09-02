@@ -296,6 +296,32 @@ export type SubmissionEvaluation = {
   completedAt?: string;
   current: boolean;
 };
+export type SubmissionTestcaseResult = {
+  ordinal: number;
+  verdict: 'AC' | 'WA' | 'CE' | 'RE' | 'TLE' | 'MLE';
+  timeMs?: number;
+  memoryBytes?: number;
+  runtimeReason?: string;
+  exitCode?: number;
+};
+export type SubmissionCompileDetail = {
+  status: 'FAILED';
+  durationMs?: number;
+  diagnostics?: string;
+  truncated: boolean;
+};
+export type SubmissionEvaluationDetail = {
+  testcaseCount: number;
+  completedTestcaseCount: number;
+  totalTimeMs?: number;
+  peakMemoryBytes?: number;
+  compile?: SubmissionCompileDetail;
+  testcases: SubmissionTestcaseResult[];
+};
+export type SubmissionEvaluationDetailResponse = {
+  submission: Pick<Submission, 'id' | 'languageId' | 'createdAt'>;
+  evaluation: SubmissionEvaluation & { detail?: SubmissionEvaluationDetail };
+};
 export type Submission = {
   id: string;
   ownerUserId: string;
@@ -1181,6 +1207,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<{ items: SubmissionEvaluation[] }>(
         baseUrl,
         `/api/submissions/${encodeURIComponent(id)}/evaluations`,
+        undefined,
+        fetcher,
+      ),
+    submissionEvaluation: (id: string, generation: number) =>
+      request<SubmissionEvaluationDetailResponse>(
+        baseUrl,
+        `/api/submissions/${encodeURIComponent(id)}/evaluations/${encodeURIComponent(String(generation))}`,
         undefined,
         fetcher,
       ),

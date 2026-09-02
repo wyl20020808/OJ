@@ -4,6 +4,7 @@ import type {
   SubmissionCreateInput,
   SubmissionListQuery,
   SubmissionEvaluation,
+  SubmissionEvaluationDetail,
   SubmissionEvaluationStatus,
   SubmissionJudgeBinding,
   SubmissionVerdict,
@@ -59,6 +60,7 @@ export type PublishEvaluationInput = {
   testcaseSetId?: string;
   manifestHash?: string;
   verdictRecordDigest?: string;
+  detail?: SubmissionEvaluationDetail;
   evaluationRecordDigest: string;
   completedAt?: string;
 };
@@ -101,7 +103,21 @@ export class InMemorySubmissionRepository implements SubmissionRepository {
       (item) => item.evaluationGeneration === input.evaluationGeneration,
     );
     if (existing) {
-      if (!existing.current || existing.judgeJobId !== input.judgeJobId)
+      if (existing.judgeJobId !== input.judgeJobId)
+        throw new Error('STALE_EVALUATION');
+      const matchingDigest =
+        existing.evaluationRecordDigest === input.evaluationRecordDigest ||
+        (!!existing.verdictRecordDigest &&
+          existing.verdictRecordDigest === input.verdictRecordDigest);
+      if (
+        !existing.current &&
+        (!matchingDigest ||
+          existing.status !== input.status ||
+          existing.verdict !== input.verdict ||
+          existing.attemptGeneration !== input.attemptGeneration ||
+          existing.detail ||
+          !input.detail)
+      )
         throw new Error('STALE_EVALUATION');
       if (
         [
@@ -113,10 +129,27 @@ export class InMemorySubmissionRepository implements SubmissionRepository {
         ].includes(existing.status)
       ) {
         if (
-          existing.evaluationRecordDigest === input.evaluationRecordDigest &&
+          existing.judgeJobId === input.judgeJobId &&
+          existing.status === input.status &&
+          existing.verdict === input.verdict &&
+          matchingDigest &&
           existing.attemptGeneration === input.attemptGeneration
-        )
-          return { ...existing };
+        ) {
+          if (!existing.current) {
+            if (!existing.detail && input.detail) {
+              existing.detail = input.detail;
+              existing.updatedAt = now();
+              return { ...existing };
+            }
+            throw new Error('STALE_EVALUATION');
+          }
+          if (sameDetail(existing.detail, input.detail)) return { ...existing };
+          if (!existing.detail && input.detail) {
+            existing.detail = input.detail;
+            existing.updatedAt = now();
+            return { ...existing };
+          }
+        }
         throw new Error('CONFLICTING_PUBLICATION');
       }
       if (input.attemptGeneration < existing.attemptGeneration)
@@ -348,7 +381,7 @@ export class PostgresSubmissionRepository implements SubmissionRepository {
     if (input.status !== 'COMPLETED_WITH_VERDICT' && input.verdict)
       throw new Error('INVALID_VERDICT');
     const result = await this.pool.query(
-      "WITH updated AS (UPDATE submission_evaluations SET attempt_generation=$4,status=$5,verdict=$6,testcase_set_id=$7,manifest_hash=$8,verdict_record_digest=$9,evaluation_record_digest=$10,completed_at=$11,updated_at=now() WHERE submission_id=$1 AND evaluation_generation=$2 AND judge_job_id=$3 AND current=true AND status IN ('QUEUED','RUNNING','REJUDGE_PENDING','REJUDGING') AND attempt_generation <= $4 RETURNING *), submission_update AS (UPDATE submissions SET status=CASE (SELECT status FROM updated) WHEN 'COMPLETED_WITH_VERDICT' THEN 'EXECUTION_COMPLETED' WHEN 'CANCELLED' THEN 'CANCELLED' WHEN 'QUEUED' THEN 'PENDING' WHEN 'REJUDGE_PENDING' THEN 'PENDING' WHEN 'RUNNING' THEN 'LEASED' WHEN 'REJUDGING' THEN 'LEASED' ELSE 'PROTOCOL_FAILURE' END,updated_at=now() WHERE id=$1 AND EXISTS (SELECT 1 FROM updated)) SELECT * FROM updated",
+      "WITH updated AS (UPDATE submission_evaluations SET attempt_generation=$4,status=$5,verdict=$6,testcase_set_id=$7,manifest_hash=$8,verdict_record_digest=$9,evaluation_record_digest=$10,completed_at=$11,detail=$12::jsonb,updated_at=now() WHERE submission_id=$1 AND evaluation_generation=$2 AND judge_job_id=$3 AND current=true AND status IN ('QUEUED','RUNNING','REJUDGE_PENDING','REJUDGING') AND attempt_generation <= $4 RETURNING *), submission_update AS (UPDATE submissions SET status=CASE (SELECT status FROM updated) WHEN 'COMPLETED_WITH_VERDICT' THEN 'EXECUTION_COMPLETED' WHEN 'CANCELLED' THEN 'CANCELLED' WHEN 'QUEUED' THEN 'PENDING' WHEN 'REJUDGE_PENDING' THEN 'PENDING' WHEN 'RUNNING' THEN 'LEASED' WHEN 'REJUDGING' THEN 'LEASED' ELSE 'PROTOCOL_FAILURE' END,updated_at=now() WHERE id=$1 AND EXISTS (SELECT 1 FROM updated)) SELECT * FROM updated",
       [
         input.submissionId,
         input.evaluationGeneration,
@@ -361,15 +394,52 @@ export class PostgresSubmissionRepository implements SubmissionRepository {
         input.verdictRecordDigest ?? null,
         input.evaluationRecordDigest,
         input.completedAt ?? null,
+        input.detail ? JSON.stringify(input.detail) : null,
       ],
     );
     if (result.rows[0]) return mapEvaluation(result.rows[0]);
-    const existing = await this.getEvaluation(input.submissionId);
+    const existing = (
+      await this.listEvaluationHistory(input.submissionId)
+    ).find((item) => item.evaluationGeneration === input.evaluationGeneration);
+    const matchingDigest =
+      existing &&
+      (existing.evaluationRecordDigest === input.evaluationRecordDigest ||
+        (!!existing.verdictRecordDigest &&
+          existing.verdictRecordDigest === input.verdictRecordDigest));
     if (
       existing &&
       existing.evaluationGeneration === input.evaluationGeneration &&
-      existing.evaluationRecordDigest === input.evaluationRecordDigest &&
-      existing.attemptGeneration === input.attemptGeneration
+      existing.judgeJobId === input.judgeJobId &&
+      existing.status === input.status &&
+      existing.verdict === input.verdict &&
+      matchingDigest &&
+      existing.attemptGeneration === input.attemptGeneration &&
+      !existing.detail &&
+      input.detail
+    ) {
+      const backfill = await this.pool.query(
+        'UPDATE submission_evaluations SET detail=$6::jsonb,updated_at=now() WHERE submission_id=$1 AND evaluation_generation=$2 AND judge_job_id=$3 AND status=$4 AND verdict IS NOT DISTINCT FROM $5 AND (evaluation_record_digest=$7 OR (verdict_record_digest IS NOT NULL AND verdict_record_digest=$9)) AND attempt_generation=$8 AND detail IS NULL RETURNING *',
+        [
+          input.submissionId,
+          input.evaluationGeneration,
+          input.judgeJobId,
+          input.status,
+          input.verdict ?? null,
+          JSON.stringify(input.detail),
+          input.evaluationRecordDigest,
+          input.attemptGeneration,
+          input.verdictRecordDigest ?? null,
+        ],
+      );
+      if (backfill.rows[0]) return mapEvaluation(backfill.rows[0]);
+    }
+    if (existing && !existing.current) throw new Error('STALE_EVALUATION');
+    if (
+      existing &&
+      existing.evaluationGeneration === input.evaluationGeneration &&
+      matchingDigest &&
+      existing.attemptGeneration === input.attemptGeneration &&
+      sameDetail(existing.detail, input.detail)
     )
       return existing;
     throw new Error(
@@ -502,6 +572,9 @@ function mapEvaluation(row: Record<string, unknown>): SubmissionEvaluation {
     ...(row.verdict_record_digest
       ? { verdictRecordDigest: String(row.verdict_record_digest) }
       : {}),
+    ...(row.detail && typeof row.detail === 'object'
+      ? { detail: row.detail as SubmissionEvaluationDetail }
+      : {}),
     evaluationRecordDigest: String(row.evaluation_record_digest),
     status: row.status as SubmissionEvaluationStatus,
     ...(row.verdict ? { verdict: row.verdict as SubmissionVerdict } : {}),
@@ -513,3 +586,20 @@ function mapEvaluation(row: Record<string, unknown>): SubmissionEvaluation {
     current: Boolean(row.current),
   };
 }
+
+const sameDetail = (
+  left: SubmissionEvaluationDetail | undefined,
+  right: SubmissionEvaluationDetail | undefined,
+) => stableJson(left ?? null) === stableJson(right ?? null);
+
+const stableJson = (item: unknown): string => {
+  if (Array.isArray(item)) return `[${item.map(stableJson).join(',')}]`;
+  if (item && typeof item === 'object') {
+    const value = item as Record<string, unknown>;
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(item);
+};

@@ -19,6 +19,7 @@ import {
   type ProfileContest,
   type Submission,
   type SubmissionEvaluation,
+  type SubmissionEvaluationDetail,
   type SubmissionStatus,
 } from '../services/api.js';
 import './app.css';
@@ -1905,7 +1906,7 @@ function SubmissionHistory({
   );
 }
 
-function SubmissionDetail({
+export function SubmissionDetail({
   api,
   id,
   user,
@@ -1917,8 +1918,12 @@ function SubmissionDetail({
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [transportError, setTransportError] = useState('');
-  const [cancelling, setCancelling] = useState(false);
   const [history, setHistory] = useState<SubmissionEvaluation[]>([]);
+  const [selectedGeneration, setSelectedGeneration] = useState<number>();
+  const [evaluation, setEvaluation] = useState<
+    (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null
+  >(null);
+  const [evaluationError, setEvaluationError] = useState(false);
   const requestVersion = useRef(0);
   const load = () => {
     const version = ++requestVersion.current;
@@ -1932,9 +1937,19 @@ function SubmissionDetail({
         void api
           .submissionEvaluations(id)
           .then((response) => {
-            if (version === requestVersion.current) setHistory(response.items);
+            if (version !== requestVersion.current) return;
+            setHistory(response.items);
+            setSelectedGeneration(
+              (selected) =>
+                selected ??
+                response.items.find((item) => item.current)
+                  ?.evaluationGeneration ??
+                value.evaluation?.evaluationGeneration,
+            );
           })
-          .catch(() => undefined);
+          .catch(() => {
+            if (version === requestVersion.current) setHistory([]);
+          });
       })
       .catch((e) => {
         if (version !== requestVersion.current) return;
@@ -1950,20 +1965,22 @@ function SubmissionDetail({
     };
   }, [api, id, user]);
   useEffect(() => {
-    if (!submission?.evaluation) return;
-    if (
-      [
-        'COMPLETED_WITH_VERDICT',
-        'CANCELLED',
-        'INFRA_FAILED',
-        'NO_VERDICT',
-        'INCOMPLETE',
-      ].includes(submission.evaluation.status)
-    )
-      return;
-    const timer = window.setInterval(load, 2000);
-    return () => window.clearInterval(timer);
-  }, [submission?.evaluation?.status]);
+    if (!user || selectedGeneration === undefined) return;
+    let active = true;
+    setEvaluation(null);
+    setEvaluationError(false);
+    void api
+      .submissionEvaluation(id, selectedGeneration)
+      .then((response) => {
+        if (active) setEvaluation(response.evaluation);
+      })
+      .catch(() => {
+        if (active) setEvaluationError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, id, selectedGeneration, user]);
   if (!user)
     return (
       <State
@@ -2006,66 +2023,207 @@ function SubmissionDetail({
     );
   if (!submission)
     return <State title="正在加载提交" text="正在获取提交元数据…" />;
+  const isTerminal = evaluation
+    ? [
+        'COMPLETED_WITH_VERDICT',
+        'CANCELLED',
+        'INFRA_FAILED',
+        'NO_VERDICT',
+        'INCOMPLETE',
+      ].includes(evaluation.status)
+    : false;
   return (
-    <article className="detail">
+    <article className="detail submission-detail">
       <Link to="/submissions">← 返回提交记录</Link>
       <p className="eyebrow">提交详情</p>
-      <h1>{submission.id}</h1>
-      <div className="limits">
-        <span>语言：{submission.languageId}</span>
-        <span>接收时间：{formatDate(submission.createdAt)}</span>
+      <div className="submission-heading">
+        <div>
+          <h1>Submission #{submission.id}</h1>
+          <p>{submission.problemId}</p>
+        </div>
+        {evaluation?.verdict ? (
+          <strong className="submission-verdict">{evaluation.verdict}</strong>
+        ) : (
+          <JudgeStatus submission={submission} />
+        )}
       </div>
-      <JudgeStatus submission={submission} />
-      <div className="judge-actions">
+      <dl className="submission-facts">
+        <div>
+          <dt>语言</dt>
+          <dd>{submission.languageId}</dd>
+        </div>
+        <div>
+          <dt>提交时间</dt>
+          <dd>{formatDate(submission.createdAt)}</dd>
+        </div>
+        <div>
+          <dt>完成时间</dt>
+          <dd>
+            {evaluation?.completedAt
+              ? formatDate(evaluation.completedAt)
+              : '评测中'}
+          </dd>
+        </div>
+        <div>
+          <dt>评测代次</dt>
+          <dd>
+            {evaluation
+              ? `Generation ${evaluation.evaluationGeneration}`
+              : '加载中'}
+          </dd>
+        </div>
+      </dl>
+      <div className="submission-detail-actions">
         <button type="button" className="secondary" onClick={load}>
           刷新执行状态
         </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={cancelling || submission.executionStage === 'CANCELLED'}
-          onClick={() => {
-            setCancelling(true);
-            void api
-              .cancelSubmission(submission.id)
-              .then(load)
-              .catch((error: unknown) => {
-                if (error instanceof ApiError) setError(error);
-                else setTransportError('The service could not be reached.');
-              })
-              .finally(() => setCancelling(false));
-          }}
-        >
-          {cancelling ? '取消中…' : '取消资格流程'}
-        </button>
       </div>
-      <Section title="题目">
-        {submission.problemId} · 版本 {submission.problemRevisionId}
-      </Section>
-      <Section title="测试数据版本">{submission.testdataVersionRef}</Section>
-      {submission.judgeDataVersionId && (
-        <Section title="评测数据绑定">
-          v{submission.judgeDataVersionNumber} · {submission.judgeDataVersionId}
-        </Section>
-      )}
-      <Section title="提交者">{submission.ownerUserId}</Section>
       <Section title="源代码">
         <pre className="source">{submission.source}</pre>
       </Section>
-      {history.length > 0 && (
-        <Section title="评测历史">
-          {history.map((item) => (
-            <p key={item.evaluationGeneration}>
-              第 {item.evaluationGeneration} 代 ·{' '}
-              {item.status === 'COMPLETED_WITH_VERDICT'
-                ? item.verdict
-                : item.status}
-            </p>
-          ))}
-        </Section>
+      <section
+        className="submission-generation"
+        aria-labelledby="generation-history-title"
+      >
+        <div className="section-heading-inline">
+          <div>
+            <p className="eyebrow">Generation History</p>
+            <h2 id="generation-history-title">评测历史</h2>
+          </div>
+        </div>
+        {history.length ? (
+          <div className="generation-list" role="list">
+            {history.map((item) => (
+              <div key={item.evaluationGeneration} role="listitem">
+                <button
+                  type="button"
+                  className={
+                    selectedGeneration === item.evaluationGeneration
+                      ? 'generation-current'
+                      : ''
+                  }
+                  aria-pressed={
+                    selectedGeneration === item.evaluationGeneration
+                  }
+                  onClick={() =>
+                    setSelectedGeneration(item.evaluationGeneration)
+                  }
+                >
+                  <span>
+                    Generation {item.evaluationGeneration}
+                    {item.current ? ' - Current' : ''}
+                  </span>
+                  <strong>{item.verdict ?? item.status}</strong>
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="submission-muted">评测历史暂不可用。</p>
+        )}
+      </section>
+      {evaluationError ? (
+        <State
+          title="评测详情暂不可用"
+          text="无法加载此代评测详情，请刷新后重试。"
+          action={<button onClick={load}>刷新</button>}
+        />
+      ) : !evaluation ? (
+        <State
+          title="正在加载评测详情"
+          text="正在获取 Judge 已发布的评测结果…"
+        />
+      ) : !isTerminal ? (
+        <section className="submission-pending" aria-live="polite">
+          <h2>
+            {evaluation.status === 'QUEUED' ? '正在排队评测' : '正在评测'}
+          </h2>
+          <p>正在评测，详细测试点结果将在评测完成后显示。</p>
+        </section>
+      ) : (
+        <>
+          <section className="submission-metrics" aria-label="评测资源使用">
+            <div>
+              <span>Verdict</span>
+              <strong>{evaluation.verdict ?? evaluation.status}</strong>
+            </div>
+            <div>
+              <span>Time</span>
+              <strong>
+                {formatMilliseconds(evaluation.detail?.totalTimeMs)}
+              </strong>
+            </div>
+            <div>
+              <span>Memory</span>
+              <strong>{formatBytes(evaluation.detail?.peakMemoryBytes)}</strong>
+            </div>
+            <div>
+              <span>Generation</span>
+              <strong>{evaluation.evaluationGeneration}</strong>
+            </div>
+          </section>
+          {evaluation.detail?.compile?.diagnostics && (
+            <Section title="编译诊断">
+              <pre className="compiler-diagnostics">
+                {evaluation.detail.compile.diagnostics}
+              </pre>
+            </Section>
+          )}
+          <section
+            className="testcase-results"
+            aria-labelledby="testcase-results-title"
+          >
+            <div className="section-heading-inline">
+              <div>
+                <p className="eyebrow">Testcase Results</p>
+                <h2 id="testcase-results-title">测试点结果</h2>
+              </div>
+            </div>
+            {evaluation.detail?.testcases.length ? (
+              <div className="testcase-list" role="list">
+                {evaluation.detail.testcases.map((item) => (
+                  <article
+                    key={item.ordinal}
+                    role="listitem"
+                    className="testcase-row"
+                  >
+                    <strong>#{item.ordinal}</strong>
+                    <span className="testcase-verdict">{item.verdict}</span>
+                    <span>{formatMilliseconds(item.timeMs)}</span>
+                    <span>{formatBytes(item.memoryBytes)}</span>
+                    {item.runtimeReason && (
+                      <span className="testcase-reason">
+                        {item.runtimeReason}
+                      </span>
+                    )}
+                    {item.exitCode !== undefined && (
+                      <span className="testcase-reason">
+                        Exit {item.exitCode}
+                      </span>
+                    )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="submission-muted">
+                该评测代没有可展示的测试点执行记录。
+              </p>
+            )}
+          </section>
+        </>
       )}
     </article>
   );
+}
+
+function formatMilliseconds(value: number | undefined) {
+  return value === undefined ? '未提供' : `${value} ms`;
+}
+function formatBytes(value: number | undefined) {
+  if (value === undefined) return '未提供';
+  return value >= 1024 * 1024
+    ? `${(value / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.ceil(value / 1024))} KB`;
 }
 
 function Profile({

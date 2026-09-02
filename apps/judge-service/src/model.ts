@@ -14,6 +14,30 @@ export type JudgeServiceStatus =
   | 'INFRA_FAILED'
   | 'NO_VERDICT';
 
+export type JudgeServiceTestcaseDetail = {
+  ordinal: number;
+  verdict: JudgeServiceVerdict;
+  timeMs?: number;
+  memoryBytes?: number;
+  exitCode?: number;
+  runtimeReasonCode?: string;
+  runtimeReason?: string;
+};
+
+export type JudgeServiceDetail = {
+  testcaseCount: number;
+  completedTestcaseCount: number;
+  totalTimeMs?: number;
+  peakMemoryBytes?: number;
+  compile?: {
+    status: 'FAILED';
+    durationMs?: number;
+    diagnostics?: string;
+    truncated: boolean;
+  };
+  testcases: JudgeServiceTestcaseDetail[];
+};
+
 export type SubmitJudgeJobRequest = Omit<
   JudgeJobCreateInput,
   'submissionId' | 'ownerUserId' | 'idempotencyKey'
@@ -37,6 +61,7 @@ export type JudgeServiceResult = {
   verdict?: JudgeServiceVerdict;
   resultDigest?: string;
   completedAt?: string;
+  detail?: JudgeServiceDetail;
   acceptedAt: string;
   updatedAt: string;
 };

@@ -4,7 +4,105 @@ import type {
 } from '@ojplatform/judge-runtime';
 import { createHash } from 'node:crypto';
 import type { Submission } from './model.js';
+import type { SubmissionEvaluationDetail } from './model.js';
 import type { PublishEvaluationInput } from './repository.js';
+
+const verdicts = new Set(['AC', 'WA', 'CE', 'RE', 'TLE', 'MLE']);
+const record = (value: unknown): Record<string, unknown> | undefined =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+const integer = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined;
+
+/** Accept only the terminal DTO fields explicitly allowed across this boundary. */
+function safeDetail(value: unknown): SubmissionEvaluationDetail | undefined {
+  const detail = record(value);
+  const cases = detail?.testcases;
+  const testcaseCount = integer(detail?.testcaseCount);
+  const completedTestcaseCount = integer(detail?.completedTestcaseCount);
+  if (
+    !detail ||
+    !Array.isArray(cases) ||
+    cases.length > 64 ||
+    testcaseCount !== cases.length ||
+    completedTestcaseCount !== cases.length
+  )
+    return undefined;
+  const testcases = cases.map((item, index) => {
+    const testcase = record(item);
+    const verdict = testcase?.verdict;
+    const ordinal = integer(testcase?.ordinal);
+    if (
+      !testcase ||
+      ordinal !== index + 1 ||
+      typeof verdict !== 'string' ||
+      !verdicts.has(verdict)
+    )
+      return undefined;
+    const reasonCode = testcase.runtimeReasonCode;
+    const reason = testcase.runtimeReason;
+    if (
+      (reasonCode !== undefined &&
+        (typeof reasonCode !== 'string' ||
+          !/^[A-Z_]{1,64}$/.test(reasonCode))) ||
+      (reason !== undefined &&
+        (typeof reason !== 'string' || reason.length > 256))
+    )
+      return undefined;
+    return {
+      ordinal,
+      verdict:
+        verdict as SubmissionEvaluationDetail['testcases'][number]['verdict'],
+      ...(integer(testcase.timeMs) !== undefined
+        ? { timeMs: integer(testcase.timeMs)! }
+        : {}),
+      ...(integer(testcase.memoryBytes) !== undefined
+        ? { memoryBytes: integer(testcase.memoryBytes)! }
+        : {}),
+      ...(integer(testcase.exitCode) !== undefined
+        ? { exitCode: integer(testcase.exitCode)! }
+        : {}),
+      ...(reasonCode ? { runtimeReasonCode: reasonCode } : {}),
+      ...(reason ? { runtimeReason: reason } : {}),
+    };
+  });
+  if (testcases.some((item) => !item)) return undefined;
+  const compile = record(detail.compile);
+  if (compile && compile.status !== 'FAILED') return undefined;
+  const diagnostics = compile?.diagnostics;
+  if (
+    diagnostics !== undefined &&
+    (typeof diagnostics !== 'string' ||
+      Buffer.byteLength(diagnostics, 'utf8') > 8192)
+  )
+    return undefined;
+  return {
+    testcaseCount,
+    completedTestcaseCount,
+    ...(integer(detail.totalTimeMs) !== undefined
+      ? { totalTimeMs: integer(detail.totalTimeMs)! }
+      : {}),
+    ...(integer(detail.peakMemoryBytes) !== undefined
+      ? { peakMemoryBytes: integer(detail.peakMemoryBytes)! }
+      : {}),
+    ...(compile
+      ? {
+          compile: {
+            status: 'FAILED',
+            ...(integer(compile.durationMs) !== undefined
+              ? { durationMs: integer(compile.durationMs)! }
+              : {}),
+            ...(diagnostics ? { diagnostics } : {}),
+            truncated: Boolean(compile.truncated),
+          },
+        }
+      : {}),
+    testcases: testcases as SubmissionEvaluationDetail['testcases'],
+  };
+}
 
 export type JudgeServiceJob = {
   judgeJobId: string;
@@ -23,6 +121,7 @@ export type JudgeServiceJob = {
   manifestHash?: string;
   resultDigest?: string;
   completedAt?: string;
+  detail?: SubmissionEvaluationDetail;
 };
 
 export class JudgeServiceClient {
@@ -109,6 +208,7 @@ export function productPublication(
     ].includes(value.status)
   )
     return undefined;
+  const detail = safeDetail(value.detail);
   return {
     submissionId: value.externalSubmissionId,
     judgeJobId: value.judgeJobId,
@@ -122,5 +222,6 @@ export function productPublication(
     evaluationRecordDigest:
       value.resultDigest ?? `${value.judgeJobId}:${value.status}`,
     ...(value.completedAt ? { completedAt: value.completedAt } : {}),
+    ...(detail ? { detail } : {}),
   };
 }

@@ -20,6 +20,33 @@ export type SubmissionEvaluationStatus =
   | 'REJUDGE_PENDING'
   | 'REJUDGING';
 
+export type SubmissionTestcaseDetail = {
+  ordinal: number;
+  verdict: SubmissionVerdict;
+  timeMs?: number;
+  memoryBytes?: number;
+  exitCode?: number;
+  runtimeReasonCode?: string;
+  runtimeReason?: string;
+};
+
+export type SubmissionCompileDetail = {
+  status: 'FAILED';
+  durationMs?: number;
+  diagnostics?: string;
+  truncated: boolean;
+};
+
+/** A terminal, Judge-supplied safe read projection. */
+export type SubmissionEvaluationDetail = {
+  testcaseCount: number;
+  completedTestcaseCount: number;
+  totalTimeMs?: number;
+  peakMemoryBytes?: number;
+  compile?: SubmissionCompileDetail;
+  testcases: SubmissionTestcaseDetail[];
+};
+
 export type SubmissionEvaluation = {
   submissionId: string;
   evaluationGeneration: number;
@@ -28,6 +55,7 @@ export type SubmissionEvaluation = {
   testcaseSetId?: string;
   manifestHash?: string;
   verdictRecordDigest?: string;
+  detail?: SubmissionEvaluationDetail;
   evaluationRecordDigest: string;
   status: SubmissionEvaluationStatus;
   verdict?: SubmissionVerdict;

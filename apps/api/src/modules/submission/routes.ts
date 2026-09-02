@@ -243,7 +243,9 @@ export async function registerSubmissionModule(
         ? await context.evaluationHistory(submission.id)
         : [];
       return reply.send({
-        items: history.map(publicSubmissionEvaluation),
+        items: history.map((evaluation) =>
+          publicSubmissionEvaluation(evaluation),
+        ),
       });
     } catch (e) {
       if (e instanceof SubmissionNotFoundError)
@@ -267,6 +269,70 @@ export async function registerSubmissionModule(
       throw e;
     }
   });
+  app.get(
+    '/api/submissions/:id/evaluations/:generation',
+    async (request, reply) => {
+      try {
+        const submission = await service.detail(
+          (request.params as { id: string }).id,
+          await auth(request),
+        );
+        const generation = Number(
+          (request.params as { generation: string }).generation,
+        );
+        if (!Number.isSafeInteger(generation) || generation < 1)
+          return error(
+            reply,
+            request,
+            400,
+            'VALIDATION_ERROR',
+            'Invalid generation',
+          );
+        const history = context.evaluationHistory
+          ? await context.evaluationHistory(submission.id)
+          : [];
+        const evaluation = history.find(
+          (item) => item.evaluationGeneration === generation,
+        );
+        if (!evaluation)
+          return error(
+            reply,
+            request,
+            404,
+            'NOT_FOUND',
+            'Evaluation not found',
+          );
+        return reply.send({
+          submission: {
+            id: submission.id,
+            languageId: submission.languageId,
+            createdAt: submission.createdAt,
+          },
+          evaluation: publicSubmissionEvaluation(evaluation, true),
+        });
+      } catch (e) {
+        if (e instanceof SubmissionNotFoundError)
+          return error(reply, request, 404, 'NOT_FOUND', e.message);
+        if (e instanceof Error && e.message === 'UNAUTHENTICATED')
+          return error(
+            reply,
+            request,
+            401,
+            'UNAUTHENTICATED',
+            'Authentication required',
+          );
+        if (e instanceof Error && e.message === 'FORBIDDEN')
+          return error(
+            reply,
+            request,
+            403,
+            'FORBIDDEN',
+            'Submission detail is forbidden',
+          );
+        throw e;
+      }
+    },
+  );
   app.get('/api/problems/:problemId/submissions', async (request, reply) =>
     listRoute(
       service,

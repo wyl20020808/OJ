@@ -735,6 +735,142 @@ pre {
 .judge-actions {
   margin-top: 0.65rem;
 }
+.submission-detail {
+  max-width: 940px;
+}
+.submission-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin: var(--space-3) 0 var(--space-5);
+}
+.submission-heading h1 {
+  margin: 0;
+  font-size: 2.5rem;
+}
+.submission-heading p,
+.submission-muted {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+}
+.submission-verdict {
+  min-width: 4.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid #9dd6bb;
+  border-radius: 6px;
+  background: #edf9f1;
+  color: var(--success);
+  font-size: 1.1rem;
+  text-align: center;
+}
+.submission-facts,
+.submission-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--line);
+}
+.submission-facts > div,
+.submission-metrics > div {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+}
+.submission-facts dt,
+.submission-metrics span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.submission-facts dd,
+.submission-metrics strong {
+  display: block;
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.submission-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-3);
+}
+.submission-generation,
+.testcase-results {
+  margin-top: var(--space-8);
+}
+.submission-generation h2,
+.testcase-results h2,
+.submission-pending h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.generation-list,
+.testcase-list {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.generation-list button {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+}
+.generation-list button:hover:not(:disabled),
+.generation-list .generation-current {
+  border-color: var(--state-selected-border);
+  background: var(--state-selected);
+  color: var(--ink);
+}
+.submission-pending {
+  margin-top: var(--space-8);
+  padding: var(--space-5);
+  border-left: 3px solid var(--accent);
+  background: var(--surface-tint);
+}
+.submission-pending p {
+  margin-bottom: 0;
+  color: var(--muted);
+}
+.submission-metrics {
+  margin-top: var(--space-8);
+}
+.compiler-diagnostics {
+  min-height: 0;
+  max-height: 20rem;
+  margin: 0;
+}
+.testcase-row {
+  display: grid;
+  grid-template-columns: 4rem 5rem minmax(5rem, 1fr) minmax(6rem, 1fr) minmax(
+      0,
+      2fr
+    );
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-variant-numeric: tabular-nums;
+}
+.testcase-verdict {
+  font-weight: 800;
+}
+.testcase-reason {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
 .tone-progress {
   border-color: #a8d5df;
   background: #effafd;
@@ -1367,6 +1503,16 @@ footer {
   .problem-meta {
     display: none;
   }
+  .submission-facts,
+  .submission-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .testcase-row {
+    grid-template-columns: 3.5rem 4.5rem minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .testcase-reason {
+    grid-column: 3 / -1;
+  }
 }
 @media (max-width: 560px) {
   .nav {
@@ -1483,6 +1629,32 @@ footer {
   .limits {
     flex-direction: column;
     gap: 0.3rem;
+  }
+  .submission-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .submission-heading h1 {
+    font-size: 2rem;
+  }
+  .submission-verdict {
+    align-self: flex-start;
+  }
+  .submission-facts,
+  .submission-metrics {
+    grid-template-columns: 1fr;
+  }
+  .generation-list button {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .testcase-row {
+    grid-template-columns: 3.25rem 4.25rem minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+  .testcase-row > :nth-child(4),
+  .testcase-reason {
+    grid-column: 3;
   }
 }
 

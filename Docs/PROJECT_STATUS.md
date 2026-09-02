@@ -2,8 +2,10 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: PHASE 3D PASS
-Current Status: PHASE 3D PASS / REAL SUBMISSION AND IMMUTABLE JUDGE DATA DISPATCH QUALIFIED FOR THE LOCAL PRODUCT-TO-SANDBOX SCOPE
+Current Stage: PHASE 3D.1 PASS
+Current Status: PHASE 3D.1 PASS / SUBMISSION DETAIL AND PER-TESTCASE PRODUCT PROJECTION QUALIFIED FOR THE LOCAL PRODUCT-TO-SANDBOX SCOPE
+
+Phase 3D.1 Submission Detail + Per-Testcase Results V1: PASS for the qualified local scope. Terminal Judge facts are reduced to a safe durable per-generation Product projection; no Product verdict engine was added. The selected-generation API, immutable historical detail, bounded scrubbed CE diagnostics, responsive detail UI, and strict stale/duplicate/backfill protections are implemented and tested. Existing real Phase 3D AC/WA/CE/RE/TLE/MLE records and Generation 1 -> 2 were projected and persisted locally; owner browser details were checked at desktop/tablet/mobile without overflow or console errors. Generation-selector browser behavior is covered by focused Web tests; this session could not authenticate as the historical Generation 1 -> 2 owner. No production or unsupported Judge/Product features are claimed; see `OJPLATFORM_PHASE_3D1_SUBMISSION_DETAIL_PER_TESTCASE_RESULTS_V1_REPORT.md`.
 
 Phase 3D Real Submission + Judge Dispatch Product Flow V1: PASS for the qualified local scope. Product Submissions bind one exact published JudgeDataVersion and manifest hash, Product reads and hash-verifies private testcase objects before creating the existing 2C.4 manifest for dispatch, C++20 is the only submission profile, and Guest owner binding/rate limiting plus Product-only status presentation are implemented. Fresh Guest Browser -> Product -> standalone Judge Service -> Worker -> Supervisor -> Sandbox -> Product projection paths are RUNTIME VERIFIED for AC, WA, CE, RE, TLE, and MLE. Product API rejudge is RUNTIME VERIFIED from generation 1 to 2; inherited 2C.6 real PostgreSQL evidence covers cancellation without a verdict, stale publication rejection, and duplicate-rejudge serialization. Responsive submission presentation is verified at desktop/tablet/mobile viewports. No unsupported browser lifecycle mutation or production qualification is claimed; see `OJPLATFORM_PHASE_3D_REAL_SUBMISSION_JUDGE_DISPATCH_PRODUCT_FLOW_V1_REPORT.md`.
 
@@ -51,6 +53,7 @@ READY FOR NEXT PHASE 2C GOAL: YES
 - PHASE 2C.3 — Deterministic Testcase Execution & Runtime Measurement Contract: PASS
 - PHASE 2C.4 — Testcase Set Execution & Aggregation Foundation: PASS
 - PHASE 3C — Problem Judge Data Lead Integration & Guest Authoring: PASS
+- PHASE 3D.1 — Submission Detail & Per-Testcase Results V1: PASS
 
 ## Current Project State
 

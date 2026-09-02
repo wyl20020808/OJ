@@ -391,7 +391,7 @@ describe('Web platform shell', () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: 'sub-x' }));
     expect(
-      await screen.findByRole('heading', { name: 'sub-x' }),
+      await screen.findByRole('heading', { name: 'Submission #sub-x' }),
     ).toBeInTheDocument();
     expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
