@@ -150,7 +150,7 @@ export function SandboxOperationsPage({
               onClick={() => void start(qualificationProbe)}
               disabled={busy || !hasProbe(qualificationProbe)}
             >
-              Start trusted qualification probe
+              启动可信资格探针
             </button>
           )}
           {(state.projection.qualificationState === 'QUALIFICATION_PENDING' ||
@@ -161,7 +161,7 @@ export function SandboxOperationsPage({
                 onClick={() => void start(cancellationProbe)}
                 disabled={busy}
               >
-                Start cancellation probe
+                启动取消探针
               </button>
             )}
           {(state.projection.qualificationState === 'QUALIFICATION_PENDING' ||
@@ -172,12 +172,12 @@ export function SandboxOperationsPage({
                 onClick={() => void start(cleanupFailureProbe)}
                 disabled={busy}
               >
-                Run cleanup failure fixture
+                运行清理失败测试夹具
               </button>
             )}
           {polling && overview?.activeProbeId && (
             <button type="button" onClick={() => void cancel()} disabled={busy}>
-              Cancel trusted probe
+              取消可信探针
             </button>
           )}
           {(state.projection.qualificationState === 'CLEANUP_FAILED' ||
@@ -187,7 +187,7 @@ export function SandboxOperationsPage({
               onClick={() => void cleanup()}
               disabled={busy}
             >
-              Verify Sandbox cleanup
+              验证沙箱清理
             </button>
           )}
           {state.projection.qualificationState === 'CLEANUP_FAILED' && (
@@ -196,17 +196,17 @@ export function SandboxOperationsPage({
               onClick={() => void recover()}
               disabled={busy}
             >
-              Recover qualification cleanup
+              恢复资格清理
             </button>
           )}
           {overview?.lastProbeId && overview.lastProbePass !== null && (
-            <p role="status" aria-label="Last trusted probe result">
-              Last trusted probe: {overview.lastProbePass ? 'Passed' : 'Failed'}
+            <p role="status" aria-label="最近可信探针结果">
+              最近可信探针：{overview.lastProbePass ? '通过' : '失败'}
             </p>
           )}
           {actionError && (
             <p className="error" role="alert">
-              Sandbox operation was rejected by the server.
+              沙箱操作被服务器拒绝。
             </p>
           )}
         </div>

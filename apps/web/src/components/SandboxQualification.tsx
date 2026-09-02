@@ -69,79 +69,79 @@ const statusPresentation: Record<
   SandboxStatusPresentation
 > = {
   NOT_CONFIGURED: {
-    label: 'Sandbox not configured',
+    label: '沙箱未配置',
     tone: 'neutral',
-    note: 'Security qualification is unavailable until a backend is configured.',
+    note: '配置后端前无法进行安全资格验证。',
     securitySignificant: false,
     qualified: false,
   },
   CONFIGURED: {
-    label: 'Sandbox backend configured',
+    label: '沙箱后端已配置',
     tone: 'neutral',
-    note: 'Configuration is present; security qualification has not completed.',
+    note: '配置已存在，但安全资格验证尚未完成。',
     securitySignificant: false,
     qualified: false,
   },
   IMPLEMENTATION_IN_PROGRESS: {
-    label: 'Sandbox implementation in progress',
+    label: '沙箱实现进行中',
     tone: 'progress',
-    note: 'The backend is not qualified for real submission execution.',
+    note: '后端尚未通过真实提交执行资格验证。',
     securitySignificant: false,
     qualified: false,
   },
   QUALIFICATION_PENDING: {
-    label: 'Sandbox qualification pending',
+    label: '沙箱资格待验证',
     tone: 'warning',
-    note: 'Security qualification has not started or is waiting for an approved probe.',
+    note: '安全资格验证尚未开始，或正在等待已批准的探针。',
     securitySignificant: false,
     qualified: false,
   },
   QUALIFYING: {
-    label: 'Qualification probe running',
+    label: '资格探针运行中',
     tone: 'progress',
-    note: 'A security qualification probe is running; user source is not executed.',
+    note: '安全资格探针正在运行，不会执行用户源码。',
     securitySignificant: false,
     qualified: false,
   },
   QUALIFIED: {
-    label: 'Sandbox security qualified',
+    label: '沙箱安全资格已通过',
     tone: 'success',
-    note: 'The server reports a qualified Sandbox policy for the approved probe suite.',
+    note: '服务器报告已批准探针套件对应的沙箱策略通过验证。',
     securitySignificant: false,
     qualified: true,
   },
   DEGRADED: {
-    label: 'Sandbox degraded',
+    label: '沙箱能力降级',
     tone: 'warning',
-    note: 'Sandbox capability is degraded; real submission execution remains disabled.',
+    note: '沙箱能力已降级，真实提交执行仍保持禁用。',
     securitySignificant: true,
     qualified: false,
   },
   UNAVAILABLE: {
-    label: 'Sandbox unavailable',
+    label: '沙箱不可用',
     tone: 'danger',
-    note: 'The Sandbox service is unavailable; qualification cannot be trusted.',
+    note: '沙箱服务不可用，无法信任资格验证结果。',
     securitySignificant: true,
     qualified: false,
   },
   QUALIFICATION_FAILED: {
-    label: 'Sandbox qualification failed',
+    label: '沙箱资格验证失败',
     tone: 'danger',
-    note: 'The approved security qualification did not pass.',
+    note: '已批准的安全资格验证未通过。',
     securitySignificant: true,
     qualified: false,
   },
   CLEANUP_FAILED: {
-    label: 'Cleanup verification failed',
+    label: '清理验证失败',
     tone: 'danger',
-    note: 'Security-significant cleanup failure: the Sandbox cannot be treated as qualified.',
+    note: '发生安全相关的清理失败，沙箱不能视为已通过资格验证。',
     securitySignificant: true,
     qualified: false,
   },
   UNKNOWN: {
-    label: 'Unknown Sandbox state',
+    label: '未知沙箱状态',
     tone: 'neutral',
-    note: 'The server returned an unrecognized state; qualification is not assumed.',
+    note: '服务器返回了无法识别的状态，不假定其已通过资格验证。',
     securitySignificant: true,
     qualified: false,
   },
@@ -160,21 +160,21 @@ export function presentCapabilityState(state: string): {
 } {
   switch (state as SandboxCapabilityState) {
     case 'qualified':
-      return { label: 'Qualified', tone: 'success' };
+      return { label: '已通过', tone: 'success' };
     case 'configured':
-      return { label: 'Configured', tone: 'neutral' };
+      return { label: '已配置', tone: 'neutral' };
     case 'qualification_pending':
-      return { label: 'Qualification pending', tone: 'warning' };
+      return { label: '待验证', tone: 'warning' };
     case 'implementation_pending':
-      return { label: 'Implementation pending', tone: 'warning' };
+      return { label: '实现待完成', tone: 'warning' };
     case 'degraded':
-      return { label: 'Degraded', tone: 'warning' };
+      return { label: '已降级', tone: 'warning' };
     case 'failed':
-      return { label: 'Failed', tone: 'danger' };
+      return { label: '失败', tone: 'danger' };
     case 'unsupported':
-      return { label: 'Unsupported', tone: 'neutral' };
+      return { label: '不支持', tone: 'neutral' };
     default:
-      return { label: 'Unknown', tone: 'neutral' };
+      return { label: '未知', tone: 'neutral' };
   }
 }
 
@@ -196,14 +196,13 @@ export function presentSandboxTransportError(
   error: SandboxTransportError,
 ): string {
   if (error.status === 401 || error.status === 403 || error.status === 404)
-    return 'Sandbox qualification details are not available for this session.';
+    return '当前会话无法查看沙箱资格详情。';
   if (error.status === 409)
-    return 'Sandbox qualification changed on the server. Refresh to view the current state.';
-  if (error.status === 422)
-    return 'The qualification request was rejected by the current policy.';
+    return '服务器上的沙箱资格状态已变化，请刷新查看最新状态。';
+  if (error.status === 422) return '当前策略拒绝了资格验证请求。';
   if (typeof error.status === 'number' && error.status >= 500)
-    return 'Sandbox qualification service is temporarily unavailable.';
-  return 'Sandbox qualification service could not be reached.';
+    return '沙箱资格服务暂时不可用。';
+  return '无法连接沙箱资格服务。';
 }
 
 export type SandboxQualificationLoadState = {
@@ -269,8 +268,7 @@ function CapabilityList({
 }: {
   capabilities: SandboxCapability[];
 }) {
-  if (!capabilities.length)
-    return <p className="muted">No capability projection was provided.</p>;
+  if (!capabilities.length) return <p className="muted">未提供能力投影。</p>;
   return (
     <ul className="sandbox-capabilities">
       {capabilities.map((capability) => {
@@ -304,14 +302,14 @@ export function SandboxQualificationOverview({
   if (!authorized)
     return (
       <section className="sandbox-overview" aria-labelledby="sandbox-title">
-        <h2 id="sandbox-title">Sandbox qualification</h2>
-        <p role="status">Sandbox qualification details are not available.</p>
+        <h2 id="sandbox-title">沙箱资格验证</h2>
+        <p role="status">当前会话无法查看沙箱资格详情。</p>
       </section>
     );
   if (error)
     return (
       <section className="sandbox-overview" aria-labelledby="sandbox-title">
-        <h2 id="sandbox-title">Sandbox qualification</h2>
+        <h2 id="sandbox-title">沙箱资格验证</h2>
         <p className="error" role="alert">
           {presentSandboxTransportError(error)}
         </p>
@@ -325,8 +323,8 @@ export function SandboxQualificationOverview({
   if (!projection)
     return (
       <section className="sandbox-overview" aria-labelledby="sandbox-title">
-        <h2 id="sandbox-title">Sandbox qualification</h2>
-        <p role="status">Sandbox qualification status is pending.</p>
+        <h2 id="sandbox-title">沙箱资格验证</h2>
+        <p role="status">沙箱资格状态待确认。</p>
       </section>
     );
   const status = presentSandboxStatus(projection.qualificationState);
@@ -334,12 +332,12 @@ export function SandboxQualificationOverview({
     <section className="sandbox-overview" aria-labelledby="sandbox-title">
       <div className="sandbox-heading">
         <div>
-          <p className="panel-label">SECURITY QUALIFICATION</p>
-          <h2 id="sandbox-title">Sandbox qualification</h2>
+          <p className="panel-label">安全资格验证</p>
+          <h2 id="sandbox-title">沙箱资格验证</h2>
         </div>
         {onRefresh && (
           <button type="button" onClick={onRefresh} disabled={refreshing}>
-            {refreshing ? 'Refreshing…' : 'Refresh status'}
+            {refreshing ? '刷新中…' : '刷新状态'}
           </button>
         )}
       </div>
@@ -353,36 +351,35 @@ export function SandboxQualificationOverview({
       </div>
       <dl className="sandbox-facts">
         <div>
-          <dt>Backend</dt>
+          <dt>后端</dt>
           <dd>{safeValue(projection.backendType)}</dd>
         </div>
         <div>
-          <dt>Policy version</dt>
+          <dt>策略版本</dt>
           <dd>{safeValue(projection.policyVersion)}</dd>
         </div>
         <div>
-          <dt>Probe suite</dt>
+          <dt>探针套件</dt>
           <dd>{safeValue(projection.probeSuiteVersion)}</dd>
         </div>
         <div>
-          <dt>Last qualification</dt>
+          <dt>最近验证</dt>
           <dd>{safeValue(projection.lastQualificationAt)}</dd>
         </div>
         <div>
-          <dt>Real submission execution</dt>
-          <dd>Disabled / unqualified</dd>
+          <dt>真实提交执行</dt>
+          <dd>已禁用 / 未通过验证</dd>
         </div>
       </dl>
       {projection.failureCategory && (
         <p className="sandbox-failure" role="alert">
-          Safe failure category: {safeValue(projection.failureCategory)}
+          安全失败分类：{safeValue(projection.failureCategory)}
         </p>
       )}
-      <h3>Capability summary</h3>
+      <h3>能力摘要</h3>
       <CapabilityList capabilities={projection.capabilities} />
       <p className="muted sandbox-honesty">
-        Qualification probes are security checks only. They are not user-code
-        execution and do not produce OJ verdicts.
+        资格探针仅用于安全检查，不执行用户代码，也不会产生 OJ 判定结果。
       </p>
     </section>
   );

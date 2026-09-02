@@ -7,9 +7,66 @@ export type ApiErrorBody = {
 export type AuthenticatedUser = {
   id: string;
   username: string;
-  email: string;
+  email: string | null;
   displayName: string;
   status: 'active';
+  guest?: boolean;
+  upgradeHint?: string;
+};
+export type Account = AuthenticatedUser & {
+  createdAt: string;
+  updatedAt: string;
+  capabilities: { canManageSessions: boolean };
+};
+export type Session = {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastSeenAt?: string;
+  deviceLabel?: string;
+};
+export type AuthProvider = 'wechat' | 'qq' | 'google' | 'github';
+export type AuthMethods = {
+  registration: { email: boolean; phone: boolean };
+  login: {
+    emailPassword: boolean;
+    phonePassword: boolean;
+    emailCode: boolean;
+    phoneCode: boolean;
+  };
+  providers: Record<AuthProvider, 'enabled' | 'disabled' | 'not_configured'>;
+  passwordPolicy: { minLength: number };
+};
+export type AuthCapabilities = {
+  guestLogin: { available: boolean };
+};
+export type VerificationChallenge = {
+  challengeId: string;
+  channel: 'EMAIL' | 'SMS';
+  destination: string;
+  expiresAt: string;
+  resendAt: string;
+  attemptsRemaining: number;
+};
+export type VerificationGrant = {
+  grantId: string;
+  purpose: 'REGISTER' | 'LOGIN_CODE' | 'ADD_IDENTIFIER';
+  destination: string;
+  expiresAt: string;
+};
+export type ConnectedIdentity = {
+  provider: AuthProvider;
+  subjectLabel?: string;
+  linkedAt: string;
+};
+export type AccountIdentifier = {
+  id: string;
+  type: 'EMAIL' | 'PHONE';
+  maskedValue: string;
+  verifiedAt: string;
+  primary: boolean;
+  loginCapable: boolean;
 };
 export type Example = { input: string; output: string; note?: string };
 export type Problem = {
@@ -29,12 +86,94 @@ export type Problem = {
   testdataVersion: string | null;
   authorId: string | null;
   currentRevisionId?: string;
+  difficulty?: string;
+  tags?: string[];
+  source?: string;
+  statistics?: {
+    submissionCount: number;
+    acceptedCount: number;
+  };
   createdAt: string;
   updatedAt: string;
 };
 export type Page = { limit: number; offset: number; total: number };
 export type ProblemList = { items: Problem[]; page: Page };
 export type Home = { recentProblems: Problem[] };
+export type BackendContest = {
+  id: string;
+  title: string;
+  description: string;
+  ownerUserId: string;
+  visibility: 'PUBLIC' | 'PRIVATE';
+  lifecycle: 'DRAFT' | 'UPCOMING' | 'RUNNING' | 'ENDED' | 'CANCELLED';
+  format: 'ICPC' | 'IOI' | 'OI' | 'CUSTOM';
+  startsAt: string;
+  endsAt: string;
+  registrationOpenAt?: string | null;
+  registrationCloseAt?: string | null;
+  canManage: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+export type ProfileCapability =
+  { available: true } | { available: false; reason: string };
+export type ProfileCapabilities = {
+  contractVersion: string;
+  favorites: ProfileCapability;
+  myContests: ProfileCapability;
+  myProblems: ProfileCapability;
+  activity: ProfileCapability;
+  heatmap: ProfileCapability;
+  teams: ProfileCapability;
+  homework: ProfileCapability;
+  wrongbook: ProfileCapability;
+};
+export type PublicProfile = {
+  username: string;
+  displayName: string;
+  createdAt: string;
+  capabilities: ProfileCapabilities;
+};
+export type FavoriteProblem = {
+  problemId: string;
+  slug: string;
+  title: string;
+  timeLimitMs: number;
+  memoryLimitBytes: number;
+  favoritedAt: string;
+};
+export type FavoriteList = {
+  items: FavoriteProblem[];
+  page: { limit: number; total: number; nextCursor?: string };
+};
+export type ProfileContestRelationship = 'CREATED' | 'MANAGED' | 'REGISTERED';
+export type ProfileContest = {
+  id: string;
+  title: string;
+  visibility: BackendContest['visibility'];
+  lifecycle: BackendContest['lifecycle'];
+  startsAt: string;
+  endsAt: string;
+  relationship: ProfileContestRelationship;
+  relationshipAt: string;
+};
+export type ProfileContestList = {
+  items: ProfileContest[];
+  page: { limit: number; nextCursor?: string };
+};
+export type ProfileProblem = {
+  id: string;
+  slug: string;
+  title: string;
+  status: Problem['status'];
+  visibility: Problem['visibility'];
+  createdAt: string;
+  updatedAt: string;
+};
+export type ProfileProblemList = {
+  items: ProfileProblem[];
+  page: { limit: number; total: number; nextCursor?: string };
+};
 export type Language = {
   id: string;
   name: string;
@@ -144,6 +283,13 @@ export type ProblemInput = Omit<
 > & {
   testdataVersion?: string | null;
 };
+import type {
+  ContestProblem,
+  FriendRequest,
+  FriendSummary,
+  Message,
+  NotificationSummary,
+} from './portal-contracts.js';
 export class ApiError extends Error {
   readonly code: string;
   readonly requestId: string;
@@ -192,6 +338,22 @@ async function request<T>(
   return (await response.json()) as T;
 }
 export type ApiClient = ReturnType<typeof createApiClient>;
+const defaultAuthMethods: AuthMethods = {
+  registration: { email: false, phone: false },
+  login: {
+    emailPassword: false,
+    phonePassword: false,
+    emailCode: false,
+    phoneCode: false,
+  },
+  providers: {
+    wechat: 'not_configured',
+    qq: 'not_configured',
+    google: 'not_configured',
+    github: 'not_configured',
+  },
+  passwordPolicy: { minLength: 8 },
+};
 export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
   return {
     me: () =>
@@ -225,14 +387,474 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'POST', body: '{}' },
         fetcher,
       ),
-    problems: (offset = 0, limit = 20) =>
-      request<ProblemList>(
+    account: () =>
+      request<Account>(baseUrl, '/api/auth/account', undefined, fetcher),
+    sessions: () =>
+      request<Session[]>(baseUrl, '/api/auth/sessions', undefined, fetcher),
+    revokeSession: (id: string) =>
+      request<void>(
         baseUrl,
-        `/api/problems?offset=${offset}&limit=${limit}`,
+        `/api/auth/sessions/${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
+    revokeAllSessions: () =>
+      request<void>(
+        baseUrl,
+        '/api/auth/sessions/revoke-all',
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    authMethods: () =>
+      request<AuthMethods>(
+        baseUrl,
+        '/api/auth/methods',
+        undefined,
+        fetcher,
+      ).catch((error) => {
+        if (error instanceof ApiError && [404, 501].includes(error.status))
+          return defaultAuthMethods;
+        throw error;
+      }),
+    authCapabilities: () =>
+      request<AuthCapabilities>(
+        baseUrl,
+        '/api/auth/capabilities',
+        undefined,
+        fetcher,
+      ).catch((error) => {
+        if (error instanceof ApiError && [404, 501].includes(error.status))
+          return { guestLogin: { available: false } };
+        throw error;
+      }),
+    guestContinue: () =>
+      request<AuthenticatedUser & { guest: true }>(
+        baseUrl,
+        '/api/auth/guest/continue',
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    requestVerification: (input: {
+      channel: 'EMAIL' | 'SMS';
+      purpose: 'REGISTER' | 'LOGIN_CODE' | 'ADD_IDENTIFIER';
+      destination: string;
+    }) =>
+      request<VerificationChallenge>(
+        baseUrl,
+        '/api/auth/verification/challenges',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    verifyVerification: (challengeId: string, code: string) =>
+      request<VerificationGrant>(
+        baseUrl,
+        `/api/auth/verification/challenges/${encodeURIComponent(challengeId)}/verify`,
+        { method: 'POST', body: JSON.stringify({ code }) },
+        fetcher,
+      ),
+    registerVerified: (input: {
+      grantId: string;
+      identifierType: 'EMAIL' | 'PHONE';
+      username: string;
+      displayName: string;
+      password: string;
+    }) =>
+      request<AuthenticatedUser>(
+        baseUrl,
+        '/api/auth/register/verified',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    loginPassword: (input: {
+      identifierType: 'EMAIL' | 'PHONE';
+      identifier: string;
+      password: string;
+    }) =>
+      request<AuthenticatedUser>(
+        baseUrl,
+        '/api/auth/login/password',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    loginCode: (input: { grantId: string }) =>
+      request<AuthenticatedUser>(
+        baseUrl,
+        '/api/auth/login/code',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    oauthStart: (provider: AuthProvider, returnTo = '/') =>
+      request<{ authorizationUrl: string }>(
+        baseUrl,
+        `/api/auth/oauth/${provider}/start`,
+        { method: 'POST', body: JSON.stringify({ returnTo }) },
+        fetcher,
+      ),
+    completeSocialOnboarding: (input: {
+      transactionId: string;
+      username: string;
+      displayName: string;
+    }) =>
+      request<AuthenticatedUser>(
+        baseUrl,
+        '/api/auth/oauth/onboarding',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    accountIdentifiers: () =>
+      request<AccountIdentifier[]>(
+        baseUrl,
+        '/api/auth/account/identifiers',
         undefined,
         fetcher,
       ),
+    connectedIdentities: () =>
+      request<ConnectedIdentity[]>(
+        baseUrl,
+        '/api/auth/account/identities',
+        undefined,
+        fetcher,
+      ),
+    unlinkIdentity: (provider: AuthProvider) =>
+      request<void>(
+        baseUrl,
+        `/api/auth/account/identities/${provider}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
+    problems: (offset = 0, limit = 20, options: { search?: string } = {}) => {
+      const params = new URLSearchParams({
+        offset: String(offset),
+        limit: String(limit),
+      });
+      if (options.search) params.set('search', options.search);
+      return request<ProblemList>(
+        baseUrl,
+        `/api/problems?${params.toString()}`,
+        undefined,
+        fetcher,
+      );
+    },
     home: () => request<Home>(baseUrl, '/api/home', undefined, fetcher),
+    profileCapabilities: () =>
+      request<ProfileCapabilities>(
+        baseUrl,
+        '/api/profile/capabilities',
+        undefined,
+        fetcher,
+      ),
+    publicProfile: (username: string) =>
+      request<PublicProfile>(
+        baseUrl,
+        `/api/profiles/${encodeURIComponent(username)}`,
+        undefined,
+        fetcher,
+      ),
+    profileFavorites: (limit = 20, cursor?: string) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (cursor) params.set('cursor', cursor);
+      return request<FavoriteList>(
+        baseUrl,
+        `/api/profile/favorites?${params.toString()}`,
+        undefined,
+        fetcher,
+      );
+    },
+    addFavorite: (problemId: string) =>
+      request<{ problemId: string; favorited: true; createdAt?: string }>(
+        baseUrl,
+        `/api/profile/favorites/${encodeURIComponent(problemId)}`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    removeFavorite: (problemId: string) =>
+      request<void>(
+        baseUrl,
+        `/api/profile/favorites/${encodeURIComponent(problemId)}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
+    profileContests: (
+      kind?: ProfileContestRelationship,
+      limit = 20,
+      cursor?: string,
+    ) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (kind) params.set('kind', kind);
+      if (cursor) params.set('cursor', cursor);
+      return request<ProfileContestList>(
+        baseUrl,
+        `/api/profile/contests?${params.toString()}`,
+        undefined,
+        fetcher,
+      );
+    },
+    profileProblems: (limit = 20, cursor?: string) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (cursor) params.set('cursor', cursor);
+      return request<ProfileProblemList>(
+        baseUrl,
+        `/api/profile/problems?${params.toString()}`,
+        undefined,
+        fetcher,
+      );
+    },
+    contests: (limit = 20) =>
+      request<{ items: BackendContest[] }>(
+        baseUrl,
+        `/api/contests?limit=${encodeURIComponent(String(limit))}`,
+        undefined,
+        fetcher,
+      ),
+    contest: (id: string) =>
+      request<BackendContest>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}`,
+        undefined,
+        fetcher,
+      ),
+    contestProblems: (id: string) =>
+      request<{
+        items: Array<
+          ContestProblem & {
+            ordinal?: number;
+            pointsConfig?: { score?: number } | null;
+          }
+        >;
+      }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/problems`,
+        undefined,
+        fetcher,
+      ),
+    createContest: (input: {
+      title: string;
+      description?: string;
+      startsAt: string;
+      endsAt: string;
+      visibility: 'PUBLIC' | 'PRIVATE';
+      format?: 'ICPC' | 'IOI' | 'OI' | 'CUSTOM';
+      registrationOpenAt?: string | null;
+      registrationCloseAt?: string | null;
+      privatePassword?: string;
+    }) =>
+      request<BackendContest>(
+        baseUrl,
+        '/api/contests',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    publishContest: (id: string) =>
+      request<BackendContest>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/publish`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    updateContest: (id: string, input: Record<string, unknown>) =>
+      request<BackendContest>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}`,
+        { method: 'PATCH', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    setContestProblems: (
+      id: string,
+      problems: Array<{ problemId: string; score?: number }>,
+    ) =>
+      request<{ items: Array<{ problemId: string; score?: number }> }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/problems`,
+        { method: 'PUT', body: JSON.stringify({ problems }) },
+        fetcher,
+      ),
+    registerContest: (id: string, accessCode?: string) =>
+      request<{
+        contestId: string;
+        userId: string;
+        status: string;
+        registeredAt: string;
+      }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/register`,
+        {
+          method: 'POST',
+          body: JSON.stringify(accessCode ? { accessCode } : {}),
+        },
+        fetcher,
+      ),
+    unregisterContest: (id: string) =>
+      request<void>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/register`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
+    contestRegistration: (id: string) =>
+      request<{
+        status: string;
+        contestId?: string;
+        userId?: string;
+        registeredAt?: string;
+      }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/registration`,
+        undefined,
+        fetcher,
+      ),
+    contestParticipants: (id: string) =>
+      request<{
+        items: Array<{
+          id: string;
+          username?: string;
+          displayName?: string;
+          registeredAt?: string;
+        }>;
+      }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/participants`,
+        undefined,
+        fetcher,
+      ),
+    contestHomeSummary: () =>
+      request<{
+        running: BackendContest[];
+        upcoming: BackendContest[];
+        recentEnded: BackendContest[];
+      }>(baseUrl, '/api/contests/home-summary', undefined, fetcher),
+    contestStandings: (id: string) =>
+      request<
+        | { available: true; items: unknown[] }
+        | { available: false; reason: string }
+      >(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/standings`,
+        undefined,
+        fetcher,
+        [503],
+      ),
+    friends: () =>
+      request<{ items: FriendSummary[] }>(
+        baseUrl,
+        '/api/friends',
+        undefined,
+        fetcher,
+      ),
+    searchUsers: (query: string) =>
+      request<{ items: FriendSummary[] }>(
+        baseUrl,
+        `/api/users/search?q=${encodeURIComponent(query)}`,
+        undefined,
+        fetcher,
+      ),
+    sendFriendRequest: (targetUserId: string, note?: string) =>
+      request<{ id: string; state: FriendRequest['state'] }>(
+        baseUrl,
+        '/api/friend-requests',
+        { method: 'POST', body: JSON.stringify({ targetUserId, note }) },
+        fetcher,
+      ),
+    resolveFriendRequest: (id: string, action: 'accept' | 'reject') =>
+      request<{ id: string; state: FriendRequest['state'] }>(
+        baseUrl,
+        `/api/friend-requests/${encodeURIComponent(id)}/${action}`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    friendRequests: (direction: 'incoming' | 'outgoing') =>
+      request<{ items: FriendRequest[] }>(
+        baseUrl,
+        `/api/friend-requests?direction=${direction}`,
+        undefined,
+        fetcher,
+      ),
+    cancelFriendRequest: (id: string) =>
+      request<void>(
+        baseUrl,
+        `/api/friend-requests/${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
+    removeFriend: (userId: string) =>
+      request<void>(
+        baseUrl,
+        `/api/friends/${encodeURIComponent(userId)}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
+    conversations: () =>
+      request<{ items: Array<ConversationSummaryApi> }>(
+        baseUrl,
+        '/api/conversations',
+        undefined,
+        fetcher,
+      ),
+    conversationMessages: (id: string, limit = 50, cursor?: string) =>
+      request<{ items: Message[]; nextCursor?: string }>(
+        baseUrl,
+        `/api/conversations/${encodeURIComponent(id)}/messages?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        undefined,
+        fetcher,
+      ),
+    createDirectConversation: (userId: string) =>
+      request<{ id: string; kind: 'DIRECT' }>(
+        baseUrl,
+        '/api/conversations/direct',
+        { method: 'POST', body: JSON.stringify({ userId }) },
+        fetcher,
+      ),
+    sendMessage: (id: string, body: string, clientMessageId: string) =>
+      request<Message>(
+        baseUrl,
+        `/api/conversations/${encodeURIComponent(id)}/messages`,
+        { method: 'POST', body: JSON.stringify({ body, clientMessageId }) },
+        fetcher,
+      ),
+    markConversationRead: (id: string, messageId?: string) =>
+      request<void>(
+        baseUrl,
+        `/api/conversations/${encodeURIComponent(id)}/read`,
+        {
+          method: 'POST',
+          body: JSON.stringify(messageId ? { messageId } : {}),
+        },
+        fetcher,
+      ),
+    unreadMessages: () =>
+      request<{ count: number }>(
+        baseUrl,
+        '/api/messages/unread-count',
+        undefined,
+        fetcher,
+      ),
+    notifications: (limit = 50) =>
+      request<{ items: NotificationSummary[]; nextCursor?: string }>(
+        baseUrl,
+        `/api/notifications?limit=${limit}`,
+        undefined,
+        fetcher,
+      ),
+    unreadNotifications: () =>
+      request<{ count: number }>(
+        baseUrl,
+        '/api/notifications/unread-count',
+        undefined,
+        fetcher,
+      ),
+    markNotificationRead: (id: string) =>
+      request<void>(
+        baseUrl,
+        `/api/notifications/${encodeURIComponent(id)}/read`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    markAllNotificationsRead: () =>
+      request<void>(
+        baseUrl,
+        '/api/notifications/read-all',
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
     problem: (idOrSlug: string) =>
       request<Problem>(
         baseUrl,
@@ -370,3 +992,11 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       }>(baseUrl, '/ready', undefined, fetcher, [503]),
   };
 }
+
+type ConversationSummaryApi = {
+  id: string;
+  kind: 'DIRECT';
+  peer: { id: string; username: string; displayName: string };
+  lastMessageAt?: string;
+  unreadCount: number;
+};

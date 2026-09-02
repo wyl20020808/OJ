@@ -68,11 +68,11 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
   });
   it('W2B-02 presents qualification pending', () => {
     expect(presentSandboxStatus('QUALIFICATION_PENDING').label).toContain(
-      'pending',
+      '待验证',
     );
   });
   it('W2B-03 presents qualifying as a running probe', () => {
-    expect(presentSandboxStatus('QUALIFYING').label).toContain('running');
+    expect(presentSandboxStatus('QUALIFYING').label).toContain('运行中');
   });
   it('W2B-04 presents qualified only from the qualified server state', () => {
     render(
@@ -81,7 +81,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
         projection={projection('QUALIFIED')}
       />,
     );
-    expect(screen.getByText('Sandbox security qualified')).toBeInTheDocument();
+    expect(screen.getByText('沙箱安全资格已通过')).toBeInTheDocument();
   });
   it('W2B-05 presents degraded as security-significant', () => {
     expect(presentSandboxStatus('DEGRADED').securitySignificant).toBe(true);
@@ -91,7 +91,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
   });
   it('W2B-07 presents qualification failure distinctly', () => {
     expect(presentSandboxStatus('QUALIFICATION_FAILED').label).toContain(
-      'failed',
+      '失败',
     );
   });
   it('W2B-08 visibly preserves cleanup failure', () => {
@@ -101,14 +101,12 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
         projection={projection('CLEANUP_FAILED')}
       />,
     );
-    expect(screen.getByText('Cleanup verification failed')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent(
-      /security-significant/i,
-    );
+    expect(screen.getByText('清理验证失败')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/安全相关|沙箱/);
   });
   it('W2B-09 maps unknown state to a neutral non-qualified view', () => {
     const status = presentSandboxStatus('FUTURE_STATE');
-    expect(status.label).toContain('Unknown');
+    expect(status.label).toContain('未知');
     expect(status.qualified).toBe(false);
   });
   it('W2B-10 explicitly disables real submission execution', () => {
@@ -118,7 +116,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
         projection={projection('QUALIFIED')}
       />,
     );
-    expect(screen.getByText('Disabled / unqualified')).toBeInTheDocument();
+    expect(screen.getByText('已禁用 / 未通过验证')).toBeInTheDocument();
   });
   it('W2B-11 does not use OJ verdict deception', () => {
     render(
@@ -134,17 +132,17 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
       <SandboxQualificationOverview authorized projection={projection()} />,
     );
     expect(screen.getByText('Filesystem isolation')).toBeInTheDocument();
-    expect(screen.getByText('Configured')).toBeInTheDocument();
+    expect(screen.getByText('已配置')).toBeInTheDocument();
   });
   it('W2B-13 keeps unsupported capability neutral', () => {
     expect(presentCapabilityState('unsupported')).toEqual({
-      label: 'Unsupported',
+      label: '不支持',
       tone: 'neutral',
     });
   });
   it('W2B-14 keeps failed capability failed', () => {
     expect(presentCapabilityState('failed')).toEqual({
-      label: 'Failed',
+      label: '失败',
       tone: 'danger',
     });
   });
@@ -153,7 +151,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
       <SandboxQualificationOverview projection={projection('QUALIFIED')} />,
     );
     expect(
-      screen.getByText('Sandbox qualification details are not available.'),
+      screen.getByText('当前会话无法查看沙箱资格详情。'),
     ).toBeInTheDocument();
     expect(screen.queryByText('Dedicated Supervisor')).not.toBeInTheDocument();
   });
@@ -170,7 +168,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
   });
   it('W2B-17 protects a stale or missing session', () => {
     render(<SandboxQualificationOverview authorized={false} />);
-    expect(screen.getByRole('status')).toHaveTextContent('not available');
+    expect(screen.getByRole('status')).toHaveTextContent('无法查看');
   });
   it('W2B-18 has no probe list without a frozen probe API', () => {
     render(
@@ -231,7 +229,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
         projection={projection('QUALIFYING')}
       />,
     );
-    expect(screen.getByRole('status')).toHaveTextContent('probe is running');
+    expect(screen.getByRole('status')).toHaveTextContent('资格探针正在运行');
   });
   it('W2B-27 refresh is an explicit server-owned action', () => {
     const refresh = vi.fn();
@@ -242,7 +240,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
         onRefresh={refresh}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+    fireEvent.click(screen.getByRole('button', { name: '刷新状态' }));
     expect(refresh).toHaveBeenCalledOnce();
   });
   it('W2B-28 has no cancel control without a frozen API', () => {
@@ -272,9 +270,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
     expect(presentSandboxStatus('QUALIFIED').qualified).toBe(true);
   });
   it('W2B-31 handles 401 with an anti-enumeration message', () => {
-    expect(presentSandboxTransportError({ status: 401 })).toContain(
-      'not available',
-    );
+    expect(presentSandboxTransportError({ status: 401 })).toContain('当前会话');
   });
   it('W2B-32 handles 403 with the same anti-enumeration message', () => {
     expect(presentSandboxTransportError({ status: 403 })).toBe(
@@ -287,17 +283,15 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
     );
   });
   it('W2B-34 handles 409 as an authoritative refresh prompt', () => {
-    expect(presentSandboxTransportError({ status: 409 })).toContain('Refresh');
+    expect(presentSandboxTransportError({ status: 409 })).toContain('刷新');
   });
   it('W2B-35 handles 5xx as service failure', () => {
     expect(presentSandboxTransportError({ status: 503 })).toContain(
-      'temporarily unavailable',
+      '暂时不可用',
     );
   });
   it('W2B-36 handles transport failure without raw exception text', () => {
-    expect(presentSandboxTransportError({})).toBe(
-      'Sandbox qualification service could not be reached.',
-    );
+    expect(presentSandboxTransportError({})).toBe('无法连接沙箱资格服务。');
   });
   it('W2B-37 ignores an out-of-order older server response', async () => {
     const resolvers: Array<(value: SandboxProjection) => void> = [];
@@ -311,13 +305,11 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     resolvers[1]?.(projection('QUALIFIED'));
     await waitFor(() =>
-      expect(
-        screen.getByText('Sandbox security qualified'),
-      ).toBeInTheDocument(),
+      expect(screen.getByText('沙箱安全资格已通过')).toBeInTheDocument(),
     );
     resolvers[0]?.(projection('QUALIFYING'));
     await Promise.resolve();
-    expect(screen.getByText('Sandbox security qualified')).toBeInTheDocument();
+    expect(screen.getByText('沙箱安全资格已通过')).toBeInTheDocument();
   });
   it('W2B-38 removes protected facts when authorization is removed', () => {
     const view = render(
@@ -387,10 +379,10 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
       <SandboxQualificationOverview authorized projection={projection()} />,
     );
     expect(
-      screen.getByRole('heading', { name: 'Sandbox qualification' }),
+      screen.getByRole('heading', { name: '沙箱资格验证' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Capability summary' }),
+      screen.getByRole('heading', { name: '能力摘要' }),
     ).toBeInTheDocument();
   });
   it('W2B-44 provides a keyboard-reachable refresh button', () => {
@@ -401,7 +393,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
         onRefresh={() => undefined}
       />,
     );
-    const button = screen.getByRole('button', { name: 'Refresh status' });
+    const button = screen.getByRole('button', { name: '刷新状态' });
     button.focus();
     expect(button).toHaveFocus();
   });
@@ -414,7 +406,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
         refreshing
       />,
     );
-    const button = screen.getByRole('button', { name: 'Refreshing…' });
+    const button = screen.getByRole('button', { name: '刷新中…' });
     expect(button).toBeDisabled();
   });
   it('W2B-46 exposes status and errors accessibly', () => {
@@ -424,15 +416,11 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
         projection={projection('QUALIFYING')}
       />,
     );
-    expect(screen.getByRole('status')).toHaveAccessibleName(
-      /qualification probe running/i,
-    );
+    expect(screen.getByRole('status')).toHaveAccessibleName(/资格探针运行中/);
     rerender(
       <SandboxQualificationOverview authorized error={{ status: 503 }} />,
     );
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'temporarily unavailable',
-    );
+    expect(screen.getByRole('alert')).toHaveTextContent('暂时不可用');
   });
   it('W2B-47 cleanup failure cannot be hidden by a qualified badge', () => {
     const status = presentSandboxStatus('CLEANUP_FAILED');
@@ -440,7 +428,7 @@ describe('PHASE 2B Sandbox operations UI matrix', () => {
     expect(status.securitySignificant).toBe(true);
   });
   it('W2B-48 handles policy mismatch as a safe rejected request', () => {
-    expect(presentSandboxTransportError({ status: 422 })).toContain('policy');
+    expect(presentSandboxTransportError({ status: 422 })).toContain('策略');
   });
   it('W2B-49 probe failure cannot imply whole Sandbox qualification', () => {
     expect(presentSandboxStatus('QUALIFICATION_FAILED').qualified).toBe(false);
