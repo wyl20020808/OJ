@@ -45,6 +45,13 @@ export async function registerProblemJudgeDataRoutes(
       r,
     ),
   );
+  app.get('/api/problems/:problemId/judge-data/metadata', async (r, reply) =>
+    run(
+      () => options.service.metadata((r.params as any).problemId, auth(r)),
+      reply,
+      r,
+    ),
+  );
   app.get('/api/problems/:problemId/judge-data/draft', async (r, reply) =>
     run(
       () => options.service.draft((r.params as any).problemId, auth(r)),
@@ -99,6 +106,29 @@ export async function registerProblemJudgeDataRoutes(
       const p = (r.params as any).problemId;
       return mutate(r, reply, () =>
         options.service.addTestcase(p, r.body, auth(r)),
+      );
+    },
+  );
+  app.patch(
+    '/api/problems/:problemId/judge-data/draft/testcases/:testcaseId',
+    async (r, reply) => {
+      const x = r.params as any;
+      return mutate(r, reply, () =>
+        options.service.updateTestcase(
+          x.problemId,
+          x.testcaseId,
+          r.body,
+          auth(r),
+        ),
+      );
+    },
+  );
+  app.delete(
+    '/api/problems/:problemId/judge-data/draft/testcases/:testcaseId',
+    async (r, reply) => {
+      const x = r.params as any;
+      return mutate(r, reply, () =>
+        options.service.deleteTestcase(x.problemId, x.testcaseId, auth(r)),
       );
     },
   );

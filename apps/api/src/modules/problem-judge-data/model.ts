@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {
+  testcaseSetManifestHash,
+  TESTCASE_SET_PROTOCOL_VERSION,
+} from '../judge/testcase-set.js';
 
 export type Checker = 'EXACT_BYTES' | 'TOKEN_WHITESPACE';
+export type ExecutionProfileId = 'cpp20-gcc-13-v1';
 export type ObjectRef = {
   objectId: string;
   key: string;
@@ -39,6 +44,10 @@ export type JudgeDraft = {
   updatedAt: string;
   updatedBy: string;
   manifestSha256?: string;
+  problemRevisionId: string;
+  testdataVersionId: string;
+  testcaseSetId: string;
+  executionProfileId: ExecutionProfileId;
 };
 export type JudgeDataVersion = {
   versionId: string;
@@ -51,9 +60,11 @@ export type JudgeDataVersion = {
   publishedAt: string;
   publishedBy: string;
   testcases: DraftTestcase[];
-  problemRevisionId?: string;
-  testdataVersionId?: string;
-  testcaseSetId?: string;
+  problemRevisionId: string;
+  testdataVersionId: string;
+  testcaseSetId: string;
+  executionProfileId: ExecutionProfileId;
+  allowedLanguageProfiles: string[];
 };
 export type JudgeDataHandoff = {
   problemId: string;
@@ -63,7 +74,7 @@ export type JudgeDataHandoff = {
   testcaseSetId: string;
   manifestSha256: string;
   checker: Checker;
-  executionProfileId: 'cpp20-gcc-13-v1';
+  executionProfileId: ExecutionProfileId;
   allowedLanguageProfiles: readonly string[];
   testcases: readonly {
     testcaseId: string;
@@ -139,30 +150,56 @@ export const effective = (
   override: number | null | undefined,
   fallback: number,
 ) => override ?? fallback;
-export const manifestHash = (
-  problemId: string,
-  version: number,
-  defaults: JudgeDefaults,
+export const validateObjectRef = (value: unknown): ObjectRef => {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new JudgeDataError('INVALID_PAIR', 'Invalid object reference');
+  const v = value as Record<string, unknown>;
+  if (
+    typeof v.objectId !== 'string' ||
+    !v.objectId ||
+    typeof v.key !== 'string' ||
+    !v.key ||
+    typeof v.fileName !== 'string' ||
+    !v.fileName ||
+    typeof v.sha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(v.sha256)
+  )
+    throw new JudgeDataError('INVALID_PAIR', 'Invalid object reference');
+  const size = validateLimit(v.sizeBytes, 16 * 1024 * 1024);
+  return {
+    objectId: v.objectId,
+    key: v.key,
+    fileName: v.fileName,
+    sizeBytes: size,
+    sha256: v.sha256,
+  };
+};
+export const canonicalManifestHash = (
+  identity: {
+    problemId: string;
+    problemRevisionId: string;
+    testdataVersionId: string;
+    testcaseSetId: string;
+    executionProfileId: ExecutionProfileId;
+  },
   cases: readonly DraftTestcase[],
 ) =>
-  sha256(
-    [
-      '2C.4',
-      problemId,
-      String(version),
-      defaults.checker,
-      ...defaults.allowedLanguageProfiles,
-      ...cases
-        .slice()
-        .sort((a, b) => a.ordinal - b.ordinal)
-        .flatMap((c) => [
-          String(c.ordinal),
-          c.testcaseId,
-          c.input.sha256,
-          c.expectedOutput.sha256,
-          String(c.effectiveTimeLimitMs),
-          String(c.effectiveMemoryLimitBytes),
-          String(c.effectiveOutputLimitBytes),
-        ]),
-    ].join('\0'),
-  );
+  testcaseSetManifestHash({
+    problemId: identity.problemId,
+    problemRevisionId: identity.problemRevisionId,
+    testdataVersionId: identity.testdataVersionId,
+    testcaseSetId: identity.testcaseSetId,
+    executionProfileId: identity.executionProfileId,
+    entries: cases
+      .slice()
+      .sort((a, b) => a.ordinal - b.ordinal)
+      .map((c, index) => ({
+        index,
+        testcaseId: c.testcaseId,
+        testdataVersionId: identity.testdataVersionId,
+        input: '',
+        inputSha256: c.input.sha256,
+        executionProfileId: identity.executionProfileId,
+      })),
+  });
+export const manifestProtocolVersion = TESTCASE_SET_PROTOCOL_VERSION;

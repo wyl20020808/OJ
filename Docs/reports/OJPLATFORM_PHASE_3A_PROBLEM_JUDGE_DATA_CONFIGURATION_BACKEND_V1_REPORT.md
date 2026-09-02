@@ -2,7 +2,7 @@
 
 ## IMPLEMENTATION
 
-Implemented Product-side config/draft/version metadata, object-storage adapter, pair and bounded ZIP import, limits/checker validation, deterministic manifest digest, immutable publish repository and Product API wiring. Judge Service/Worker/Supervisor/Web, Submission flow, Lead Integration and PROJECT_STATUS were not modified.
+Implemented Product-side config/draft/version metadata, object-storage adapter, pair and bounded central-directory ZIP import, limits/checker validation, deterministic 2C.4 manifest digest, immutable publish repository with transactional Postgres path/CAS checks, object ownership metadata, and Product API wiring. Judge Service/Worker/Supervisor/Web, Submission flow, Lead Integration and PROJECT_STATUS were not modified.
 
 ## CONTRACT
 
@@ -10,7 +10,11 @@ Permanent model, web, storage/manifest, error and authorization contracts are in
 
 ## REAL DB-STORAGE RUNTIME
 
-NOT VERIFIED in this Windows worktree: PostgreSQL/MinIO integration was not available during this implementation turn. The migration and S3 adapter are present; runtime qualification remains a follow-up gate.
+NOT VERIFIED in this Windows worktree: PostgreSQL/MinIO integration was not available. `pnpm integration` and the existing integration suite are blocked by `ECONNREFUSED 127.0.0.1:55432`; migration and S3 adapter are present but no runtime claim is made.
+
+## TEST EVIDENCE
+
+`tests/problem-judge-data.test.ts` passes 3 focused tests covering draft/config, effective per-case limits, publish immutability, canonical manifest hash, stale publish conflict, and authorization denial. `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test:architecture`, `pnpm build`, and `git diff --check` pass. Full `pnpm test` reaches 358 passing tests but is PARTIAL because the pre-existing PostgreSQL integration suite cannot connect in this environment.
 
 ## PRODUCT→JUDGE HANDOFF CONTRACT
 

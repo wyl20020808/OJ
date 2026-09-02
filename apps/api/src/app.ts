@@ -277,13 +277,38 @@ export async function buildApp(options: AppOptions = {}) {
           !actor.userId
         )
           return false;
-        if (options.judgeAdminPermissions?.get(actor.userId)?.has(permission))
+        const actorId: string = actor.userId;
+        const required: string[] =
+          action === 'view' ? [permission] : [permission, 'problem.edit'];
+        if (
+          required.every((p) =>
+            options.judgeAdminPermissions?.get(actorId as string)?.has(p),
+          )
+        )
           return true;
         const result = await database.pool.query(
-          'SELECT 1 FROM auth_user_roles ur JOIN auth_roles r ON r.name=ur.role_name WHERE ur.user_id=$1 AND $2=ANY(r.permissions) LIMIT 1',
-          [actor.userId, permission],
+          'SELECT COUNT(DISTINCT p.permission)::int AS matched FROM auth_user_roles ur JOIN auth_roles r ON r.name=ur.role_name CROSS JOIN LATERAL unnest(r.permissions) p(permission) WHERE ur.user_id=$1 AND p.permission = ANY($2::text[])',
+          [actorId, required],
         );
-        return result.rows.length > 0;
+        return Number(result.rows[0]?.matched ?? 0) === required.length;
+      },
+      async (problemId) => {
+        const problem = await problemRepository.get(problemId);
+        if (!problem?.currentRevisionId)
+          throw new Error('Problem revision identity unavailable');
+        const revision = (await problemRepository.revisions(problemId)).find(
+          (item) => item.revisionId === problem.currentRevisionId,
+        );
+        const testdataVersionId =
+          revision?.testdataVersion ?? problem.testdataVersion;
+        if (!testdataVersionId)
+          throw new Error('Problem testdata identity unavailable');
+        return {
+          problemRevisionId: problem.currentRevisionId,
+          testdataVersionId,
+          testcaseSetId: `judge-data-${problem.currentRevisionId}`,
+          executionProfileId: 'cpp20-gcc-13-v1' as const,
+        };
       },
     );
     await registerProblemJudgeDataRoutes(app, {
@@ -595,13 +620,36 @@ export async function buildApp(options: AppOptions = {}) {
       async (action, context) => {
         const actor = context as
           { strength?: string; userId?: string } | undefined;
+        const required =
+          action === 'view'
+            ? [`problem.judge_data.${action}`]
+            : [`problem.judge_data.${action}`, 'problem.edit'];
         return Boolean(
           actor?.strength === 'password' &&
           actor.userId &&
-          options.judgeAdminPermissions
-            ?.get(actor.userId)
-            ?.has(`problem.judge_data.${action}`),
+          options.judgeAdminPermissions?.get(actor.userId) &&
+          required.every((permission) =>
+            options.judgeAdminPermissions?.get(actor.userId!)?.has(permission),
+          ),
         );
+      },
+      async (problemId) => {
+        const problem = await problemRepository.get(problemId);
+        if (!problem?.currentRevisionId)
+          throw new Error('Problem revision identity unavailable');
+        const revision = (await problemRepository.revisions(problemId)).find(
+          (item) => item.revisionId === problem.currentRevisionId,
+        );
+        const testdataVersionId =
+          revision?.testdataVersion ?? problem.testdataVersion;
+        if (!testdataVersionId)
+          throw new Error('Problem testdata identity unavailable');
+        return {
+          problemRevisionId: problem.currentRevisionId,
+          testdataVersionId,
+          testcaseSetId: `judge-data-${problem.currentRevisionId}`,
+          executionProfileId: 'cpp20-gcc-13-v1' as const,
+        };
       },
     );
     await registerProblemJudgeDataRoutes(app, {

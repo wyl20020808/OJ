@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS problem_judge_configs (
 );
 CREATE TABLE IF NOT EXISTS problem_judge_drafts (
   problem_id text PRIMARY KEY REFERENCES problems(id) ON DELETE CASCADE,
+  problem_revision_id text NOT NULL,
+  testdata_version_id text NOT NULL,
+  testcase_set_id text NOT NULL,
+  execution_profile_id text NOT NULL DEFAULT 'cpp20-gcc-13-v1',
+  manifest_sha256 text,
   status text NOT NULL DEFAULT 'DRAFT',
   revision integer NOT NULL DEFAULT 0,
   updated_by text NOT NULL,
@@ -35,6 +40,11 @@ CREATE TABLE IF NOT EXISTS problem_judge_draft_testcases (
 CREATE TABLE IF NOT EXISTS judge_data_versions (
   version_id text PRIMARY KEY,
   problem_id text NOT NULL REFERENCES problems(id) ON DELETE RESTRICT,
+  problem_revision_id text NOT NULL,
+  testdata_version_id text NOT NULL,
+  testcase_set_id text NOT NULL,
+  execution_profile_id text NOT NULL,
+  allowed_language_profiles jsonb NOT NULL DEFAULT '[]'::jsonb,
   version_number integer NOT NULL,
   manifest_sha256 text NOT NULL,
   checker text NOT NULL,
@@ -54,6 +64,17 @@ CREATE TABLE IF NOT EXISTS judge_data_version_testcases (
   testcase jsonb NOT NULL,
   PRIMARY KEY(version_id, testcase_id),
   UNIQUE(version_id, ordinal)
+);
+CREATE TABLE IF NOT EXISTS problem_judge_data_objects (
+  object_id text PRIMARY KEY,
+  problem_id text NOT NULL REFERENCES problems(id) ON DELETE RESTRICT,
+  version_id text REFERENCES judge_data_versions(version_id) ON DELETE RESTRICT,
+  object_key text NOT NULL,
+  file_name text NOT NULL,
+  size_bytes bigint NOT NULL,
+  sha256 text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(problem_id, object_key, sha256)
 );
 CREATE INDEX IF NOT EXISTS judge_data_versions_problem_idx ON judge_data_versions(problem_id, version_number DESC);
 CREATE INDEX IF NOT EXISTS judge_data_draft_cases_problem_idx ON problem_judge_draft_testcases(problem_id, ordinal);
