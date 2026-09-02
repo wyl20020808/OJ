@@ -47,6 +47,14 @@ import {
 } from './modules/sandbox/control.js';
 import type { AuditHook as ProblemAuditHook } from './modules/problem/model.js';
 import {
+  ProblemJudgeDataService,
+  InMemoryJudgeDataRepository,
+  PostgresJudgeDataRepository,
+  MemoryByteStorage,
+  S3ByteStorage,
+  registerProblemJudgeDataRoutes,
+} from './modules/problem-judge-data/index.js';
+import {
   PostgresSubmissionRepository,
   InMemorySubmissionRepository,
   registerSubmissionModule,
@@ -94,6 +102,7 @@ export type AppOptions = {
   config?: RuntimeConfig;
   operatorUserIds?: ReadonlySet<string>;
   operatorUsernames?: ReadonlySet<string>;
+  judgeAdminPermissions?: ReadonlyMap<string, ReadonlySet<string>>;
   realSubmissionExecution?: boolean;
   judgeAdminAdapter?: JudgeAdminAdapter;
   judgeAdminPermissions?: ReadonlyMap<string, ReadonlySet<string>>;
@@ -288,6 +297,66 @@ export async function buildApp(options: AppOptions = {}) {
           ['read', 'create', 'update', 'transition'].includes(action),
       },
       auditHook: problemAuditHook,
+    });
+    const judgeData = new ProblemJudgeDataService(
+      new PostgresJudgeDataRepository(database.pool),
+      new S3ByteStorage(storage.client, storage.bucket),
+      async (id) => Boolean(await problemRepository.get(id)),
+      async (action, context) => {
+        const permission = (
+          {
+            view: 'problem.judge_data.view',
+            manage: 'problem.judge_data.manage',
+            publish: 'problem.judge_data.publish',
+          } as Record<string, string>
+        )[action];
+        const actor = context as
+          { strength?: string; userId?: string } | undefined;
+        if (
+          !permission ||
+          !actor ||
+          actor.strength !== 'password' ||
+          !actor.userId
+        )
+          return false;
+        const actorId: string = actor.userId;
+        const required: string[] =
+          action === 'view' ? [permission] : [permission, 'problem.edit'];
+        if (
+          required.every((p) =>
+            options.judgeAdminPermissions?.get(actorId as string)?.has(p),
+          )
+        )
+          return true;
+        const result = await database.pool.query(
+          'SELECT COUNT(DISTINCT p.permission)::int AS matched FROM auth_user_roles ur JOIN auth_roles r ON r.name=ur.role_name CROSS JOIN LATERAL unnest(r.permissions) p(permission) WHERE ur.user_id=$1 AND p.permission = ANY($2::text[])',
+          [actorId, required],
+        );
+        return Number(result.rows[0]?.matched ?? 0) === required.length;
+      },
+      async (problemId) => {
+        const problem = await problemRepository.get(problemId);
+        if (!problem?.currentRevisionId)
+          throw new Error('Problem revision identity unavailable');
+        const revision = (await problemRepository.revisions(problemId)).find(
+          (item) => item.revisionId === problem.currentRevisionId,
+        );
+        const testdataVersionId =
+          revision?.testdataVersion ?? problem.testdataVersion;
+        if (!testdataVersionId)
+          throw new Error('Problem testdata identity unavailable');
+        return {
+          problemRevisionId: problem.currentRevisionId,
+          testdataVersionId,
+          testcaseSetId: `judge-data-${problem.currentRevisionId}`,
+          executionProfileId: 'cpp20-gcc-13-v1' as const,
+        };
+      },
+    );
+    await registerProblemJudgeDataRoutes(app, {
+      service: judgeData,
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
     const submissionPolicy = createSubmissionAuthorizationPolicy();
     const problemResolver: ProblemRevisionResolver = {
@@ -608,6 +677,50 @@ export async function buildApp(options: AppOptions = {}) {
           ['read', 'create', 'update', 'transition'].includes(action),
       },
       auditHook: problemAuditHook,
+    });
+    const judgeData = new ProblemJudgeDataService(
+      new InMemoryJudgeDataRepository(),
+      new MemoryByteStorage(),
+      async (id) => Boolean(await problemRepository.get(id)),
+      async (action, context) => {
+        const actor = context as
+          { strength?: string; userId?: string } | undefined;
+        const required =
+          action === 'view'
+            ? [`problem.judge_data.${action}`]
+            : [`problem.judge_data.${action}`, 'problem.edit'];
+        return Boolean(
+          actor?.strength === 'password' &&
+          actor.userId &&
+          options.judgeAdminPermissions?.get(actor.userId) &&
+          required.every((permission) =>
+            options.judgeAdminPermissions?.get(actor.userId!)?.has(permission),
+          ),
+        );
+      },
+      async (problemId) => {
+        const problem = await problemRepository.get(problemId);
+        if (!problem?.currentRevisionId)
+          throw new Error('Problem revision identity unavailable');
+        const revision = (await problemRepository.revisions(problemId)).find(
+          (item) => item.revisionId === problem.currentRevisionId,
+        );
+        const testdataVersionId =
+          revision?.testdataVersion ?? problem.testdataVersion;
+        if (!testdataVersionId)
+          throw new Error('Problem testdata identity unavailable');
+        return {
+          problemRevisionId: problem.currentRevisionId,
+          testdataVersionId,
+          testcaseSetId: `judge-data-${problem.currentRevisionId}`,
+          executionProfileId: 'cpp20-gcc-13-v1' as const,
+        };
+      },
+    );
+    await registerProblemJudgeDataRoutes(app, {
+      service: judgeData,
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
     const submissionPolicy = createSubmissionAuthorizationPolicy();
     await registerSubmissionModule(app, {
