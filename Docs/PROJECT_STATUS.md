@@ -2,8 +2,16 @@
 
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
-Current Stage: WEB UI POLISH AND EVALUATION LIST V1 PARTIAL
-Current Status: WEB UI POLISH IMPLEMENTED AND TESTED / GLOBAL EVALUATION LIST BACKEND SUPPORT NOT AVAILABLE
+Current Stage: UNIFIED JUDGE RUNTIME INTEGRATION V1 PARTIAL
+Current Status: HISTORY-PRESERVING PRODUCT/WEB + 2C.8D MERGE IMPLEMENTED AND TESTED; FRESH INTEGRATED HOST-AGENT PRODUCT RUNTIME QUALIFICATION NOT YET VERIFIED
+
+Unified Judge Runtime Integration V1: PARTIAL. Product/Web `4df8c2c` and
+Phase 2C.8D `4462fbd` are formally preserved by merge `d4e04ca`, with Product
+and Judge migrations independently passing and TypeScript/Web/Go gates passing
+in their applicable host environments. The current-source bounded runtime
+chain (Supervisor -> Judge Service -> Host Agent -> Worker ONLINE -> Product
+browser AC/WA -> Submission Detail) has not yet been run, so it is explicitly
+not claimed. See `OJPLATFORM_UNIFIED_JUDGE_RUNTIME_INTEGRATION_V1_REPORT.md`.
 
 Web UI Polish and Evaluation List V1: PARTIAL. Problem Detail actions are
 consolidated below the title with owner/Guest-owner edit entry; duplicate Web
@@ -37,7 +45,7 @@ PHASE 2C.2: PASS / REAL EXECUTION LIFECYCLE, INTEGRITY & RELIABILITY QUALIFIED
 PHASE 2C.3: PASS / DETERMINISTIC SINGLE-TESTCASE EXECUTION & MEASUREMENT RECORD QUALIFIED
 PHASE 2C.4: PASS / TESTCASE-SET EXECUTION-FACT AGGREGATION FOUNDATION QUALIFIED
 REAL C++20 EXECUTION: QUALIFICATION ONLY
-VERDICT ENGINE: NOT STARTED
+VERDICT ENGINE: HISTORICAL "NOT STARTED" SUMMARY; 2C.5/2C.6 and Phase 3D authoritative verdict paths are implemented and qualified in their recorded scopes
 PHASE 2D: NOT STARTED
 READY FOR NEXT PHASE 2C GOAL: YES
 
