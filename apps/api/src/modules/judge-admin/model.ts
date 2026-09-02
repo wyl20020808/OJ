@@ -25,6 +25,27 @@ export type JudgeAdminAdapter = {
   failures(nodeId: string, query?: PageQuery): Promise<unknown>;
   assignment(id: string): Promise<unknown>;
   metrics(): Promise<unknown>;
+  policy?: () => Promise<unknown>;
+  templates?: () => Promise<unknown>;
+  hostCapacity?: () => Promise<unknown>;
+  lifecycleCapabilities?: () => Promise<unknown>;
+  lifecycleHistory?: (query?: PageQuery) => Promise<unknown>;
+  autoscalerHistory?: (query?: PageQuery) => Promise<unknown>;
+  addNode?: (input: AddNodeInput, headers?: RequestHeaders) => Promise<unknown>;
+  lifecycle?: (
+    action: 'start' | 'stop' | 'restart',
+    nodeId: string,
+    input: LifecycleInput,
+    headers?: RequestHeaders,
+  ) => Promise<unknown>;
+  updatePolicy?: (
+    input: PolicyMutationInput,
+    headers?: RequestHeaders,
+  ) => Promise<unknown>;
+  setMode?: (
+    input: ModeMutationInput,
+    headers?: RequestHeaders,
+  ) => Promise<unknown>;
   mutate(
     action: 'drain' | 'offline' | 'enable',
     nodeId: string,
@@ -33,6 +54,41 @@ export type JudgeAdminAdapter = {
   ): Promise<unknown>;
 };
 export type PageQuery = { limit?: number; cursor?: string };
+export type AddNodeInput = {
+  templateId: string;
+  reason: string;
+  count?: number;
+  idempotencyKey: string;
+};
+export type LifecycleInput = MutationInput;
+export type ModeMutationInput = {
+  mode: 'MANUAL' | 'AUTOMATIC';
+  reason: string;
+  expectedControlVersion: number;
+  idempotencyKey: string;
+};
+export type PoolPolicyInput = {
+  templateId: string;
+  minNodes: number;
+  maxNodes: number;
+  targetQueueWaitMs: number;
+  fastScaleQueueWaitMs: number;
+  pendingJobsScaleUpThreshold: number;
+  scaleUpStep: number;
+  fastScaleUpStep: number;
+  scaleDownStep: number;
+  scaleDownUtilizationThreshold: number;
+  scaleDownIdleWindowMs: number;
+  scaleUpCooldownMs: number;
+  scaleDownCooldownMs: number;
+  hostCpuReserve: number;
+  hostMemoryReserve: number;
+};
+export type PolicyMutationInput = PoolPolicyInput & {
+  reason: string;
+  expectedControlVersion: number;
+  idempotencyKey: string;
+};
 export type MutationInput = {
   reason: string;
   expectedIncarnation: string;

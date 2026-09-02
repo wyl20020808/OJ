@@ -1,7 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FastifyInstance } from 'fastify';
 import { JudgeAdminUpstreamError } from './adapter.js';
-import type { JudgeAdminRouteOptions, MutationInput } from './model.js';
+import type {
+  AddNodeInput,
+  JudgeAdminRouteOptions,
+  LifecycleInput,
+  ModeMutationInput,
+  MutationInput,
+  PolicyMutationInput,
+} from './model.js';
 const errorMap = (e: unknown) => {
   if (!(e instanceof JudgeAdminUpstreamError))
     return {
@@ -9,6 +16,47 @@ const errorMap = (e: unknown) => {
       code: 'INTERNAL_ERROR',
       message: 'Internal server error',
     };
+  const code = e.upstreamCode;
+  const known: Record<string, { status: number; message: string }> = {
+    HOST_AGENT_UNAVAILABLE: { status: 503, message: 'Host Agent unavailable' },
+    HOST_AGENT_UNAUTHORIZED: {
+      status: 502,
+      message: 'Host Agent authorization failed',
+    },
+    PROCESS_START_FAILED: {
+      status: 502,
+      message: 'Judge process failed to start',
+    },
+    PROCESS_STOP_FAILED: {
+      status: 502,
+      message: 'Judge process failed to stop',
+    },
+    PROCESS_IDENTITY_MISMATCH: {
+      status: 409,
+      message: 'Judge process identity mismatch',
+    },
+    TEMPLATE_NOT_FOUND: {
+      status: 404,
+      message: 'Judge node template not found',
+    },
+    TEMPLATE_DISABLED: {
+      status: 409,
+      message: 'Judge node template is disabled',
+    },
+    SLOT_NOT_FOUND: { status: 404, message: 'Judge node slot not found' },
+    ACTIVE_JOBS: { status: 409, message: 'Judge node has active jobs' },
+    DRAIN_TIMEOUT: { status: 504, message: 'Judge node drain timed out' },
+    INVALID_POOL_POLICY: { status: 400, message: 'Invalid judge pool policy' },
+    MIN_MAX_INVALID: { status: 400, message: 'Invalid judge pool node bounds' },
+    HOST_CAPACITY_EXHAUSTED: {
+      status: 409,
+      message: 'Judge host capacity exhausted',
+    },
+    COOLDOWN_ACTIVE: { status: 409, message: 'Judge pool cooldown is active' },
+    HOST_AGENT_TIMEOUT: { status: 504, message: 'Host Agent timed out' },
+  };
+  if (code && known[code])
+    return { status: known[code].status, code, message: known[code].message };
   if (e.status === 404)
     return {
       status: 404,
@@ -65,6 +113,16 @@ const productSummary = (value: any) => {
     ),
   };
 };
+const unsafeLifecycleKeys = new Set([
+  'executablePath',
+  'executable',
+  'command',
+  'commandArguments',
+  'args',
+  'shell',
+  'env',
+  'environment',
+]);
 export async function registerJudgeAdminRoutes(
   app: FastifyInstance,
   o: JudgeAdminRouteOptions,
@@ -97,6 +155,21 @@ export async function registerJudgeAdminRoutes(
     ['/summary', async () => productSummary(await o.adapter.summary())],
     ['/nodes', (r) => o.adapter.nodes(query(r))],
     ['/metrics', () => o.adapter.metrics()],
+    ['/pool/policy', () => o.adapter.policy?.() ?? unsupported()],
+    ['/pool/templates', () => o.adapter.templates?.() ?? unsupported()],
+    ['/pool/host-capacity', () => o.adapter.hostCapacity?.() ?? unsupported()],
+    [
+      '/lifecycle/capabilities',
+      () => o.adapter.lifecycleCapabilities?.() ?? unsupported(),
+    ],
+    [
+      '/lifecycle/operations',
+      (r) => o.adapter.lifecycleHistory?.(query(r)) ?? unsupported(),
+    ],
+    [
+      '/autoscaling/decisions',
+      (r) => o.adapter.autoscalerHistory?.(query(r)) ?? unsupported(),
+    ],
   ];
   for (const [path, fn] of routes)
     app.get(`/api/admin/judge${path}`, async (r, reply) => {
@@ -278,4 +351,291 @@ export async function registerJudgeAdminRoutes(
         }
       },
     );
+
+  const lifecycleMutation = async (
+    r: any,
+    reply: any,
+    action: string,
+    nodeId: string,
+    body: Record<string, unknown>,
+    invoke: () => Promise<unknown>,
+    expected?: { incarnation?: string; controlVersion?: number },
+  ) => {
+    const ctx = await o.getAuthContext(r);
+    const correlationId = String(
+      r.headers['x-correlation-id'] ?? crypto.randomUUID(),
+    );
+    const idempotencyKey =
+      typeof body.idempotencyKey === 'string' ? body.idempotencyKey : undefined;
+    const base = {
+      actorUserId: ctx?.userId ?? 'anonymous',
+      permission: 'judge.lifecycle',
+      action,
+      nodeId,
+      requestId: r.id,
+      correlationId,
+      occurredAt: new Date().toISOString(),
+      outcome: 'denied' as const,
+    };
+    if (!ctx) {
+      await o.audit.record(base);
+      return reply.status(401).send({
+        code: 'UNAUTHENTICATED',
+        message: 'Authentication required',
+        requestId: r.id,
+      });
+    }
+    if (!(await o.can(ctx, 'judge.lifecycle'))) {
+      await o.audit.record({ ...base, actorUserId: ctx.userId });
+      return reply.status(403).send({
+        code: 'FORBIDDEN',
+        message: 'Judge lifecycle forbidden',
+        requestId: r.id,
+      });
+    }
+    const csrf = o.csrf
+      ? o.csrf(r)
+      : r.headers['x-csrf-token'] &&
+        r.headers.cookie?.includes(`oj_csrf=${r.headers['x-csrf-token']}`);
+    if (!csrf) {
+      await o.audit.record({
+        ...base,
+        actorUserId: ctx.userId,
+        errorCode: 'CSRF_REQUIRED',
+      });
+      return reply.status(403).send({
+        code: 'CSRF_REQUIRED',
+        message: 'CSRF validation failed',
+        requestId: r.id,
+      });
+    }
+    if (
+      !idempotencyKey?.trim() ||
+      typeof body.reason !== 'string' ||
+      !body.reason.trim()
+    ) {
+      await o.audit.record({
+        ...base,
+        actorUserId: ctx.userId,
+        errorCode: 'VALIDATION_ERROR',
+      });
+      return reply.status(400).send({
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid lifecycle request',
+        requestId: r.id,
+      });
+    }
+    if (Object.keys(body).some((key) => unsafeLifecycleKeys.has(key))) {
+      await o.audit.record({
+        ...base,
+        actorUserId: ctx.userId,
+        errorCode: 'VALIDATION_ERROR',
+      });
+      return reply.status(400).send({
+        code: 'VALIDATION_ERROR',
+        message: 'Unsupported lifecycle fields',
+        requestId: r.id,
+      });
+    }
+    if (
+      expected &&
+      (typeof expected.controlVersion !== 'number' ||
+        typeof expected.incarnation !== 'string')
+    ) {
+      await o.audit.record({
+        ...base,
+        actorUserId: ctx.userId,
+        errorCode: 'VALIDATION_ERROR',
+      });
+      return reply.status(400).send({
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid lifecycle concurrency guard',
+        requestId: r.id,
+      });
+    }
+    const fingerprint = JSON.stringify([action, nodeId, body]);
+    const prior = idempotent.get(idempotencyKey);
+    if (prior) {
+      if (prior.fingerprint !== fingerprint)
+        return reply.status(409).send({
+          code: 'IDEMPOTENCY_KEY_REUSED',
+          message: 'Idempotency key was already used',
+          requestId: r.id,
+        });
+      await o.audit.record({
+        ...base,
+        actorUserId: ctx.userId,
+        outcome: 'success',
+        idempotencyKey,
+        afterState: prior.result,
+      });
+      return reply.send(prior.result);
+    }
+    try {
+      const value = await invoke();
+      const result = {
+        operationId: crypto.randomUUID(),
+        correlationId,
+        node: value,
+      };
+      idempotent.set(idempotencyKey, { fingerprint, result });
+      await o.audit.record({
+        ...base,
+        actorUserId: ctx.userId,
+        outcome: 'success',
+        idempotencyKey,
+        reason: body.reason,
+        ...(expected?.incarnation
+          ? { expectedIncarnation: expected.incarnation }
+          : {}),
+        ...(expected?.controlVersion !== undefined
+          ? { expectedControlVersion: expected.controlVersion }
+          : {}),
+        afterState: result,
+      });
+      return reply.send(result);
+    } catch (e) {
+      const x = errorMap(e);
+      await o.audit.record({
+        ...base,
+        actorUserId: ctx.userId,
+        outcome: 'failure',
+        idempotencyKey,
+        reason: body.reason,
+        errorCode: x.code,
+      });
+      return reply
+        .status(x.status)
+        .send({ code: x.code, message: x.message, requestId: r.id });
+    }
+  };
+
+  for (const action of ['start', 'stop', 'restart'] as const)
+    app.post(
+      `/api/admin/judge/nodes/:nodeId/${action}`,
+      async (r: any, reply) => {
+        const body = (r.body ?? {}) as Partial<LifecycleInput>;
+        const expected: { incarnation?: string; controlVersion?: number } = {
+          ...(typeof body.expectedIncarnation === 'string'
+            ? { incarnation: body.expectedIncarnation }
+            : {}),
+          ...(typeof body.expectedControlVersion === 'number'
+            ? { controlVersion: body.expectedControlVersion }
+            : {}),
+        };
+        if (!o.adapter.lifecycle)
+          return reply.status(501).send({
+            code: 'JUDGE_LIFECYCLE_UNAVAILABLE',
+            message: 'Judge lifecycle unavailable',
+            requestId: r.id,
+          });
+        return lifecycleMutation(
+          r,
+          reply,
+          action,
+          r.params.nodeId,
+          body as Record<string, unknown>,
+          () =>
+            o.adapter.lifecycle!(
+              action,
+              r.params.nodeId,
+              body as LifecycleInput,
+              {
+                requestId: r.id,
+                correlationId: String(
+                  r.headers['x-correlation-id'] ?? crypto.randomUUID(),
+                ),
+              },
+            ),
+          expected,
+        );
+      },
+    );
+
+  app.post('/api/admin/judge/nodes', async (r: any, reply) => {
+    const body = (r.body ?? {}) as Partial<AddNodeInput>;
+    if (!o.adapter.addNode)
+      return reply.status(501).send({
+        code: 'JUDGE_LIFECYCLE_UNAVAILABLE',
+        message: 'Judge lifecycle unavailable',
+        requestId: r.id,
+      });
+    if (
+      typeof body.templateId !== 'string' ||
+      !body.templateId.trim() ||
+      (body.count !== undefined &&
+        (!Number.isInteger(body.count) || body.count < 1 || body.count > 16))
+    )
+      return reply.status(400).send({
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid trusted template request',
+        requestId: r.id,
+      });
+    return lifecycleMutation(
+      r,
+      reply,
+      'add',
+      'pool',
+      body as Record<string, unknown>,
+      () =>
+        o.adapter.addNode!(body as AddNodeInput, {
+          requestId: r.id,
+          correlationId: String(
+            r.headers['x-correlation-id'] ?? crypto.randomUUID(),
+          ),
+        }),
+    );
+  });
+
+  const policyMutation =
+    (action: 'update_policy' | 'set_mode') => async (r: any, reply: any) => {
+      const body = (r.body ?? {}) as Record<string, unknown>;
+      const invoke =
+        action === 'update_policy' ? o.adapter.updatePolicy : o.adapter.setMode;
+      if (!invoke)
+        return reply.status(501).send({
+          code: 'JUDGE_LIFECYCLE_UNAVAILABLE',
+          message: 'Judge lifecycle unavailable',
+          requestId: r.id,
+        });
+      if (
+        action === 'set_mode' &&
+        body.mode !== 'MANUAL' &&
+        body.mode !== 'AUTOMATIC'
+      )
+        return reply.status(400).send({
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid pool mode',
+          requestId: r.id,
+        });
+      return lifecycleMutation(
+        r,
+        reply,
+        action,
+        'pool',
+        body,
+        () =>
+          action === 'update_policy'
+            ? o.adapter.updatePolicy!(body as PolicyMutationInput, {
+                requestId: r.id,
+                correlationId: String(
+                  r.headers['x-correlation-id'] ?? crypto.randomUUID(),
+                ),
+              })
+            : o.adapter.setMode!(body as ModeMutationInput, {
+                requestId: r.id,
+                correlationId: String(
+                  r.headers['x-correlation-id'] ?? crypto.randomUUID(),
+                ),
+              }),
+        { controlVersion: body.expectedControlVersion as number },
+      );
+    };
+  app.post('/api/admin/judge/pool/policy', policyMutation('update_policy'));
+  app.put('/api/admin/judge/pool/policy', policyMutation('update_policy'));
+  app.post('/api/admin/judge/pool/mode', policyMutation('set_mode'));
+  app.put('/api/admin/judge/pool/mode', policyMutation('set_mode'));
 }
+
+const unsupported = () =>
+  Promise.reject(new JudgeAdminUpstreamError(501, 'UNSUPPORTED'));
