@@ -96,6 +96,46 @@ export type Problem = {
   createdAt: string;
   updatedAt: string;
 };
+export type ProblemJudgeDefaults = {
+  timeLimitMs: number;
+  memoryLimitBytes: number;
+  outputLimitBytes: number;
+  checker: 'EXACT_BYTES' | 'TOKEN_WHITESPACE';
+  allowedLanguageProfiles: string[];
+};
+export type JudgeDraftTestcase = {
+  testcaseId: string;
+  ordinal: number;
+  label: string | null;
+  input: { objectId: string; fileName: string; sizeBytes: number; sha256: string };
+  expectedOutput: { objectId: string; fileName: string; sizeBytes: number; sha256: string };
+  timeLimitMsOverride: number | null;
+  memoryLimitBytesOverride: number | null;
+  outputLimitBytesOverride: number | null;
+  effectiveTimeLimitMs: number;
+  effectiveMemoryLimitBytes: number;
+  effectiveOutputLimitBytes: number;
+  createdAt: string;
+  updatedAt: string;
+};
+export type JudgeDataVersionSummary = {
+  versionId: string;
+  problemId: string;
+  versionNumber: number;
+  manifestSha256: string;
+  testcaseCount: number;
+  checker: 'EXACT_BYTES' | 'TOKEN_WHITESPACE';
+  createdAt: string;
+  publishedAt: string;
+  publishedBy: string;
+};
+export type JudgeDraft = {
+  problemId: string;
+  defaults: ProblemJudgeDefaults;
+  testcases: JudgeDraftTestcase[];
+  validation: { state: 'VALID' | 'INVALID' | 'UNKNOWN'; errors: string[]; warnings: string[] };
+  updatedAt: string;
+};
 export type Page = { limit: number; offset: number; total: number };
 export type ProblemList = { items: Problem[]; page: Page };
 export type Home = { recentProblems: Problem[] };
@@ -314,7 +354,10 @@ async function request<T>(
 ): Promise<T> {
   const response = await fetcher(`${baseUrl}${path}`, {
     credentials: 'include',
-    headers: { 'content-type': 'application/json', ...init?.headers },
+    headers:
+      init?.body instanceof FormData
+        ? { ...init?.headers }
+        : { 'content-type': 'application/json', ...init?.headers },
     ...init,
   });
   if (
@@ -887,6 +930,81 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         baseUrl,
         `/api/problems/${encodeURIComponent(idOrSlug)}/transition`,
         { method: 'POST', body: JSON.stringify(transition) },
+        fetcher,
+      ),
+    judgeData: (problemId: string) =>
+      request<JudgeDraft>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data`,
+        undefined,
+        fetcher,
+      ),
+    judgeDraft: (problemId: string) =>
+      request<JudgeDraft>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft`,
+        undefined,
+        fetcher,
+      ),
+    judgeVersions: (problemId: string) =>
+      request<JudgeDataVersionSummary[]>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/versions`,
+        undefined,
+        fetcher,
+      ),
+    saveJudgeConfig: (problemId: string, config: ProblemJudgeDefaults) =>
+      request<JudgeDraft>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/config`,
+        { method: 'PUT', body: JSON.stringify(config) },
+        fetcher,
+      ),
+    addJudgeTestcase: (problemId: string, input: FormData | Record<string, unknown>) =>
+      request<JudgeDraftTestcase>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/testcases`,
+        input instanceof FormData
+          ? { method: 'POST', body: input }
+          : { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    updateJudgeTestcase: (problemId: string, testcaseId: string, input: Record<string, unknown>) =>
+      request<JudgeDraftTestcase>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/testcases/${encodeURIComponent(testcaseId)}`,
+        { method: 'PATCH', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    deleteJudgeTestcase: (problemId: string, testcaseId: string) =>
+      request<void>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/testcases/${encodeURIComponent(testcaseId)}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
+    uploadJudgeData: (problemId: string, file: File | File[], zip = false) => {
+      const data = new FormData();
+      for (const item of Array.isArray(file) ? file : [file]) data.append('file', item);
+      return request<JudgeDraft>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/${zip ? 'upload-zip' : 'upload'}`,
+        { method: 'POST', body: data, headers: {} },
+        fetcher,
+      );
+    },
+    validateJudgeData: (problemId: string) =>
+      request<JudgeDraft['validation']>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/validate`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    publishJudgeData: (problemId: string) =>
+      request<JudgeDataVersionSummary>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/publish`,
+        { method: 'POST', body: '{}' },
         fetcher,
       ),
     languages: () =>
