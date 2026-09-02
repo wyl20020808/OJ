@@ -6,6 +6,7 @@ Current Stage: PHASE 2C IN PROGRESS
 Current Status: PHASE 2C.4 PASS / TESTCASE-SET EXECUTION-FACT AGGREGATION FOUNDATION QUALIFIED
 
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
+Product Lead Integration V1: PASS / qualified Backend + Web integrated; Judge remains separate
 PHASE 1C: PASS
 PHASE 1D: PASS
 PHASE 1E: HISTORICAL PASS / FINAL RERUN PARTIAL
@@ -54,6 +55,7 @@ READY FOR NEXT PHASE 2C GOAL: YES
 - Phase 2C.2 qualification commits: `26cc692`, `9e17d7e`
 - Phase 2C.4 implementation commit: `a3af407` (`feat: add phase 2c4 testcase-set execution foundation`)
 - Phase 2C.4 qualification commit: `4856438` (`test: qualify phase 2c4 testcase-set reliability`)
+- Product Lead Integration V1: `100e9f4` integration baseline plus `58c6b10` real browser smoke; final report records the closure commit. Judge history remains separate from this Product integration.
 - Business implementation: Phase 1 product foundations, Phase 2A Worker foundation, Phase 2B trusted-probe Sandbox boundary, and the Phase 2C.1/2C.2/2C.3 qualification-only C++20 execution foundation implemented
 - Framework/toolchain: initialized and qualified through the current Phase 2C.1 scope
 - Local PostgreSQL/Redis/MinIO infrastructure: Docker Engine/Compose, Windows localhost API/browser boundary, and recovery behavior qualified with WSL instance kept alive
