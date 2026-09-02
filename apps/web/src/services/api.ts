@@ -1141,7 +1141,6 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
     createSubmission: (input: {
       problemId: string;
       problemRevisionId: string;
-      testdataVersionRef: string | null;
       languageId: string;
       source: string;
     }) =>

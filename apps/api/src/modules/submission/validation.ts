@@ -1,7 +1,7 @@
 import { LANGUAGE_CATALOG, MAX_SOURCE_BYTES } from './languages.js';
 import {
   SubmissionValidationError,
-  type SubmissionCreateInput,
+  type SubmissionCreateRequest,
 } from './model.js';
 
 const required = (value: unknown, field: string, max = 512): string => {
@@ -16,7 +16,7 @@ const required = (value: unknown, field: string, max = 512): string => {
   return value;
 };
 
-export function validateCreate(input: unknown): SubmissionCreateInput {
+export function validateCreate(input: unknown): SubmissionCreateRequest {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new SubmissionValidationError({ body: 'must be an object' });
   const value = input as Record<string, unknown>;
@@ -37,11 +37,15 @@ export function validateCreate(input: unknown): SubmissionCreateInput {
       'problemRevisionId',
       128,
     ),
-    testdataVersionRef: required(
-      value.testdataVersionRef,
-      'testdataVersionRef',
-      512,
-    ),
+    ...(value.testdataVersionRef === undefined || value.testdataVersionRef === null
+      ? {}
+      : {
+          testdataVersionRef: required(
+            value.testdataVersionRef,
+            'testdataVersionRef',
+            512,
+          ),
+        }),
     languageId,
     source,
   };

@@ -95,6 +95,24 @@ export class InMemoryProblemRepository implements ProblemRepository {
       throw new ProblemConflictError();
     const updated = { ...row, ...input, updatedAt: now() };
     this.rows.set(row.id, updated);
+    if (
+      updated.currentRevisionId &&
+      (input.status !== undefined || input.visibility !== undefined)
+    )
+      this.history.set(
+        row.id,
+        (this.history.get(row.id) ?? []).map((revision) =>
+          revision.revisionId === updated.currentRevisionId
+            ? {
+                ...revision,
+                ...(input.status === undefined ? {} : { status: input.status }),
+                ...(input.visibility === undefined
+                  ? {}
+                  : { visibility: input.visibility }),
+              }
+            : revision,
+        ),
+      );
     return updated;
   }
   async revisions(key: string) {
@@ -265,7 +283,20 @@ export class PostgresProblemRepository implements ProblemRepository {
       `UPDATE problems SET ${columns.join(', ')}, updated_at=now() WHERE id=$${params.length} RETURNING *`,
       params,
     );
-    return mapRow(result.rows[0]!);
+    const updated = mapRow(result.rows[0]!);
+    if (
+      updated.currentRevisionId &&
+      (input.status !== undefined || input.visibility !== undefined)
+    )
+      await this.pool.query(
+        'UPDATE problem_revisions SET status=COALESCE($1,status), visibility=COALESCE($2,visibility) WHERE id=$3',
+        [
+          input.status ?? null,
+          input.visibility ?? null,
+          updated.currentRevisionId,
+        ],
+      );
+    return updated;
   }
   async revisions(key: string) {
     const row = await this.get(key);

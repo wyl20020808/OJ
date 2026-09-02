@@ -6,8 +6,8 @@
 focused tests, complete TypeScript tests, database integration, Web unit tests,
 format, lint, typecheck, architecture, build, and diff gates pass. A real
 Browser -> Product -> Judge Service -> Worker -> Supervisor -> Sandbox ->
-Product projection verdict run was not executed in this Goal, so no AC/WA/CE/
-RE/TLE/MLE Product E2E or viewport runtime claim is made.
+Product projection verdict run was not executed before the initial checkpoint,
+so no AC/WA/CE/RE/TLE/MLE Product E2E or viewport runtime claim is made.
 
 ## Baseline
 
@@ -66,6 +66,21 @@ not become verdicts.
 - WSL bounded readiness check: PASS (`Ubuntu-24.04`, Go and runc available).
 
 ## Not Verified
+
+## Runtime Evidence Added 2026-09-02
+
+- **RUNTIME VERIFIED (AC only):** a fresh public deterministic A+B problem was
+  bound to its published Judge Data version and submitted from the browser as
+  Guest. Submission `94e7839a-57b9-450f-92c0-f92c4964dd2b` progressed from
+  `QUEUED` to Product-projected `AC` through the standalone Judge Service,
+  real Worker, Supervisor, and Sandbox. The browser displayed `AC`, generation
+  1, and attempt 1 without console warnings/errors.
+- **IMPLEMENTED/TESTED:** publishing synchronizes the current immutable
+  Problem revision's status and visibility; the submission page sends the
+  resolved Product problem ID rather than its URL slug for Judge Data lookup.
+- **NOT VERIFIED:** this single AC path does not qualify the remaining verdicts,
+  lifecycle matrix, responsive viewports, production readiness, or any broader
+  sandbox claim.
 
 - Real Product Browser -> Judge Service -> Worker -> Supervisor -> Sandbox
   qualification for AC, WA, CE, RE, TLE, and MLE.

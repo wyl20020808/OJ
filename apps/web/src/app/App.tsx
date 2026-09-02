@@ -1752,9 +1752,8 @@ function SubmissionForm({
     setState('saving');
     try {
       const result = await api.createSubmission({
-        problemId,
+        problemId: problem?.id ?? problemId,
         problemRevisionId: problem?.currentRevisionId ?? problemId,
-        testdataVersionRef: problem?.testdataVersion ?? null,
         languageId: effectiveLanguageId,
         source,
       });

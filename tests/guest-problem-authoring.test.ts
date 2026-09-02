@@ -34,6 +34,38 @@ const headers = (values: string[]) => ({
 });
 
 describe('guest problem authoring', () => {
+  it('restores a CSRF token for an existing Guest session before authoring', async () => {
+    const app = await buildApp({ logger: false });
+    try {
+      const started = await app.inject({
+        method: 'POST',
+        url: '/api/auth/guest/continue',
+        payload: {},
+      });
+      const session = cookies(started).filter((value) =>
+        value.startsWith('oj_session='),
+      );
+      const me = await app.inject({
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: { cookie: session.join('; ') },
+      });
+      expect(me.statusCode).toBe(200);
+      const restored = cookies(me);
+      expect(csrf(restored)).toBeTruthy();
+
+      const created = await app.inject({
+        method: 'POST',
+        url: '/api/problems',
+        headers: headers([...session, ...restored]),
+        payload: problem('guest-csrf-restored'),
+      });
+      expect(created.statusCode).toBe(201);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('binds Guest judge-data authoring to the server-side guest principal', async () => {
     const app = await buildApp({ logger: false });
     try {

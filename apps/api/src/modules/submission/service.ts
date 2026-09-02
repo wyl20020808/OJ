@@ -3,7 +3,7 @@ import type {
   AuthContext,
   ProblemRevisionResolver,
   Submission,
-  SubmissionCreateInput,
+  SubmissionCreateRequest,
   SubmissionJudgeDataResolver,
 } from './model.js';
 import { SubmissionNotFoundError } from './model.js';
@@ -26,12 +26,7 @@ export class SubmissionService {
       input.problemId,
       input.problemRevisionId,
     );
-    if (
-      !revision ||
-      revision.problemId !== input.problemId ||
-      !revision.testdataVersionRef ||
-      revision.testdataVersionRef !== input.testdataVersionRef
-    )
+    if (!revision || revision.problemId !== input.problemId)
       throw new Error('VALIDATION_ERROR');
     if (
       !(await this.policy.canSubmit(context, {
@@ -47,8 +42,17 @@ export class SubmissionService {
           input.languageId,
         )
       : undefined;
+    const testdataVersionRef =
+      binding?.testdataVersionRef ?? revision.testdataVersionRef;
+    if (
+      !testdataVersionRef ||
+      (input.testdataVersionRef &&
+        input.testdataVersionRef !== testdataVersionRef)
+    )
+      throw new Error('VALIDATION_ERROR');
     return this.repository.create({
       ...input,
+      testdataVersionRef,
       ...binding,
       ownerUserId: context.userId,
     });
@@ -79,7 +83,7 @@ export class SubmissionService {
   ) {
     return this.list({ ...query, problemId }, context);
   }
-  static createInput(input: unknown): SubmissionCreateInput {
+  static createInput(input: unknown): SubmissionCreateRequest {
     return validateCreate(input);
   }
 }

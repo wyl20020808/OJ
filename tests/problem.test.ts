@@ -71,6 +71,26 @@ describe('problem foundation', () => {
       'Problem not found',
     );
   });
+  it('publishes the current revision with the problem', async () => {
+    const repo = new InMemoryProblemRepository();
+    const service = new ProblemService(repo, allow);
+    const created = await service.create(
+      { ...input, status: 'draft', visibility: 'private' },
+      { userId: 'u1' },
+    );
+    await service.transition(
+      created.id,
+      { status: 'published', visibility: 'public' },
+      { userId: 'u1' },
+    );
+    const current = (await repo.revisions(created.id)).find(
+      (revision) => revision.revisionId === created.currentRevisionId,
+    );
+    expect(current).toMatchObject({
+      status: 'published',
+      visibility: 'public',
+    });
+  });
   it('rejects malformed and duplicate input', async () => {
     const repo = new InMemoryProblemRepository();
     const service = new ProblemService(repo, allow);

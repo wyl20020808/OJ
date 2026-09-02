@@ -214,7 +214,6 @@ describe('Product Judge Data submission bridge', () => {
       payload: {
         problemId: 'problem-1',
         problemRevisionId: 'revision-1',
-        testdataVersionRef: 'revision-testdata',
         languageId: 'cpp20',
         source: 'int main() {}',
       },

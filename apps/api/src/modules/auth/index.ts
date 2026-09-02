@@ -364,6 +364,8 @@ export async function registerAuthModule(
     const user = await resolveUser(ctx.userId);
     if (!user || user.status !== 'active')
       return error(reply, 401, 'UNAUTHENTICATED', 'Authentication required');
+    // Restore the double-submit token for sessions issued before CSRF support.
+    setCsrfCookie(reply);
     return projectUser(user);
   });
   const sessions = {

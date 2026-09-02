@@ -77,6 +77,11 @@ export type SubmissionCreateInput = {
   source: string;
 };
 
+export type SubmissionCreateRequest = Omit<
+  SubmissionCreateInput,
+  'testdataVersionRef'
+> & { testdataVersionRef?: string };
+
 export type SubmissionJudgeBinding = {
   judgeDataVersionId: string;
   judgeDataVersionNumber: number;
