@@ -93,7 +93,11 @@ export class InMemoryJudgeDataRepository implements JudgeDataRepository {
     );
   }
   async listVersions(problemId: string) {
-    return structuredClone(this.versions.get(problemId) ?? []);
+    return structuredClone(
+      [...(this.versions.get(problemId) ?? [])].sort(
+        (a, b) => b.versionNumber - a.versionNumber,
+      ),
+    );
   }
   async publish(draft: JudgeDraft, actor: string, expectedRevision?: number) {
     const current = this.drafts.get(draft.problemId);
@@ -349,8 +353,7 @@ export class PostgresJudgeDataRepository implements JudgeDataRepository {
       const current = await this.readDraft(db, draft.problemId);
       if (
         expectedRevision !== undefined &&
-        current &&
-        current.revision !== expectedRevision
+        (!current || current.revision !== expectedRevision)
       )
         throw new JudgeDataError(
           'STALE_PUBLISH_CONFLICT',
@@ -416,7 +419,7 @@ export class PostgresJudgeDataRepository implements JudgeDataRepository {
       for (const testcase of v.testcases)
         for (const ref of [testcase.input, testcase.expectedOutput])
           await db.query(
-            'INSERT INTO problem_judge_data_objects(object_id,problem_id,version_id,object_key,file_name,size_bytes,sha256) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING',
+            'INSERT INTO problem_judge_data_objects(object_id,problem_id,version_id,object_key,file_name,size_bytes,sha256) VALUES($1,$2,$3,$4,$5,$6,$7)',
             [
               ref.objectId,
               v.problemId,

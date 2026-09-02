@@ -135,9 +135,15 @@ export const validateDefaults = (value: unknown): JudgeDefaults => {
   const profiles = v.allowedLanguageProfiles;
   if (
     !Array.isArray(profiles) ||
+    profiles.length < 1 ||
     profiles.some((p) => typeof p !== 'string' || p.length > 128)
   )
     throw new JudgeDataError('VALIDATION_FAILED', 'Invalid language profiles');
+  if (profiles.some((p) => p !== 'cpp20-gcc-13-v1'))
+    throw new JudgeDataError(
+      'VALIDATION_FAILED',
+      'Unsupported language profile',
+    );
   return {
     timeLimitMs: validateLimit(v.timeLimitMs, 600_000),
     memoryLimitBytes: validateLimit(v.memoryLimitBytes),
@@ -161,11 +167,25 @@ export const validateObjectRef = (value: unknown): ObjectRef => {
     !v.key ||
     typeof v.fileName !== 'string' ||
     !v.fileName ||
+    v.fileName.length > 255 ||
+    v.fileName.includes('\\') ||
+    v.fileName.includes('\0') ||
+    v.fileName.startsWith('/') ||
+    v.fileName
+      .split('/')
+      .some((part) => part === '.' || part === '..' || part === '') ||
     typeof v.sha256 !== 'string' ||
     !/^[a-f0-9]{64}$/.test(v.sha256)
   )
     throw new JudgeDataError('INVALID_PAIR', 'Invalid object reference');
-  const size = validateLimit(v.sizeBytes, 16 * 1024 * 1024);
+  if (
+    typeof v.sizeBytes !== 'number' ||
+    !Number.isSafeInteger(v.sizeBytes) ||
+    v.sizeBytes < 0 ||
+    v.sizeBytes > 16 * 1024 * 1024
+  )
+    throw new JudgeDataError('INVALID_PAIR', 'Invalid object reference');
+  const size = v.sizeBytes;
   return {
     objectId: v.objectId,
     key: v.key,

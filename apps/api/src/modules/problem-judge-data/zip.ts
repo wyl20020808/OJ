@@ -38,6 +38,7 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
       throw unsafe();
     let p = centralOffset;
     let total = 0;
+    let compressedTotal = 0;
     const seen = new Set<string>();
     const pairs = new Map<
       string,
@@ -71,6 +72,8 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
         throw unsafe('Unsupported archive entry');
       if (csize > MAX_FILE || usize > MAX_FILE || usize > MAX_TOTAL - total)
         throw unsafe('Archive exceeds size limits');
+      if (csize > MAX_TOTAL - compressedTotal)
+        throw unsafe('Archive exceeds compressed size limits');
       if (csize > 0 && usize > csize * MAX_RATIO)
         throw unsafe('Archive compression ratio exceeded');
       if (
@@ -80,6 +83,20 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
         throw unsafe('Invalid local header');
       const localNameLength = b.readUInt16LE(localOffset + 26);
       const localExtraLength = b.readUInt16LE(localOffset + 28);
+      const localMethod = b.readUInt16LE(localOffset + 8);
+      const localCompressedSize = b.readUInt32LE(localOffset + 18);
+      const localSize = b.readUInt32LE(localOffset + 22);
+      const localName = b
+        .subarray(localOffset + 30, localOffset + 30 + localNameLength)
+        .toString('utf8')
+        .normalize('NFKC');
+      if (
+        localName !== name ||
+        localMethod !== method ||
+        localCompressedSize !== csize ||
+        localSize !== usize
+      )
+        throw unsafe('Header mismatch');
       const start = localOffset + 30 + localNameLength + localExtraLength;
       const end = start + csize;
       if (end > b.length) throw unsafe('Truncated archive');
@@ -93,8 +110,11 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
       if (!data || data.length !== usize)
         throw unsafe('Unsupported or corrupt archive');
       total += data.length;
+      compressedTotal += csize;
       const match = /^(.*)\.(in|out)$/i.exec(name);
       if (match) {
+        if (!match[1])
+          throw new JudgeDataError('INVALID_PAIR', 'Invalid testcase name');
         const key = (match[1] ?? '').replace(/^0+/, '') || '0';
         const pair = pairs.get(key) ?? {};
         if (match[2]!.toLowerCase() === 'in') {

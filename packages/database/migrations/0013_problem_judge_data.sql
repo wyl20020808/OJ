@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS judge_data_versions (
   manifest jsonb NOT NULL,
   UNIQUE(problem_id, version_number),
   UNIQUE(problem_id, manifest_sha256),
+  UNIQUE(version_id, problem_id),
   CHECK (checker IN ('EXACT_BYTES','TOKEN_WHITESPACE'))
 );
 CREATE TABLE IF NOT EXISTS judge_data_version_testcases (
@@ -74,6 +75,9 @@ CREATE TABLE IF NOT EXISTS problem_judge_data_objects (
   size_bytes bigint NOT NULL,
   sha256 text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (version_id, problem_id)
+    REFERENCES judge_data_versions(version_id, problem_id)
+    ON DELETE RESTRICT,
   UNIQUE(problem_id, object_key, sha256)
 );
 CREATE INDEX IF NOT EXISTS judge_data_versions_problem_idx ON judge_data_versions(problem_id, version_number DESC);

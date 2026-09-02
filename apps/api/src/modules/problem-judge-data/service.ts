@@ -10,10 +10,33 @@ import {
   type JudgeDataRepository,
   type JudgeDraft,
   type DraftTestcase,
+  type ObjectRef,
+  type JudgeDataVersion,
   type JudgeDataHandoff,
 } from './model.js';
 import type { ByteStorage } from './storage.js';
 import { parseZip } from './zip.js';
+
+type PublicObjectRef = Omit<ObjectRef, 'key'>;
+const publicRef = (ref: ObjectRef): PublicObjectRef => ({
+  objectId: ref.objectId,
+  fileName: ref.fileName,
+  sizeBytes: ref.sizeBytes,
+  sha256: ref.sha256,
+});
+const publicCase = (testcase: DraftTestcase) => ({
+  ...testcase,
+  input: publicRef(testcase.input),
+  expectedOutput: publicRef(testcase.expectedOutput),
+});
+const publicDraft = (draft: JudgeDraft) => ({
+  ...draft,
+  testcases: draft.testcases.map(publicCase),
+});
+const publicVersion = (version: JudgeDataVersion) => ({
+  ...version,
+  testcases: version.testcases.map(publicCase),
+});
 export class ProblemJudgeDataService {
   constructor(
     private readonly repo: JudgeDataRepository,
@@ -29,13 +52,23 @@ export class ProblemJudgeDataService {
       testdataVersionId: string;
       testcaseSetId: string;
       executionProfileId: 'cpp20-gcc-13-v1';
-    }> = async (problemId) => ({
-      problemRevisionId: `problem:${problemId}:current-revision`,
-      testdataVersionId: `judge-data:${problemId}`,
-      testcaseSetId: `judge-data:${problemId}`,
-      executionProfileId: 'cpp20-gcc-13-v1',
-    }),
+    }>,
   ) {}
+  private assertDraftRef(problemId: string, ref: { key: string }) {
+    const prefix = `judge-data/problems/${problemId}/draft/`;
+    const parts = ref.key.split('/');
+    if (
+      !ref.key.startsWith(prefix) ||
+      ref.key.length > 1024 ||
+      ref.key.includes('\\') ||
+      ref.key.includes('\0') ||
+      parts.some((part) => part === '.' || part === '..' || part === '')
+    )
+      throw new JudgeDataError(
+        'INVALID_PAIR',
+        'Object is not owned by problem draft',
+      );
+  }
   private async auth(action: string, user: unknown, p: string) {
     if (!user)
       throw new JudgeDataError('UNAUTHORIZED', 'Authentication required', 401);
@@ -46,7 +79,8 @@ export class ProblemJudgeDataService {
   }
   async draft(problemId: string, user: unknown) {
     await this.auth('view', user, problemId);
-    return (await this.repo.getDraft(problemId)) ?? undefined;
+    const draft = await this.repo.getDraft(problemId);
+    return draft ? publicDraft(draft) : undefined;
   }
   async metadata(problemId: string, user: unknown) {
     await this.auth('view', user, problemId);
@@ -69,13 +103,13 @@ export class ProblemJudgeDataService {
   }
   async versions(problemId: string, user: unknown) {
     await this.auth('view', user, problemId);
-    return this.repo.listVersions(problemId);
+    return (await this.repo.listVersions(problemId)).map(publicVersion);
   }
   async version(problemId: string, versionId: string, user: unknown) {
     await this.auth('view', user, problemId);
     const v = await this.repo.getVersion(problemId, versionId);
     if (!v) throw new JudgeDataError('NOT_FOUND', 'Version not found', 404);
-    return v;
+    return publicVersion(v);
   }
   async testcase(problemId: string, testcaseId: string, user: unknown) {
     await this.auth('view', user, problemId);
@@ -89,8 +123,8 @@ export class ProblemJudgeDataService {
       throw new JudgeDataError('NOT_FOUND', 'Testcase not found', 404);
     return {
       ...found,
-      input: { ...found.input },
-      expectedOutput: { ...found.expectedOutput },
+      input: publicRef(found.input),
+      expectedOutput: publicRef(found.expectedOutput),
     };
   }
   async saveConfig(problemId: string, body: unknown, user: unknown) {
@@ -114,7 +148,7 @@ export class ProblemJudgeDataService {
       updatedAt: now(),
       updatedBy: (user as { userId: string }).userId,
     };
-    return this.repo.saveDraft(draft, old?.revision);
+    return publicDraft(await this.repo.saveDraft(draft, old?.revision));
   }
   private async saveCase(problemId: string, c: DraftTestcase, user: unknown) {
     await this.auth('manage', user, problemId);
@@ -148,7 +182,7 @@ export class ProblemJudgeDataService {
       updatedAt: now(),
       updatedBy: (user as { userId: string }).userId,
     };
-    return this.repo.saveDraft(draft, old?.revision);
+    return publicDraft(await this.repo.saveDraft(draft, old?.revision));
   }
   async addTestcase(problemId: string, body: unknown, user: unknown) {
     await this.auth('manage', user, problemId);
@@ -165,11 +199,25 @@ export class ProblemJudgeDataService {
       });
     const input = validateObjectRef(b.input);
     const expectedOutput = validateObjectRef(b.expectedOutput);
+    this.assertDraftRef(problemId, input);
+    this.assertDraftRef(problemId, expectedOutput);
+    await Promise.all([
+      this.storage.verify(input),
+      this.storage.verify(expectedOutput),
+    ]);
     const c: DraftTestcase = {
       testcaseId: typeof b.testcaseId === 'string' ? b.testcaseId : id(),
-      ordinal: Number.isInteger(b.ordinal)
-        ? Number(b.ordinal)
-        : (old?.testcases.length ?? 0),
+      ordinal:
+        b.ordinal === undefined
+          ? (old?.testcases.length ?? 0)
+          : Number.isSafeInteger(b.ordinal) && Number(b.ordinal) >= 0
+            ? Number(b.ordinal)
+            : (() => {
+                throw new JudgeDataError(
+                  'VALIDATION_FAILED',
+                  'Invalid ordinal',
+                );
+              })(),
       label: typeof b.label === 'string' ? b.label : null,
       input,
       expectedOutput,
@@ -232,16 +280,22 @@ export class ProblemJudgeDataService {
         !name ||
         name.length > 255 ||
         name.includes('\\') ||
+        name.includes('\0') ||
         name.startsWith('/') ||
-        name.split('/').includes('..')
+        name
+          .split('/')
+          .some((part) => part === '.' || part === '..' || part === '')
       )
         throw new JudgeDataError('UNSAFE_ARCHIVE', 'Unsafe file name');
     }
     const base = `judge-data/problems/${problemId}/draft/${id()}`;
-    const refs = await Promise.all([
-      this.storage.put(input, `${base}/input`, fileNames.input, problemId),
-      this.storage.put(output, `${base}/output`, fileNames.output, problemId),
-    ]);
+    const refs = await this.uploadPair(
+      problemId,
+      input,
+      output,
+      base,
+      fileNames,
+    );
     const old = await this.repo.getDraft(problemId);
     const ordinal = old?.testcases.length ?? 0;
     const c: DraftTestcase = {
@@ -260,7 +314,45 @@ export class ProblemJudgeDataService {
       createdAt: now(),
       updatedAt: now(),
     };
-    return this.saveCase(problemId, c, user);
+    try {
+      return await this.saveCase(problemId, c, user);
+    } catch (error) {
+      if (this.storage.remove)
+        await Promise.all(refs.map((ref) => this.storage.remove!(ref)));
+      throw error;
+    }
+  }
+  private async uploadPair(
+    problemId: string,
+    input: Uint8Array,
+    output: Uint8Array,
+    base: string,
+    fileNames: { input: string; output: string },
+  ) {
+    const refs: Awaited<ReturnType<ByteStorage['put']>>[] = [];
+    try {
+      refs.push(
+        await this.storage.put(
+          input,
+          `${base}/input`,
+          fileNames.input,
+          problemId,
+        ),
+      );
+      refs.push(
+        await this.storage.put(
+          output,
+          `${base}/output`,
+          fileNames.output,
+          problemId,
+        ),
+      );
+      return [refs[0]!, refs[1]!] as const;
+    } catch (error) {
+      if (this.storage.remove)
+        await Promise.all(refs.map((ref) => this.storage.remove!(ref)));
+      throw error;
+    }
   }
   async addZip(problemId: string, bytes: Uint8Array, user: unknown) {
     await this.auth('manage', user, problemId);
@@ -276,68 +368,74 @@ export class ProblemJudgeDataService {
         allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
       });
     const base = `judge-data/problems/${problemId}/draft/${id()}`;
-    const uploaded = await Promise.all(
-      pairs.map(async (p, index) => {
-        const refs = await Promise.all([
-          this.storage.put(
-            p.input,
-            `${base}/${index}/input`,
-            `${p.name}.in`,
-            problemId,
-          ),
-          this.storage.put(
-            p.output,
-            `${base}/${index}/output`,
-            `${p.name}.out`,
-            problemId,
-          ),
-        ]);
-        return {
+    const uploaded: {
+      refs: readonly [ObjectRef, ObjectRef];
+      name: string;
+      ordinal: number;
+    }[] = [];
+    try {
+      for (const [index, p] of pairs.entries()) {
+        const refs = await this.uploadPair(
+          problemId,
+          p.input,
+          p.output,
+          `${base}/${index}`,
+          { input: `${p.name}.in`, output: `${p.name}.out` },
+        );
+        uploaded.push({
           refs,
           name: p.name,
           ordinal: (old?.testcases.length ?? 0) + index,
-        };
-      }),
-    );
-    const timestamp = now();
-    const testcases: DraftTestcase[] = uploaded.map(
-      ({ refs, name, ordinal }) => ({
-        testcaseId: id(),
-        ordinal,
-        label: name,
-        input: refs[0]!,
-        expectedOutput: refs[1]!,
-        timeLimitMsOverride: null,
-        memoryLimitBytesOverride: null,
-        outputLimitBytesOverride: null,
-        effectiveTimeLimitMs: defaults.timeLimitMs,
-        effectiveMemoryLimitBytes: defaults.memoryLimitBytes,
-        effectiveOutputLimitBytes: defaults.outputLimitBytes,
-        createdAt: timestamp,
+        });
+      }
+      const timestamp = now();
+      const testcases: DraftTestcase[] = uploaded.map(
+        ({ refs, name, ordinal }) => ({
+          testcaseId: id(),
+          ordinal,
+          label: name,
+          input: refs[0]!,
+          expectedOutput: refs[1]!,
+          timeLimitMsOverride: null,
+          memoryLimitBytesOverride: null,
+          outputLimitBytesOverride: null,
+          effectiveTimeLimitMs: defaults.timeLimitMs,
+          effectiveMemoryLimitBytes: defaults.memoryLimitBytes,
+          effectiveOutputLimitBytes: defaults.outputLimitBytes,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }),
+      );
+      const identity = old ?? {
+        problemId,
+        ...(await this.resolveIdentity(problemId)),
+      };
+      const draft: JudgeDraft = {
+        problemId,
+        problemRevisionId: identity.problemRevisionId,
+        testdataVersionId: identity.testdataVersionId,
+        testcaseSetId: identity.testcaseSetId,
+        executionProfileId: identity.executionProfileId,
+        status: 'DRAFT',
+        revision: old?.revision ?? 0,
+        defaults,
+        testcases: [...(old?.testcases ?? []), ...testcases],
         updatedAt: timestamp,
-      }),
-    );
-    const identity = old ?? {
-      problemId,
-      ...(await this.resolveIdentity(problemId)),
-    };
-    const draft: JudgeDraft = {
-      problemId,
-      problemRevisionId: identity.problemRevisionId,
-      testdataVersionId: identity.testdataVersionId,
-      testcaseSetId: identity.testcaseSetId,
-      executionProfileId: identity.executionProfileId,
-      status: 'DRAFT',
-      revision: old?.revision ?? 0,
-      defaults,
-      testcases: [...(old?.testcases ?? []), ...testcases],
-      updatedAt: timestamp,
-      updatedBy: (user as { userId: string }).userId,
-    };
-    return {
-      imported: pairs.length,
-      draft: await this.repo.saveDraft(draft, old?.revision),
-    };
+        updatedBy: (user as { userId: string }).userId,
+      };
+      return {
+        imported: pairs.length,
+        draft: publicDraft(await this.repo.saveDraft(draft, old?.revision)),
+      };
+    } catch (error) {
+      if (this.storage.remove)
+        await Promise.all(
+          uploaded.flatMap(({ refs }) =>
+            refs.map((ref) => this.storage.remove!(ref)),
+          ),
+        );
+      throw error;
+    }
   }
   async updateTestcase(
     problemId: string,
@@ -409,7 +507,7 @@ export class ProblemJudgeDataService {
     draft.status = 'DRAFT';
     delete draft.manifestSha256;
     draft.updatedBy = (user as { userId: string }).userId;
-    return this.repo.saveDraft(draft, draft.revision);
+    return publicDraft(await this.repo.saveDraft(draft, draft.revision));
   }
   async deleteTestcase(problemId: string, testcaseId: string, user: unknown) {
     await this.auth('manage', user, problemId);
@@ -423,7 +521,7 @@ export class ProblemJudgeDataService {
     draft.status = 'DRAFT';
     delete draft.manifestSha256;
     draft.updatedBy = (user as { userId: string }).userId;
-    return this.repo.saveDraft(draft, draft.revision);
+    return publicDraft(await this.repo.saveDraft(draft, draft.revision));
   }
   async validate(problemId: string, user: unknown) {
     await this.auth('manage', user, problemId);
@@ -434,13 +532,15 @@ export class ProblemJudgeDataService {
         'At least one testcase required',
       );
     for (const c of d.testcases) {
+      this.assertDraftRef(problemId, c.input);
+      this.assertDraftRef(problemId, c.expectedOutput);
       await this.storage.verify(c.input);
       await this.storage.verify(c.expectedOutput);
     }
     const hash = canonicalManifestHash(d, d.testcases);
     d.status = 'VALIDATED';
     d.manifestSha256 = hash;
-    return this.repo.saveDraft(d, d.revision);
+    return publicDraft(await this.repo.saveDraft(d, d.revision));
   }
   async publish(problemId: string, user: unknown, expectedRevision?: number) {
     await this.auth('publish', user, problemId);
@@ -451,13 +551,17 @@ export class ProblemJudgeDataService {
     if (computed !== d.manifestSha256)
       throw new JudgeDataError('INTEGRITY_MISMATCH', 'Manifest changed', 409);
     for (const c of d.testcases) {
+      this.assertDraftRef(problemId, c.input);
+      this.assertDraftRef(problemId, c.expectedOutput);
       await this.storage.verify(c.input);
       await this.storage.verify(c.expectedOutput);
     }
-    return this.repo.publish(
-      d,
-      (user as { userId: string }).userId,
-      expectedRevision ?? d.revision,
+    return publicVersion(
+      await this.repo.publish(
+        d,
+        (user as { userId: string }).userId,
+        expectedRevision ?? d.revision,
+      ),
     );
   }
   handoff(
@@ -467,13 +571,13 @@ export class ProblemJudgeDataService {
     return {
       problemId: v.problemId,
       judgeDataVersionId: v.versionId,
-      problemRevisionId: v.problemRevisionId ?? 'product-current-revision',
-      testdataVersionId: v.testdataVersionId ?? v.versionId,
-      testcaseSetId: v.testcaseSetId ?? v.versionId,
+      problemRevisionId: v.problemRevisionId,
+      testdataVersionId: v.testdataVersionId,
+      testcaseSetId: v.testcaseSetId,
       manifestSha256: v.manifestSha256,
       checker: v.checker,
-      executionProfileId: 'cpp20-gcc-13-v1',
-      allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
+      executionProfileId: v.executionProfileId,
+      allowedLanguageProfiles: [...v.allowedLanguageProfiles],
       testcases: v.testcases.map((c) => ({
         testcaseId: c.testcaseId,
         ordinal: c.ordinal,

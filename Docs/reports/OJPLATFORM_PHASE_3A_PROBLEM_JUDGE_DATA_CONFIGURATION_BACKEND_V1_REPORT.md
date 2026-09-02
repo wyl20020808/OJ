@@ -14,7 +14,7 @@ NOT VERIFIED in this Windows worktree: PostgreSQL/MinIO integration was not avai
 
 ## TEST EVIDENCE
 
-`tests/problem-judge-data.test.ts` passes 3 focused tests covering draft/config, effective per-case limits, publish immutability, canonical manifest hash, stale publish conflict, and authorization denial. `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test:architecture`, `pnpm build`, and `git diff --check` pass. Full `pnpm test` reaches 358 passing tests but is PARTIAL because the pre-existing PostgreSQL integration suite cannot connect in this environment.
+`tests/problem-judge-data.test.ts` passes 4 focused tests covering draft/config, all per-case effective limits, publish immutability, v1 to v2 history, canonical 2C.4 manifest hash, handoff binding, stale publish conflict, authorization denial, valid ZIP import, traversal rejection, and normalized duplicate rejection. `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test:architecture`, `pnpm build`, and `git diff --check` pass. Full `pnpm test` reaches 362 passing tests but is PARTIAL because the pre-existing PostgreSQL integration suite cannot connect in this environment.
 
 ## PRODUCT→JUDGE HANDOFF CONTRACT
 
