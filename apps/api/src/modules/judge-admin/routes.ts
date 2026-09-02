@@ -198,6 +198,16 @@ export async function registerJudgeAdminRoutes(
               message: 'Idempotency key was already used',
               requestId: r.id,
             });
+          await o.audit.record({
+            ...base,
+            actorUserId: ctx.userId,
+            outcome: 'success',
+            expectedIncarnation: body.expectedIncarnation,
+            expectedControlVersion: body.expectedControlVersion,
+            reason: body.reason,
+            idempotencyKey: body.idempotencyKey,
+            afterState: prior.result,
+          });
           return reply.send(prior.result);
         }
         try {
