@@ -16,5 +16,21 @@ describe('runtime configuration', () => {
     const config = loadConfig({});
     expect(config.databaseUrl).toContain('127.0.0.1');
     expect(config.s3SecretKey).toBeDefined();
+    expect(config.corsOrigins).toEqual([]);
+  });
+
+  it('accepts only explicit CORS origins', () => {
+    expect(
+      loadConfig({
+        OJPLATFORM_CORS_ORIGINS:
+          'http://127.0.0.1:5173, https://web.example.test',
+      }).corsOrigins,
+    ).toEqual(['http://127.0.0.1:5173', 'https://web.example.test']);
+    expect(() => loadConfig({ OJPLATFORM_CORS_ORIGINS: '*' })).toThrow(
+      'OJPLATFORM_CORS_ORIGINS',
+    );
+    expect(() =>
+      loadConfig({ OJPLATFORM_CORS_ORIGINS: 'https://web.example.test/path' }),
+    ).toThrow('must be origins');
   });
 });

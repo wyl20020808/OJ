@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../apps/api/src/app.js';
+import { loadConfig } from '../apps/api/src/config.js';
 
 describe('API platform contract', () => {
   it('serves health, readiness, request IDs, and controlled errors', async () => {
@@ -45,6 +46,34 @@ describe('API platform contract', () => {
     const document = await app.inject({ method: 'GET', url: '/openapi.json' });
     expect(document.statusCode).toBe(200);
     expect(document.json().paths).toHaveProperty('/health');
+    await app.close();
+  });
+
+  it('allows credentialed CORS only for configured origins', async () => {
+    const app = await buildApp({
+      logger: false,
+      config: loadConfig({
+        OJPLATFORM_CORS_ORIGINS: 'http://127.0.0.1:5177',
+      }),
+    });
+    const preflight = (origin: string) =>
+      app.inject({
+        method: 'OPTIONS',
+        url: '/health',
+        headers: {
+          origin,
+          'access-control-request-method': 'GET',
+        },
+      });
+    const trusted = await preflight('http://127.0.0.1:5177');
+    expect(trusted.headers['access-control-allow-origin']).toBe(
+      'http://127.0.0.1:5177',
+    );
+    expect(trusted.headers['access-control-allow-credentials']).toBe('true');
+
+    const untrusted = await preflight('https://untrusted.example.test');
+    expect(untrusted.headers['access-control-allow-origin']).toBeUndefined();
+    expect((await app.inject('/health')).statusCode).toBe(200);
     await app.close();
   });
 });

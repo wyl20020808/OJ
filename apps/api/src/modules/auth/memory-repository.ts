@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { AuthRepository } from './types.js';
 import type { User } from '../user/model.js';
+import { createMemoryAuthV2Repository } from './memory-v2-repository.js';
 export function createMemoryAuthRepository(): AuthRepository {
-  const users = new Map<string, User & { passwordHash: string }>();
+  const users = new Map<
+    string,
+    User & { passwordHash: string; passwordLoginEnabled?: boolean }
+  >();
   const sessions = new Map<
     string,
     {
@@ -13,7 +17,7 @@ export function createMemoryAuthRepository(): AuthRepository {
       revokedAt: Date | null;
     }
   >();
-  return {
+  const repository: AuthRepository = {
     async createUser(input) {
       const now = new Date().toISOString();
       const user = {
@@ -22,8 +26,15 @@ export function createMemoryAuthRepository(): AuthRepository {
         status: 'active' as const,
         createdAt: now,
         updatedAt: now,
+        passwordLoginEnabled: true,
       };
       users.set(user.id, user);
+      if (repository.v2)
+        await repository.v2.addIdentity({
+          userId: user.id,
+          kind: 'EMAIL',
+          value: input.email,
+        });
       return user;
     },
     async findByIdentity(identity) {
@@ -32,7 +43,7 @@ export function createMemoryAuthRepository(): AuthRepository {
         [...users.values()].find(
           (u) =>
             u.username.toLowerCase() === value ||
-            u.email.toLowerCase() === value,
+            u.email?.toLowerCase() === value,
         ) ?? null
       );
     },
@@ -49,6 +60,19 @@ export function createMemoryAuthRepository(): AuthRepository {
         revokedAt: null,
       });
       return { id };
+    },
+    async updateProfile(id, patch) {
+      const user = users.get(id);
+      if (!user || user.status !== 'active') return null;
+      user.displayName = patch.displayName;
+      user.updatedAt = new Date().toISOString();
+      return user;
+    },
+    async updatePasswordHash(id, passwordHash) {
+      const user = users.get(id);
+      if (!user) return false;
+      user.passwordHash = passwordHash;
+      return true;
     },
     async findSession(hash) {
       const s = sessions.get(hash);
@@ -82,8 +106,15 @@ export function createMemoryAuthRepository(): AuthRepository {
       for (const s of sessions.values())
         if (s.userId === userId) s.revokedAt = new Date();
     },
+    async revokeOtherSessions(userId, keepSessionId) {
+      for (const s of sessions.values())
+        if (s.userId === userId && s.id !== keepSessionId)
+          s.revokedAt = new Date();
+    },
     async findSessionOwner(id) {
       return [...sessions.values()].find((s) => s.id === id)?.userId ?? null;
     },
   };
+  repository.v2 = createMemoryAuthV2Repository(users);
+  return repository;
 }

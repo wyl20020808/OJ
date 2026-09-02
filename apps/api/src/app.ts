@@ -6,13 +6,20 @@ import { createHash } from 'node:crypto';
 import { Type } from '@sinclair/typebox';
 import { createDatabase, checkDatabase } from '@ojplatform/database';
 import { createCache, checkCache } from '@ojplatform/cache';
+import { createRedisRateLimiter } from './modules/auth/rate-limiter.js';
 import { createStorage, checkStorage } from '@ojplatform/storage';
 import { loadConfig, type RuntimeConfig } from './config.js';
 import {
+  createPostgresGuestAuthStore,
+  RedisGuestRateLimiter,
   createMemoryAuthRepository,
   createPostgresAuthRepository,
   registerAuthModule,
 } from './modules/auth/index.js';
+import { registerContestModule } from './modules/contest/index.js';
+import { registerSocialModule } from './modules/social/index.js';
+import { registerProfileModule } from './modules/profile/index.js';
+import { RedisFixedWindowLimiter } from './modules/social/rate-limiter.js';
 import {
   InMemoryProblemRepository,
   PostgresProblemRepository,
@@ -111,6 +118,7 @@ const bounded = async (
 };
 
 export async function buildApp(options: AppOptions = {}) {
+  const config = options.config ?? loadConfig();
   const realSubmissionExecution =
     options.realSubmissionExecution ??
     process.env.REAL_SUBMISSION_EXECUTION === 'true';
@@ -128,7 +136,10 @@ export async function buildApp(options: AppOptions = {}) {
         : crypto.randomUUID();
     },
   });
-  await app.register(cors, { origin: true });
+  await app.register(cors, {
+    origin: config.corsOrigins,
+    credentials: true,
+  });
   app.addHook('onSend', async (request, reply) => {
     reply.header('x-request-id', request.id);
   });
@@ -163,7 +174,6 @@ export async function buildApp(options: AppOptions = {}) {
   if (options.withInfrastructure) {
     const qualificationMode =
       process.env.OJPLATFORM_PHASE1E_QUALIFICATION === 'true';
-    const config = options.config ?? loadConfig();
     const database = createDatabase({ url: config.databaseUrl });
     const cache = createCache({ url: config.redisUrl });
     const storage = createStorage({
@@ -182,10 +192,14 @@ export async function buildApp(options: AppOptions = {}) {
           requestId: event.requestId ?? 'internal',
         }),
     };
+    const authRepository = createPostgresAuthRepository(database.pool);
     const auth = await registerAuthModule(app, {
-      repository: createPostgresAuthRepository(database.pool),
+      repository: authRepository,
       production: process.env.NODE_ENV === 'production',
       auditHook,
+      rateLimiter: createRedisRateLimiter(cache),
+      guestStore: createPostgresGuestAuthStore(database.pool),
+      guestRateLimiter: new RedisGuestRateLimiter(cache),
     });
     const submissionRepository = new PostgresSubmissionRepository(
       database.pool,
@@ -421,6 +435,25 @@ export async function buildApp(options: AppOptions = {}) {
             : {}),
         };
       },
+    });
+    await registerContestModule(app, {
+      pool: database.pool,
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      audit: auditHook,
+      problemExists: async (id) => Boolean(await problemRepository.get(id)),
+    });
+    await registerSocialModule(app, {
+      pool: database.pool,
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      audit: auditHook,
+      limiter: new RedisFixedWindowLimiter(cache),
+    });
+    await registerProfileModule(app, {
+      pool: database.pool,
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
     await registerWorkerControlRoutes(app, {
       cache,

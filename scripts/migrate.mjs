@@ -19,6 +19,12 @@ try {
     '0005_submission_intake',
     '0006_submission_evaluation_history',
     '0007_submission_status_lifecycle',
+    '0006_auth_identity_verification_social',
+    '0007_contest_foundation',
+    '0008_social_messaging_foundation',
+    '0009_notifications_foundation',
+    '0010_guest_auth',
+    '0011_profile_favorites',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {

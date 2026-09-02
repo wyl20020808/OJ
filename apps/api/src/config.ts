@@ -1,6 +1,7 @@
 export type RuntimeConfig = {
   port: number;
   host: string;
+  corsOrigins: string[];
   databaseUrl: string;
   redisUrl: string;
   s3Endpoint: string;
@@ -19,6 +20,21 @@ const url = (name: string, value: string): string => {
   }
 };
 
+const corsOrigins = (value = ''): string[] =>
+  [
+    ...new Set(
+      value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ),
+  ].map((origin) => {
+    const parsed = url('OJPLATFORM_CORS_ORIGINS', origin);
+    if (new URL(parsed).origin !== parsed)
+      throw new Error('OJPLATFORM_CORS_ORIGINS entries must be origins');
+    return parsed;
+  });
+
 export function loadConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeConfig {
@@ -28,6 +44,7 @@ export function loadConfig(
   return {
     port,
     host: env.HOST ?? '127.0.0.1',
+    corsOrigins: corsOrigins(env.OJPLATFORM_CORS_ORIGINS),
     databaseUrl: url(
       'DATABASE_URL',
       env.DATABASE_URL ??
