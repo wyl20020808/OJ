@@ -107,8 +107,18 @@ export type JudgeDraftTestcase = {
   testcaseId: string;
   ordinal: number;
   label: string | null;
-  input: { objectId: string; fileName: string; sizeBytes: number; sha256: string };
-  expectedOutput: { objectId: string; fileName: string; sizeBytes: number; sha256: string };
+  input: {
+    objectId: string;
+    fileName: string;
+    sizeBytes: number;
+    sha256: string;
+  };
+  expectedOutput: {
+    objectId: string;
+    fileName: string;
+    sizeBytes: number;
+    sha256: string;
+  };
   timeLimitMsOverride: number | null;
   memoryLimitBytesOverride: number | null;
   outputLimitBytesOverride: number | null;
@@ -129,11 +139,18 @@ export type JudgeDataVersionSummary = {
   publishedAt: string;
   publishedBy: string;
 };
+export type JudgeDataVersion = JudgeDataVersionSummary & {
+  testcases?: JudgeDraftTestcase[];
+};
 export type JudgeDraft = {
   problemId: string;
   defaults: ProblemJudgeDefaults;
   testcases: JudgeDraftTestcase[];
-  validation: { state: 'VALID' | 'INVALID' | 'UNKNOWN'; errors: string[]; warnings: string[] };
+  validation: {
+    state: 'VALID' | 'INVALID' | 'UNKNOWN';
+    errors: string[];
+    warnings: string[];
+  };
   updatedAt: string;
 };
 export type Page = { limit: number; offset: number; total: number };
@@ -953,6 +970,20 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
+    judgeVersion: (problemId: string, versionId: string) =>
+      request<JudgeDataVersion>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/versions/${encodeURIComponent(versionId)}`,
+        undefined,
+        fetcher,
+      ),
+    judgeTestcase: (problemId: string, testcaseId: string) =>
+      request<JudgeDraftTestcase>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data/testcases/${encodeURIComponent(testcaseId)}`,
+        undefined,
+        fetcher,
+      ),
     saveJudgeConfig: (problemId: string, config: ProblemJudgeDefaults) =>
       request<JudgeDraft>(
         baseUrl,
@@ -960,7 +991,10 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'PUT', body: JSON.stringify(config) },
         fetcher,
       ),
-    addJudgeTestcase: (problemId: string, input: FormData | Record<string, unknown>) =>
+    addJudgeTestcase: (
+      problemId: string,
+      input: FormData | Record<string, unknown>,
+    ) =>
       request<JudgeDraftTestcase>(
         baseUrl,
         `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/testcases`,
@@ -969,7 +1003,11 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
           : { method: 'POST', body: JSON.stringify(input) },
         fetcher,
       ),
-    updateJudgeTestcase: (problemId: string, testcaseId: string, input: Record<string, unknown>) =>
+    updateJudgeTestcase: (
+      problemId: string,
+      testcaseId: string,
+      input: Record<string, unknown>,
+    ) =>
       request<JudgeDraftTestcase>(
         baseUrl,
         `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/testcases/${encodeURIComponent(testcaseId)}`,
@@ -985,7 +1023,8 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       ),
     uploadJudgeData: (problemId: string, file: File | File[], zip = false) => {
       const data = new FormData();
-      for (const item of Array.isArray(file) ? file : [file]) data.append('file', item);
+      for (const item of Array.isArray(file) ? file : [file])
+        data.append('file', item);
       return request<JudgeDraft>(
         baseUrl,
         `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/${zip ? 'upload-zip' : 'upload'}`,

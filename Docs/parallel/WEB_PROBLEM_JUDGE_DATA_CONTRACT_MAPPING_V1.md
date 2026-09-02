@@ -11,6 +11,8 @@ The Web client uses only the Product-facing namespace `/api/problems/:problemId/
 | `GET .../judge-data` | `judgeData` | aggregate read contract |
 | `GET .../judge-data/draft` | `judgeDraft` | current editable draft |
 | `GET .../judge-data/versions` | `judgeVersions` | immutable version history |
+| `GET .../judge-data/versions/:versionId` | `judgeVersion` | published version detail read |
+| `GET .../judge-data/testcases/:testcaseId` | `judgeTestcase` | metadata-only testcase read |
 | `PUT .../draft/config` | `saveJudgeConfig` | defaults/checker/language profiles |
 | `POST .../draft/testcases` | `addJudgeTestcase` | future pair metadata import |
 | `PATCH .../draft/testcases/:testcaseId` | `updateJudgeTestcase` | per-case limit overrides |
@@ -21,6 +23,8 @@ The Web client uses only the Product-facing namespace `/api/problems/:problemId/
 | `POST .../publish` | `publishJudgeData` | immutable published version |
 
 `effective* = override ?? defaults` is rendered from the typed draft. Published versions are displayed as history and are never edited in place. Hidden input/output bodies are never rendered; only filenames, sizes, and hashes represented by metadata are available to the component.
+
+Upload selection is a two-step client flow: local `.in/.out` or `.zip` selection first renders a pair preview, then the explicit upload action sends the files to Product Backend for parse/import. The client does not infer or persist backend testcase identities from the preview.
 
 ## Qualification Boundary
 

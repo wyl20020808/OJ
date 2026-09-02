@@ -38,7 +38,9 @@ const problem: Problem = {
   updatedAt: '2026-01-01T00:00:00Z',
 };
 
-const testcase = (overrides: Partial<JudgeDraft['testcases'][number]> = {}) => ({
+const testcase = (
+  overrides: Partial<JudgeDraft['testcases'][number]> = {},
+) => ({
   testcaseId: 'tc1',
   ordinal: 1,
   label: 'sample',
@@ -121,37 +123,76 @@ describe('ProblemEditor judge-data contract UI', () => {
     const api = makeApi();
     render(<ProblemEditor api={api} problemId="p1" />);
 
-    expect(await screen.findByRole('heading', { name: /编辑题目：Hello World/ })).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: '题目编辑分区' })).toHaveTextContent('题面评测数据评测设置');
+    expect(
+      await screen.findByRole('heading', { name: /编辑题目：Hello World/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('navigation', { name: '题目编辑分区' }),
+    ).toHaveTextContent('题面评测数据评测设置');
     expect(screen.getByText('DRAFT')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '评测数据' }));
-    expect(screen.getByRole('heading', { name: 'Judge Data' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Judge Data' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('01.in / 01.out')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '版本历史' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '版本历史' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('v1')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '评测设置' }));
-    expect(screen.getByRole('heading', { name: '评测设置' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '评测设置' }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('默认时间（毫秒）')).toHaveValue(1000);
   });
 
   it('wires the author edit URL to the ProblemEditor route', async () => {
-    const fetcher = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith('/api/auth/me')) {
-        return { status: 200, ok: true, json: async () => ({ id: 'u1', username: 'author', email: 'a@example.test', displayName: 'Author', status: 'active' }) };
-      }
-      if (url.endsWith('/ready')) return { status: 200, ok: true, json: async () => ({ status: 'ok' }) };
-      if (url.endsWith('/api/problems/p1')) return { status: 200, ok: true, json: async () => problem };
-      if (url.endsWith('/api/problems/p1/judge-data/draft')) return { status: 200, ok: true, json: async () => draft() };
-      if (url.endsWith('/api/problems/p1/judge-data/versions')) return { status: 200, ok: true, json: async () => [version] };
-      return { status: 200, ok: true, json: async () => ({ items: [], page: { total: 0, offset: 0, limit: 20 } }) };
-    });
+    const fetcher = vi
+      .fn()
+      .mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/api/auth/me')) {
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              id: 'u1',
+              username: 'author',
+              email: 'a@example.test',
+              displayName: 'Author',
+              status: 'active',
+            }),
+          };
+        }
+        if (url.endsWith('/ready'))
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({ status: 'ok' }),
+          };
+        if (url.endsWith('/api/problems/p1'))
+          return { status: 200, ok: true, json: async () => problem };
+        if (url.endsWith('/api/problems/p1/judge-data/draft'))
+          return { status: 200, ok: true, json: async () => draft() };
+        if (url.endsWith('/api/problems/p1/judge-data/versions'))
+          return { status: 200, ok: true, json: async () => [version] };
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({
+            items: [],
+            page: { total: 0, offset: 0, limit: 20 },
+          }),
+        };
+      });
     vi.stubGlobal('fetch', fetcher);
     window.history.pushState({}, '', '/author/problems/p1/edit');
     render(<App />);
-    expect(await screen.findByRole('heading', { name: /编辑题目：Hello World/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: /编辑题目：Hello World/ }),
+    ).toBeInTheDocument();
     expect(fetcher).toHaveBeenCalledWith('/api/problems/p1', expect.anything());
   });
 
@@ -159,7 +200,9 @@ describe('ProblemEditor judge-data contract UI', () => {
     const api = makeApi({ judgeDraft: vi.fn().mockResolvedValue(draft([])) });
     render(<ProblemEditor api={api} problemId="p1" />);
     fireEvent.click(await screen.findByRole('button', { name: '评测数据' }));
-    expect(screen.getByRole('heading', { name: '暂无测试点' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '暂无测试点' }),
+    ).toBeInTheDocument();
     expect(screen.getByText(/上传 \.in\/.out 文件或 ZIP/)).toBeInTheDocument();
     expect(screen.queryByText('in-hash')).not.toBeInTheDocument();
     expect(screen.queryByText('out-hash')).not.toBeInTheDocument();
@@ -205,7 +248,9 @@ describe('ProblemEditor judge-data contract UI', () => {
         expect.objectContaining({ timeLimitMs: 2500 }),
       ),
     );
-    expect(await screen.findByRole('status')).toHaveTextContent('评测设置已保存');
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '评测设置已保存',
+    );
   });
 
   it('requires destructive confirmation before deleting a testcase', async () => {
@@ -218,7 +263,9 @@ describe('ProblemEditor judge-data contract UI', () => {
     expect(api.deleteJudgeTestcase).not.toHaveBeenCalled();
     confirm.mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: '删除' }));
-    await waitFor(() => expect(api.deleteJudgeTestcase).toHaveBeenCalledWith('p1', 'tc1'));
+    await waitFor(() =>
+      expect(api.deleteJudgeTestcase).toHaveBeenCalledWith('p1', 'tc1'),
+    );
     expect(screen.queryByText('01.in / 01.out')).not.toBeInTheDocument();
   });
 
@@ -226,18 +273,46 @@ describe('ProblemEditor judge-data contract UI', () => {
     const uploadJudgeData = vi
       .fn()
       .mockResolvedValueOnce(draft([testcase()]))
-      .mockRejectedValueOnce(new ApiError({ code: 'ZIP_PARTIAL', message: '部分文件无法导入', requestId: 'r1' }, 422));
+      .mockRejectedValueOnce(
+        new ApiError(
+          { code: 'ZIP_PARTIAL', message: '部分文件无法导入', requestId: 'r1' },
+          422,
+        ),
+      );
     const api = makeApi({ uploadJudgeData });
     render(<ProblemEditor api={api} problemId="p1" />);
     fireEvent.click(await screen.findByRole('button', { name: '评测数据' }));
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const input = document.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
     expect(input).toBeInTheDocument();
     fireEvent.change(input, { target: { files: [new File(['in'], '01.in')] } });
-    await waitFor(() => expect(uploadJudgeData).toHaveBeenCalledWith('p1', expect.any(File), false));
-    expect(await screen.findByRole('status')).toHaveTextContent('测试点已导入草稿');
-    fireEvent.change(input, { target: { files: [new File(['zip'], 'batch.zip')] } });
-    await waitFor(() => expect(uploadJudgeData).toHaveBeenCalledWith('p1', expect.any(File), true));
-    expect(await screen.findByRole('status')).toHaveTextContent('部分文件无法导入');
+    expect(await screen.findByText('01.in / 缺少 .out')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '上传选中的数据' }));
+    await waitFor(() =>
+      expect(uploadJudgeData).toHaveBeenCalledWith(
+        'p1',
+        expect.any(File),
+        false,
+      ),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '测试点已导入草稿',
+    );
+    fireEvent.change(input, {
+      target: { files: [new File(['zip'], 'batch.zip')] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '上传选中的数据' }));
+    await waitFor(() =>
+      expect(uploadJudgeData).toHaveBeenCalledWith(
+        'p1',
+        expect.any(File),
+        true,
+      ),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '部分文件无法导入',
+    );
   });
 
   it('validates then requires publish confirmation and records the immutable version', async () => {
@@ -245,20 +320,37 @@ describe('ProblemEditor judge-data contract UI', () => {
     render(<ProblemEditor api={api} problemId="p1" />);
     fireEvent.click(await screen.findByRole('button', { name: '评测数据' }));
     fireEvent.click(screen.getByRole('button', { name: '校验草稿' }));
-    await waitFor(() => expect(api.validateJudgeData).toHaveBeenCalledWith('p1'));
+    await waitFor(() =>
+      expect(api.validateJudgeData).toHaveBeenCalledWith('p1'),
+    );
     expect(await screen.findByRole('status')).toHaveTextContent('校验通过');
     fireEvent.click(screen.getByRole('button', { name: '发布新数据版本' }));
-    expect(screen.getByRole('dialog', { name: '发布评测数据？' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('dialog', { name: '发布评测数据？' }),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认发布' }));
-    await waitFor(() => expect(api.publishJudgeData).toHaveBeenCalledWith('p1'));
-    expect(await screen.findByRole('status')).toHaveTextContent('数据版本 v1 已发布');
+    await waitFor(() =>
+      expect(api.publishJudgeData).toHaveBeenCalledWith('p1'),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '数据版本 v1 已发布',
+    );
   });
 
   it('surfaces stale publish conflicts instead of claiming success', async () => {
     const api = makeApi({
-      validateJudgeData: vi.fn().mockResolvedValue({ state: 'VALID', errors: [], warnings: [] }),
+      validateJudgeData: vi
+        .fn()
+        .mockResolvedValue({ state: 'VALID', errors: [], warnings: [] }),
       publishJudgeData: vi.fn().mockRejectedValue(
-        new ApiError({ code: 'STALE_CONFLICT', message: '草稿已过期', requestId: 'r409' }, 409),
+        new ApiError(
+          {
+            code: 'STALE_CONFLICT',
+            message: '草稿已过期',
+            requestId: 'r409',
+          },
+          409,
+        ),
       ),
     });
     render(<ProblemEditor api={api} problemId="p1" />);
@@ -268,33 +360,93 @@ describe('ProblemEditor judge-data contract UI', () => {
     fireEvent.click(screen.getByRole('button', { name: '发布新数据版本' }));
     fireEvent.click(screen.getByRole('button', { name: '确认发布' }));
     expect(await screen.findByRole('status')).toHaveTextContent('草稿已过期');
-    expect(screen.queryByText(/已发布，旧版本保持不可变/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/已发布，旧版本保持不可变/),
+    ).not.toBeInTheDocument();
   });
 
   it('honors permissions in the UI while preserving backend 403 errors', async () => {
-    const forbidden = new ApiError({ code: 'FORBIDDEN', message: '没有评测数据权限', requestId: 'r403' }, 403);
+    const forbidden = new ApiError(
+      { code: 'FORBIDDEN', message: '没有评测数据权限', requestId: 'r403' },
+      403,
+    );
     const api = makeApi({
       judgeDraft: vi.fn().mockRejectedValue(forbidden),
       judgeVersions: vi.fn().mockRejectedValue(forbidden),
     });
-    render(<ProblemEditor api={api} problemId="p1" canEdit={false} canManage={false} canPublish={false} />);
-    expect(await screen.findByRole('heading', { name: '编辑题目：Hello World' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '保存题面' })).toBeDisabled();
+    render(
+      <ProblemEditor
+        api={api}
+        problemId="p1"
+        canEdit={false}
+        canManage={false}
+        canPublish={false}
+      />,
+    );
+    expect(
+      await screen.findByRole('heading', { name: '无权访问评测数据' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('没有评测数据权限');
+  });
+
+  it('keeps a readable editor when version history is unavailable', async () => {
+    const api = makeApi({
+      judgeVersions: vi.fn().mockRejectedValue(
+        new ApiError(
+          {
+            code: 'STORAGE_UNAVAILABLE',
+            message: '版本存储暂不可用',
+            requestId: 'r-storage',
+          },
+          503,
+        ),
+      ),
+    });
+    render(<ProblemEditor api={api} problemId="p1" />);
+    expect(
+      await screen.findByRole('heading', { name: /编辑题目：Hello World/ }),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '评测数据' }));
-    expect(screen.getByRole('button', { name: '校验草稿' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '发布新数据版本' })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '版本历史暂不可用：版本存储暂不可用',
+    );
+    expect(
+      screen.getByRole('heading', { name: 'Judge Data' }),
+    ).toBeInTheDocument();
+  });
+
+  it('supports statement edit/preview and preserves existing samples in the shared model', async () => {
+    const api = makeApi({
+      problem: vi.fn().mockResolvedValue({
+        ...problem,
+        examples: [{ input: '1 2', output: '3', note: 'sum' }],
+      }),
+    });
+    render(<ProblemEditor api={api} problemId="p1" />);
+    expect(
+      await screen.findByRole('heading', { name: /编辑题目：Hello World/ }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '预览' }));
+    expect(screen.getByRole('heading', { name: '样例' })).toBeInTheDocument();
+    expect(screen.getByText('1 2')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    expect(screen.getByLabelText('输入样例 1')).toHaveValue('1 2');
   });
 
   it('uses only Product judge-data paths and no privileged Judge/storage endpoints', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
-    const fetcher = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
-      requests.push(init === undefined ? { url } : { url, init });
-      return { ok: true, status: 200, json: async () => ({}) };
-    });
+    const fetcher = vi
+      .fn()
+      .mockImplementation(async (url: string, init?: RequestInit) => {
+        requests.push(init === undefined ? { url } : { url, init });
+        return { ok: true, status: 200, json: async () => ({}) };
+      });
     const client = createApiClient('', fetcher);
     await client.judgeData('p1');
     await client.judgeDraft('p1');
     await client.judgeVersions('p1');
+    await client.judgeVersion('p1', 'v1');
+    await client.judgeTestcase('p1', 'tc1');
     await client.saveJudgeConfig('p1', {
       timeLimitMs: 1000,
       memoryLimitBytes: 1,
@@ -304,10 +456,26 @@ describe('ProblemEditor judge-data contract UI', () => {
     });
     await client.validateJudgeData('p1');
     await client.publishJudgeData('p1');
-    expect(requests).toHaveLength(6);
-    expect(requests.every(({ url }) => url.startsWith('/api/problems/p1/judge-data'))).toBe(true);
-    expect(requests.some(({ url }) => /\/v1\/|minio|storage\/admin|judge\/admin/i.test(url))).toBe(false);
-    expect(requests.every(({ init }) => init?.headers && !Object.keys(init.headers).some((key) => /authorization|credential|token/i.test(key)))).toBe(true);
+    expect(requests).toHaveLength(8);
+    expect(
+      requests.every(({ url }) =>
+        url.startsWith('/api/problems/p1/judge-data'),
+      ),
+    ).toBe(true);
+    expect(
+      requests.some(({ url }) =>
+        /\/v1\/|minio|storage\/admin|judge\/admin/i.test(url),
+      ),
+    ).toBe(false);
+    expect(
+      requests.every(
+        ({ init }) =>
+          init?.headers &&
+          !Object.keys(init.headers).some((key) =>
+            /authorization|credential|token/i.test(key),
+          ),
+      ),
+    ).toBe(true);
   });
 
   it('keeps the editor keyboard usable and exposes a mobile-friendly testcase list', async () => {

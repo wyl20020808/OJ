@@ -7,9 +7,10 @@
 ## IMPLEMENTED
 
 - Existing problem edit route now uses a three-tab ProblemEditor: 题面, 评测数据, 评测设置.
-- Statement editing preserves the existing Problem storage model and adds save/error and unsaved-change protection.
-- Typed Product judge-data client covers draft/config/testcases/upload/upload-ZIP/validate/publish/versions.
-- Judge Data UI shows draft/published distinction, metadata-only testcase rows, inherited/default versus per-case overrides, delete confirmation, upload progress/errors, validation, publish confirmation, and immutable history.
+- Statement editing preserves the existing Problem storage model, adds edit/preview modes, preserves samples, and provides save/error and unsaved-change protection.
+- Typed Product judge-data client covers draft/config/testcases/upload/upload-ZIP/validate/publish/versions plus published version detail and metadata-only testcase reads.
+- Judge Data UI shows draft/published distinction, latest published version, metadata-only testcase rows, inherited/default versus per-case overrides, delete confirmation, local pair preview, explicit upload action, upload progress/errors, validation, publish confirmation, and immutable history.
+- Judge Data 403/no-access and version-history failures stay visible to the author; they are never silently converted into an empty draft.
 - Settings cover time, memory, output defaults, checker, and allowed language profiles.
 - Responsive CSS covers desktop, tablet, and mobile card/list layouts; file upload has an associated label and no privileged credentials are sent.
 - Permanent contract and state matrices are recorded under `Docs/parallel/`.
@@ -18,10 +19,10 @@
 
 - `pnpm typecheck` PASS.
 - `pnpm test:web` PASS (11 existing Web tests).
-- `pnpm exec vitest run tests/problem-editor.test.tsx` PASS (11 focused tests).
+- `pnpm exec vitest run tests/problem-editor.test.tsx` PASS (14 focused tests).
 - `pnpm exec eslint apps/web/src/components/ProblemEditor.tsx apps/web/src/services/api.ts tests/problem-editor.test.tsx` PASS.
 - `pnpm --filter @ojplatform/web build` PASS.
-- Focused tests cover tabs, empty/list states, inheritance/override reset, pair/ZIP and partial errors, delete/publish confirmation, validation, 403 controls, Product-only paths, and keyboard/mobile semantics.
+- Focused tests cover tabs, empty/list states, statement preview/samples, inheritance/override reset, pair preview and pair/ZIP/partial errors, delete/publish confirmation, validation, 403/no-access and history failure, Product-only paths, and keyboard/mobile semantics.
 
 ## RUNTIME VERIFIED
 
