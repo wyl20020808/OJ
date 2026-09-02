@@ -140,6 +140,40 @@ describe('standalone Judge Service V1', () => {
     await app.close();
   });
 
+  it('restores pool policy and autoscaler history from the state repository', async () => {
+    const state = new InMemoryJudgeServiceStateRepository();
+    const first = await buildJudgeService({
+      queue: new InMemoryJudgeJobRepository(),
+      state,
+      serviceToken: token,
+      logger: false,
+    });
+    const changed = await first.inject({
+      method: 'POST',
+      url: '/v1/admin/pool/mode',
+      headers,
+      payload: { mode: 'AUTOMATIC', expectedControlVersion: 1 },
+    });
+    expect(changed.statusCode).toBe(200);
+    await first.close();
+    const second = await buildJudgeService({
+      queue: new InMemoryJudgeJobRepository(),
+      state,
+      serviceToken: token,
+      logger: false,
+    });
+    expect(
+      (
+        await second.inject({
+          method: 'GET',
+          url: '/v1/admin/pool/policy',
+          headers,
+        })
+      ).json(),
+    ).toMatchObject({ mode: 'AUTOMATIC', controlVersion: 2 });
+    await second.close();
+  });
+
   it('accepts opaque external references exactly once and projects no source or lease data', async () => {
     const { app } = await service();
     const first = await app.inject({

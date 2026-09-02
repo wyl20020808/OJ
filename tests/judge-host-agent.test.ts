@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { LocalJudgeHostAgent } from '../apps/judge-host-agent/src/agent.js';
 import { buildJudgeHostAgentServer } from '../apps/judge-host-agent/src/http.js';
@@ -112,6 +115,57 @@ describe('local judge host agent', () => {
       nodeId: 'active',
       expectedIncarnation: started.incarnation!,
     });
+  });
+
+  it('fails closed when a restarted host agent sees persisted live ownership', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'oj-host-agent-'));
+    const statePath = join(directory, 'state.json');
+    const templates = [
+      {
+        templateId: 'node-v1',
+        displayName: 'Node V1',
+        executable: process.execPath,
+        args: ['-e', 'setTimeout(() => {}, 5000)'],
+        maxConcurrentJobs: 1,
+        cpuUnits: 1,
+        memoryMb: 64,
+        enabled: true,
+      },
+    ] as const;
+    const capacity = {
+      configuredCpuUnits: 2,
+      availableCpuUnits: 2,
+      configuredMemoryMb: 512,
+      availableMemoryMb: 512,
+    };
+    const owner = new LocalJudgeHostAgent(templates, capacity, { statePath });
+    const started = await owner.start({
+      templateId: 'node-v1',
+      nodeId: 'persisted',
+    });
+    const restarted = new LocalJudgeHostAgent(templates, capacity, {
+      statePath,
+    });
+
+    expect(await restarted.listOwned()).toEqual([]);
+    expect(await restarted.operationsHistory()).toEqual([
+      expect.objectContaining({
+        nodeId: 'persisted',
+        status: 'FAILED',
+        incarnation: started.incarnation,
+      }),
+    ]);
+    await expect(
+      restarted.start({ templateId: 'node-v1', nodeId: 'persisted' }),
+    ).rejects.toThrow('NODE_OWNERSHIP_RECONCILIATION_REQUIRED');
+
+    await owner.stop({
+      nodeId: 'persisted',
+      ...(started.incarnation
+        ? { expectedIncarnation: started.incarnation }
+        : {}),
+    });
+    await rm(directory, { recursive: true, force: true });
   });
 
   it('protects the HTTP boundary with a separate credential', async () => {

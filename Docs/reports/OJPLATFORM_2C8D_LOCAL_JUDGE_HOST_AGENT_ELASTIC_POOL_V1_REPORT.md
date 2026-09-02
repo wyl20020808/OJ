@@ -18,20 +18,21 @@
 - Product `/api/admin/judge/*` lifecycle boundary with `judge.lifecycle` RBAC, CSRF, idempotency, safe errors and durable audit integration; existing `judge.manage` operations remain separate.
 - Web Judge Machines controls for mode, Add Node and lifecycle actions with truthful Host Agent unavailable state.
 - Judge Service autoscaler loop with configurable interval, Redis pending-queue metrics, derived node utilization/schedulable capacity, overlap protection and timer cleanup. Host Agent-owned process count prevents repeated scale-up before registration.
-- Host Agent lifecycle hardening: live PID checks, spawn-failure cleanup, per-node serialized restart, expected-incarnation checks and active-job stop rejection.
+- Host Agent lifecycle hardening: live PID checks, spawn-failure cleanup, per-node serialized restart, expected-incarnation checks, active-job stop rejection and persisted ownership reconciliation that fails closed without adopting or killing an unverified process.
+- Judge DB persistence for pool policy and bounded autoscaler decision history, restored at Judge Service startup through formal migration `0003_judge_pool_control.sql`.
 
 ## Tested
 
-- Focused Host Agent, Judge Service, node registry and autoscaler tests: PASS (25 tests).
+- Focused Host Agent, Judge Service, node registry and autoscaler tests: PASS (26 tests).
 - Web tests: PASS (11 tests).
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test:architecture`, `pnpm build`, `pnpm build:web`, and `git diff --check`: PASS.
-- Full `pnpm test`: 715 passed, 8 skipped; PostgreSQL integration suite is blocked by `ECONNREFUSED 127.0.0.1:55432`.
+- Full `pnpm test`: 717 passed, 8 skipped; PostgreSQL integration suite is blocked by `ECONNREFUSED 127.0.0.1:55432`.
 
 ## Not verified / blocked
 
 Real Host Agent -> Supervisor -> Worker multi-process lifecycle, real routed jobs, restart stale-incarnation rejection across a Host Agent process restart, automatic scale-up/down against a live queue, and browser runtime qualification were not executed in this bounded run. Docker/Compose reports no running services and PostgreSQL is unavailable. No mock node is claimed as runtime evidence.
 
-Pool policy and autoscaler history remain process-local in this V1 implementation; durable cross-instance policy persistence is a follow-up risk and is not claimed as qualified.
+Host Agent operation history remains bounded process-local observability; a restarted Agent retains live persisted ownership as an unreconciled block and does not adopt or kill the process, so cross-restart process reconciliation still requires runtime qualification and is not claimed.
 
 ## Security and architecture
 

@@ -8,7 +8,7 @@ Current Status: PHASE 2C.4 PASS / TESTCASE-SET EXECUTION-FACT AGGREGATION FOUNDA
 Parallel Worker Model: STABILIZED / PERMANENT SLOT MODEL ENABLED
 Product Lead Integration V1: PASS / qualified Backend + Web integrated; Judge remains separate; final closure `eb7912e`
 Phase 2C.8BC Product Judge Admin Integration Reconciliation V1: PASS / Product + real frozen Judge read boundary qualified; final report `OJPLATFORM_2C8BC_PRODUCT_JUDGE_ADMIN_INTEGRATION_RECONCILIATION_V1_REPORT.md`
-Phase 2C.8D Local Judge Host Agent + Elastic Pool V1: PARTIAL / Host Agent lifecycle hardening, Product RBAC, Judge Service autoscaler loop and Web controls implemented; focused and full non-DB gates pass, PostgreSQL integration plus real Supervisor/Worker multi-node and autoscaling runtime NOT VERIFIED; final report `OJPLATFORM_2C8D_LOCAL_JUDGE_HOST_AGENT_ELASTIC_POOL_V1_REPORT.md`
+Phase 2C.8D Local Judge Host Agent + Elastic Pool V1: PARTIAL / Host Agent lifecycle hardening, durable Judge pool policy/audit state, Product RBAC, Judge Service autoscaler loop and Web controls implemented; focused and full non-DB gates pass, PostgreSQL integration plus real Supervisor/Worker multi-node and autoscaling runtime NOT VERIFIED; final report `OJPLATFORM_2C8D_LOCAL_JUDGE_HOST_AGENT_ELASTIC_POOL_V1_REPORT.md`
 PHASE 1C: PASS
 PHASE 1D: PASS
 PHASE 1E: HISTORICAL PASS / FINAL RERUN PARTIAL

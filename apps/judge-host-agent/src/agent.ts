@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 
 export type JudgeNodeTemplate = {
   templateId: string;
@@ -33,6 +34,16 @@ export type HostOperation = {
   nodeId: string;
   status: 'STARTING' | 'RUNNING' | 'STOPPING' | 'STOPPED' | 'FAILED';
   incarnation?: string;
+};
+
+type PersistedOwned = {
+  nodeId: string;
+  generation: number;
+  nonce: string;
+  pid: number;
+  startedAt: number;
+  executable: string;
+  incarnation: string;
 };
 
 const validTemplateId = (value: unknown) =>
@@ -80,10 +91,16 @@ export class LocalJudgeHostAgent {
   private readonly operations = new Map<string, HostOperation>();
   private generation = 0;
   private readonly locks = new Map<string, Promise<unknown>>();
+  private readonly unreconciledNodePids = new Map<string, number>();
+  private readonly statePath: string | undefined;
+  private readonly ready: Promise<void>;
+  private initializationError?: Error;
   constructor(
     private readonly templates: readonly JudgeNodeTemplate[],
     private readonly capacity: HostCapacity,
+    options: { statePath?: string } = {},
   ) {
+    this.statePath = options.statePath;
     const ids = new Set<string>();
     for (const template of templates) {
       validateTemplate(template);
@@ -104,8 +121,80 @@ export class LocalJudgeHostAgent {
       capacity.availableMemoryMb > capacity.configuredMemoryMb
     )
       throw new Error('INVALID_HOST_CAPACITY');
+    this.ready = this.reconcilePersistedState();
+  }
+  private async ensureReady() {
+    await this.ready;
+    if (this.initializationError) throw this.initializationError;
+  }
+  private async reconcilePersistedState() {
+    if (!this.statePath) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await readFile(this.statePath, 'utf8'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      this.initializationError = new Error('HOST_AGENT_STATE_UNREADABLE');
+      return;
+    }
+    const items =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as { owned?: unknown }).owned
+        : undefined;
+    if (!Array.isArray(items)) {
+      this.initializationError = new Error('HOST_AGENT_STATE_INVALID');
+      return;
+    }
+    // Never adopt a process after an Agent restart without a child handle and
+    // independently verified executable identity. This makes PID reuse fail
+    // closed; operators can inspect the reconciliation failure and clean up.
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      const value = item as Partial<PersistedOwned>;
+      const pid = value.pid;
+      if (
+        typeof value.nodeId !== 'string' ||
+        typeof pid !== 'number' ||
+        !Number.isInteger(pid) ||
+        pid <= 0 ||
+        typeof value.incarnation !== 'string'
+      )
+        continue;
+      try {
+        process.kill(pid, 0);
+      } catch {
+        continue;
+      }
+      this.unreconciledNodePids.set(value.nodeId, pid);
+      const operationId = `reconcile-${randomUUID()}`;
+      this.operations.set(operationId, {
+        operationId,
+        nodeId: value.nodeId,
+        status: 'FAILED',
+        incarnation: value.incarnation,
+      });
+    }
+  }
+  private async persistState(owned = [...this.owned.values()]) {
+    if (!this.statePath) return;
+    const payload = JSON.stringify({
+      version: 1,
+      owned: owned.map((value) => ({
+        nodeId: value.nodeId,
+        generation: value.generation,
+        nonce: value.nonce,
+        pid: value.pid,
+        startedAt: value.startedAt,
+        executable: value.executable,
+        incarnation: value.incarnation,
+      })),
+    });
+    const temporary = `${this.statePath}.${process.pid}.tmp`;
+    await writeFile(temporary, payload, { encoding: 'utf8', mode: 0o600 });
+    await rename(temporary, this.statePath);
   }
   async listTemplates() {
+    await this.ensureReady();
     return this.templates.map((template) => ({
       templateId: template.templateId,
       displayName: template.displayName,
@@ -116,6 +205,7 @@ export class LocalJudgeHostAgent {
     }));
   }
   async hostCapacity() {
+    await this.ensureReady();
     const used = [...this.owned.values()].length;
     return {
       ...this.capacity,
@@ -134,6 +224,7 @@ export class LocalJudgeHostAgent {
     };
   }
   async listOwned() {
+    await this.ensureReady();
     return [...this.owned.values()].map((x) => ({
       nodeId: x.nodeId,
       pid: x.pid,
@@ -143,6 +234,7 @@ export class LocalJudgeHostAgent {
     }));
   }
   async operationsHistory() {
+    await this.ensureReady();
     return [...this.operations.values()]
       .slice(-200)
       .map((x) => structuredClone(x));
@@ -151,6 +243,7 @@ export class LocalJudgeHostAgent {
     templateId: string;
     nodeId: string;
   }): Promise<HostOperation> {
+    await this.ensureReady();
     if (!/^[A-Za-z0-9._:-]{1,96}$/.test(input.nodeId))
       throw new Error('INVALID_NODE_ID');
     const priorLock = this.locks.get(input.nodeId);
@@ -168,6 +261,20 @@ export class LocalJudgeHostAgent {
     templateId: string;
     nodeId: string;
   }): Promise<HostOperation> {
+    const unreconciledPid = this.unreconciledNodePids.get(input.nodeId);
+    if (unreconciledPid !== undefined) {
+      try {
+        process.kill(unreconciledPid, 0);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ESRCH') {
+          this.unreconciledNodePids.delete(input.nodeId);
+        } else {
+          throw new Error('NODE_OWNERSHIP_RECONCILIATION_REQUIRED');
+        }
+      }
+      if (this.unreconciledNodePids.has(input.nodeId))
+        throw new Error('NODE_OWNERSHIP_RECONCILIATION_REQUIRED');
+    }
     const template = this.templates.find(
       (x) => x.templateId === input.templateId && x.enabled,
     );
@@ -239,6 +346,17 @@ export class LocalJudgeHostAgent {
       incarnation,
     };
     this.owned.set(input.nodeId, owned);
+    try {
+      await this.persistState();
+    } catch {
+      this.owned.delete(input.nodeId);
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // Best-effort cleanup after a failed ownership commit.
+      }
+      throw new Error('HOST_AGENT_STATE_WRITE_FAILED');
+    }
     const op: HostOperation = {
       operationId,
       nodeId: input.nodeId,
@@ -247,8 +365,9 @@ export class LocalJudgeHostAgent {
     };
     this.operations.set(operationId, op);
     child.once('exit', () => {
-      if (this.owned.get(input.nodeId)?.nonce === nonce)
-        this.owned.delete(input.nodeId);
+      if (this.owned.get(input.nodeId)?.nonce !== nonce) return;
+      this.owned.delete(input.nodeId);
+      void this.persistState().catch(() => undefined);
     });
     return op;
   }
@@ -257,6 +376,7 @@ export class LocalJudgeHostAgent {
     expectedIncarnation?: string;
     activeJobs?: number;
   }): Promise<HostOperation> {
+    await this.ensureReady();
     const priorLock = this.locks.get(input.nodeId);
     if (priorLock) await priorLock;
     const operation = this.stopUnlocked(input);
@@ -322,6 +442,7 @@ export class LocalJudgeHostAgent {
       throw new Error('DRAIN_TIMEOUT');
     }
     this.owned.delete(input.nodeId);
+    await this.persistState();
     op.status = 'STOPPED';
     return op;
   }
@@ -341,6 +462,7 @@ export class LocalJudgeHostAgent {
     expectedIncarnation?: string;
     activeJobs?: number;
   }) {
+    await this.ensureReady();
     const priorLock = this.locks.get(input.nodeId);
     if (priorLock) await priorLock;
     const operation = (async () => {

@@ -1,5 +1,9 @@
 import type { Pool } from 'pg';
 import type { StoredJudgeServiceJob } from './model.js';
+import type {
+  JudgePoolAuditRecord,
+  JudgePoolPolicy,
+} from './pool-autoscaler.js';
 
 type Queryable = Pick<Pool, 'query'>;
 
@@ -13,11 +17,17 @@ export interface JudgeServiceStateRepository {
     externalSubmissionId: string,
   ): Promise<StoredJudgeServiceJob[]>;
   listAll(): Promise<StoredJudgeServiceJob[]>;
+  getPoolPolicy?(): Promise<JudgePoolPolicy | undefined>;
+  savePoolPolicy?(value: JudgePoolPolicy): Promise<JudgePoolPolicy>;
+  appendAutoscalerDecision?(value: JudgePoolAuditRecord): Promise<void>;
+  listAutoscalerDecisions?(limit?: number): Promise<JudgePoolAuditRecord[]>;
 }
 
 export class InMemoryJudgeServiceStateRepository implements JudgeServiceStateRepository {
   private readonly byJobId = new Map<string, StoredJudgeServiceJob>();
   private readonly byRequestId = new Map<string, string>();
+  private poolPolicy: JudgePoolPolicy | undefined;
+  private readonly autoscalerDecisions: JudgePoolAuditRecord[] = [];
 
   async save(value: StoredJudgeServiceJob) {
     const existingId = this.byRequestId.get(value.clientRequestId);
@@ -57,6 +67,27 @@ export class InMemoryJudgeServiceStateRepository implements JudgeServiceStateRep
       .sort((left, right) =>
         left.result.judgeJobId.localeCompare(right.result.judgeJobId),
       )
+      .map((value) => structuredClone(value));
+  }
+
+  async getPoolPolicy() {
+    return this.poolPolicy ? structuredClone(this.poolPolicy) : undefined;
+  }
+
+  async savePoolPolicy(value: JudgePoolPolicy) {
+    this.poolPolicy = structuredClone(value);
+    return structuredClone(value);
+  }
+
+  async appendAutoscalerDecision(value: JudgePoolAuditRecord) {
+    this.autoscalerDecisions.push(structuredClone(value));
+    while (this.autoscalerDecisions.length > 500)
+      this.autoscalerDecisions.shift();
+  }
+
+  async listAutoscalerDecisions(limit = 100) {
+    return this.autoscalerDecisions
+      .slice(-Math.max(0, limit))
       .map((value) => structuredClone(value));
   }
 }
@@ -120,6 +151,39 @@ export class PostgresJudgeServiceStateRepository implements JudgeServiceStateRep
       'SELECT client_request_id,job_request,result_projection FROM judge_service_jobs ORDER BY judge_job_id',
     );
     return result.rows.map(row);
+  }
+
+  async getPoolPolicy() {
+    const result = await this.pool.query(
+      'SELECT policy FROM judge_pool_control WHERE control_id=1',
+    );
+    return result.rows[0]?.policy as JudgePoolPolicy | undefined;
+  }
+
+  async savePoolPolicy(value: JudgePoolPolicy) {
+    const result = await this.pool.query(
+      'INSERT INTO judge_pool_control (control_id,policy,control_version,updated_at) VALUES (1,$1::jsonb,$2,now()) ON CONFLICT (control_id) DO UPDATE SET policy=EXCLUDED.policy,control_version=EXCLUDED.control_version,updated_at=now() RETURNING policy',
+      [JSON.stringify(value), value.controlVersion],
+    );
+    return result.rows[0]!.policy as JudgePoolPolicy;
+  }
+
+  async appendAutoscalerDecision(value: JudgePoolAuditRecord) {
+    await this.pool.query(
+      'INSERT INTO judge_autoscaler_decisions (decision_id,decision,created_at) VALUES ($1,$2::jsonb,now()) ON CONFLICT (decision_id) DO NOTHING',
+      [value.decisionId, JSON.stringify(value)],
+    );
+  }
+
+  async listAutoscalerDecisions(limit = 100) {
+    const bounded = Math.min(500, Math.max(1, Math.floor(limit)));
+    const result = await this.pool.query(
+      'SELECT decision FROM judge_autoscaler_decisions ORDER BY created_at DESC LIMIT $1',
+      [bounded],
+    );
+    return result.rows
+      .reverse()
+      .map((item) => item.decision as JudgePoolAuditRecord);
   }
 }
 

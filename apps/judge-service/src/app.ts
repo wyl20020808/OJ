@@ -14,6 +14,8 @@ import type { RequiredNodeCapabilities } from './node-model.js';
 import {
   assertJudgePoolPolicy,
   decideJudgePool,
+  type JudgePoolAuditRecord,
+  type JudgePoolPolicy,
   type JudgePoolSnapshot,
 } from './pool-autoscaler.js';
 
@@ -183,25 +185,7 @@ export async function buildJudgeService(
       },
     });
   });
-  const poolPolicy: {
-    mode: 'MANUAL' | 'AUTOMATIC';
-    templateId: string;
-    minNodes: number;
-    maxNodes: number;
-    targetQueueWaitMs: number;
-    fastScaleQueueWaitMs: number;
-    pendingJobsScaleUpThreshold: number;
-    scaleUpStep: number;
-    fastScaleUpStep: number;
-    scaleDownStep: number;
-    scaleDownUtilizationThreshold: number;
-    scaleDownIdleWindowMs: number;
-    scaleUpCooldownMs: number;
-    scaleDownCooldownMs: number;
-    hostCpuReserve: number;
-    hostMemoryReserve: number;
-    controlVersion: number;
-  } = {
+  const defaultPoolPolicy: JudgePoolPolicy = {
     mode: 'MANUAL' as const,
     templateId: 'cpp20-gcc-13-v1',
     minNodes: 1,
@@ -220,8 +204,14 @@ export async function buildJudgeService(
     hostMemoryReserve: 0.1,
     controlVersion: 1,
   };
+  const storedPoolPolicy = await options.state.getPoolPolicy?.();
+  if (storedPoolPolicy) assertJudgePoolPolicy(storedPoolPolicy);
+  let poolPolicy: JudgePoolPolicy = structuredClone(
+    storedPoolPolicy ?? defaultPoolPolicy,
+  );
   const lifecycleHistory: unknown[] = [];
-  const autoscalerHistory: unknown[] = [];
+  const autoscalerHistory: JudgePoolAuditRecord[] =
+    (await options.state.listAutoscalerDecisions?.(100)) ?? [];
   let lastScaleUpAt: Date | undefined;
   let lastScaleDownAt: Date | undefined;
   let idleSince: Date | undefined;
@@ -411,6 +401,7 @@ export async function buildJudgeService(
     const decision = decideJudgePool(snapshot, poolPolicy);
     autoscalerHistory.push(decision.audit);
     while (autoscalerHistory.length > 200) autoscalerHistory.shift();
+    await options.state.appendAutoscalerDecision?.(decision.audit);
     const operations: unknown[] = [];
     try {
       if (decision.action === 'SCALE_UP' && options.hostAgent) {
@@ -642,9 +633,13 @@ export async function buildJudgeService(
       )
     )
       return reply.code(400).send({ code: 'INVALID_POOL_POLICY' });
-    Object.assign(poolPolicy, body, {
+    const nextPolicy = {
+      ...poolPolicy,
+      ...body,
       controlVersion: poolPolicy.controlVersion + 1,
-    });
+    } as JudgePoolPolicy;
+    await options.state.savePoolPolicy?.(nextPolicy);
+    poolPolicy = nextPolicy;
     return poolPolicy;
   });
   app.post('/v1/admin/pool/mode', async (request, reply) => {
@@ -660,8 +655,13 @@ export async function buildJudgeService(
       body.expectedControlVersion !== poolPolicy.controlVersion
     )
       return reply.code(409).send({ code: 'CONTROL_VERSION_CONFLICT' });
-    poolPolicy.mode = body.mode;
-    poolPolicy.controlVersion += 1;
+    const nextPolicy: JudgePoolPolicy = {
+      ...poolPolicy,
+      mode: body.mode,
+      controlVersion: poolPolicy.controlVersion + 1,
+    };
+    await options.state.savePoolPolicy?.(nextPolicy);
+    poolPolicy = nextPolicy;
     return poolPolicy;
   });
   app.get('/v1/capabilities', async (request, reply) => {
