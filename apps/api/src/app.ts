@@ -35,6 +35,13 @@ import {
 } from './modules/judge/index.js';
 import { registerWorkerControlRoutes } from './modules/judge/worker-control.js';
 import {
+  JudgeAdminAdapterClient,
+  MemoryJudgeAdminAuditRepository,
+  PostgresJudgeAdminAuditRepository,
+  registerJudgeAdminRoutes,
+} from './modules/judge-admin/index.js';
+import type { JudgeAdminAdapter } from './modules/judge-admin/model.js';
+import {
   createSandboxRuntime,
   registerSandboxControlRoutes,
 } from './modules/sandbox/control.js';
@@ -83,6 +90,8 @@ export type AppOptions = {
   operatorUserIds?: ReadonlySet<string>;
   operatorUsernames?: ReadonlySet<string>;
   realSubmissionExecution?: boolean;
+  judgeAdminAdapter?: JudgeAdminAdapter;
+  judgeAdminPermissions?: ReadonlyMap<string, ReadonlySet<string>>;
 };
 type Owned = {
   close: () => Promise<void>;
@@ -196,6 +205,29 @@ export async function buildApp(options: AppOptions = {}) {
       guestStore: createPostgresGuestAuthStore(database.pool),
       guestRateLimiter: new RedisGuestRateLimiter(cache),
     });
+    const adminAdapter =
+      options.judgeAdminAdapter ??
+      (process.env.JUDGE_SERVICE_ADMIN_URL &&
+      process.env.JUDGE_SERVICE_ADMIN_TOKEN
+        ? new JudgeAdminAdapterClient(
+            process.env.JUDGE_SERVICE_ADMIN_URL,
+            process.env.JUDGE_SERVICE_ADMIN_TOKEN,
+          )
+        : undefined);
+    if (adminAdapter)
+      await registerJudgeAdminRoutes(app, {
+        adapter: adminAdapter,
+        getAuthContext: async (request) =>
+          (await auth.getAuthContext(request)) ?? undefined,
+        can: (ctx, permission) =>
+          Boolean(
+            ctx &&
+            ctx.strength === 'password' &&
+            (options.judgeAdminPermissions?.get(ctx.userId)?.has(permission) ||
+              configuredOperatorUserIds.has(ctx.userId)),
+          ),
+        audit: new PostgresJudgeAdminAuditRepository(database.pool),
+      });
     const submissionRepository = new PostgresSubmissionRepository(
       database.pool,
     );
@@ -409,6 +441,21 @@ export async function buildApp(options: AppOptions = {}) {
     const auth = await registerAuthModule(app, {
       repository: createMemoryAuthRepository(),
       auditHook,
+    });
+    const adminAdapter =
+      options.judgeAdminAdapter ??
+      new JudgeAdminAdapterClient('http://127.0.0.1:0', 'unconfigured');
+    await registerJudgeAdminRoutes(app, {
+      adapter: adminAdapter,
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      can: (ctx, permission) =>
+        Boolean(
+          ctx &&
+          ctx.strength === 'password' &&
+          options.judgeAdminPermissions?.get(ctx.userId)?.has(permission),
+        ),
+      audit: new MemoryJudgeAdminAuditRepository(),
     });
     const submissionRepository = new InMemorySubmissionRepository();
     const judgeRepository = new InMemoryJudgeJobRepository();
