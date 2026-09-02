@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 type QueryResult = { rows: Record<string, unknown>[] };
-type PoolLike = {
+type QueryExecutor = {
   query(text: string, values?: unknown[]): Promise<QueryResult>;
+};
+type PoolLike = QueryExecutor & {
+  connect?: () => Promise<QueryExecutor & { release(): void }>;
 };
 import {
   ProblemConflictError,
@@ -10,6 +13,14 @@ import {
   type ProblemUpdateInput,
 } from './model.js';
 import type { ProblemRevision } from './model.js';
+
+const storedSamples = (samples: Problem['samples']) =>
+  samples.map(({ ordinal, input, output, explanation }) => ({
+    ordinal,
+    input,
+    output,
+    ...(explanation === undefined ? {} : { explanation }),
+  }));
 
 export type ProblemListQuery = {
   limit: number;
@@ -158,58 +169,79 @@ export class InMemoryProblemRepository implements ProblemRepository {
 
 export class PostgresProblemRepository implements ProblemRepository {
   constructor(private readonly pool: PoolLike) {}
+  private async transaction<T>(work: (executor: QueryExecutor) => Promise<T>) {
+    if (!this.pool.connect) return work(this.pool);
+    const client = await this.pool.connect();
+    await client.query('BEGIN');
+    try {
+      const result = await work(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
   async create(input: ProblemCreateInput) {
-    const id = input.id ?? randomUUID();
-    const result = await this.pool.query(
-      'INSERT INTO problems (id, slug, title, statement, input_description, output_description, examples, constraints, notes, time_limit_ms, memory_limit_bytes, visibility, status, testdata_version, author_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *',
-      [
-        id,
-        input.slug,
-        input.title,
-        input.statement,
-        input.inputDescription,
-        input.outputDescription,
-        JSON.stringify(input.examples),
-        input.constraints,
-        input.notes,
-        input.timeLimitMs,
-        input.memoryLimitBytes,
-        input.visibility,
-        input.status,
-        input.testdataVersion,
-        input.authorId,
-      ],
-    );
-    const problem = mapRow(result.rows[0]!);
-    const revisionId = randomUUID();
-    await this.pool.query(
-      'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,status,testdata_version,author_id,created_by) VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)',
-      [
-        revisionId,
-        problem.id,
-        problem.slug,
-        problem.title,
-        problem.statement,
-        problem.inputDescription,
-        problem.outputDescription,
-        JSON.stringify(problem.examples),
-        problem.constraints,
-        problem.notes,
-        problem.timeLimitMs,
-        problem.memoryLimitBytes,
-        problem.visibility,
-        problem.status,
-        problem.testdataVersion,
-        problem.authorId,
-        problem.authorId ?? 'system',
-      ],
-    );
-    await this.pool.query(
-      'UPDATE problems SET current_revision_id=$1 WHERE id=$2',
-      [revisionId, problem.id],
-    );
-    problem.currentRevisionId = revisionId;
-    return problem;
+    return this.transaction(async (executor) => {
+      const id = input.id ?? randomUUID();
+      const result = await executor.query(
+        'INSERT INTO problems (id, slug, title, background, statement, input_description, output_description, examples, constraints, notes, time_limit_ms, memory_limit_bytes, visibility, difficulty, status, testdata_version, author_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *',
+        [
+          id,
+          input.slug,
+          input.title,
+          input.background,
+          input.statement,
+          input.inputDescription,
+          input.outputDescription,
+          JSON.stringify(storedSamples(input.samples)),
+          input.constraints,
+          input.notes,
+          input.timeLimitMs,
+          input.memoryLimitBytes,
+          input.visibility,
+          input.difficulty,
+          input.status,
+          input.testdataVersion,
+          input.authorId,
+        ],
+      );
+      const problem = mapRow(result.rows[0]!);
+      const revisionId = randomUUID();
+      await executor.query(
+        'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)',
+        [
+          revisionId,
+          problem.id,
+          problem.slug,
+          problem.title,
+          problem.background,
+          problem.statement,
+          problem.inputDescription,
+          problem.outputDescription,
+          JSON.stringify(storedSamples(problem.samples)),
+          problem.constraints,
+          problem.notes,
+          problem.timeLimitMs,
+          problem.memoryLimitBytes,
+          problem.visibility,
+          problem.difficulty,
+          problem.status,
+          problem.testdataVersion,
+          problem.authorId,
+          problem.authorId ?? 'system',
+        ],
+      );
+      await executor.query(
+        'UPDATE problems SET current_revision_id=$1 WHERE id=$2',
+        [revisionId, problem.id],
+      );
+      problem.currentRevisionId = revisionId;
+      return problem;
+    });
   }
   async get(key: string) {
     const result = await this.pool.query(
@@ -265,7 +297,9 @@ export class PostgresProblemRepository implements ProblemRepository {
   async update(key: string, input: ProblemUpdateInput) {
     const row = await this.get(key);
     if (!row) throw new Error('NOT_FOUND');
-    const fields = Object.keys(input) as (keyof ProblemUpdateInput)[];
+    const fields = (Object.keys(input) as (keyof ProblemUpdateInput)[]).filter(
+      (field) => field !== 'samples',
+    );
     if (!fields.length) return row;
     const columns: string[] = [];
     const params: unknown[] = [];
@@ -275,7 +309,11 @@ export class PostgresProblemRepository implements ProblemRepository {
         (m) => `_${m.toLowerCase()}`,
       );
       const value = input[field];
-      params.push(field === 'examples' ? JSON.stringify(value) : value);
+      params.push(
+        field === 'examples'
+          ? JSON.stringify(storedSamples(input.samples ?? row.samples))
+          : value,
+      );
       columns.push(`${column} = $${params.length}`);
     }
     params.push(row.id);
@@ -318,22 +356,24 @@ export class PostgresProblemRepository implements ProblemRepository {
     const revs = await this.revisions(key);
     const revisionId = randomUUID();
     await this.pool.query(
-      'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)',
+      'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)',
       [
         revisionId,
         row.id,
         revs.length + 1,
         next.slug,
         next.title,
+        next.background,
         next.statement,
         next.inputDescription,
         next.outputDescription,
-        JSON.stringify(next.examples),
+        JSON.stringify(storedSamples(next.samples)),
         next.constraints,
         next.notes,
         next.timeLimitMs,
         next.memoryLimitBytes,
         next.visibility ?? 'private',
+        next.difficulty,
         'draft',
         next.testdataVersion,
         next.authorId,
@@ -350,21 +390,39 @@ export class PostgresProblemRepository implements ProblemRepository {
   }
 }
 function mapRow(row: Record<string, unknown>): Problem {
+  const rawSamples = (
+    typeof row.examples === 'string' ? JSON.parse(row.examples) : row.examples
+  ) as Array<Record<string, unknown>> | undefined;
+  const samples = (rawSamples ?? []).map((sample, index) => ({
+    ordinal: typeof sample.ordinal === 'number' ? sample.ordinal : index + 1,
+    input: String(sample.input ?? ''),
+    output: String(sample.output ?? ''),
+    ...(typeof sample.explanation === 'string'
+      ? { explanation: sample.explanation }
+      : typeof sample.note === 'string'
+        ? { explanation: sample.note }
+        : {}),
+  }));
   return {
     id: String(row.id),
     slug: String(row.slug),
     title: String(row.title),
+    background: String(row.background ?? ''),
     statement: String(row.statement),
     inputDescription: String(row.input_description),
     outputDescription: String(row.output_description),
-    examples: (typeof row.examples === 'string'
-      ? JSON.parse(row.examples)
-      : row.examples) as Problem['examples'],
+    examples: samples.map(({ input, output, explanation }) => ({
+      input,
+      output,
+      ...(explanation ? { note: explanation } : {}),
+    })),
+    samples,
     constraints: String(row.constraints),
     notes: String(row.notes),
     timeLimitMs: Number(row.time_limit_ms),
     memoryLimitBytes: Number(row.memory_limit_bytes),
     visibility: row.visibility as Problem['visibility'],
+    difficulty: (row.difficulty as Problem['difficulty']) ?? null,
     status: row.status as Problem['status'],
     testdataVersion: row.testdata_version as string | null,
     authorId: row.author_id as string | null,

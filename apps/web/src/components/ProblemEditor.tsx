@@ -9,11 +9,11 @@ import {
 import {
   ApiError,
   type ApiClient,
-  type Example,
   type JudgeDataVersionSummary,
   type JudgeDraft,
   type JudgeDraftTestcase,
   type Problem,
+  type ProblemDifficulty,
   type ProblemJudgeDefaults,
 } from '../services/api.js';
 import './problem-editor.css';
@@ -67,15 +67,17 @@ function StatementPreview({
 }: {
   statement: {
     title: string;
+    background: string;
     statement: string;
     inputDescription: string;
     outputDescription: string;
     constraints: string;
     notes: string;
-    examples: Example[];
+    samples: Array<{ ordinal: number; input: string; output: string }>;
   };
 }) {
   const sections = [
+    ['题目背景', statement.background],
     ['题目描述', statement.statement],
     ['输入格式', statement.inputDescription],
     ['输出格式', statement.outputDescription],
@@ -93,14 +95,14 @@ function StatementPreview({
             <p>{value}</p>
           </section>
         ))}
-      {statement.examples.length > 0 && (
+      {statement.samples.length > 0 && (
         <section>
           <h3>样例</h3>
-          {statement.examples.map((example, index) => (
-            <div className="preview-example" key={index}>
-              <strong>样例 {index + 1}</strong>
-              <pre>{example.input}</pre>
-              <pre>{example.output}</pre>
+          {statement.samples.map((sample) => (
+            <div className="preview-example" key={sample.ordinal}>
+              <strong>样例 {sample.ordinal}</strong>
+              <pre>{sample.input}</pre>
+              <pre>{sample.output}</pre>
             </div>
           ))}
         </section>
@@ -133,12 +135,15 @@ export function ProblemEditor({
   const fileRef = useRef<HTMLInputElement>(null);
   const [statement, setStatement] = useState({
     title: '',
+    background: '',
     statement: '',
     inputDescription: '',
     outputDescription: '',
     constraints: '',
     notes: '',
-    examples: [] as Example[],
+    samples: [] as Array<{ ordinal: number; input: string; output: string }>,
+    difficulty: null as ProblemDifficulty | null,
+    visibility: 'private' as Problem['visibility'],
   });
   const [statementMode, setStatementMode] = useState<'edit' | 'preview'>(
     'edit',
@@ -164,12 +169,21 @@ export function ProblemEditor({
         setProblem(p);
         setStatement({
           title: p.title,
+          background: p.background ?? '',
           statement: p.statement,
           inputDescription: p.inputDescription,
           outputDescription: p.outputDescription,
           constraints: p.constraints,
           notes: p.notes ?? '',
-          examples: p.examples ?? [],
+          samples:
+            p.samples ??
+            (p.examples ?? []).map((sample, index) => ({
+              ordinal: index + 1,
+              input: sample.input,
+              output: sample.output,
+            })),
+          difficulty: p.difficulty ?? null,
+          visibility: p.visibility,
         });
         const normalized =
           d && Array.isArray(d.testcases) && d.defaults
@@ -207,12 +221,16 @@ export function ProblemEditor({
     setDirty(true);
     setStatement((s) => ({ ...s, [key]: value }));
   };
-  const updateExample = (index: number, key: keyof Example, value: string) => {
+  const updateSample = (
+    index: number,
+    key: 'input' | 'output',
+    value: string,
+  ) => {
     setDirty(true);
     setStatement((s) => ({
       ...s,
-      examples: s.examples.map((example, item) =>
-        item === index ? { ...example, [key]: value } : example,
+      samples: s.samples.map((sample, item) =>
+        item === index ? { ...sample, [key]: value } : sample,
       ),
     }));
   };
@@ -477,6 +495,55 @@ export function ProblemEditor({
                   required
                 />
               </label>
+              <div className="statement-grid">
+                <label>
+                  难度
+                  <select
+                    value={statement.difficulty ?? ''}
+                    onChange={(e) =>
+                      updateStatement(
+                        'difficulty',
+                        e.target.value as ProblemDifficulty,
+                      )
+                    }
+                    disabled={!canEdit}
+                  >
+                    <option value="">未设置</option>
+                    <option value="入门">入门</option>
+                    <option value="简单">简单</option>
+                    <option value="中等">中等</option>
+                    <option value="困难">困难</option>
+                    <option value="专家">专家</option>
+                  </select>
+                </label>
+                <label>
+                  可见性
+                  <select
+                    value={statement.visibility}
+                    onChange={(e) =>
+                      updateStatement(
+                        'visibility',
+                        e.target.value as Problem['visibility'],
+                      )
+                    }
+                    disabled={!canEdit}
+                  >
+                    <option value="private">仅自己可见</option>
+                    <option value="public">公开</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                题目背景
+                <textarea
+                  rows={6}
+                  value={statement.background}
+                  onChange={(e) =>
+                    updateStatement('background', e.target.value)
+                  }
+                  disabled={!canEdit}
+                />
+              </label>
               <label>
                 题目描述
                 <textarea
@@ -532,36 +599,81 @@ export function ProblemEditor({
               </label>
               <fieldset>
                 <legend>样例</legend>
-                {statement.examples.length === 0 ? (
+                {statement.samples.length === 0 ? (
                   <p className="field-help">暂无样例。</p>
                 ) : (
-                  statement.examples.map((example, index) => (
-                    <div className="statement-grid" key={index}>
-                      <label>
-                        输入样例 {index + 1}
-                        <textarea
-                          rows={3}
-                          value={example.input}
-                          onChange={(e) =>
-                            updateExample(index, 'input', e.target.value)
-                          }
+                  statement.samples.map((sample, index) => (
+                    <div className="sample-editor" key={sample.ordinal}>
+                      <div className="sample-heading">
+                        <strong>样例 #{index + 1}</strong>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => {
+                            setDirty(true);
+                            setStatement((current) => ({
+                              ...current,
+                              samples: current.samples
+                                .filter((_, item) => item !== index)
+                                .map((item, ordinal) => ({
+                                  ...item,
+                                  ordinal: ordinal + 1,
+                                })),
+                            }));
+                          }}
                           disabled={!canEdit}
-                        />
-                      </label>
-                      <label>
-                        输出样例 {index + 1}
-                        <textarea
-                          rows={3}
-                          value={example.output}
-                          onChange={(e) =>
-                            updateExample(index, 'output', e.target.value)
-                          }
-                          disabled={!canEdit}
-                        />
-                      </label>
+                        >
+                          删除
+                        </button>
+                      </div>
+                      <div className="statement-grid">
+                        <label>
+                          输入样例 {index + 1}
+                          <textarea
+                            rows={3}
+                            value={sample.input}
+                            onChange={(e) =>
+                              updateSample(index, 'input', e.target.value)
+                            }
+                            disabled={!canEdit}
+                          />
+                        </label>
+                        <label>
+                          输出样例 {index + 1}
+                          <textarea
+                            rows={3}
+                            value={sample.output}
+                            onChange={(e) =>
+                              updateSample(index, 'output', e.target.value)
+                            }
+                            disabled={!canEdit}
+                          />
+                        </label>
+                      </div>
                     </div>
                   ))
                 )}
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setDirty(true);
+                    setStatement((current) => ({
+                      ...current,
+                      samples: [
+                        ...current.samples,
+                        {
+                          ordinal: current.samples.length + 1,
+                          input: '',
+                          output: '',
+                        },
+                      ],
+                    }));
+                  }}
+                  disabled={!canEdit}
+                >
+                  添加样例
+                </button>
               </fieldset>
             </>
           )}{' '}

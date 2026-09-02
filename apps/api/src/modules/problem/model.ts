@@ -1,21 +1,38 @@
 export type ProblemVisibility = 'private' | 'public';
 export type ProblemStatus = 'draft' | 'published' | 'archived';
+export const problemDifficulties = [
+  '入门',
+  '简单',
+  '中等',
+  '困难',
+  '专家',
+] as const;
+export type ProblemDifficulty = (typeof problemDifficulties)[number];
 
 export type ProblemExample = { input: string; output: string; note?: string };
+export type ProblemSample = {
+  ordinal: number;
+  input: string;
+  output: string;
+  explanation?: string | null;
+};
 
 export type Problem = {
   id: string;
   slug: string;
   title: string;
+  background: string;
   statement: string;
   inputDescription: string;
   outputDescription: string;
   examples: ProblemExample[];
+  samples: ProblemSample[];
   constraints: string;
   notes: string;
   timeLimitMs: number;
   memoryLimitBytes: number;
   visibility: ProblemVisibility;
+  difficulty: ProblemDifficulty | null;
   status: ProblemStatus;
   testdataVersion: string | null;
   authorId: string | null;

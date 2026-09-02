@@ -69,14 +69,23 @@ export type AccountIdentifier = {
   loginCapable: boolean;
 };
 export type Example = { input: string; output: string; note?: string };
+export type ProblemDifficulty = '入门' | '简单' | '中等' | '困难' | '专家';
+export type ProblemSample = {
+  ordinal: number;
+  input: string;
+  output: string;
+  explanation?: string | null;
+};
 export type Problem = {
   id: string;
   slug: string;
   title: string;
+  background?: string;
   statement: string;
   inputDescription: string;
   outputDescription: string;
   examples: Example[];
+  samples?: ProblemSample[];
   constraints: string;
   notes?: string;
   timeLimitMs: number;
@@ -86,7 +95,7 @@ export type Problem = {
   testdataVersion: string | null;
   authorId: string | null;
   currentRevisionId?: string;
-  difficulty?: string;
+  difficulty?: ProblemDifficulty | null;
   tags?: string[];
   source?: string;
   statistics?: {
@@ -394,9 +403,10 @@ export type SandboxProbe = {
 export type SubmissionList = { items: Submission[]; nextCursor: string | null };
 export type ProblemInput = Omit<
   Problem,
-  'id' | 'createdAt' | 'updatedAt' | 'authorId' | 'testdataVersion'
+  'id' | 'createdAt' | 'updatedAt' | 'authorId' | 'testdataVersion' | 'examples'
 > & {
   testdataVersion?: string | null;
+  examples?: Example[];
 };
 import type {
   ContestProblem,
