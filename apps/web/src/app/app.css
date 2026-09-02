@@ -1793,10 +1793,13 @@ footer {
 .evaluation-list-header,
 .evaluation-row {
   display: grid;
-  grid-template-columns: minmax(7rem, 0.8fr) minmax(8rem, 1.2fr) minmax(
+  grid-template-columns: minmax(7rem, 0.7fr) minmax(8rem, 1.2fr) minmax(
       6rem,
       0.8fr
-    ) minmax(9rem, 1.4fr) minmax(10rem, 1.3fr);
+    ) minmax(6rem, 0.8fr) minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(
+      10rem,
+      1.1fr
+    );
   gap: var(--space-3);
   align-items: center;
   padding: var(--space-3) var(--space-4);
@@ -2050,7 +2053,9 @@ footer {
       ) auto;
   }
   .evaluation-list-header > :nth-child(3),
-  .evaluation-row > :nth-child(3) {
+  .evaluation-row > :nth-child(3),
+  .evaluation-list-header > :nth-child(6),
+  .evaluation-row > :nth-child(6) {
     display: none;
   }
   .problem-list-v4 .difficulty-label {
@@ -2123,6 +2128,13 @@ footer {
     grid-column: 1;
   }
   .evaluation-row > :nth-child(4) {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .evaluation-row > :nth-child(5) {
+    display: none;
+  }
+  .evaluation-row > :nth-child(6) {
     grid-column: 2;
     grid-row: 1 / span 2;
   }

@@ -71,7 +71,7 @@ describe('problem foundation', () => {
     );
     await expect(
       service.detail(created.id, { userId: 'manager' }),
-    ).resolves.toBe(created);
+    ).resolves.toMatchObject({ ...created, capabilities: { canEdit: true } });
     await expect(
       service.update(
         created.id,

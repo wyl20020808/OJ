@@ -38,6 +38,18 @@ const submission = (
     updatedAt: '2026-08-29T00:00:00.000Z',
     ...extra,
   }) as Submission;
+const evaluation = (value: Submission) => ({
+  submissionId: value.id,
+  problem: {
+    id: value.problemId,
+    slug: `problem-${value.problemId}`,
+    title: 'Problem',
+  },
+  submitter: { id: value.ownerUserId, displayName: 'Phase 2A' },
+  languageProfileId: value.languageId,
+  status: value.status,
+  createdAt: value.createdAt,
+});
 
 const user = {
   id: 'u1',
@@ -217,7 +229,7 @@ describe('PHASE 2A Worker operations UI matrix', () => {
           return response(200, { status: 'ok', dependencies: {} });
         if (url.endsWith('/api/auth/logout')) return response(204, undefined);
         return response(200, {
-          items: [submission('QUEUED')],
+          items: [evaluation(submission('QUEUED'))],
           nextCursor: null,
         });
       });

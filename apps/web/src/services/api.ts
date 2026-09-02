@@ -85,6 +85,7 @@ export type Problem = {
   status: 'draft' | 'published' | 'archived';
   testdataVersion: string | null;
   authorId: string | null;
+  capabilities?: { canEdit: boolean };
   currentRevisionId?: string;
   difficulty?: string;
   tags?: string[];
@@ -392,9 +393,30 @@ export type SandboxProbe = {
   timeoutMs: number;
 };
 export type SubmissionList = { items: Submission[]; nextCursor: string | null };
+export type EvaluationListItem = {
+  submissionId: string;
+  problem: { id: string; slug: string; title: string };
+  submitter: { id: string; displayName: string };
+  languageProfileId: string;
+  status: string;
+  verdict?: string;
+  createdAt: string;
+  completedAt?: string;
+  totalTimeMs?: number;
+  peakMemoryBytes?: number;
+};
+export type EvaluationList = {
+  items: EvaluationListItem[];
+  nextCursor: string | null;
+};
 export type ProblemInput = Omit<
   Problem,
-  'id' | 'createdAt' | 'updatedAt' | 'authorId' | 'testdataVersion'
+  | 'id'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'authorId'
+  | 'testdataVersion'
+  | 'capabilities'
 > & {
   testdataVersion?: string | null;
 };
@@ -1193,6 +1215,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<SubmissionList>(
         baseUrl,
         `/api/submissions?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        undefined,
+        fetcher,
+      ),
+    evaluations: (cursor?: string, limit = 20) =>
+      request<EvaluationList>(
+        baseUrl,
+        `/api/evaluations?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
         undefined,
         fetcher,
       ),

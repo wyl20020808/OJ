@@ -5,6 +5,7 @@ import type {
   Submission,
   SubmissionCreateRequest,
   SubmissionJudgeDataResolver,
+  GlobalSubmissionListQuery,
 } from './model.js';
 import { SubmissionNotFoundError } from './model.js';
 import { validateCreate } from './validation.js';
@@ -75,6 +76,23 @@ export class SubmissionService {
     if (!(await this.policy.canViewSubmission(context, submission)))
       throw new Error('FORBIDDEN');
     return submission;
+  }
+  async listGlobal(query: GlobalSubmissionListQuery, context?: AuthContext) {
+    if (!context) throw new Error('UNAUTHENTICATED');
+    if (query.cursor && !/^[A-Za-z0-9_-]+$/.test(query.cursor))
+      throw new Error('VALIDATION_ERROR');
+    if (
+      !(await (this.policy.canListGlobalSubmissions?.(context) ??
+        this.policy.listOwnSubmissions(context)))
+    )
+      throw new Error('FORBIDDEN');
+    try {
+      return await this.repository.listGlobal(query);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'INVALID_CURSOR')
+        throw new Error('VALIDATION_ERROR');
+      throw error;
+    }
   }
   async problemHistory(
     problemId: string,

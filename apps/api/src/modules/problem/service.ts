@@ -3,6 +3,7 @@ import {
   type AuthorizationPolicy,
   type AuthContext,
   type Problem,
+  type ProblemProjection,
   type ProblemCreateInput,
   type ProblemUpdateInput,
   type AuditHook,
@@ -32,7 +33,7 @@ export class ProblemService {
     const filter = query.context
       ? { ownedOrPublicBy: query.context.userId }
       : { publicOnly: true as const };
-    return this.repository.list({
+    const result = await this.repository.list({
       limit: query.limit,
       ...(query.offset === undefined ? {} : { offset: query.offset }),
       ...filter,
@@ -42,6 +43,12 @@ export class ProblemService {
         ? { visibility: query.visibility }
         : {}),
     });
+    return {
+      ...result,
+      items: await Promise.all(
+        result.items.map((problem) => this.project(problem, query.context)),
+      ),
+    };
   }
   async home() {
     const recent = await this.repository.list({
@@ -51,10 +58,11 @@ export class ProblemService {
     });
     return { recentProblems: recent.items };
   }
-  async detail(key: string, context?: AuthContext): Promise<Problem> {
+  async detail(key: string, context?: AuthContext): Promise<ProblemProjection> {
     const row = await this.repository.get(key);
     if (!row) throw new ProblemNotFoundError();
-    if (row.visibility === 'public' && row.status === 'published') return row;
+    if (row.visibility === 'public' && row.status === 'published')
+      return this.project(row, context);
     if (
       !context ||
       !(await this.policy.can('read', 'problem', context, {
@@ -63,7 +71,7 @@ export class ProblemService {
       }))
     )
       throw new ProblemNotFoundError();
-    return row;
+    return this.project(row, context);
   }
   async create(raw: unknown, context?: AuthContext) {
     if (!context || !(await this.policy.can('create', 'problem', context)))
@@ -177,5 +185,18 @@ export class ProblemService {
   }
   static createInput(input: unknown): ProblemCreateInput {
     return validateCreate(input);
+  }
+  private async project(
+    problem: Problem,
+    context?: AuthContext,
+  ): Promise<ProblemProjection> {
+    const canEdit = Boolean(
+      context &&
+      (await this.policy.can('update', 'problem', context, {
+        id: problem.id,
+        type: 'problem',
+      })),
+    );
+    return { ...problem, capabilities: { canEdit } };
   }
 }

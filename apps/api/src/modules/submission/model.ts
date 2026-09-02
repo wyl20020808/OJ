@@ -123,6 +123,27 @@ export type SubmissionListQuery = {
   ownerUserId?: string;
   problemId?: string;
 };
+export type GlobalSubmissionListQuery = {
+  limit: number;
+  cursor?: string;
+  ownerUserId?: string;
+  problemId?: string;
+  languageId?: string;
+  evaluationStatus?: SubmissionEvaluationStatus;
+  verdict?: SubmissionVerdict;
+};
+export type GlobalEvaluationListItem = {
+  submissionId: string;
+  problem: { id: string; slug: string; title: string };
+  submitter: { id: string; displayName: string };
+  languageProfileId: string;
+  status: SubmissionEvaluationStatus | IntakeStatus;
+  verdict?: SubmissionVerdict;
+  createdAt: string;
+  completedAt?: string;
+  totalTimeMs?: number;
+  peakMemoryBytes?: number;
+};
 
 export type AuthContext = {
   userId: string;
@@ -140,6 +161,7 @@ export type SubmissionAuthorizationPolicy = {
     submission: Pick<Submission, 'id' | 'ownerUserId' | 'problemId'>,
   ): Promise<boolean> | boolean;
   listOwnSubmissions(user: AuthContext): Promise<boolean> | boolean;
+  canListGlobalSubmissions?(user: AuthContext): Promise<boolean> | boolean;
 };
 
 export type ProblemRevisionReference = {

@@ -28,6 +28,7 @@ const problem: Problem = {
   status: 'published',
   testdataVersion: 'td1',
   authorId: 'u1',
+  capabilities: { canEdit: true },
   createdAt: '2026-09-02T00:00:00.000Z',
   updatedAt: '2026-09-02T00:00:00.000Z',
 };
@@ -57,21 +58,16 @@ function renderApp(
           page: { total: 1, offset: 0, limit: 20 },
         });
       if (url.endsWith('/api/problems/sum')) return response(detail);
-      if (url.includes('/api/submissions'))
+      if (url.includes('/api/evaluations'))
         return response({
           items: [
             {
-              id: 's1',
-              ownerUserId: 'u1',
-              problemId: 'p1',
-              problemRevisionId: 'r1',
-              testdataVersionRef: 'td1',
-              languageId: 'cpp20',
-              source: 'int main() {}',
-              sourceBytes: 13,
+              submissionId: 's1',
+              problem: { id: 'p1', slug: 'sum', title: 'A+B Problem' },
+              submitter: { id: 'u1', displayName: 'Owner' },
+              languageProfileId: 'cpp20',
               status: 'QUEUED',
               createdAt: '2026-09-02T00:00:00.000Z',
-              updatedAt: '2026-09-02T00:00:00.000Z',
             },
           ],
           nextCursor: null,
@@ -88,7 +84,7 @@ afterEach(() => {
 });
 
 describe('Web UI polish', () => {
-  it('shows the canonical editor entry only for the current problem owner', async () => {
+  it('shows the canonical editor entry from the server capability', async () => {
     renderApp('/problems/sum', {
       id: 'u1',
       username: 'guest-owner',
@@ -120,7 +116,7 @@ describe('Web UI polish', () => {
         displayName: 'Reader',
         status: 'active',
       },
-      problem,
+      { ...problem, capabilities: { canEdit: false } },
     );
 
     await screen.findByRole('heading', { name: 'A+B Problem' });
@@ -146,7 +142,7 @@ describe('Web UI polish', () => {
     expect(screen.queryByText('我的题目')).not.toBeInTheDocument();
   });
 
-  it('uses the real owner-scoped submission contract for the evaluation list', async () => {
+  it('uses the real global evaluation contract for the evaluation list', async () => {
     renderApp('/submissions', {
       id: 'u1',
       username: 'owner',
@@ -159,7 +155,7 @@ describe('Web UI polish', () => {
       await screen.findByRole('heading', { name: '评测列表' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('table', { name: '评测列表' })).toHaveTextContent(
-      '#s1p1cpp20',
+      '#s1A+B ProblemsumOwnercpp20',
     );
     expect(screen.getByRole('link', { name: '查看评测 s1' })).toHaveAttribute(
       'href',
