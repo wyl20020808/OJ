@@ -2,12 +2,12 @@
 
 ## Decision
 
-**PARTIAL.** The Product implementation, immutable binding contract, migration,
-focused tests, complete TypeScript tests, database integration, Web unit tests,
-format, lint, typecheck, architecture, build, and diff gates pass. A real
-Browser -> Product -> Judge Service -> Worker -> Supervisor -> Sandbox ->
-Product projection verdict run was not executed before the initial checkpoint,
-so no AC/WA/CE/RE/TLE/MLE Product E2E or viewport runtime claim is made.
+**PASS for the qualified local scope.** The Product implementation and
+immutable binding contract are implemented and tested. Browser -> Product ->
+Judge Service -> Worker -> Supervisor -> Sandbox -> Product projection has
+qualified each supported terminal verdict, and the Product API rejudge path has
+qualified a new immutable evaluation generation. All required final TypeScript
+and Go gates pass.
 
 ## Baseline
 
@@ -57,37 +57,63 @@ not become verdicts.
   Guest ownership, exact binding, v1 survival after v2 becomes selectable,
   private object tamper failure, unsupported profile rejection, and manifest
   construction before dispatch.
-- `pnpm test`: PASS, 730 passed / 5 opt-in skipped.
+- `pnpm test`: PASS, 733 passed / 5 opt-in skipped.
 - `pnpm test:web`: PASS, 11 passed.
 - `pnpm db:migrate`: PASS after adding `0015` to the explicit migration runner.
 - `pnpm integration`: PASS, 9 passed against local PostgreSQL/Redis/MinIO.
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck`,
   `pnpm test:architecture`, `pnpm build`, and `git diff --check`: PASS.
 - WSL bounded readiness check: PASS (`Ubuntu-24.04`, Go and runc available).
-
-## Not Verified
+- Final rerun after the current Phase 3D commits: `pnpm test` (733 passed / 5
+  opt-in skipped), `pnpm test:web` (11 passed), `pnpm integration` (9 passed),
+  `pnpm format:check`, `pnpm lint`, `pnpm typecheck`,
+  `pnpm test:architecture`, `pnpm build`, `git diff --check`, and `go test ./...`
+  for both Judge Worker and Sandbox Supervisor: PASS.
 
 ## Runtime Evidence Added 2026-09-02
 
-- **RUNTIME VERIFIED (AC only):** a fresh public deterministic A+B problem was
-  bound to its published Judge Data version and submitted from the browser as
-  Guest. Submission `94e7839a-57b9-450f-92c0-f92c4964dd2b` progressed from
-  `QUEUED` to Product-projected `AC` through the standalone Judge Service,
-  real Worker, Supervisor, and Sandbox. The browser displayed `AC`, generation
-  1, and attempt 1 without console warnings/errors.
+- **RUNTIME VERIFIED (all terminal verdicts):** Guest `F303E02B` submitted a
+  fresh public deterministic A+B problem from the browser. Every case traversed
+  Browser -> Product -> standalone Judge Service -> real Worker -> Supervisor
+  -> Sandbox -> Product projection and appeared in the Product submission list
+  with generation 1 and attempt 1:
+  `94e7839a-57b9-450f-92c0-f92c4964dd2b` (`AC`),
+  `0428e332-111b-43e7-a7c2-a9c535e97b15` (`WA`),
+  `59efd7d9-ac37-400b-aaa7-330ca84ae51a` (`CE`),
+  `49d931aa-606d-41ff-aa7e-20a8311a8117` (`RE`),
+  `f97b4bd2-939f-4d46-9d36-5eb80b51838b` (`TLE`), and
+  `5251f12c-f16c-4cdb-81ff-e4ffc1aaab7e` (`MLE`).
+- **RUNTIME VERIFIED (execution facts):** the `RE` record shows exit code `7`
+  for all three testcases. The `TLE` record shows 2000/2001 ms wall-limit facts
+  without memory events. The `MLE` record shows 64 MiB peak memory and a
+  memory-limit event for all three testcases. Each record was cleanly
+  published by the Supervisor.
+- **RUNTIME VERIFIED (Product rejudge):** fresh Guest submission
+  `d2cf2bae-c513-459d-aa1c-f74b35dfa6e8` completed as `AC` in generation 1,
+  then the authenticated Product rejudge API produced `AC` in generation 2.
+  Its Product history retained generation 1 as noncurrent and generation 2 as
+  current. This uses the same real Judge Service, Worker, Supervisor, and
+  Sandbox path.
+- **RUNTIME VERIFIED (responsive presentation):** the projected submission
+  list was checked at 1440x900, 1024x768, and 390x844. The mobile navigation
+  collapsed to its menu control, verdict rows and IDs wrapped within the
+  viewport, and no browser console warnings or errors were observed.
 - **IMPLEMENTED/TESTED:** publishing synchronizes the current immutable
   Problem revision's status and visibility; the submission page sends the
   resolved Product problem ID rather than its URL slug for Judge Data lookup.
-- **NOT VERIFIED:** this single AC path does not qualify the remaining verdicts,
-  lifecycle matrix, responsive viewports, production readiness, or any broader
-  sandbox claim.
+- **TESTED (2C.6 lifecycle):** the real PostgreSQL integration suite covers
+  cancellation with no verdict, stale old-generation rejection, and concurrent
+  duplicate-rejudge serialization. Product has neither a submission-cancel
+  route nor a browser cancellation/rejudge control, so no unsupported browser
+  mutation is claimed.
 
-- Real Product Browser -> Judge Service -> Worker -> Supervisor -> Sandbox
-  qualification for AC, WA, CE, RE, TLE, and MLE.
-- Product browser Guest submission, desktop/tablet/mobile viewport checks, and
-  direct-network/console inspection in this Goal environment.
-- Real Product cancellation, rejudge, stale-generation, duplicate-dispatch,
-  missing-object, hash-mismatch, and Judge Service outage runtime matrices.
+## Not Verified
+
+- A separate browser mutation matrix for cancellation, rejudge, stale result,
+  duplicate dispatch, missing objects, hash mismatch, and Judge Service outage.
+  The first three lifecycle semantics have automated real PostgreSQL evidence;
+  the Product surface lacks the browser controls needed to extend that evidence
+  as a browser journey.
 - No production, HA, Host Agent, Elastic Pool, SPJ, interactive, subtasks,
   partial score, contest scoring, or multi-language readiness is claimed.
 
@@ -111,9 +137,9 @@ The Phase 3D contracts are recorded in:
 `FEATURE TESTED`: YES, for the listed automated and local infrastructure
 evidence.
 
-`FEATURE RUNTIME QUALIFIED`: NO.
+`FEATURE RUNTIME QUALIFIED`: YES, for the specified local Product-to-Sandbox
+verdict, rejudge, and responsive-browser scope only.
 
 `PRODUCTION READY`: NO.
 
-`GOAL STATUS`: **PARTIAL** pending real Product-to-Sandbox and Browser runtime
-qualification.
+`GOAL STATUS`: **PASS** for the qualified local scope.

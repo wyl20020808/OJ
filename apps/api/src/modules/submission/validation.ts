@@ -37,7 +37,8 @@ export function validateCreate(input: unknown): SubmissionCreateRequest {
       'problemRevisionId',
       128,
     ),
-    ...(value.testdataVersionRef === undefined || value.testdataVersionRef === null
+    ...(value.testdataVersionRef === undefined ||
+    value.testdataVersionRef === null
       ? {}
       : {
           testdataVersionRef: required(
