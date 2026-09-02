@@ -38,7 +38,25 @@ The formal history-preserving merge and all executable integration gates complet
 
 ## Runtime Qualification
 
-`NOT VERIFIED`: current-source Supervisor, Judge Service, Host Agent, Worker ONLINE/heartbeat, and Product/browser AC/WA plus fresh per-testcase browser detail. Historical Phase 2C.8D and 3D/3D.1 runtime qualifications remain historical evidence only and were not reused to qualify this merge.
+`RUNTIME VERIFIED (current integrated source, direct Judge path)`: an isolated
+Judge DB and Redis prefix used a current-source Supervisor running as the
+non-root `oj-sandbox` identity, current-source Judge Service, and current-source
+Host Agent. Judge Service Add Node selected the fixed trusted C++20 template;
+the Host Agent created the Worker. The registered node reported
+`desiredState=ONLINE`, `observedState=ONLINE`, a healthy heartbeat,
+`cpp20-gcc-13-v1`, and `REAL_SANDBOXED_EXECUTION`. A real standalone Judge
+runtime matrix then passed AC, WA, CE, RE, TLE, MLE, duplicate dispatch,
+cancellation, and rejudge history through Judge Service -> Scheduler ->
+Host-Agent-owned Worker -> Supervisor -> Sandbox. The Worker was stopped by
+the Judge Service lifecycle API before Goal-owned services were terminated.
+
+`NOT VERIFIED`: the remaining required current-source Browser/Product smoke:
+Guest creation, private A+B authoring, Judge Data upload/validation/publication,
+Product AC and WA submission, and browser Submission Detail per-testcase rows.
+This session requested the required browser action-time confirmation before
+creating the local test Guest account, but confirmation was not received.
+Historical Phase 2C.8D and 3D/3D.1 browser/runtime records were not reused as
+evidence for this merge.
 
 ## Status
 

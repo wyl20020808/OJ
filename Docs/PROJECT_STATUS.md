@@ -8,10 +8,13 @@ Current Status: HISTORY-PRESERVING PRODUCT/WEB + 2C.8D MERGE IMPLEMENTED AND TES
 Unified Judge Runtime Integration V1: PARTIAL. Product/Web `4df8c2c` and
 Phase 2C.8D `4462fbd` are formally preserved by merge `d4e04ca`, with Product
 and Judge migrations independently passing and TypeScript/Web/Go gates passing
-in their applicable host environments. The current-source bounded runtime
-chain (Supervisor -> Judge Service -> Host Agent -> Worker ONLINE -> Product
-browser AC/WA -> Submission Detail) has not yet been run, so it is explicitly
-not claimed. See `OJPLATFORM_UNIFIED_JUDGE_RUNTIME_INTEGRATION_V1_REPORT.md`.
+in their applicable host environments. The current-source Supervisor -> Judge
+Service -> Host Agent -> Worker ONLINE -> Sandbox chain is runtime verified,
+including real direct Judge AC/WA/CE/RE/TLE/MLE and lifecycle evidence. The
+remaining Browser/Product Guest A+B authoring, Product AC/WA and Submission
+Detail smoke is not claimed because its local browser account-creation action
+was awaiting confirmation. See
+`OJPLATFORM_UNIFIED_JUDGE_RUNTIME_INTEGRATION_V1_REPORT.md`.
 
 Web UI Polish and Evaluation List V1: PARTIAL. Problem Detail actions are
 consolidated below the title with owner/Guest-owner edit entry; duplicate Web
