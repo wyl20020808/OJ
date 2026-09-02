@@ -391,6 +391,8 @@ export async function buildJudgeService(
               )
             : await nodes[method](
                 (request.params as { nodeId: string }).nodeId,
+                body.expectedIncarnation,
+                body.expectedControlVersion,
               );
         return adminDto(n);
       } catch (e) {

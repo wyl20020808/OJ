@@ -30,8 +30,16 @@ export interface JudgeNodeRepository {
   ): Promise<JudgeNode>;
   list(now?: Date): Promise<JudgeNode[]>;
   get(nodeId: string, now?: Date): Promise<JudgeNode | undefined>;
-  drain(nodeId: string): Promise<JudgeNode>;
-  offline(nodeId: string): Promise<JudgeNode>;
+  drain(
+    nodeId: string,
+    expectedIncarnation?: string,
+    expectedControlVersion?: number,
+  ): Promise<JudgeNode>;
+  offline(
+    nodeId: string,
+    expectedIncarnation?: string,
+    expectedControlVersion?: number,
+  ): Promise<JudgeNode>;
   enable(
     nodeId: string,
     expectedIncarnation?: string,
@@ -206,9 +214,19 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
     const value = this.nodes.get(nodeId);
     return value ? this.refresh(value, now) : undefined;
   }
-  async drain(nodeId: string) {
+  async drain(
+    nodeId: string,
+    expectedIncarnation?: string,
+    expectedControlVersion?: number,
+  ) {
     const value = this.nodes.get(nodeId);
     if (!value) throw new Error('NODE_NOT_FOUND');
+    if (
+      (expectedIncarnation && expectedIncarnation !== value.incarnation) ||
+      (expectedControlVersion !== undefined &&
+        expectedControlVersion !== (value.controlVersion ?? 1))
+    )
+      throw new Error('STALE_CONTROL_VERSION');
     const next = {
       ...value,
       desiredState: 'DRAINING' as const,
@@ -219,9 +237,19 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
     this.nodes.set(nodeId, next);
     return structuredClone(next);
   }
-  async offline(nodeId: string) {
+  async offline(
+    nodeId: string,
+    expectedIncarnation?: string,
+    expectedControlVersion?: number,
+  ) {
     const value = this.nodes.get(nodeId);
     if (!value) throw new Error('NODE_NOT_FOUND');
+    if (
+      (expectedIncarnation && expectedIncarnation !== value.incarnation) ||
+      (expectedControlVersion !== undefined &&
+        expectedControlVersion !== (value.controlVersion ?? 1))
+    )
+      throw new Error('STALE_CONTROL_VERSION');
     const next = {
       ...value,
       desiredState: 'OFFLINE' as const,
@@ -406,20 +434,38 @@ export class PostgresJudgeNodeRepository implements JudgeNodeRepository {
     );
     return result.rows[0] ? node(result.rows[0]) : undefined;
   }
-  async drain(nodeId: string) {
+  async drain(
+    nodeId: string,
+    expectedIncarnation?: string,
+    expectedControlVersion?: number,
+  ) {
     const result = await this.pool.query(
-      `UPDATE judge_nodes SET desired_state='DRAINING',control_version=control_version+1,state=CASE WHEN active_jobs=0 THEN 'OFFLINE' ELSE 'DRAINING' END,updated_at=now() WHERE node_id=$1 RETURNING *`,
-      [nodeId],
+      `UPDATE judge_nodes SET desired_state='DRAINING',control_version=control_version+1,state=CASE WHEN active_jobs=0 THEN 'OFFLINE' ELSE 'DRAINING' END,updated_at=now() WHERE node_id=$1 AND ($2::text IS NULL OR incarnation=$2) AND ($3::int IS NULL OR control_version=$3) RETURNING *`,
+      [nodeId, expectedIncarnation ?? null, expectedControlVersion ?? null],
     );
-    if (!result.rows[0]) throw new Error('NODE_NOT_FOUND');
+    if (!result.rows[0])
+      throw new Error(
+        expectedIncarnation || expectedControlVersion !== undefined
+          ? 'STALE_CONTROL_VERSION'
+          : 'NODE_NOT_FOUND',
+      );
     return node(result.rows[0]);
   }
-  async offline(nodeId: string) {
+  async offline(
+    nodeId: string,
+    expectedIncarnation?: string,
+    expectedControlVersion?: number,
+  ) {
     const result = await this.pool.query(
-      `UPDATE judge_nodes SET desired_state='OFFLINE',control_version=control_version+1,state='OFFLINE',updated_at=now() WHERE node_id=$1 RETURNING *`,
-      [nodeId],
+      `UPDATE judge_nodes SET desired_state='OFFLINE',control_version=control_version+1,state='OFFLINE',updated_at=now() WHERE node_id=$1 AND ($2::text IS NULL OR incarnation=$2) AND ($3::int IS NULL OR control_version=$3) RETURNING *`,
+      [nodeId, expectedIncarnation ?? null, expectedControlVersion ?? null],
     );
-    if (!result.rows[0]) throw new Error('NODE_NOT_FOUND');
+    if (!result.rows[0])
+      throw new Error(
+        expectedIncarnation || expectedControlVersion !== undefined
+          ? 'STALE_CONTROL_VERSION'
+          : 'NODE_NOT_FOUND',
+      );
     return node(result.rows[0]);
   }
   async enable(
