@@ -4,6 +4,7 @@ import type {
   ProblemRevisionResolver,
   Submission,
   SubmissionAuthorizationPolicy,
+  SubmissionJudgeDataResolver,
 } from './model.js';
 import { SubmissionNotFoundError, SubmissionValidationError } from './model.js';
 import {
@@ -18,6 +19,8 @@ export type SubmissionModuleContext = {
   repository?: SubmissionRepository;
   authorizationPolicy: SubmissionAuthorizationPolicy;
   problemResolver: ProblemRevisionResolver;
+  judgeDataResolver?: SubmissionJudgeDataResolver;
+  guardCreate?: (context: AuthContext) => Promise<void>;
   getAuthContext?: (
     request: FastifyRequest,
   ) => AuthContext | undefined | Promise<AuthContext | undefined>;
@@ -55,6 +58,8 @@ export async function registerSubmissionModule(
     context.repository ?? new InMemorySubmissionRepository(),
     context.authorizationPolicy,
     context.problemResolver,
+    context.judgeDataResolver,
+    context.guardCreate,
   );
   const project = async (submission: Submission) =>
     context.projectJudge
@@ -113,6 +118,31 @@ export async function registerSubmissionModule(
           403,
           'FORBIDDEN',
           'Submission is forbidden',
+        );
+      if (e instanceof Error && e.message === 'RATE_LIMITED')
+        return error(
+          reply,
+          request,
+          429,
+          'RATE_LIMITED',
+          'Submission rate limit exceeded',
+        );
+      if (
+        e &&
+        typeof e === 'object' &&
+        'code' in e &&
+        typeof e.code === 'string' &&
+        'status' in e &&
+        typeof e.status === 'number' &&
+        e.status >= 400 &&
+        e.status < 600
+      )
+        return error(
+          reply,
+          request,
+          e.status,
+          e.code,
+          'Judge Data unavailable',
         );
       if (e instanceof Error && e.message === 'VALIDATION_ERROR')
         return error(

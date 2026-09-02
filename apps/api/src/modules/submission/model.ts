@@ -53,6 +53,9 @@ export type Submission = {
   problemId: string;
   problemRevisionId: string;
   testdataVersionRef: string;
+  judgeDataVersionId?: string;
+  judgeDataVersionNumber?: number;
+  judgeDataManifestSha256?: string;
   languageId: string;
   source: string;
   status: IntakeStatus;
@@ -72,6 +75,13 @@ export type SubmissionCreateInput = {
   testdataVersionRef: string;
   languageId: string;
   source: string;
+};
+
+export type SubmissionJudgeBinding = {
+  judgeDataVersionId: string;
+  judgeDataVersionNumber: number;
+  judgeDataManifestSha256: string;
+  testdataVersionRef: string;
 };
 
 export type SubmissionListQuery = {
@@ -110,6 +120,14 @@ export type ProblemRevisionResolver = {
     problemId: string,
     revisionId: string,
   ): Promise<ProblemRevisionReference | undefined>;
+};
+
+export type SubmissionJudgeDataResolver = {
+  bind(
+    problemId: string,
+    problemRevisionId: string,
+    languageId: string,
+  ): Promise<SubmissionJudgeBinding>;
 };
 
 export class SubmissionValidationError extends Error {

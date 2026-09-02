@@ -25,8 +25,8 @@ const input = {
   problemId: 'p1',
   problemRevisionId: 'r1',
   testdataVersionRef: 'td-v1',
-  languageId: 'typescript',
-  source: 'export const answer = 3;',
+  languageId: 'cpp20',
+  source: 'int main() { return 0; }',
 };
 
 describe('submission intake', () => {
@@ -139,7 +139,7 @@ describe('submission intake', () => {
               problem_id: 'p1',
               problem_revision_id: 'r1',
               testdata_version_ref: 'td-v1',
-              language_id: 'typescript',
+              language_id: 'cpp20',
               source: input.source,
               status: 'PENDING',
               created_at: new Date().toISOString(),

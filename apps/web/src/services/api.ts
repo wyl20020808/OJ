@@ -279,12 +279,32 @@ export type ExecutionStage =
   | 'SAFE_FIXTURE_SUCCEEDED'
   | 'WORKER_DEGRADED'
   | 'WORKER_OFFLINE';
+export type SubmissionEvaluation = {
+  evaluationGeneration: number;
+  attemptGeneration: number;
+  status:
+    | 'QUEUED'
+    | 'RUNNING'
+    | 'COMPLETED_WITH_VERDICT'
+    | 'CANCELLED'
+    | 'INFRA_FAILED'
+    | 'NO_VERDICT'
+    | 'INCOMPLETE'
+    | 'REJUDGE_PENDING'
+    | 'REJUDGING';
+  verdict?: 'AC' | 'WA' | 'CE' | 'RE' | 'TLE' | 'MLE';
+  completedAt?: string;
+  current: boolean;
+};
 export type Submission = {
   id: string;
   ownerUserId: string;
   problemId: string;
   problemRevisionId: string;
   testdataVersionRef: string | null;
+  judgeDataVersionId?: string;
+  judgeDataVersionNumber?: number;
+  judgeDataManifestSha256?: string;
   languageId: string;
   source: string;
   sourceBytes: number;
@@ -297,6 +317,7 @@ export type Submission = {
   failureCode?: string | null;
   synthetic?: boolean;
   executionStage?: ExecutionStage;
+  evaluation?: SubmissionEvaluation;
 };
 export type WorkerDiagnostics = {
   items: Array<{
@@ -1141,6 +1162,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<Submission>(
         baseUrl,
         `/api/submissions/${encodeURIComponent(id)}`,
+        undefined,
+        fetcher,
+      ),
+    submissionEvaluations: (id: string) =>
+      request<{ items: SubmissionEvaluation[] }>(
+        baseUrl,
+        `/api/submissions/${encodeURIComponent(id)}/evaluations`,
         undefined,
         fetcher,
       ),

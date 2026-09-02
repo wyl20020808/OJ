@@ -4,6 +4,7 @@ import swagger from '@fastify/swagger';
 import type { IncomingMessage } from 'node:http';
 import { createHash } from 'node:crypto';
 import { Type } from '@sinclair/typebox';
+import type { TestcaseSetManifest } from '@ojplatform/judge-runtime';
 import { createDatabase, checkDatabase } from '@ojplatform/database';
 import { createCache, checkCache } from '@ojplatform/cache';
 import { createRedisRateLimiter } from './modules/auth/rate-limiter.js';
@@ -31,6 +32,7 @@ import { createSubmissionAuthorizationPolicy } from './modules/authz/index.js';
 import { createJudgeAuthorizationPolicy } from './modules/authz/judge.js';
 import {
   InMemoryJudgeJobRepository,
+  ProductJudgeDataSubmissionBridge,
   RedisJudgeJobRepository,
   registerJudgeModule,
 } from './modules/judge/index.js';
@@ -140,10 +142,11 @@ async function guardGuestAuthoring(
   if (actor.strength !== 'guest' || !actor.userId) return;
   try {
     const create = scope === 'create';
+    const submission = scope === 'submission';
     if (
       !(await limiter.consume(
         `guest:${actor.userId}:${scope}`,
-        create ? 5 : 60,
+        create ? 5 : submission ? 20 : 60,
         create ? 3600 : 60,
       ))
     )
@@ -371,9 +374,11 @@ export async function buildApp(options: AppOptions = {}) {
       guardGuestMutation: (action, context) =>
         guardGuestAuthoring(guestAuthoringLimiter, context, action),
     });
+    const judgeDataRepository = new PostgresJudgeDataRepository(database.pool);
+    const judgeDataStorage = new S3ByteStorage(storage.client, storage.bucket);
     const judgeData = new ProblemJudgeDataService(
-      new PostgresJudgeDataRepository(database.pool),
-      new S3ByteStorage(storage.client, storage.bucket),
+      judgeDataRepository,
+      judgeDataStorage,
       async (id) => Boolean(await problemRepository.get(id)),
       async (action, context, problemId) => {
         const permission = (
@@ -441,6 +446,10 @@ export async function buildApp(options: AppOptions = {}) {
         (await auth.getAuthContext(request)) ?? undefined,
       resolveProblemId: async (key) => (await problemRepository.get(key))?.id,
     });
+    const submissionJudgeData = new ProductJudgeDataSubmissionBridge(
+      judgeDataRepository,
+      judgeDataStorage,
+    );
     const submissionPolicy = createSubmissionAuthorizationPolicy();
     const problemResolver: ProblemRevisionResolver = {
       getRevision: async (problemId, revisionId) => {
@@ -492,15 +501,20 @@ export async function buildApp(options: AppOptions = {}) {
           }),
       },
       problemResolver,
+      judgeDataResolver: submissionJudgeData,
+      guardCreate: async (context) =>
+        guardGuestAuthoring(guestAuthoringLimiter, context, 'submission'),
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       onCreated: async (submission) => {
+        const testcaseSet = await submissionJudgeData.manifest(submission);
         if (judgeService) {
           const job = await judgeService.submit(
             judgeServiceInput(
               submission,
               `submission:${submission.id}:evaluation:1`,
               realSubmissionExecution,
+              testcaseSet,
             ),
           );
           await submissionRepository.beginEvaluation?.(
@@ -510,7 +524,11 @@ export async function buildApp(options: AppOptions = {}) {
           return;
         }
         const { job } = await judgeRepository.enqueue(
-          judgeInputForSubmission(submission, realSubmissionExecution),
+          judgeInputForSubmission(
+            submission,
+            realSubmissionExecution,
+            testcaseSet,
+          ),
         );
         await submissionRepository.beginEvaluation?.(submission.id, job.id);
       },
@@ -535,8 +553,13 @@ export async function buildApp(options: AppOptions = {}) {
           return;
         }
         const evaluationGeneration = (current?.evaluationGeneration ?? 0) + 1;
+        const testcaseSet = await submissionJudgeData.manifest(submission);
         const { job } = await judgeRepository.enqueue({
-          ...judgeInputForSubmission(submission, realSubmissionExecution),
+          ...judgeInputForSubmission(
+            submission,
+            realSubmissionExecution,
+            testcaseSet,
+          ),
           evaluationGeneration,
           idempotencyKey: `submission:${submission.id}:evaluation:${evaluationGeneration}`,
         });
@@ -784,9 +807,11 @@ export async function buildApp(options: AppOptions = {}) {
       guardGuestMutation: (action, context) =>
         guardGuestAuthoring(guestAuthoringLimiter, context, action),
     });
+    const judgeDataRepository = new InMemoryJudgeDataRepository();
+    const judgeDataStorage = new MemoryByteStorage();
     const judgeData = new ProblemJudgeDataService(
-      new InMemoryJudgeDataRepository(),
-      new MemoryByteStorage(),
+      judgeDataRepository,
+      judgeDataStorage,
       async (id) => Boolean(await problemRepository.get(id)),
       async (action, context, problemId) => {
         const actor = context as
@@ -840,6 +865,10 @@ export async function buildApp(options: AppOptions = {}) {
         (await auth.getAuthContext(request)) ?? undefined,
       resolveProblemId: async (key) => (await problemRepository.get(key))?.id,
     });
+    const submissionJudgeData = new ProductJudgeDataSubmissionBridge(
+      judgeDataRepository,
+      judgeDataStorage,
+    );
     const submissionPolicy = createSubmissionAuthorizationPolicy();
     await registerSubmissionModule(app, {
       repository: submissionRepository,
@@ -890,11 +919,19 @@ export async function buildApp(options: AppOptions = {}) {
           };
         },
       },
+      judgeDataResolver: submissionJudgeData,
+      guardCreate: async (context) =>
+        guardGuestAuthoring(guestAuthoringLimiter, context, 'submission'),
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       onCreated: async (submission) => {
+        const testcaseSet = await submissionJudgeData.manifest(submission);
         const { job } = await judgeRepository.enqueue(
-          judgeInputForSubmission(submission, realSubmissionExecution),
+          judgeInputForSubmission(
+            submission,
+            realSubmissionExecution,
+            testcaseSet,
+          ),
         );
         await submissionRepository.beginEvaluation?.(submission.id, job.id);
       },
@@ -908,8 +945,13 @@ export async function buildApp(options: AppOptions = {}) {
         )
           return;
         const evaluationGeneration = (current?.evaluationGeneration ?? 0) + 1;
+        const testcaseSet = await submissionJudgeData.manifest(submission);
         const { job } = await judgeRepository.enqueue({
-          ...judgeInputForSubmission(submission, realSubmissionExecution),
+          ...judgeInputForSubmission(
+            submission,
+            realSubmissionExecution,
+            testcaseSet,
+          ),
           evaluationGeneration,
           idempotencyKey: `submission:${submission.id}:evaluation:${evaluationGeneration}`,
         });
@@ -1030,6 +1072,7 @@ export async function buildApp(options: AppOptions = {}) {
 function judgeInputForSubmission(
   submission: Submission,
   realSubmissionExecution: boolean,
+  testcaseSet?: TestcaseSetManifest,
 ) {
   const base = {
     submissionId: submission.id,
@@ -1041,6 +1084,7 @@ function judgeInputForSubmission(
   };
   if (!realSubmissionExecution || submission.languageId !== 'cpp20')
     return base;
+  if (!testcaseSet) throw new Error('JUDGE_DATA_BINDING_MISSING');
   return {
     ...base,
     executionMode: 'REAL_SANDBOXED_EXECUTION' as const,
@@ -1050,10 +1094,7 @@ function judgeInputForSubmission(
     sourceSha256: createHash('sha256')
       .update(submission.source, 'utf8')
       .digest('hex'),
-    controlledInputId: 'stdin-empty-v1' as const,
-    testcaseId: 'sample-1',
-    testcaseInput: '',
-    testcaseInputSha256: createHash('sha256').update('', 'utf8').digest('hex'),
-    executionProfileId: 'cpp20-gcc-13-v1' as const,
+    testcaseSet,
+    executionSetPolicy: 'RUN_ALL' as const,
   };
 }

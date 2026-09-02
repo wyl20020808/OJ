@@ -18,6 +18,7 @@ import {
   type Problem,
   type ProfileContest,
   type Submission,
+  type SubmissionEvaluation,
   type SubmissionStatus,
 } from '../services/api.js';
 import './app.css';
@@ -416,6 +417,40 @@ export function presentJudgeStatus(status: string): StatusPresentation {
 }
 
 export function JudgeStatus({ submission }: { submission: Submission }) {
+  const evaluation = submission.evaluation;
+  if (evaluation) {
+    const label =
+      evaluation.status === 'COMPLETED_WITH_VERDICT'
+        ? (evaluation.verdict ?? 'NO_VERDICT')
+        : evaluation.status;
+    const terminal = [
+      'COMPLETED_WITH_VERDICT',
+      'CANCELLED',
+      'INFRA_FAILED',
+      'NO_VERDICT',
+      'INCOMPLETE',
+    ].includes(evaluation.status);
+    return (
+      <div
+        className={`judge-status tone-${
+          evaluation.status === 'COMPLETED_WITH_VERDICT'
+            ? evaluation.verdict === 'AC'
+              ? 'success'
+              : 'warning'
+            : terminal
+              ? 'danger'
+              : 'neutral'
+        }`}
+        role="status"
+      >
+        <span className="status">{label}</span>
+        <span className="judge-note">
+          第 {evaluation.evaluationGeneration} 代评测 · 第{' '}
+          {evaluation.attemptGeneration} 次尝试
+        </span>
+      </div>
+    );
+  }
   const presentation = presentJudgeStatus(
     String(submission.executionStage ?? submission.status),
   );
@@ -1769,9 +1804,6 @@ function SubmissionForm({
             required
           />
         </label>
-        <p className="muted">
-          源代码目前只作为提交接收文本保存，当前阶段没有执行结果。
-        </p>
         {error && <FormMessage error={error} />}
         <button disabled={state === 'saving'}>
           {state === 'saving' ? '提交中…' : '提交源代码'}
@@ -1887,6 +1919,7 @@ function SubmissionDetail({
   const [error, setError] = useState<ApiError | null>(null);
   const [transportError, setTransportError] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [history, setHistory] = useState<SubmissionEvaluation[]>([]);
   const requestVersion = useRef(0);
   const load = () => {
     const version = ++requestVersion.current;
@@ -1897,6 +1930,12 @@ function SubmissionDetail({
       .then((value) => {
         if (version !== requestVersion.current) return;
         setSubmission(value);
+        void api
+          .submissionEvaluations(id)
+          .then((response) => {
+            if (version === requestVersion.current) setHistory(response.items);
+          })
+          .catch(() => undefined);
       })
       .catch((e) => {
         if (version !== requestVersion.current) return;
@@ -1911,6 +1950,21 @@ function SubmissionDetail({
       requestVersion.current++;
     };
   }, [api, id, user]);
+  useEffect(() => {
+    if (!submission?.evaluation) return;
+    if (
+      [
+        'COMPLETED_WITH_VERDICT',
+        'CANCELLED',
+        'INFRA_FAILED',
+        'NO_VERDICT',
+        'INCOMPLETE',
+      ].includes(submission.evaluation.status)
+    )
+      return;
+    const timer = window.setInterval(load, 2000);
+    return () => window.clearInterval(timer);
+  }, [submission?.evaluation?.status]);
   if (!user)
     return (
       <State
@@ -1990,13 +2044,27 @@ function SubmissionDetail({
         {submission.problemId} · 版本 {submission.problemRevisionId}
       </Section>
       <Section title="测试数据版本">{submission.testdataVersionRef}</Section>
+      {submission.judgeDataVersionId && (
+        <Section title="评测数据绑定">
+          v{submission.judgeDataVersionNumber} · {submission.judgeDataVersionId}
+        </Section>
+      )}
       <Section title="提交者">{submission.ownerUserId}</Section>
       <Section title="源代码">
         <pre className="source">{submission.source}</pre>
       </Section>
-      <p className="muted">
-        此页面仅展示提交接收元数据。当前没有执行结果，也不会伪造判题结论。
-      </p>
+      {history.length > 0 && (
+        <Section title="评测历史">
+          {history.map((item) => (
+            <p key={item.evaluationGeneration}>
+              第 {item.evaluationGeneration} 代 ·{' '}
+              {item.status === 'COMPLETED_WITH_VERDICT'
+                ? item.verdict
+                : item.status}
+            </p>
+          ))}
+        </Section>
+      )}
     </article>
   );
 }

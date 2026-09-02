@@ -3,6 +3,7 @@ export * from './repository.js';
 export * from './service.js';
 export * from './safety.js';
 export * from './testcase-set.js';
+export * from './product-judge-data-bridge.js';
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { timingSafeEqual } from 'node:crypto';

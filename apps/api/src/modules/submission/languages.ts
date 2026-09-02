@@ -7,27 +7,6 @@ export type LanguageDefinition = {
 export const LANGUAGE_CATALOG: ReadonlyMap<string, LanguageDefinition> =
   new Map([
     [
-      'typescript',
-      {
-        id: 'typescript',
-        displayName: 'TypeScript',
-        maxSourceBytes: 256 * 1024,
-      },
-    ],
-    [
-      'javascript',
-      {
-        id: 'javascript',
-        displayName: 'JavaScript',
-        maxSourceBytes: 256 * 1024,
-      },
-    ],
-    [
-      'python',
-      { id: 'python', displayName: 'Python', maxSourceBytes: 256 * 1024 },
-    ],
-    ['go', { id: 'go', displayName: 'Go', maxSourceBytes: 256 * 1024 }],
-    [
       'cpp20',
       {
         id: 'cpp20',

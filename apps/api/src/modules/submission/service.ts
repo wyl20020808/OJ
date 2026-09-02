@@ -4,6 +4,7 @@ import type {
   ProblemRevisionResolver,
   Submission,
   SubmissionCreateInput,
+  SubmissionJudgeDataResolver,
 } from './model.js';
 import { SubmissionNotFoundError } from './model.js';
 import { validateCreate } from './validation.js';
@@ -14,9 +15,12 @@ export class SubmissionService {
     private readonly repository: SubmissionRepository,
     private readonly policy: SubmissionAuthorizationPolicy,
     private readonly problems: ProblemRevisionResolver,
+    private readonly judgeData?: SubmissionJudgeDataResolver,
+    private readonly guardCreate?: (context: AuthContext) => Promise<void>,
   ) {}
   async create(raw: unknown, context?: AuthContext) {
     if (!context) throw new Error('UNAUTHENTICATED');
+    await this.guardCreate?.(context);
     const input = validateCreate(raw);
     const revision = await this.problems.getRevision(
       input.problemId,
@@ -36,7 +40,18 @@ export class SubmissionService {
       }))
     )
       throw new Error('FORBIDDEN');
-    return this.repository.create({ ...input, ownerUserId: context.userId });
+    const binding = this.judgeData
+      ? await this.judgeData.bind(
+          input.problemId,
+          input.problemRevisionId,
+          input.languageId,
+        )
+      : undefined;
+    return this.repository.create({
+      ...input,
+      ...binding,
+      ownerUserId: context.userId,
+    });
   }
   async list(
     query: { limit: number; cursor?: string; problemId?: string },

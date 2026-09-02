@@ -28,6 +28,7 @@ try {
     '0012_product_judge_admin_audit',
     '0013_problem_judge_data',
     '0014_problem_judge_data_integrity',
+    '0015_submission_judge_data_binding',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {
