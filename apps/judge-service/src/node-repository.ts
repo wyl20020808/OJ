@@ -32,6 +32,11 @@ export interface JudgeNodeRepository {
   get(nodeId: string, now?: Date): Promise<JudgeNode | undefined>;
   drain(nodeId: string): Promise<JudgeNode>;
   offline(nodeId: string): Promise<JudgeNode>;
+  enable(
+    nodeId: string,
+    expectedIncarnation?: string,
+    expectedControlVersion?: number,
+  ): Promise<JudgeNode>;
   assign(
     node: JudgeNode,
     judgeJobId: string,
@@ -51,36 +56,64 @@ export interface JudgeNodeRepository {
 }
 
 const stamp = (now = new Date()) => now.toISOString();
-const node = (value: Record<string, unknown>): JudgeNode => ({
-  nodeId: String(value.node_id),
-  incarnation: String(value.incarnation),
-  runtimeVersion: String(value.runtime_version),
-  maxConcurrentJobs: Number(value.max_concurrent_jobs),
-  capabilities: value.capabilities as JudgeNode['capabilities'],
-  ...(value.metadata
-    ? { metadata: value.metadata as NonNullable<JudgeNode['metadata']> }
-    : {}),
-  state: value.state as JudgeNode['state'],
-  activeJobs: Number(value.active_jobs),
-  ...(value.last_heartbeat_at
-    ? {
-        lastHeartbeatAt: new Date(
-          String(value.last_heartbeat_at),
-        ).toISOString(),
-      }
-    : {}),
-});
+const node = (value: Record<string, unknown>): JudgeNode =>
+  ({
+    nodeId: String(value.node_id),
+    incarnation: String(value.incarnation),
+    runtimeVersion: String(value.runtime_version),
+    maxConcurrentJobs: Number(value.max_concurrent_jobs),
+    capabilities: value.capabilities as JudgeNode['capabilities'],
+    ...(value.metadata
+      ? { metadata: value.metadata as NonNullable<JudgeNode['metadata']> }
+      : {}),
+    state: value.state as JudgeNode['state'],
+    desiredState: (value.desired_state ??
+      (value.state === 'DRAINING'
+        ? 'DRAINING'
+        : value.state === 'OFFLINE'
+          ? 'OFFLINE'
+          : 'ONLINE')) as JudgeNode['desiredState'],
+    observedState: (value.observed_state ??
+      value.state) as JudgeNode['observedState'],
+    controlVersion: Number(value.control_version ?? 1),
+    activeJobs: Number(value.active_jobs),
+    ...(value.last_heartbeat_at
+      ? {
+          lastHeartbeatAt: new Date(
+            String(value.last_heartbeat_at),
+          ).toISOString(),
+        }
+      : {}),
+  }) as JudgeNode;
 
 const fresh = (value: JudgeNode, now = new Date(), timeout = 15_000) => {
+  let observedState: JudgeNode['state'] = value.observedState ?? value.state;
   if (
     ['ONLINE', 'BUSY'].includes(value.state) &&
     (!value.lastHeartbeatAt ||
       now.getTime() - Date.parse(value.lastHeartbeatAt) > timeout)
   )
-    return { ...value, state: 'UNHEALTHY' as const };
-  if (value.state === 'DRAINING' && value.activeJobs === 0)
-    return { ...value, state: 'OFFLINE' as const };
-  return value;
+    observedState = 'UNHEALTHY';
+  else if (value.observedState === 'DRAINING' && value.activeJobs === 0)
+    observedState = 'OFFLINE';
+  const desired = value.desiredState ?? 'ONLINE';
+  const state: JudgeNode['state'] =
+    desired === 'OFFLINE'
+      ? 'OFFLINE'
+      : desired === 'DRAINING'
+        ? value.activeJobs
+          ? 'DRAINING'
+          : 'OFFLINE'
+        : observedState === 'BUSY'
+          ? 'BUSY'
+          : observedState;
+  return {
+    ...value,
+    desiredState: desired,
+    observedState,
+    controlVersion: value.controlVersion ?? 1,
+    state,
+  };
 };
 
 export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
@@ -100,6 +133,9 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
     const next: JudgeNode = {
       ...value,
       state: 'ONLINE',
+      desiredState: 'ONLINE',
+      observedState: 'ONLINE',
+      controlVersion: 1,
       activeJobs: 0,
       lastHeartbeatAt: stamp(now),
     };
@@ -108,7 +144,10 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
         ...existing,
         ...value,
         lastHeartbeatAt: stamp(now),
-        state: existing.state === 'OFFLINE' ? 'OFFLINE' : 'ONLINE',
+        state: existing.desiredState === 'OFFLINE' ? 'OFFLINE' : 'ONLINE',
+        desiredState: existing.desiredState ?? 'ONLINE',
+        observedState: 'ONLINE',
+        controlVersion: existing.controlVersion ?? 1,
       } as JudgeNode;
       this.nodes.set(value.nodeId, current);
       return structuredClone(current);
@@ -142,6 +181,7 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
       state:
         Math.max(existing.activeJobs, activeJobs) === 0 ? 'ONLINE' : 'BUSY',
       lastHeartbeatAt: stamp(now),
+      observedState: activeJobs === 0 ? 'ONLINE' : 'BUSY',
     };
     this.nodes.set(nodeId, next);
     return structuredClone(next);
@@ -161,6 +201,8 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
     if (!value) throw new Error('NODE_NOT_FOUND');
     const next = {
       ...value,
+      desiredState: 'DRAINING' as const,
+      controlVersion: (value.controlVersion ?? 1) + 1,
       state:
         value.activeJobs === 0 ? ('OFFLINE' as const) : ('DRAINING' as const),
     };
@@ -170,7 +212,39 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
   async offline(nodeId: string) {
     const value = this.nodes.get(nodeId);
     if (!value) throw new Error('NODE_NOT_FOUND');
-    const next = { ...value, state: 'OFFLINE' as const };
+    const next = {
+      ...value,
+      desiredState: 'OFFLINE' as const,
+      controlVersion: (value.controlVersion ?? 1) + 1,
+      state: 'OFFLINE' as const,
+    };
+    this.nodes.set(nodeId, next);
+    return structuredClone(next);
+  }
+  async enable(
+    nodeId: string,
+    expectedIncarnation?: string,
+    expectedControlVersion?: number,
+  ) {
+    const value = this.nodes.get(nodeId);
+    if (!value) throw new Error('NODE_NOT_FOUND');
+    if (
+      (expectedIncarnation && expectedIncarnation !== value.incarnation) ||
+      (expectedControlVersion !== undefined &&
+        expectedControlVersion !== (value.controlVersion ?? 1))
+    )
+      throw new Error('STALE_CONTROL_VERSION');
+    const next = {
+      ...value,
+      desiredState: 'ONLINE' as const,
+      controlVersion: (value.controlVersion ?? 1) + 1,
+      state:
+        value.observedState === 'UNHEALTHY'
+          ? ('UNHEALTHY' as const)
+          : value.activeJobs
+            ? ('BUSY' as const)
+            : ('ONLINE' as const),
+    };
     this.nodes.set(nodeId, next);
     return structuredClone(next);
   }
@@ -239,7 +313,17 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
         this.nodes.set(value.nodeId, {
           ...nodeValue,
           activeJobs,
-          state: activeJobs === 0 ? 'ONLINE' : 'BUSY',
+          observedState: activeJobs === 0 ? 'ONLINE' : 'BUSY',
+          state:
+            (nodeValue.desiredState ?? 'ONLINE') === 'OFFLINE'
+              ? 'OFFLINE'
+              : (nodeValue.desiredState ?? 'ONLINE') === 'DRAINING'
+                ? activeJobs
+                  ? 'DRAINING'
+                  : 'OFFLINE'
+                : activeJobs === 0
+                  ? 'ONLINE'
+                  : 'BUSY',
         });
       }
     }
@@ -307,7 +391,7 @@ export class PostgresJudgeNodeRepository implements JudgeNodeRepository {
   }
   async drain(nodeId: string) {
     const result = await this.pool.query(
-      `UPDATE judge_nodes SET state=CASE WHEN active_jobs=0 THEN 'OFFLINE' ELSE 'DRAINING' END,updated_at=now() WHERE node_id=$1 RETURNING *`,
+      `UPDATE judge_nodes SET desired_state='DRAINING',control_version=control_version+1,state=CASE WHEN active_jobs=0 THEN 'OFFLINE' ELSE 'DRAINING' END,updated_at=now() WHERE node_id=$1 RETURNING *`,
       [nodeId],
     );
     if (!result.rows[0]) throw new Error('NODE_NOT_FOUND');
@@ -315,10 +399,22 @@ export class PostgresJudgeNodeRepository implements JudgeNodeRepository {
   }
   async offline(nodeId: string) {
     const result = await this.pool.query(
-      `UPDATE judge_nodes SET state='OFFLINE',updated_at=now() WHERE node_id=$1 RETURNING *`,
+      `UPDATE judge_nodes SET desired_state='OFFLINE',control_version=control_version+1,state='OFFLINE',updated_at=now() WHERE node_id=$1 RETURNING *`,
       [nodeId],
     );
     if (!result.rows[0]) throw new Error('NODE_NOT_FOUND');
+    return node(result.rows[0]);
+  }
+  async enable(
+    nodeId: string,
+    expectedIncarnation?: string,
+    expectedControlVersion?: number,
+  ) {
+    const result = await this.pool.query(
+      `UPDATE judge_nodes SET desired_state='ONLINE',control_version=control_version+1,state=CASE WHEN observed_state='UNHEALTHY' THEN 'UNHEALTHY' WHEN active_jobs>0 THEN 'BUSY' ELSE 'ONLINE' END,updated_at=now() WHERE node_id=$1 AND ($2::text IS NULL OR incarnation=$2) AND ($3::int IS NULL OR control_version=$3) RETURNING *`,
+      [nodeId, expectedIncarnation ?? null, expectedControlVersion ?? null],
+    );
+    if (!result.rows[0]) throw new Error('STALE_CONTROL_VERSION');
     return node(result.rows[0]);
   }
   async assign(
@@ -402,7 +498,7 @@ export class PostgresJudgeNodeRepository implements JudgeNodeRepository {
       `WITH resolved AS (
          UPDATE judge_node_assignments SET status='COMPLETED' WHERE assignment_id=$1 AND status='LEASED' RETURNING node_id,incarnation
        )
-       UPDATE judge_nodes SET active_jobs=GREATEST(active_jobs-1,0),state=CASE WHEN active_jobs <= 1 THEN 'ONLINE' ELSE 'BUSY' END,updated_at=now()
+       UPDATE judge_nodes SET active_jobs=GREATEST(active_jobs-1,0),observed_state=CASE WHEN active_jobs <= 1 THEN 'ONLINE' ELSE 'BUSY' END,state=CASE WHEN desired_state='OFFLINE' THEN 'OFFLINE' WHEN desired_state='DRAINING' AND active_jobs <= 1 THEN 'OFFLINE' WHEN desired_state='DRAINING' THEN 'DRAINING' WHEN active_jobs <= 1 THEN 'ONLINE' ELSE 'BUSY' END,updated_at=now()
        WHERE (node_id,incarnation) IN (SELECT node_id,incarnation FROM resolved)`,
       [assignmentId],
     );

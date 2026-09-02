@@ -196,6 +196,129 @@ export async function buildJudgeService(
       return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
     return { items: await nodes.list() };
   });
+  const adminDto = (
+    n: Awaited<ReturnType<NonNullable<JudgeServiceAppOptions['nodes']>['get']>>,
+  ) =>
+    n && {
+      nodeId: n.nodeId,
+      incarnation: n.incarnation,
+      desiredState: n.desiredState ?? 'ONLINE',
+      observedState: n.observedState ?? n.state,
+      state: n.state,
+      runtimeVersion: n.runtimeVersion,
+      maxConcurrentJobs: n.maxConcurrentJobs,
+      activeJobs: n.activeJobs,
+      availableCapacity: Math.max(0, n.maxConcurrentJobs - n.activeJobs),
+      lastHeartbeatAt: n.lastHeartbeatAt ?? null,
+      heartbeatAgeMs: n.lastHeartbeatAt
+        ? Math.max(0, Date.now() - Date.parse(n.lastHeartbeatAt))
+        : null,
+      capabilities: n.capabilities,
+      controlVersion: n.controlVersion ?? 1,
+    };
+  app.get('/v1/admin/nodes', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    if (!nodes)
+      return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+    const query = request.query as { limit?: string; state?: string };
+    const limit = Math.min(
+      100,
+      Math.max(1, Number(query?.limit ?? 100) || 100),
+    );
+    const items = (await nodes.list())
+      .filter(
+        (n) => !query?.state || (n.observedState ?? n.state) === query.state,
+      )
+      .slice(0, limit)
+      .map(adminDto);
+    return { items, nextCursor: null };
+  });
+  app.get('/v1/admin/nodes/:nodeId', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    if (!nodes)
+      return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+    const n = await nodes.get((request.params as { nodeId: string }).nodeId);
+    return n ? adminDto(n) : reply.code(404).send({ code: 'NOT_FOUND' });
+  });
+  app.get('/v1/admin/cluster/summary', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    if (!nodes)
+      return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+    const all = await nodes.list();
+    const counts: Record<string, number> = {};
+    for (const n of all) counts[n.state] = (counts[n.state] ?? 0) + 1;
+    const totalCapacity = all.reduce((s, n) => s + n.maxConcurrentJobs, 0);
+    const schedulableCapacity = all
+      .filter(
+        (n) =>
+          (n.desiredState ?? 'ONLINE') === 'ONLINE' &&
+          ['ONLINE', 'BUSY'].includes(n.observedState ?? n.state),
+      )
+      .reduce((s, n) => s + Math.max(0, n.maxConcurrentJobs - n.activeJobs), 0);
+    return {
+      totalNodes: all.length,
+      countsByState: counts,
+      activeJobs: all.reduce((s, n) => s + n.activeJobs, 0),
+      totalCapacity,
+      schedulableCapacity,
+      staleNodeCount: all.filter(
+        (n) => (n.observedState ?? n.state) === 'UNHEALTHY',
+      ).length,
+      generatedAt: new Date().toISOString(),
+    };
+  });
+  app.get('/v1/admin/metrics', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    if (!nodes)
+      return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+    const all = await nodes.list();
+    return {
+      nodesByState: Object.fromEntries(
+        all.map((n) => [
+          n.state,
+          all.filter((x) => x.state === n.state).length,
+        ]),
+      ),
+      activeJobs: all.reduce((s, n) => s + n.activeJobs, 0),
+      totalCapacity: all.reduce((s, n) => s + n.maxConcurrentJobs, 0),
+      generatedAt: new Date().toISOString(),
+    };
+  });
+  for (const [action, method] of [
+    ['drain', 'drain'],
+    ['offline', 'offline'],
+    ['enable', 'enable'],
+  ] as const)
+    app.post(`/v1/admin/nodes/:nodeId/${action}`, async (request, reply) => {
+      if (!(await deny(request, reply))) return;
+      if (!nodes)
+        return reply.code(501).send({ code: 'NODE_REGISTRY_UNAVAILABLE' });
+      const body = (request.body ?? {}) as {
+        expectedIncarnation?: string;
+        expectedControlVersion?: number;
+      };
+      try {
+        const n =
+          method === 'enable'
+            ? await nodes.enable(
+                (request.params as { nodeId: string }).nodeId,
+                body.expectedIncarnation,
+                body.expectedControlVersion,
+              )
+            : await nodes[method](
+                (request.params as { nodeId: string }).nodeId,
+              );
+        return adminDto(n);
+      } catch (e) {
+        return reply
+          .code(
+            e instanceof Error && e.message === 'STALE_CONTROL_VERSION'
+              ? 409
+              : 404,
+          )
+          .send({ code: e instanceof Error ? e.message : 'CONTROL_REJECTED' });
+      }
+    });
   app.get('/v1/nodes/:nodeId', async (request, reply) => {
     if (!(await deny(request, reply))) return;
     if (!nodes)
