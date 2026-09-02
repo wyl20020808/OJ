@@ -32,6 +32,9 @@ export type JudgeNodeRegistration = {
 
 export type JudgeNode = JudgeNodeRegistration & {
   state: JudgeNodeState;
+  desiredState?: 'ONLINE' | 'DRAINING' | 'OFFLINE';
+  observedState?: JudgeNodeState;
+  controlVersion?: number;
   activeJobs: number;
   lastHeartbeatAt?: string;
 };
@@ -166,7 +169,8 @@ export function scheduleJudgeNode(
 ): NodeScheduleResult {
   const eligible = nodes.filter((node) => {
     if (
-      !['ONLINE', 'BUSY'].includes(node.state) ||
+      (node.desiredState ?? 'ONLINE') !== 'ONLINE' ||
+      !['ONLINE', 'BUSY'].includes(node.observedState ?? node.state) ||
       node.activeJobs < 0 ||
       node.activeJobs >= node.maxConcurrentJobs ||
       !node.lastHeartbeatAt ||
