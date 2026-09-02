@@ -28,6 +28,7 @@ The formal history-preserving merge and all executable integration gates complet
 - Focused Web regression: 23 passed.
 - `pnpm test`: 771 passed, 5 existing opt-in skips.
 - `pnpm test:web`: 11 passed.
+- `pnpm integration`: 9 passed.
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test:architecture`, `pnpm build`, `pnpm build:web`, and `git diff --check`: PASS.
 - `go test ./...` in Judge Worker: PASS.
 - `go test ./...` in Sandbox Supervisor: PASS in WSL Linux.
