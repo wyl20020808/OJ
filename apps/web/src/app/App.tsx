@@ -15,6 +15,7 @@ import {
   type AuthenticatedUser,
   type BackendContest,
   type EvaluationListItem,
+  type EvaluationFilters,
   type Language,
   type Problem,
   type ProfileContest,
@@ -1857,22 +1858,36 @@ function SubmissionForm({
   );
 }
 
-function SubmissionHistory({
-  api,
-}: {
-  api: ApiClient;
-}) {
+function SubmissionHistory({ api }: { api: ApiClient }) {
   const [items, setItems] = useState<EvaluationListItem[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [cursor, setCursor] = useState<string | undefined>();
+  const [resultFilter, setResultFilter] = useState('');
+  const [problemFilter, setProblemFilter] = useState('');
+  const [submitterFilter, setSubmitterFilter] = useState('');
   const requestVersion = useRef(0);
+  const filters = useMemo<EvaluationFilters>(() => {
+    if (!resultFilter)
+      return {
+        ...(problemFilter ? { problemId: problemFilter.trim() } : {}),
+        ...(submitterFilter ? { submitterId: submitterFilter.trim() } : {}),
+      };
+    const verdicts = new Set(['AC', 'WA', 'CE', 'RE', 'TLE', 'MLE']);
+    return {
+      ...(verdicts.has(resultFilter)
+        ? { verdict: resultFilter }
+        : { status: resultFilter }),
+      ...(problemFilter ? { problemId: problemFilter.trim() } : {}),
+      ...(submitterFilter ? { submitterId: submitterFilter.trim() } : {}),
+    };
+  }, [problemFilter, resultFilter, submitterFilter]);
   const load = () => {
     const version = ++requestVersion.current;
     setItems(null);
     setError('');
     void api
-      .evaluations(cursor)
+      .evaluations(cursor, 20, filters)
       .then((d) => {
         if (version !== requestVersion.current) return;
         setItems(d.items);
@@ -1883,7 +1898,7 @@ function SubmissionHistory({
         setError(e instanceof ApiError ? e.message : '无法加载评测列表。');
       });
   };
-  useEffect(load, [api, cursor]);
+  useEffect(load, [api, cursor, filters]);
   useEffect(
     () => () => {
       requestVersion.current++;
@@ -1907,6 +1922,67 @@ function SubmissionHistory({
           <p className="eyebrow">评测</p>
           <h1>评测列表</h1>
         </div>
+      </div>
+      <div className="evaluation-filters" aria-label="评测筛选">
+        <label>
+          结果
+          <select
+            aria-label="结果"
+            value={resultFilter}
+            onChange={(event) => {
+              setResultFilter(event.target.value);
+              setCursor(undefined);
+            }}
+          >
+            <option value="">全部结果</option>
+            <option value="AC">AC</option>
+            <option value="WA">WA</option>
+            <option value="CE">CE</option>
+            <option value="RE">RE</option>
+            <option value="TLE">TLE</option>
+            <option value="MLE">MLE</option>
+            <option value="INFRA_FAILED">INFRA_FAILED</option>
+            <option value="QUEUED">QUEUED</option>
+            <option value="RUNNING">RUNNING</option>
+          </select>
+        </label>
+        <label>
+          题目
+          <input
+            aria-label="题目"
+            value={problemFilter}
+            placeholder="题目 ID / slug"
+            onChange={(event) => {
+              setProblemFilter(event.target.value);
+              setCursor(undefined);
+            }}
+          />
+        </label>
+        <label>
+          提交者
+          <input
+            aria-label="提交者"
+            value={submitterFilter}
+            placeholder="提交者 ID"
+            onChange={(event) => {
+              setSubmitterFilter(event.target.value);
+              setCursor(undefined);
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          className="filter-clear"
+          onClick={() => {
+            setResultFilter('');
+            setProblemFilter('');
+            setSubmitterFilter('');
+            setCursor(undefined);
+          }}
+          disabled={!resultFilter && !problemFilter && !submitterFilter}
+        >
+          清除筛选
+        </button>
       </div>
       {items.length === 0 ? (
         <State title="暂无评测记录" text="新的提交评测会显示在这里。" />
