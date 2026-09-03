@@ -358,8 +358,11 @@ export function ProblemEditor({
       if (fileRef.current) fileRef.current.value = '';
     }
   };
-  const remove = async (t: JudgeDraftTestcase) => {
-    if (!window.confirm(`确定删除测试点 #${t.ordinal} 吗？`)) return;
+  const remove = async (
+    t: JudgeDraftTestcase,
+    displayOrdinal = t.ordinal + 1,
+  ) => {
+    if (!window.confirm(`确定删除测试点 #${displayOrdinal} 吗？`)) return;
     try {
       await api.deleteJudgeTestcase(problemId, t.testcaseId);
       setDraft(
@@ -427,6 +430,12 @@ export function ProblemEditor({
             出题工作台 / Problem {problem.slug || problem.id}
           </p>
           <h1>编辑题目：{statement.title || '未命名题目'}</h1>
+          <a
+            className="editor-back-link"
+            href={`/problems/${encodeURIComponent(problem.slug || problem.id)}`}
+          >
+            ← 返回题目
+          </a>
           <p className="editor-meta">
             <span className="draft-badge">DRAFT</span> 最后更新{' '}
             {new Date(draft.updatedAt).toLocaleString('zh-CN')}
@@ -685,9 +694,9 @@ export function ProblemEditor({
             <div>
               <h2>Judge Data</h2>
               <p>
-                <strong>DRAFT</strong> 与最新已发布版本分离。当前{' '}
-                {draft.testcases.length} 个测试点，{overrides}{' '}
-                个测试点含覆盖值。
+                <strong>当前草稿评测数据</strong>
+                （DRAFT）与最新已发布版本分离。当前 {draft.testcases.length}{' '}
+                个测试点，{overrides} 个测试点含覆盖值。
                 {versions[0]
                   ? ` 最新已发布 v${versions[0].versionNumber}。`
                   : ' 暂无已发布版本。'}
@@ -789,16 +798,20 @@ export function ProblemEditor({
                 </p>
               </div>
             ) : (
-              draft.testcases.map((t) => (
-                <TestcaseRow
-                  key={t.testcaseId}
-                  testcase={t}
-                  defaults={draft.defaults}
-                  canManage={canManage}
-                  onChange={updateCase}
-                  onRemove={remove}
-                />
-              ))
+              draft.testcases
+                .slice()
+                .sort((a, b) => a.ordinal - b.ordinal)
+                .map((t, index) => (
+                  <TestcaseRow
+                    key={t.testcaseId}
+                    testcase={t}
+                    displayOrdinal={index + 1}
+                    defaults={draft.defaults}
+                    canManage={canManage}
+                    onChange={updateCase}
+                    onRemove={remove}
+                  />
+                ))
             )}
           </div>
           <VersionHistory versions={versions} />
@@ -953,16 +966,18 @@ function LimitInput({
 }
 function TestcaseRow({
   testcase: t,
+  displayOrdinal,
   defaults,
   canManage,
   onChange,
   onRemove,
 }: {
   testcase: JudgeDraftTestcase;
+  displayOrdinal: number;
   defaults: ProblemJudgeDefaults;
   canManage: boolean;
   onChange: (id: string, patch: Partial<JudgeDraftTestcase>) => void;
-  onRemove: (t: JudgeDraftTestcase) => void;
+  onRemove: (t: JudgeDraftTestcase, displayOrdinal: number) => void;
 }) {
   const override = (
     key:
@@ -1020,7 +1035,7 @@ function TestcaseRow({
     <article className="testcase-row">
       <div className="case-main">
         <strong>
-          #{t.ordinal}
+          #{displayOrdinal}
           {t.label ? ` · ${t.label}` : ''}
         </strong>
         <span>
@@ -1048,7 +1063,7 @@ function TestcaseRow({
       <button
         type="button"
         className="danger-button"
-        onClick={() => onRemove(t)}
+        onClick={() => onRemove(t, displayOrdinal)}
         disabled={!canManage}
       >
         删除

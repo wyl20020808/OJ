@@ -206,12 +206,11 @@
 }
 .profile-identity {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: start;
-  column-gap: var(--space-4);
+  justify-items: center;
+  align-items: center;
   margin-bottom: 1.3rem;
   padding: 0 var(--space-4);
-  text-align: left;
+  text-align: center;
 }
 .profile-avatar {
   display: grid;
@@ -226,10 +225,9 @@
   font-size: 2rem;
   font-weight: 850;
   z-index: 1;
-  grid-row: 1 / span 5;
 }
 .profile-identity > :not(.profile-avatar, .profile-actions) {
-  grid-column: 2;
+  max-width: 100%;
 }
 .profile-identity h1 {
   margin-top: 0.6rem;
@@ -245,13 +243,11 @@
 }
 .profile-actions {
   display: flex;
-  grid-column: 3;
-  grid-row: 1 / span 5;
-  align-self: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: var(--space-2);
   min-width: 0;
   flex-wrap: wrap;
+  margin-top: var(--space-3);
 }
 .profile-section {
   margin-top: var(--space-6);
@@ -642,14 +638,6 @@
   }
   .profile-overview-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .profile-identity {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .profile-actions {
-    grid-column: 1 / -1;
-    grid-row: auto;
-    justify-content: flex-start;
   }
   .messenger-shell {
     grid-template-columns: 1fr;

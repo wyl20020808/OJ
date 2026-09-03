@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { App } from '../apps/web/src/app/App.js';
+import { App, dedupeBreadcrumbHistory } from '../apps/web/src/app/App.js';
 import {
   chooseDailyProblem,
   getDailyFortune,
@@ -700,6 +700,24 @@ async function verifyRegression(id: number) {
 }
 
 describe('Product Web Portal Contest Profile Messaging V4', () => {
+  it('deduplicates breadcrumb identity and moves revisited page to newest', () => {
+    expect(
+      dedupeBreadcrumbHistory(
+        [
+          { label: 'A', to: '/a' },
+          { label: 'B', to: '/b' },
+          { label: 'C', to: '/c' },
+          { label: 'D', to: '/d' },
+        ],
+        { label: 'B', to: '/b' },
+      ),
+    ).toEqual([
+      { label: 'A', to: '/a' },
+      { label: 'C', to: '/c' },
+      { label: 'D', to: '/d' },
+      { label: 'B', to: '/b' },
+    ]);
+  });
   const matrix = Array.from({ length: 150 }, (_, index) => {
     const number = index + 1;
     return [`WEB-V4-${String(number).padStart(3, '0')}`, number] as const;

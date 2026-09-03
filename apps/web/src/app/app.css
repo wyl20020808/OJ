@@ -1825,16 +1825,41 @@ footer {
   border-radius: var(--radius);
   background: var(--surface);
 }
+.evaluation-filters {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.8fr) minmax(12rem, 1.4fr) minmax(
+      12rem,
+      1.4fr
+    ) auto;
+  gap: var(--space-3);
+  align-items: end;
+  margin-bottom: var(--space-4);
+  padding: var(--panel-padding);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.evaluation-filters label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.evaluation-filters input,
+.evaluation-filters select {
+  min-width: 0;
+  width: 100%;
+}
 .evaluation-list-header,
 .evaluation-row {
   display: grid;
-  grid-template-columns: minmax(7rem, 0.7fr) minmax(8rem, 1.2fr) minmax(
+  grid-template-columns:
+    minmax(7rem, 0.7fr) minmax(8rem, 1.2fr) minmax(6rem, 0.8fr)
+    minmax(
       6rem,
       0.8fr
-    ) minmax(6rem, 0.8fr) minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(
-      10rem,
-      1.1fr
-    );
+    ) minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(10rem, 1.1fr);
   gap: var(--space-3);
   align-items: center;
   padding: var(--space-3) var(--space-4);
@@ -2085,6 +2110,9 @@ footer {
     grid-template-columns:
       minmax(6rem, 0.8fr) minmax(0, 1fr) minmax(7rem, 1fr)
       auto;
+  }
+  .evaluation-filters {
+    grid-template-columns: 1fr;
   }
   .evaluation-list-header > :nth-child(3),
   .evaluation-row > :nth-child(3),

@@ -1748,9 +1748,6 @@ export function ProfileExperience({
             >
               编辑资料
             </button>
-            <button type="button" onClick={() => navigate('/settings')}>
-              账户与安全
-            </button>
           </div>
         )}
       </div>

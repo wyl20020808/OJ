@@ -15,6 +15,7 @@ import {
   type AuthenticatedUser,
   type BackendContest,
   type EvaluationListItem,
+  type EvaluationFilters,
   type Language,
   type Problem,
   type ProfileContest,
@@ -29,6 +30,9 @@ import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
 import { ProblemEditor } from '../components/ProblemEditor.js';
+import { ProblemSolveEditorSlot } from '../plugins/ProblemSolveEditorSlot.js';
+import { HttpCodeRunAdapter } from '@ojplatform/online-code-editor/run/HttpCodeRunAdapter';
+import { HttpSubmissionAdapter } from '@ojplatform/online-code-editor/submission/SubmissionAdapter';
 import {
   ContestExperience,
   HomeworkPage,
@@ -185,20 +189,37 @@ function Link({
 
 type BreadcrumbItem = { label: string; to: string };
 const breadcrumbStorageKey = 'ojplatform:breadcrumb-history:v1';
+export function dedupeBreadcrumbHistory(
+  items: BreadcrumbItem[],
+  current?: BreadcrumbItem,
+): BreadcrumbItem[] {
+  const unique = items.reduce<BreadcrumbItem[]>((result, item) => {
+    const existing = result.findIndex((entry) => entry.to === item.to);
+    if (existing >= 0) result.splice(existing, 1);
+    result.push(item);
+    return result;
+  }, []);
+  if (current) {
+    const existing = unique.findIndex((entry) => entry.to === current.to);
+    if (existing >= 0) unique.splice(existing, 1);
+    unique.push(current);
+  }
+  return unique.slice(-5);
+}
 const breadcrumbHistory = (): BreadcrumbItem[] => {
   try {
     const value = JSON.parse(
       window.sessionStorage.getItem(breadcrumbStorageKey) ?? '[]',
     );
     return Array.isArray(value)
-      ? value
-          .filter(
+      ? dedupeBreadcrumbHistory(
+          value.filter(
             (item): item is BreadcrumbItem =>
               typeof item?.label === 'string' &&
               typeof item?.to === 'string' &&
               item.to.startsWith('/'),
-          )
-          .slice(-5)
+          ),
+        )
       : [];
   } catch {
     return [];
@@ -249,11 +270,7 @@ function Breadcrumbs({ current }: { current: Route }) {
   useEffect(() => {
     if (transient.includes(current.name)) return;
     setHistory((previous) => {
-      const last = previous.at(-1);
-      const next =
-        last?.to === currentItem.to
-          ? [...previous.slice(0, -1), currentItem]
-          : [...previous, currentItem].slice(-5);
+      const next = dedupeBreadcrumbHistory(previous, currentItem);
       try {
         window.sessionStorage.setItem(
           breadcrumbStorageKey,
@@ -1584,10 +1601,13 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     </section>
   );
 }
-function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
+export function ProblemDetail({ api, id, user }: { api: ApiClient; id: string; user?: AuthenticatedUser | null }) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
+  const [checker, setChecker] = useState<'EXACT_BYTES' | 'TOKEN_WHITESPACE'>('EXACT_BYTES');
+  const codeRunAdapter = useMemo(() => new HttpCodeRunAdapter(), []);
+  const submissionAdapter = useMemo(() => new HttpSubmissionAdapter(), []);
   useEffect(() => {
     void api
       .problem(id)
@@ -1607,6 +1627,9 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
         ),
       );
   }, [api, id]);
+  useEffect(() => {
+    void api.judgeData(id).then((data) => setChecker(data.defaults.checker)).catch(() => undefined);
+  }, [api, id]);
   if (error)
     return error.code === 'NOT_FOUND' ? (
       <State title="题目不存在" text="该题目不存在或当前不可用。" />
@@ -1616,6 +1639,7 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
   if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
   const canEdit = problem.capabilities?.canEdit === true;
   return (
+    <>
     <article className="problem-detail-v4">
       <div className="problem-main">
         <header className="problem-heading">
@@ -1726,6 +1750,19 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
         </p>
       </aside>
     </article>
+    <section className="problem-editor-slot" aria-label="OnlineCodeEditor">
+      <ProblemSolveEditorSlot context={{
+        problemId: problem.id,
+        slug: problem.slug,
+        samples: problem.examples.map((sample, index) => ({ input: sample.input, output: sample.output, label: `样例 ${index + 1}` })),
+        problemRevisionId: problem.currentRevisionId ?? '',
+        checker,
+        codeRunAdapter,
+        ...(user ? { submissionAdapter } : {}),
+        onViewSubmission: (submissionId: string) => navigate(`/submissions/${encodeURIComponent(submissionId)}`),
+      } as import('@ojplatform/plugin-sdk').ProblemSolveEditorContext} />
+    </section>
+    </>
   );
 }
 
@@ -1857,22 +1894,36 @@ function SubmissionForm({
   );
 }
 
-function SubmissionHistory({
-  api,
-}: {
-  api: ApiClient;
-}) {
+function SubmissionHistory({ api }: { api: ApiClient }) {
   const [items, setItems] = useState<EvaluationListItem[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [cursor, setCursor] = useState<string | undefined>();
+  const [resultFilter, setResultFilter] = useState('');
+  const [problemFilter, setProblemFilter] = useState('');
+  const [submitterFilter, setSubmitterFilter] = useState('');
   const requestVersion = useRef(0);
+  const filters = useMemo<EvaluationFilters>(() => {
+    if (!resultFilter)
+      return {
+        ...(problemFilter ? { problemId: problemFilter.trim() } : {}),
+        ...(submitterFilter ? { submitterId: submitterFilter.trim() } : {}),
+      };
+    const verdicts = new Set(['AC', 'WA', 'CE', 'RE', 'TLE', 'MLE']);
+    return {
+      ...(verdicts.has(resultFilter)
+        ? { verdict: resultFilter }
+        : { status: resultFilter }),
+      ...(problemFilter ? { problemId: problemFilter.trim() } : {}),
+      ...(submitterFilter ? { submitterId: submitterFilter.trim() } : {}),
+    };
+  }, [problemFilter, resultFilter, submitterFilter]);
   const load = () => {
     const version = ++requestVersion.current;
     setItems(null);
     setError('');
     void api
-      .evaluations(cursor)
+      .evaluations(cursor, 20, filters)
       .then((d) => {
         if (version !== requestVersion.current) return;
         setItems(d.items);
@@ -1883,7 +1934,7 @@ function SubmissionHistory({
         setError(e instanceof ApiError ? e.message : '无法加载评测列表。');
       });
   };
-  useEffect(load, [api, cursor]);
+  useEffect(load, [api, cursor, filters]);
   useEffect(
     () => () => {
       requestVersion.current++;
@@ -1907,6 +1958,67 @@ function SubmissionHistory({
           <p className="eyebrow">评测</p>
           <h1>评测列表</h1>
         </div>
+      </div>
+      <div className="evaluation-filters" aria-label="评测筛选">
+        <label>
+          结果
+          <select
+            aria-label="结果"
+            value={resultFilter}
+            onChange={(event) => {
+              setResultFilter(event.target.value);
+              setCursor(undefined);
+            }}
+          >
+            <option value="">全部结果</option>
+            <option value="AC">AC</option>
+            <option value="WA">WA</option>
+            <option value="CE">CE</option>
+            <option value="RE">RE</option>
+            <option value="TLE">TLE</option>
+            <option value="MLE">MLE</option>
+            <option value="INFRA_FAILED">INFRA_FAILED</option>
+            <option value="QUEUED">QUEUED</option>
+            <option value="RUNNING">RUNNING</option>
+          </select>
+        </label>
+        <label>
+          题目
+          <input
+            aria-label="题目"
+            value={problemFilter}
+            placeholder="题目 ID / slug"
+            onChange={(event) => {
+              setProblemFilter(event.target.value);
+              setCursor(undefined);
+            }}
+          />
+        </label>
+        <label>
+          提交者
+          <input
+            aria-label="提交者"
+            value={submitterFilter}
+            placeholder="提交者 ID"
+            onChange={(event) => {
+              setSubmitterFilter(event.target.value);
+              setCursor(undefined);
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          className="filter-clear"
+          onClick={() => {
+            setResultFilter('');
+            setProblemFilter('');
+            setSubmitterFilter('');
+            setCursor(undefined);
+          }}
+          disabled={!resultFilter && !problemFilter && !submitterFilter}
+        >
+          清除筛选
+        </button>
       </div>
       {items.length === 0 ? (
         <State title="暂无评测记录" text="新的提交评测会显示在这里。" />
@@ -2732,7 +2844,7 @@ export function App() {
         />
       )
     ) : current.name === 'problem' ? (
-      <ProblemDetail api={api} id={current.id ?? ''} />
+      <ProblemDetail api={api} id={current.id ?? ''} user={user} />
     ) : (
       <NotFound />
     );

@@ -439,6 +439,12 @@ export type EvaluationList = {
   items: EvaluationListItem[];
   nextCursor: string | null;
 };
+export type EvaluationFilters = {
+  verdict?: string;
+  status?: string;
+  problemId?: string;
+  submitterId?: string;
+};
 export type ProblemInput = Omit<
   Problem,
   | 'id'
@@ -544,7 +550,12 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
     me: () =>
       request<AuthenticatedUser>(baseUrl, '/api/auth/me', undefined, fetcher),
     judgeAdminCapabilities: () =>
-      request<{ canView: boolean }>(baseUrl, '/api/admin/judge/capabilities', undefined, fetcher),
+      request<{ canView: boolean }>(
+        baseUrl,
+        '/api/admin/judge/capabilities',
+        undefined,
+        fetcher,
+      ),
     login: (identity: string, password: string) =>
       request<AuthenticatedUser>(
         baseUrl,
@@ -1279,10 +1290,14 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
-    evaluations: (cursor?: string, limit = 20) =>
+    evaluations: (
+      cursor?: string,
+      limit = 20,
+      filters: EvaluationFilters = {},
+    ) =>
       request<EvaluationList>(
         baseUrl,
-        `/api/evaluations?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        `/api/evaluations?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${filters.verdict ? `&verdict=${encodeURIComponent(filters.verdict)}` : ''}${filters.status ? `&status=${encodeURIComponent(filters.status)}` : ''}${filters.problemId ? `&problemId=${encodeURIComponent(filters.problemId)}` : ''}${filters.submitterId ? `&submitterId=${encodeURIComponent(filters.submitterId)}` : ''}`,
         undefined,
         fetcher,
       ),

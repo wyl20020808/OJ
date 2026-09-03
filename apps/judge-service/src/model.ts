@@ -64,6 +64,24 @@ export type JudgeServiceResult = {
   detail?: JudgeServiceDetail;
   acceptedAt: string;
   updatedAt: string;
+  codeRun?: {
+    status:
+      | 'QUEUED'
+      | 'RUNNING'
+      | 'SUCCEEDED'
+      | 'COMPILE_ERROR'
+      | 'RUNTIME_ERROR'
+      | 'TIME_LIMIT'
+      | 'MEMORY_LIMIT'
+      | 'INFRA_ERROR'
+      | 'CANCELLED';
+    stdout: string;
+    stderr: string;
+    compilerDiagnostics: string | null;
+    exitCode: number | null;
+    timeMs: number | null;
+    memoryBytes: number | null;
+  };
 };
 
 export type StoredJudgeServiceJob = {
