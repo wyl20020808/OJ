@@ -17,6 +17,7 @@ import {
 } from './model.js';
 import type { ByteStorage } from './storage.js';
 import { parseZip } from './zip.js';
+import { MAX_TESTCASE_PAYLOAD_BYTES } from './limits.js';
 import {
   TESTCASE_SET_MAX_EXPECTED_OUTPUT_BYTES,
   TESTCASE_SET_MAX_INPUT_BYTES,
@@ -317,8 +318,8 @@ export class ProblemJudgeDataService {
     if ((old?.testcases.length ?? 0) >= TESTCASE_SET_MAX_SIZE)
       throw new JudgeDataError('VALIDATION_FAILED', 'Too many testcases');
     if (
-      input.byteLength > 16 * 1024 * 1024 ||
-      output.byteLength > 16 * 1024 * 1024
+      input.byteLength > MAX_TESTCASE_PAYLOAD_BYTES ||
+      output.byteLength > MAX_TESTCASE_PAYLOAD_BYTES
     )
       throw new JudgeDataError('UPLOAD_TOO_LARGE', 'Upload too large', 413);
     for (const name of [fileNames.input, fileNames.output]) {

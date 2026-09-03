@@ -3,6 +3,26 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AuthContext } from '../problem/model.js';
 import { JudgeDataError } from './model.js';
 import type { ProblemJudgeDataService } from './service.js';
+import {
+  MAX_ARCHIVE_COMPRESSED_BYTES,
+  MAX_UPLOAD_BODY_BYTES,
+  MAX_TESTCASE_PAYLOAD_BYTES,
+} from './limits.js';
+
+const decodedBase64Length = (value: string) => {
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+  return Math.floor((value.length * 3) / 4) - padding;
+};
+const decodeBase64 = (value: unknown, limit: number, message: string) => {
+  if (
+    typeof value !== 'string' ||
+    value.length % 4 !== 0 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value) ||
+    decodedBase64Length(value) > limit
+  )
+    throw new JudgeDataError('UPLOAD_TOO_LARGE', message, 413);
+  return Buffer.from(value, 'base64');
+};
 export async function registerProblemJudgeDataRoutes(
   app: FastifyInstance,
   options: {
@@ -168,13 +188,22 @@ export async function registerProblemJudgeDataRoutes(
   );
   app.post(
     '/api/problems/:problemId/judge-data/draft/upload',
+    { bodyLimit: MAX_UPLOAD_BODY_BYTES },
     async (r, reply) => {
       const b = r.body as any;
       return mutate(r, reply, async () =>
         options.service.addPair(
           await problemId(r),
-          Buffer.from(String(b?.inputBase64 ?? ''), 'base64'),
-          Buffer.from(String(b?.outputBase64 ?? ''), 'base64'),
+          decodeBase64(
+            b?.inputBase64,
+            MAX_TESTCASE_PAYLOAD_BYTES,
+            'Input upload too large',
+          ),
+          decodeBase64(
+            b?.outputBase64,
+            MAX_TESTCASE_PAYLOAD_BYTES,
+            'Output upload too large',
+          ),
           {
             input: String(b?.inputFileName ?? 'input.in'),
             output: String(b?.outputFileName ?? 'output.out'),
@@ -186,12 +215,17 @@ export async function registerProblemJudgeDataRoutes(
   );
   app.post(
     '/api/problems/:problemId/judge-data/draft/upload-zip',
+    { bodyLimit: MAX_UPLOAD_BODY_BYTES },
     async (r, reply) => {
       const b = r.body as any;
       return mutate(r, reply, async () =>
         options.service.addZip(
           await problemId(r),
-          Buffer.from(String(b?.zipBase64 ?? ''), 'base64'),
+          decodeBase64(
+            b?.zipBase64,
+            MAX_ARCHIVE_COMPRESSED_BYTES,
+            'ZIP upload too large',
+          ),
           await auth(r),
         ),
       );

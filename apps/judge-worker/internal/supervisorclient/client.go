@@ -186,7 +186,7 @@ func validateRequest(request Request) error {
 	}
 	if hasTestcase {
 		h := sha256.Sum256(request.TestcaseInput)
-		if request.ProblemID == "" || request.TestcaseID == "" || len(request.TestcaseID) > 128 || strings.ContainsAny(request.TestcaseID, "/\\\x00") || request.ExecutionProfileID != CPP20ProfileID || request.TestcaseInputSHA256 != hex.EncodeToString(h[:]) || len(request.TestcaseInput) > 64<<10 {
+		if request.ProblemID == "" || request.TestcaseID == "" || len(request.TestcaseID) > 128 || strings.ContainsAny(request.TestcaseID, "/\\\x00") || request.ExecutionProfileID != CPP20ProfileID || request.TestcaseInputSHA256 != hex.EncodeToString(h[:]) || len(request.TestcaseInput) > 100<<20 {
 			return errors.New("invalid testcase input contract")
 		}
 	}

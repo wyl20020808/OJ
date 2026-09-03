@@ -410,7 +410,7 @@ func validateTestcaseJob(j Job) error {
 	if !hasTestcase {
 		return nil
 	}
-	if j.ExecutionMode != "REAL_SANDBOXED_EXECUTION" || j.ProblemID == "" || j.ProblemRevisionID == "" || j.TestdataVersionRef == "" || strings.EqualFold(j.TestdataVersionRef, "latest") || j.TestcaseID == "." || j.TestcaseID == ".." || len(j.TestcaseID) > 128 || strings.ContainsAny(j.TestcaseID, "/\\\x00") || j.ExecutionProfileID != "cpp20-gcc-13-v1" || len(j.TestcaseInput) > 64<<10 || !isSHA256(j.TestcaseInputSHA256) || j.TestcaseInputSHA256 != digest([]byte(j.TestcaseInput)) {
+	if j.ExecutionMode != "REAL_SANDBOXED_EXECUTION" || j.ProblemID == "" || j.ProblemRevisionID == "" || j.TestdataVersionRef == "" || strings.EqualFold(j.TestdataVersionRef, "latest") || j.TestcaseID == "." || j.TestcaseID == ".." || len(j.TestcaseID) > 128 || strings.ContainsAny(j.TestcaseID, "/\\\x00") || j.ExecutionProfileID != "cpp20-gcc-13-v1" || len(j.TestcaseInput) > 100<<20 || !isSHA256(j.TestcaseInputSHA256) || j.TestcaseInputSHA256 != digest([]byte(j.TestcaseInput)) {
 		return errors.New("invalid testcase job contract")
 	}
 	return nil
@@ -421,9 +421,11 @@ func validateTestcaseSet(manifest TestcaseSetManifest, problemID, revisionID, te
 		return errors.New("invalid testcase-set manifest")
 	}
 	seen := make(map[string]struct{}, len(manifest.Entries))
+	var totalInputBytes int64
 	for index, entry := range manifest.Entries {
+		totalInputBytes += int64(len(entry.Input))
 		verdictBinding := entry.ExpectedOutput != "" || entry.CheckerType != "" || entry.CheckerVersion != "" || entry.CheckerConfigSHA256 != ""
-		if entry.Index != index || !validSetID(entry.TestcaseID) || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || len(entry.Input) > 64<<10 || !isSHA256(entry.InputSHA256) || entry.InputSHA256 != digest([]byte(entry.Input)) || entry.ExpectedOutputSHA256 != "" && !isSHA256(entry.ExpectedOutputSHA256) || verdictBinding && (len(entry.ExpectedOutput) > 64<<10 || !isSHA256(entry.ExpectedOutputSHA256) || entry.ExpectedOutputSHA256 != digest([]byte(entry.ExpectedOutput)) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digest([]byte(entry.CheckerType+"\x00"+entry.CheckerVersion))) {
+		if totalInputBytes > 256<<20 || entry.Index != index || !validSetID(entry.TestcaseID) || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || len(entry.Input) > 100<<20 || !isSHA256(entry.InputSHA256) || entry.InputSHA256 != digest([]byte(entry.Input)) || entry.ExpectedOutputSHA256 != "" && !isSHA256(entry.ExpectedOutputSHA256) || verdictBinding && (len(entry.ExpectedOutput) > 100<<20 || !isSHA256(entry.ExpectedOutputSHA256) || entry.ExpectedOutputSHA256 != digest([]byte(entry.ExpectedOutput)) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digest([]byte(entry.CheckerType+"\x00"+entry.CheckerVersion))) {
 			return errors.New("invalid testcase-set entry")
 		}
 		if _, exists := seen[entry.TestcaseID]; exists {

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { MAX_TESTCASE_PAYLOAD_BYTES } from './limits.js';
 import {
   BUILTIN_CHECKER_VERSION,
   builtinCheckerConfigSha256,
@@ -184,7 +185,7 @@ export const validateObjectRef = (value: unknown): ObjectRef => {
     typeof v.sizeBytes !== 'number' ||
     !Number.isSafeInteger(v.sizeBytes) ||
     v.sizeBytes < 0 ||
-    v.sizeBytes > 16 * 1024 * 1024
+    v.sizeBytes > MAX_TESTCASE_PAYLOAD_BYTES
   )
     throw new JudgeDataError('INVALID_PAIR', 'Invalid object reference');
   const size = v.sizeBytes;

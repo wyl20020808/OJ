@@ -41,9 +41,11 @@ func ValidateRealExecutionSetRequest(request model.RealExecutionSetRequest) erro
 		return errors.New("invalid testcase-set manifest")
 	}
 	seen := make(map[string]bool, len(manifest.Entries))
+	totalInputBytes := 0
 	for index, entry := range manifest.Entries {
+		totalInputBytes += len(entry.Input)
 		verdictBinding := entry.CheckerType != "" || entry.CheckerVersion != "" || entry.CheckerConfigSHA256 != ""
-		if entry.Index != index || entry.TestcaseID == "" || entry.TestcaseID == "." || entry.TestcaseID == ".." || len(entry.TestcaseID) > 128 || strings.ContainsAny(entry.TestcaseID, "/\\\x00") || seen[entry.TestcaseID] || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || len(entry.Input) > maxTestcaseInputBytes || !sha256HexPattern(entry.InputSHA256) || digestBytes(entry.Input) != entry.InputSHA256 || entry.ExpectedOutputSHA256 != "" && !sha256HexPattern(entry.ExpectedOutputSHA256) || verdictBinding && (!sha256HexPattern(entry.ExpectedOutputSHA256) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digestBytes([]byte(entry.CheckerType+"\x00"+entry.CheckerVersion))) {
+		if totalInputBytes > 256<<20 || entry.Index != index || entry.TestcaseID == "" || entry.TestcaseID == "." || entry.TestcaseID == ".." || len(entry.TestcaseID) > 128 || strings.ContainsAny(entry.TestcaseID, "/\\\x00") || seen[entry.TestcaseID] || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || len(entry.Input) > maxTestcaseInputBytes || !sha256HexPattern(entry.InputSHA256) || digestBytes(entry.Input) != entry.InputSHA256 || entry.ExpectedOutputSHA256 != "" && !sha256HexPattern(entry.ExpectedOutputSHA256) || verdictBinding && (!sha256HexPattern(entry.ExpectedOutputSHA256) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digestBytes([]byte(entry.CheckerType+"\x00"+entry.CheckerVersion))) {
 			return errors.New("invalid testcase-set manifest entry")
 		}
 		seen[entry.TestcaseID] = true

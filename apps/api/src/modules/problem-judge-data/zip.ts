@@ -1,9 +1,15 @@
 import { inflateRawSync } from 'node:zlib';
 import { JudgeDataError } from './model.js';
+import {
+  MAX_ARCHIVE_COMPRESSED_BYTES,
+  MAX_ARCHIVE_ENTRIES,
+  MAX_ARCHIVE_UNCOMPRESSED_BYTES,
+  MAX_TESTCASE_PAYLOAD_BYTES,
+} from './limits.js';
 
-const MAX_ENTRIES = 256;
-const MAX_FILE = 16 * 1024 * 1024;
-const MAX_TOTAL = 128 * 1024 * 1024;
+const MAX_ENTRIES = MAX_ARCHIVE_ENTRIES;
+const MAX_FILE = MAX_TESTCASE_PAYLOAD_BYTES;
+const MAX_TOTAL = MAX_ARCHIVE_UNCOMPRESSED_BYTES;
 const MAX_DEPTH = 8;
 const MAX_RATIO = 1000;
 const testcaseFile = /^(.*)\.(in|out|ans|txt)$/i;
@@ -73,7 +79,7 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
         throw unsafe('Unsupported archive entry');
       if (csize > MAX_FILE || usize > MAX_FILE || usize > MAX_TOTAL - total)
         throw unsafe('Archive exceeds size limits');
-      if (csize > MAX_TOTAL - compressedTotal)
+      if (csize > MAX_ARCHIVE_COMPRESSED_BYTES - compressedTotal)
         throw unsafe('Archive exceeds compressed size limits');
       if (csize > 0 && usize > csize * MAX_RATIO)
         throw unsafe('Archive compression ratio exceeded');
@@ -121,7 +127,7 @@ export function parseZip(bytes: Uint8Array): ZipPair[] {
         method === 0
           ? compressed
           : method === 8
-            ? inflateRawSync(compressed)
+            ? inflateRawSync(compressed, { maxOutputLength: MAX_FILE + 1 })
             : null;
       if (!data || data.length !== usize)
         throw unsafe('Unsupported or corrupt archive');

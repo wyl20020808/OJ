@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 
 export const TESTCASE_SET_PROTOCOL_VERSION = '2C.4' as const;
 export const TESTCASE_SET_MAX_SIZE = 64;
-export const TESTCASE_SET_MAX_INPUT_BYTES = 64 * 1024;
-export const TESTCASE_SET_MAX_EXPECTED_OUTPUT_BYTES = 64 * 1024;
+export const TESTCASE_SET_MAX_INPUT_BYTES = 100 * 1024 * 1024;
+export const TESTCASE_SET_MAX_EXPECTED_OUTPUT_BYTES = 100 * 1024 * 1024;
+export const TESTCASE_SET_MAX_TOTAL_INPUT_BYTES = 256 * 1024 * 1024;
 export const BUILTIN_CHECKER_VERSION = 'builtin-v1' as const;
 
 export type BuiltinCheckerType = 'EXACT_BYTES' | 'TOKEN_WHITESPACE';
@@ -210,7 +211,9 @@ export function validateTestcaseSetManifest(
     throw new TestcaseSetContractError('invalid testcase-set identity');
 
   const seen = new Set<string>();
+  let totalInputBytes = 0;
   manifest.entries.forEach((entry, expectedIndex) => {
+    totalInputBytes += Buffer.byteLength(entry.input, 'utf8');
     if (
       entry.index !== expectedIndex ||
       !validRef(entry.testcaseId) ||
@@ -221,6 +224,7 @@ export function validateTestcaseSetManifest(
       Buffer.byteLength(entry.input, 'utf8') > TESTCASE_SET_MAX_INPUT_BYTES ||
       !isSha256(entry.inputSha256) ||
       sha256(entry.input) !== entry.inputSha256 ||
+      totalInputBytes > TESTCASE_SET_MAX_TOTAL_INPUT_BYTES ||
       (entry.expectedOutputSha256 !== undefined &&
         !isSha256(entry.expectedOutputSha256)) ||
       (entry.expectedOutput !== undefined &&
