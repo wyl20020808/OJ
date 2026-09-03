@@ -10,6 +10,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
+# Explorer-launched BAT files may not inherit the npm user-bin directory.
+# Add it only to this manager process so detached Web processes can resolve pnpm.
+$UserNpmBin = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'npm'
+$UserPnpm = Join-Path $UserNpmBin 'pnpm.cmd'
+if ((Test-Path -LiteralPath $UserPnpm) -and (($env:Path -split ';') -notcontains $UserNpmBin)) {
+  $env:Path = "$UserNpmBin;$env:Path"
+}
 $RuntimeRoot = Join-Path $ProjectRoot '.runtime'
 $StateFile = Join-Path $RuntimeRoot 'state.json'
 $LockFile = Join-Path $RuntimeRoot 'runtime.lock'
