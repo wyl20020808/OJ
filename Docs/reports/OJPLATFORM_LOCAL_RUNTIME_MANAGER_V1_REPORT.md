@@ -14,7 +14,7 @@
 - Added `Docs/LOCAL_RUNTIME.md`, local configuration example and the canonical-manager rule to `AGENTS.md`.
 - Supervisor startup now uses a named `systemd-run --user` unit with `Delegate=yes`, explicit WSL user-bus environment, and exact stale-scope recovery. This keeps runc execution under the delegated `oj-sandbox` cgroup instead of WSL init scope.
 - Product API starts in parallel with Judge Service after migrations; Host Agent remains gated on Judge readiness, and Web remains gated on Worker ONLINE and API readiness.
-- Worker source identity hashing uses built-in .NET SHA-256 APIs, so the BAT entry point works under Windows PowerShell 5.1 without requiring the optional `Get-FileHash` command module.
+- Worker source identity hashing uses a deterministic ordinal file manifest and built-in .NET SHA-256 APIs, so the BAT entry point works under Windows PowerShell 5.1 without requiring the optional `Get-FileHash` command module and produces the same identity under Windows PowerShell and pwsh.
 
 ## TESTED
 
