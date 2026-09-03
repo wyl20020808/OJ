@@ -630,7 +630,7 @@ func (s *Supervisor) runExecutionStageWithID(ctx context.Context, bundle, rootfs
 	}
 	commandArgs := []string{"--rootless=true", "--systemd-cgroup", "run", "--bundle", bundle, sid}
 	command := exec.CommandContext(commandCtx, s.Runc, commandArgs...)
-	command.Env = []string{"PATH=/usr/bin:/bin", "LANG=C"}
+	command.Env = []string{"HOME=/home/oj-sandbox", "USER=oj-sandbox", "LOGNAME=oj-sandbox", "PATH=/usr/bin:/bin", "LANG=C"}
 	for _, name := range []string{"DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"} {
 		if value := os.Getenv(name); value != "" {
 			command.Env = append(command.Env, name+"="+value)

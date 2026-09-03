@@ -21,7 +21,9 @@ const child = spawn(command, commandArgs, {
   detached: true,
   windowsHide: true,
   stdio: ['ignore', stdout, stderr],
-  shell: false,
+  // Windows .cmd entry points (pnpm.cmd) require the command interpreter;
+  // executable binaries remain direct child processes.
+  shell: process.platform === 'win32' && /\.(cmd|bat)$/i.test(command),
 });
 child.unref();
 process.stdout.write(`${JSON.stringify({ pid: child.pid, command, args: commandArgs })}\n`);

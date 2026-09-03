@@ -20,6 +20,8 @@
 
 正式本地地址是 `http://127.0.0.1:5173`。Product API 使用 `3010`，Judge Service 使用 `3100`，Host Agent 使用 `3180`，Supervisor 使用 `19092`。Judge Admin 通过 Product API 的管理边界提供，不直接暴露 Host Agent 凭据。
 
+Supervisor 由 WSL `Ubuntu-24.04` 中的 non-root `oj-sandbox` 运行，并由命名的 `systemd-run --user` unit `ojplatform-local-supervisor.service` 承载（`Delegate=yes`）。Runtime Manager 会在启动前清理仅属于 OJPlatform qualification 的 stale failed scopes，并显式传递 `XDG_RUNTIME_DIR`/D-Bus user bus；不会清理无关 systemd units。Product API 与 Judge Service 在迁移完成后可并行启动，Host Agent 仍等待 Judge Service `ready`，最终 Web 等待 Worker ONLINE、API 和 Web readiness。
+
 高级命令：
 
 ```powershell

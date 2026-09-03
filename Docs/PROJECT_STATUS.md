@@ -158,8 +158,13 @@ started.
 
 Last Updated: 2026-09-02
 
-Local Runtime Manager V1: PARTIAL / IMPLEMENTED_NOT_RUNTIME_QUALIFIED. Canonical
+Local Runtime Manager V1: PASS / LOCAL RUNTIME QUALIFIED. Canonical
 PowerShell/BAT startup, shutdown, status, logs and doctor tooling is present with
 ignored runtime state, generated local tokens, migration ledger, WSL Compose reuse,
-and Host-Agent-owned worker control. Full local runtime and A+B browser evidence
-remain blocked until machine-local Supervisor/rootfs/Worker paths are configured.
+named delegated non-root Supervisor startup, dependency-aware Product API/Judge
+Service parallel launch, and Host-Agent-owned worker control. Start/restart/stop,
+Stop -> Start recovery, infrastructure reuse, migration idempotency, Supervisor
+readiness, Worker ONLINE and real AC/WA/CE/RE/TLE/MLE qualification passed on the
+current machine. Existing Product/browser A+B evidence remains the application
+qualification reference; a fresh browser rerun was not part of this manager-only
+change.
