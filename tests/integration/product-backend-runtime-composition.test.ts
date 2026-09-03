@@ -290,10 +290,7 @@ describe('product backend central runtime composition', () => {
       favorites: { available: true },
       myContests: { available: true },
       myProblems: { available: true },
-      activity: {
-        available: false,
-        reason: 'NO_AUTHORITATIVE_PRODUCT_ACTIVITY_SOURCE',
-      },
+      activity: { available: true },
     });
     expect(
       (

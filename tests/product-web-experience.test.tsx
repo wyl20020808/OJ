@@ -126,7 +126,10 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     vi.stubGlobal('fetch', appFetch({ me: user }));
     render(<App />);
     expect(await screen.findByText('Ada')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Settings' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '通知' })).toBeInTheDocument();
   });
   it('WEB-PROD-05 home has honest product entry points', async () => {
     vi.stubGlobal('fetch', appFetch());

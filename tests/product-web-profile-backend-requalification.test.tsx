@@ -76,6 +76,26 @@ describe('WEB Profile ↔ Backend requalification', () => {
           displayName: 'Ada Public',
           createdAt: '2026-01-01T00:00:00Z',
           capabilities: capabilities(),
+          isSelf: true,
+          canCreateProblems: true,
+        }) as Response;
+      if (url.endsWith('/api/profiles/ada/overview'))
+        return response(200, {
+          createdProblemCount: 1,
+          solvedProblemCount: 2,
+          submissionCount: 3,
+          acceptedSubmissionCount: 2,
+          favoriteCount: 1,
+        }) as Response;
+      if (url.includes('/api/profiles/ada/solved?'))
+        return response(200, {
+          items: [],
+          page: { limit: 20, total: 0 },
+        }) as Response;
+      if (url.includes('/api/profiles/ada/problems?'))
+        return response(200, {
+          items: [],
+          page: { limit: 20, total: 0 },
         }) as Response;
       if (url.includes('/api/profile/favorites?'))
         return response(200, {
@@ -102,6 +122,9 @@ describe('WEB Profile ↔ Backend requalification', () => {
 
     await api.profileCapabilities();
     await api.publicProfile('ada');
+    await api.profileOverview('ada');
+    await api.profileSolved('ada');
+    await api.profileProblemsFor('ada');
     await api.profileFavorites(10, 'cursor-1');
     await api.addFavorite('p1');
     await api.removeFavorite('p1');
@@ -111,6 +134,9 @@ describe('WEB Profile ↔ Backend requalification', () => {
     expect(calls).toEqual([
       { url: '/api/profile/capabilities', method: 'GET' },
       { url: '/api/profiles/ada', method: 'GET' },
+      { url: '/api/profiles/ada/overview', method: 'GET' },
+      { url: '/api/profiles/ada/solved?limit=20', method: 'GET' },
+      { url: '/api/profiles/ada/problems?limit=20', method: 'GET' },
       {
         url: '/api/profile/favorites?limit=10&cursor=cursor-1',
         method: 'GET',
@@ -132,6 +158,23 @@ describe('WEB Profile ↔ Backend requalification', () => {
       calls.push({ url, method: init?.method ?? 'GET' });
       if (url.endsWith('/api/profile/capabilities'))
         return response(200, capabilities()) as Response;
+      if (url.endsWith('/api/profiles/ada'))
+        return response(200, {
+          username: 'ada',
+          displayName: 'Ada',
+          createdAt: '2026-01-01T00:00:00Z',
+          capabilities: capabilities(),
+          isSelf: true,
+          canCreateProblems: true,
+        }) as Response;
+      if (url.endsWith('/api/profiles/ada/overview'))
+        return response(200, {
+          createdProblemCount: 1,
+          solvedProblemCount: 2,
+          submissionCount: 3,
+          acceptedSubmissionCount: 2,
+          favoriteCount: 1,
+        }) as Response;
       if (url.includes('/api/profile/favorites?'))
         return response(200, {
           items: [
@@ -158,7 +201,7 @@ describe('WEB Profile ↔ Backend requalification', () => {
     });
 
     render(<ProfileExperience user={user} api={api} navigate={vi.fn()} />);
-    await screen.findByText('做题记录暂不可用');
+    await screen.findByText('已解决题目');
     fireEvent.click(screen.getByRole('tab', { name: '收藏' }));
     expect(await screen.findByText('两数之和')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '移除收藏' }));
@@ -201,13 +244,33 @@ describe('WEB Profile ↔ Backend requalification', () => {
             },
           }),
         ) as Response;
+      if (String(input).endsWith('/api/profiles/ada'))
+        return response(200, {
+          username: 'ada',
+          displayName: 'Ada',
+          createdAt: '2026-01-01T00:00:00Z',
+          capabilities: capabilities({
+            favorites: {
+              available: false,
+              reason: 'GUEST_ACCOUNT_REQUIRES_UPGRADE',
+            },
+          }),
+          isSelf: true,
+          canCreateProblems: false,
+        }) as Response;
+      if (String(input).endsWith('/api/profiles/ada/overview'))
+        return response(200, {
+          createdProblemCount: 0,
+          solvedProblemCount: 0,
+          submissionCount: 0,
+          acceptedSubmissionCount: 0,
+        }) as Response;
       return response(404, {
         code: 'NOT_FOUND',
         message: 'not found',
       }) as Response;
     });
     render(<ProfileExperience user={guest} api={api} navigate={vi.fn()} />);
-    await screen.findAllByText('游客账号需要升级为正式账号后才能使用此能力。');
     fireEvent.click(screen.getByRole('tab', { name: '收藏' }));
     expect(
       (
@@ -227,6 +290,8 @@ describe('WEB Profile ↔ Backend requalification', () => {
           displayName: 'Ada Public',
           createdAt: '2026-01-01T00:00:00Z',
           capabilities: capabilities(),
+          isSelf: false,
+          canCreateProblems: false,
           email: 'private@example.test',
           phone: '+8613800000000',
         }) as Response;

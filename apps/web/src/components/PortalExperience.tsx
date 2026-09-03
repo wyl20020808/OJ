@@ -13,9 +13,10 @@ import type {
   AuthenticatedUser,
   FavoriteProblem,
   ProfileCapabilities,
-  ProfileContest,
-  ProfileContestRelationship,
+  ProfileOverview,
+  ProfileProblem,
   PublicProfile,
+  SolvedProblem,
 } from '../services/api.js';
 import type {
   ContestDetail,
@@ -1263,14 +1264,6 @@ function profileDate(value: string) {
     : date.toLocaleDateString('zh-CN');
 }
 
-function relationshipLabel(value: ProfileContestRelationship) {
-  return {
-    CREATED: '创建',
-    MANAGED: '管理',
-    REGISTERED: '报名',
-  }[value];
-}
-
 export function ProfileExperience({
   user,
   activity,
@@ -1292,6 +1285,14 @@ export function ProfileExperience({
   const [profileLoading, setProfileLoading] = useState(Boolean(api));
   const [profileError, setProfileError] = useState('');
   const [profileRefresh, setProfileRefresh] = useState(0);
+  const [overview, setOverview] = useState<ProfileOverview>();
+  const [overviewError, setOverviewError] = useState('');
+  const [solvedItems, setSolvedItems] = useState<SolvedProblem[]>([]);
+  const [solvedLoaded, setSolvedLoaded] = useState(false);
+  const [solvedError, setSolvedError] = useState('');
+  const [problemItems, setProblemItems] = useState<ProfileProblem[]>([]);
+  const [problemsLoaded, setProblemsLoaded] = useState(false);
+  const [problemsError, setProblemsError] = useState('');
   const [favoriteItems, setFavoriteItems] = useState<FavoriteProblem[]>([]);
   const [favoriteNextCursor, setFavoriteNextCursor] = useState<string>();
   const [favoriteTotal, setFavoriteTotal] = useState(0);
@@ -1300,16 +1301,10 @@ export function ProfileExperience({
   const [favoriteError, setFavoriteError] = useState('');
   const [favoriteProblemId, setFavoriteProblemId] = useState('');
   const [favoriteAction, setFavoriteAction] = useState<string>();
-  const [contestItems, setContestItems] = useState<ProfileContest[]>([]);
-  const [contestNextCursor, setContestNextCursor] = useState<string>();
-  const [contestKind, setContestKind] = useState<
-    ProfileContestRelationship | undefined
-  >();
-  const [contestLoaded, setContestLoaded] = useState(false);
-  const [contestLoading, setContestLoading] = useState(false);
-  const [contestError, setContestError] = useState('');
   const isPublic = Boolean(username);
-  const tabs = ['概览', '做题记录', '收藏', '团队', '我的比赛', '评测列表'];
+  const tabs = ['概览', '做题记录', '收藏', '我的题目', '团队'];
+  const profileUsername = username ?? user?.username;
+  const profileApi = api as Partial<ApiClient> | undefined;
 
   useEffect(() => {
     if (!api) return;
@@ -1318,13 +1313,14 @@ export function ProfileExperience({
     setProfileError('');
     setCapabilities(undefined);
     setPublicProfile(undefined);
-    const load = username
-      ? api.publicProfile(username)
-      : api.profileCapabilities();
+    const load =
+      profileUsername && profileApi?.publicProfile
+        ? profileApi.publicProfile(profileUsername)
+        : api.profileCapabilities();
     void load
       .then((result) => {
         if (!active) return;
-        if (username) {
+        if (profileUsername) {
           const profile = result as PublicProfile;
           setPublicProfile(profile);
           setCapabilities(profile.capabilities);
@@ -1344,7 +1340,56 @@ export function ProfileExperience({
     return () => {
       active = false;
     };
-  }, [api, profileRefresh, username]);
+  }, [api, profileRefresh, profileUsername]);
+
+  useEffect(() => {
+    if (!api || !profileUsername || !profileApi?.profileOverview) return;
+    let active = true;
+    setOverviewError('');
+    void profileApi
+      .profileOverview(profileUsername)
+      .then((result) => active && setOverview(result))
+      .catch(
+        (error: unknown) =>
+          active && setOverviewError(profileErrorText(error, '概览')),
+      );
+    return () => {
+      active = false;
+    };
+  }, [api, profileRefresh, profileUsername]);
+
+  const loadSolved = useCallback(() => {
+    if (!api || !profileUsername || !profileApi?.profileSolved) return;
+    setSolvedError('');
+    void profileApi
+      .profileSolved(profileUsername)
+      .then((result) => {
+        setSolvedItems(result.items);
+        setSolvedLoaded(true);
+      })
+      .catch((error: unknown) =>
+        setSolvedError(profileErrorText(error, '做题记录')),
+      );
+  }, [api, profileUsername]);
+
+  const loadProblems = useCallback(() => {
+    if (!api || !profileUsername || !profileApi?.profileProblemsFor) return;
+    setProblemsError('');
+    void profileApi
+      .profileProblemsFor(profileUsername)
+      .then((result) => {
+        setProblemItems(result.items);
+        setProblemsLoaded(true);
+      })
+      .catch((error: unknown) =>
+        setProblemsError(profileErrorText(error, '我的题目')),
+      );
+  }, [api, profileUsername]);
+
+  useEffect(() => {
+    if (tab === '做题记录' && !solvedLoaded) loadSolved();
+    if (tab === '我的题目' && !problemsLoaded) loadProblems();
+  }, [loadProblems, loadSolved, problemsLoaded, solvedLoaded, tab]);
 
   const loadFavorites = useCallback(
     (append = false) => {
@@ -1412,42 +1457,6 @@ export function ProfileExperience({
         setFavoriteError(profileErrorText(error, '移除收藏')),
       )
       .finally(() => setFavoriteAction(undefined));
-  };
-
-  const loadContests = useCallback(
-    (append = false) => {
-      if (!api || !capabilities?.myContests.available) return;
-      const cursor = append ? contestNextCursor : undefined;
-      if (append && !cursor) return;
-      setContestLoading(true);
-      setContestError('');
-      void api
-        .profileContests(contestKind, 20, cursor)
-        .then((result) => {
-          setContestItems((items) =>
-            append ? [...items, ...result.items] : result.items,
-          );
-          setContestNextCursor(result.page.nextCursor);
-          setContestLoaded(true);
-        })
-        .catch((error: unknown) =>
-          setContestError(profileErrorText(error, '我的比赛')),
-        )
-        .finally(() => setContestLoading(false));
-    },
-    [api, capabilities, contestKind, contestNextCursor],
-  );
-
-  useEffect(() => {
-    if (tab === '我的比赛' && !contestLoaded) loadContests();
-  }, [contestLoaded, loadContests, tab]);
-
-  const changeContestKind = (kind?: ProfileContestRelationship) => {
-    setContestKind(kind);
-    setContestItems([]);
-    setContestNextCursor(undefined);
-    setContestLoaded(false);
-    setContestError('');
   };
 
   const displayName = isPublic ? publicProfile?.displayName : user?.displayName;
@@ -1570,106 +1579,120 @@ export function ProfileExperience({
     );
   };
 
-  const renderContests = () => {
-    const contestCapability = capability('myContests');
+  const renderSolved = () => {
+    if (!api) return renderActivity();
+    if (solvedError)
+      return <ProfileLoadError text={solvedError} onRetry={loadSolved} />;
+    if (!solvedLoaded)
+      return (
+        <p className="muted" role="status">
+          正在加载做题记录…
+        </p>
+      );
+    return solvedItems.length ? (
+      <ul className="profile-data-list">
+        {solvedItems.map((item) => (
+          <li key={item.problemId}>
+            <div>
+              <PortalLink to={`/problems/${item.slug}`} navigate={navigate}>
+                <strong>{item.title}</strong>
+              </PortalLink>
+              <small>最近通过于 {profileDate(item.lastAcceptedAt)}</small>
+            </div>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p className="muted">暂无已解决题目。</p>
+    );
+  };
+
+  const renderProblems = () => {
     if (!api)
       return (
         <CapabilityNotice
-          title="我的比赛功能正在接入"
-          text="当前没有真实比赛关系数据。"
-          request="CONTEST-BACKEND-INTEGRATION-REQUEST"
+          title="我的题目功能正在接入"
+          text="当前没有真实题目归属数据。"
+          request="PROFILE-PROBLEMS-BACKEND-INTEGRATION-REQUEST"
         />
       );
-    if (!contestCapability)
-      return <p className="muted">正在加载个人资料能力…</p>;
-    if (!contestCapability.available)
-      return (
-        <ProfileCapabilityNotice
-          title="我的比赛暂不可用"
-          capability={contestCapability}
-        />
-      );
+    if (problemsError)
+      return <ProfileLoadError text={problemsError} onRetry={loadProblems} />;
     return (
       <div className="profile-data-panel">
-        <div
-          className="filter-tabs profile-data-filters"
-          role="tablist"
-          aria-label="比赛关系"
-        >
-          {[
-            [undefined, '全部'],
-            ['CREATED', '创建'],
-            ['MANAGED', '管理'],
-            ['REGISTERED', '报名'],
-          ].map(([kind, label]) => (
-            <button
-              key={label}
-              type="button"
-              role="tab"
-              aria-selected={contestKind === kind}
-              onClick={() =>
-                changeContestKind(
-                  kind as ProfileContestRelationship | undefined,
-                )
-              }
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {contestError && (
-          <p className="error" role="alert">
-            {contestError}
-            <button
-              type="button"
-              className="secondary"
-              disabled={contestLoading}
-              onClick={() => loadContests()}
-            >
-              重试
-            </button>
-          </p>
+        {publicProfile?.canCreateProblems && (
+          <button
+            type="button"
+            onClick={() => navigate('/author/problems/new')}
+          >
+            创建题目
+          </button>
         )}
-        {contestLoading && !contestItems.length ? (
-          <p className="muted">正在加载比赛关系…</p>
-        ) : contestItems.length ? (
-          <>
-            <ul className="profile-data-list">
-              {contestItems.map((item, index) => (
-                <li key={`${item.id}-${item.relationship}-${index}`}>
-                  <div>
-                    <PortalLink to={`/contests/${item.id}`} navigate={navigate}>
-                      <strong>{item.title}</strong>
-                    </PortalLink>
-                    <small>
-                      {relationshipLabel(item.relationship)} · {item.lifecycle}{' '}
-                      · {profileDate(item.startsAt)}
-                    </small>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {contestNextCursor && (
-              <button
-                type="button"
-                className="secondary"
-                disabled={contestLoading}
-                onClick={() => loadContests(true)}
-              >
-                {contestLoading ? '加载中…' : '加载更多'}
-              </button>
-            )}
-          </>
+        {!problemsLoaded ? (
+          <p className="muted" role="status">
+            正在加载题目…
+          </p>
+        ) : problemItems.length ? (
+          <ul className="profile-data-list">
+            {problemItems.map((item) => (
+              <li key={item.id}>
+                <div>
+                  <PortalLink to={`/problems/${item.slug}`} navigate={navigate}>
+                    <strong>{item.title}</strong>
+                  </PortalLink>
+                  <small>
+                    {item.status} · {item.visibility} · 更新于{' '}
+                    {profileDate(item.updatedAt)}
+                  </small>
+                </div>
+              </li>
+            ))}
+          </ul>
         ) : (
-          <p className="muted">暂无比赛关系记录。</p>
+          <p className="muted">暂无题目。</p>
         )}
       </div>
     );
   };
 
   const renderTab = () => {
+    if (tab === '概览') {
+      if (overviewError)
+        return (
+          <ProfileLoadError
+            text={overviewError}
+            onRetry={() => setProfileRefresh((value) => value + 1)}
+          />
+        );
+      if (!overview)
+        return (
+          <p className="muted" role="status">
+            正在加载概览…
+          </p>
+        );
+      const metrics = [
+        ['创建题目', overview.createdProblemCount],
+        ['已解决题目', overview.solvedProblemCount],
+        ['总提交', overview.submissionCount],
+        ['AC 提交', overview.acceptedSubmissionCount],
+        ...(overview.favoriteCount === undefined
+          ? []
+          : [['收藏', overview.favoriteCount] as const]),
+      ];
+      return (
+        <div className="profile-overview-grid">
+          {metrics.map(([label, value]) => (
+            <section key={label}>
+              <strong>{value}</strong>
+              <span>{label}</span>
+            </section>
+          ))}
+        </div>
+      );
+    }
+    if (tab === '做题记录') return renderSolved();
     if (tab === '收藏') return renderFavorites();
-    if (tab === '我的比赛') return renderContests();
+    if (tab === '我的题目') return renderProblems();
     if (tab === '团队') {
       const teamCapability = capability('teams');
       return teamCapability && !teamCapability.available ? (
@@ -1685,15 +1708,7 @@ export function ProfileExperience({
         />
       );
     }
-    if (tab === '评测列表')
-      return (
-        <CapabilityNotice
-          title="评测列表请前往评测列表页"
-          text="评测列表由独立的提交服务提供，个人主页不会生成重复或虚构数据。"
-          request="SUBMISSIONS-SERVICE-ROUTE"
-        />
-      );
-    return renderActivity();
+    return null;
   };
 
   return (
@@ -1725,13 +1740,18 @@ export function ProfileExperience({
           </p>
         )}
         {!isPublic && user && (
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => navigate('/settings')}
-          >
-            编辑资料
-          </button>
+          <div className="profile-actions">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => navigate('/settings')}
+            >
+              编辑资料
+            </button>
+            <button type="button" onClick={() => navigate('/settings')}>
+              账户与安全
+            </button>
+          </div>
         )}
       </div>
       <div
@@ -1775,7 +1795,7 @@ export function ProfileExperience({
             <p className="eyebrow">
               {tab === '概览' || tab === '做题记录' ? 'ACTIVITY' : 'PROFILE'}
             </p>
-            <h2>{tab === '概览' ? '做题情况' : tab}</h2>
+            <h2>{tab}</h2>
           </div>
           <span className="muted">
             {isPublic ? '仅展示公开资料' : '指标与关系由后端明确提供'}
@@ -1783,33 +1803,6 @@ export function ProfileExperience({
         </div>
         {renderTab()}
       </section>
-      {tab === '概览' && (
-        <div className="profile-feature-grid">
-          {[
-            ['收藏', 'favorites', 'FAVORITES'],
-            ['热力图', 'heatmap', 'HEATMAP'],
-            ['错题集', 'wrongbook', 'WRONGBOOK'],
-            ['团队', 'teams', 'TEAM'],
-            ['作业', 'homework', 'HOMEWORK'],
-            ['我的比赛', 'myContests', 'CONTEST'],
-          ].map(([label, key, code]) => {
-            const item = capability(key as keyof ProfileCapabilities);
-            return (
-              <section key={label}>
-                <h2>{label}</h2>
-                {item?.available ? (
-                  <p>切换上方标签查看真实数据。</p>
-                ) : item ? (
-                  <p>{profileReason(item.reason)}</p>
-                ) : (
-                  <p>{api ? '正在加载能力…' : '暂无可用数据'}</p>
-                )}
-                <span>{code}</span>
-              </section>
-            );
-          })}
-        </div>
-      )}
     </section>
   );
 }
@@ -1872,6 +1865,7 @@ export function NotificationBell({
         type="button"
         className="icon-button"
         aria-label="通知"
+        title="通讯中心"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
@@ -1889,7 +1883,7 @@ export function NotificationBell({
           aria-label="通知预览"
         >
           <div>
-            <strong>通知</strong>
+            <strong>通讯中心</strong>
             <button
               type="button"
               aria-label="关闭通知"
@@ -1945,10 +1939,10 @@ export function NotificationBell({
             className="secondary"
             onClick={() => {
               setOpen(false);
-              navigate('/notifications');
+              navigate('/messages');
             }}
           >
-            查看全部通知
+            进入通讯中心
           </button>
         </div>
       )}

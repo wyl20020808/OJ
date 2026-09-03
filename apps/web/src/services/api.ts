@@ -203,6 +203,26 @@ export type PublicProfile = {
   displayName: string;
   createdAt: string;
   capabilities: ProfileCapabilities;
+  isSelf: boolean;
+  canCreateProblems: boolean;
+};
+export type ProfileOverview = {
+  createdProblemCount: number;
+  solvedProblemCount: number;
+  submissionCount: number;
+  acceptedSubmissionCount: number;
+  favoriteCount?: number;
+  teamCount?: number;
+};
+export type SolvedProblem = {
+  problemId: string;
+  slug: string;
+  title: string;
+  lastAcceptedAt: string;
+};
+export type SolvedProblemList = {
+  items: SolvedProblem[];
+  page: { limit: number; total: number; nextCursor?: string };
 };
 export type FavoriteProblem = {
   problemId: string;
@@ -706,6 +726,33 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
+    profileOverview: (username: string) =>
+      request<ProfileOverview>(
+        baseUrl,
+        `/api/profiles/${encodeURIComponent(username)}/overview`,
+        undefined,
+        fetcher,
+      ),
+    profileSolved: (username: string, limit = 20, cursor?: string) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (cursor) params.set('cursor', cursor);
+      return request<SolvedProblemList>(
+        baseUrl,
+        `/api/profiles/${encodeURIComponent(username)}/solved?${params.toString()}`,
+        undefined,
+        fetcher,
+      );
+    },
+    profileProblemsFor: (username: string, limit = 20, cursor?: string) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (cursor) params.set('cursor', cursor);
+      return request<ProfileProblemList>(
+        baseUrl,
+        `/api/profiles/${encodeURIComponent(username)}/problems?${params.toString()}`,
+        undefined,
+        fetcher,
+      );
+    },
     profileFavorites: (limit = 20, cursor?: string) => {
       const params = new URLSearchParams({ limit: String(limit) });
       if (cursor) params.set('cursor', cursor);

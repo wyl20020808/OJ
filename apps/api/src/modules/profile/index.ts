@@ -60,10 +60,10 @@ export async function registerProfileModule(
     }
     return auth;
   };
-  const profileCapabilities = (auth?: Auth) => ({
+  const profileCapabilities = (auth?: Auth, isSelf = false) => ({
     contractVersion: 'profile-capabilities-v1',
     favorites:
-      auth?.strength === 'password'
+      isSelf && auth?.strength === 'password'
         ? { available: true }
         : unavailable(
             auth ? 'GUEST_ACCOUNT_REQUIRES_UPGRADE' : 'AUTHENTICATION_REQUIRED',
@@ -75,12 +75,12 @@ export async function registerProfileModule(
             auth ? 'GUEST_ACCOUNT_REQUIRES_UPGRADE' : 'AUTHENTICATION_REQUIRED',
           ),
     myProblems:
-      auth?.strength === 'password'
+      !isSelf || auth?.strength === 'password'
         ? { available: true }
         : unavailable(
             auth ? 'GUEST_ACCOUNT_REQUIRES_UPGRADE' : 'AUTHENTICATION_REQUIRED',
           ),
-    activity: unavailable('NO_AUTHORITATIVE_PRODUCT_ACTIVITY_SOURCE'),
+    activity: { available: true },
     heatmap: unavailable(
       'UPSTREAM_BLOCKED_BY_AUTHORITATIVE_SUBMISSION_OUTCOME',
     ),
@@ -91,24 +91,194 @@ export async function registerProfileModule(
     ),
   });
   app.get('/api/profile/capabilities', async (request, reply) =>
-    reply.send(profileCapabilities(await options.getAuth(request))),
+    reply.send(profileCapabilities(await options.getAuth(request), true)),
   );
-  app.get('/api/profiles/:username', async (request, reply) => {
+  const profileTarget = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => {
     const username = (request.params as { username?: string }).username;
-    if (!username || username.length > 32)
-      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid username');
+    if (!username || username.length > 32) {
+      error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid username');
+      return undefined;
+    }
     const result = await options.pool.query(
-      "SELECT username,display_name,created_at FROM users WHERE username=$1 AND status='active'",
+      "SELECT id,username,display_name,created_at FROM users WHERE username=$1 AND status='active'",
       [username.toLowerCase()],
     );
     const user = result.rows[0];
-    if (!user)
-      return error(reply, request, 404, 'NOT_FOUND', 'Profile not found');
+    if (!user) {
+      error(reply, request, 404, 'NOT_FOUND', 'Profile not found');
+      return undefined;
+    }
+    const auth = await options.getAuth(request);
+    return { auth, isSelf: auth?.userId === String(user.id), user };
+  };
+  const publicProblemFilter = (isSelf: boolean) =>
+    isSelf ? '' : " AND p.visibility='public' AND p.status='published'";
+  app.get('/api/profiles/:username', async (request, reply) => {
+    const target = await profileTarget(request, reply);
+    if (!target) return;
+    const { auth, isSelf, user } = target;
     return reply.send({
       username: String(user.username),
       displayName: String(user.display_name),
       createdAt: new Date(String(user.created_at)).toISOString(),
-      capabilities: profileCapabilities(),
+      capabilities: profileCapabilities(auth, isSelf),
+      isSelf,
+      canCreateProblems: isSelf && auth?.strength === 'password',
+    });
+  });
+  app.get('/api/profiles/:username/overview', async (request, reply) => {
+    const target = await profileTarget(request, reply);
+    if (!target) return;
+    const filter = publicProblemFilter(target.isSelf);
+    const overview = await options.pool.query(
+      `SELECT
+         (SELECT count(*)::int FROM problems p WHERE p.author_id=$1${filter}) AS created_problem_count,
+         (SELECT count(DISTINCT s.problem_id)::int FROM submissions s
+          JOIN submission_evaluations se ON se.submission_id=s.id
+          JOIN problems p ON p.id=s.problem_id
+          WHERE s.owner_user_id=$1 AND se.current=true
+            AND se.status='COMPLETED_WITH_VERDICT' AND se.verdict='AC'${filter}) AS solved_problem_count,
+         (SELECT count(*)::int FROM submissions s
+          JOIN problems p ON p.id=s.problem_id
+          WHERE s.owner_user_id=$1${filter}) AS submission_count,
+         (SELECT count(*)::int FROM submissions s
+          JOIN submission_evaluations se ON se.submission_id=s.id
+          JOIN problems p ON p.id=s.problem_id
+          WHERE s.owner_user_id=$1 AND se.current=true
+            AND se.status='COMPLETED_WITH_VERDICT' AND se.verdict='AC'${filter}) AS accepted_submission_count`,
+      [String(target.user.id)],
+    );
+    const row = overview.rows[0] ?? {};
+    const result = {
+      createdProblemCount: Number(row.created_problem_count ?? 0),
+      solvedProblemCount: Number(row.solved_problem_count ?? 0),
+      submissionCount: Number(row.submission_count ?? 0),
+      acceptedSubmissionCount: Number(row.accepted_submission_count ?? 0),
+    };
+    if (target.isSelf && target.auth?.strength === 'password') {
+      const favorites = await options.pool.query(
+        "SELECT count(*)::int count FROM problem_favorites pf JOIN problems p ON p.id=pf.problem_id WHERE pf.user_id=$1 AND p.visibility='public' AND p.status='published'",
+        [String(target.user.id)],
+      );
+      return reply.send({
+        ...result,
+        favoriteCount: Number(favorites.rows[0]?.count ?? 0),
+      });
+    }
+    return reply.send(result);
+  });
+  app.get('/api/profiles/:username/solved', async (request, reply) => {
+    const target = await profileTarget(request, reply);
+    if (!target) return;
+    const query = request.query as Record<string, unknown>;
+    const limit = page(query),
+      cursor = decode(query.cursor);
+    if (!limit || (query.cursor !== undefined && !cursor))
+      return error(
+        reply,
+        request,
+        400,
+        'VALIDATION_ERROR',
+        'Invalid pagination',
+      );
+    const filter = publicProblemFilter(target.isSelf);
+    const result = await options.pool.query(
+      `SELECT p.id,p.slug,p.title,max(se.completed_at) AS accepted_at
+       FROM submissions s JOIN submission_evaluations se ON se.submission_id=s.id
+       JOIN problems p ON p.id=s.problem_id
+       WHERE s.owner_user_id=$1 AND se.current=true
+         AND se.status='COMPLETED_WITH_VERDICT' AND se.verdict='AC'${filter}
+       GROUP BY p.id,p.slug,p.title
+       ${cursor ? 'HAVING (max(se.completed_at),p.id)<($2,$3)' : ''}
+       ORDER BY max(se.completed_at) DESC,p.id DESC LIMIT $${cursor ? 4 : 2}`,
+      cursor
+        ? [String(target.user.id), cursor.createdAt, cursor.id, limit]
+        : [String(target.user.id), limit],
+    );
+    const count = await options.pool.query(
+      `SELECT count(DISTINCT s.problem_id)::int total FROM submissions s
+       JOIN submission_evaluations se ON se.submission_id=s.id
+       JOIN problems p ON p.id=s.problem_id
+       WHERE s.owner_user_id=$1 AND se.current=true
+         AND se.status='COMPLETED_WITH_VERDICT' AND se.verdict='AC'${filter}`,
+      [String(target.user.id)],
+    );
+    const items = result.rows.map((row) => ({
+      problemId: String(row.id),
+      slug: String(row.slug),
+      title: String(row.title),
+      lastAcceptedAt: new Date(String(row.accepted_at)).toISOString(),
+    }));
+    return reply.send({
+      items,
+      page: {
+        limit,
+        total: Number(count.rows[0]?.total ?? 0),
+        ...(items.length === limit
+          ? {
+              nextCursor: encode({
+                createdAt: items.at(-1)!.lastAcceptedAt,
+                id: items.at(-1)!.problemId,
+              }),
+            }
+          : {}),
+      },
+    });
+  });
+  app.get('/api/profiles/:username/problems', async (request, reply) => {
+    const target = await profileTarget(request, reply);
+    if (!target) return;
+    const query = request.query as Record<string, unknown>;
+    const limit = page(query),
+      cursor = decode(query.cursor);
+    if (!limit || (query.cursor !== undefined && !cursor))
+      return error(
+        reply,
+        request,
+        400,
+        'VALIDATION_ERROR',
+        'Invalid pagination',
+      );
+    const filter = target.isSelf
+      ? ''
+      : " AND visibility='public' AND status='published'";
+    const result = await options.pool.query(
+      `SELECT id,slug,title,status,visibility,created_at,updated_at FROM problems WHERE author_id=$1${filter}
+       ${cursor ? 'AND (created_at,id)<($2,$3)' : ''} ORDER BY created_at DESC,id DESC LIMIT $${cursor ? 4 : 2}`,
+      cursor
+        ? [String(target.user.id), cursor.createdAt, cursor.id, limit]
+        : [String(target.user.id), limit],
+    );
+    const count = await options.pool.query(
+      `SELECT count(*)::int total FROM problems WHERE author_id=$1${filter}`,
+      [String(target.user.id)],
+    );
+    const items = result.rows.map((row) => ({
+      id: String(row.id),
+      slug: String(row.slug),
+      title: String(row.title),
+      status: String(row.status),
+      visibility: String(row.visibility),
+      createdAt: new Date(String(row.created_at)).toISOString(),
+      updatedAt: new Date(String(row.updated_at)).toISOString(),
+    }));
+    return reply.send({
+      items,
+      page: {
+        limit,
+        total: Number(count.rows[0]?.total ?? 0),
+        ...(items.length === limit
+          ? {
+              nextCursor: encode({
+                createdAt: items.at(-1)!.createdAt,
+                id: items.at(-1)!.id,
+              }),
+            }
+          : {}),
+      },
     });
   });
   app.get('/api/profile/favorites', async (request, reply) => {
