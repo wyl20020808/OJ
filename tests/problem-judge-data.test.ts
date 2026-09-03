@@ -226,9 +226,11 @@ describe('problem judge data backend', () => {
             inputSha256: persistedCase.input.sha256,
             expectedOutputSha256: persistedCase.expectedOutput.sha256,
             executionProfileId: identity.executionProfileId,
-            checkerType: 'EXACT_BYTES',
+            checkerType: persisted?.defaults.checker,
             checkerVersion: BUILTIN_CHECKER_VERSION,
-            checkerConfigSha256: builtinCheckerConfigSha256('EXACT_BYTES'),
+            checkerConfigSha256: builtinCheckerConfigSha256(
+              persisted?.defaults.checker ?? 'TOKEN_WHITESPACE',
+            ),
           },
         ],
       }),
@@ -335,6 +337,18 @@ describe('problem judge data backend', () => {
         user,
       ),
     ).rejects.toMatchObject({ code: 'INVALID_PAIR' });
+  });
+
+  it('defaults new judge data to whitespace-token checking', async () => {
+    const { svc } = service();
+    const draft = await svc.addPair(
+      'p-1',
+      Uint8Array.from([1]),
+      Uint8Array.from([2]),
+      { input: '1.in', output: '1.out' },
+      user,
+    );
+    expect(draft.defaults.checker).toBe('TOKEN_WHITESPACE');
   });
 
   it('recomputes inherited limits when defaults change and fails closed for storage', async () => {

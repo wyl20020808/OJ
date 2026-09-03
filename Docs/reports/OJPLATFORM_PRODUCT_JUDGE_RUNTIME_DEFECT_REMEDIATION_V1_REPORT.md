@@ -11,11 +11,13 @@ Host-Agent-owned Worker -> non-root Supervisor -> Sandbox -> Product.
 
 ## Root Causes And Fixes
 
-- A+B WA: the published A+B v1 uses `EXACT_BYTES`. The input is `31 20 32 0A`
+- A+B WA: the published A+B v1 uses the then-configured `EXACT_BYTES` checker. The input is `31 20 32 0A`
   (`1 2\n`) and expected output is `33 0A` (`3\n`), with no BOM and LF line
   endings. `cout << a + b;` emits `33`, so it is correctly WA at the first
   missing newline. `cout << a + b << '\n';` emits `33 0A` and is AC. The
-  checker default was not changed.
+  The published immutable version was not rewritten; new drafts now use
+  `TOKEN_WHITESPACE` by the follow-up Default Checker V1 policy, while this
+  historical version remains exact.
 - Problem 409: the identifier/slug `1234` already existed. The API correctly
   returned `CONFLICT`; the Web author form now presents the Chinese business
   message `题目编号已存在，请更换题目标识。`.

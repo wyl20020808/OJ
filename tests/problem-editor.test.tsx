@@ -210,6 +210,17 @@ describe('ProblemEditor judge-data contract UI', () => {
     expect(screen.queryByText('out-hash')).not.toBeInTheDocument();
   });
 
+  it('defaults an empty judge-data editor to token whitespace while retaining exact bytes', async () => {
+    const api = makeApi({ judgeDraft: vi.fn().mockResolvedValue(null) });
+    render(<ProblemEditor api={api} problemId="p1" />);
+    fireEvent.click(await screen.findByRole('button', { name: '评测设置' }));
+    const checker = screen.getByLabelText('Checker');
+    expect(checker).toHaveValue('TOKEN_WHITESPACE');
+    expect(checker).toContainHTML(
+      '<option value="EXACT_BYTES">Exact bytes</option>',
+    );
+  });
+
   it('supports inherited defaults and independent testcase overrides with reset', async () => {
     const api = makeApi({
       judgeDraft: vi.fn().mockResolvedValue(

@@ -202,7 +202,7 @@ export class ProblemJudgeDataService {
           timeLimitMs: 1000,
           memoryLimitBytes: 64 * 1024 * 1024,
           outputLimitBytes: 64 * 1024,
-          checker: 'EXACT_BYTES',
+          checker: 'TOKEN_WHITESPACE',
           allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
         }),
       testcases: [...(old?.testcases ?? []), c]
@@ -225,7 +225,7 @@ export class ProblemJudgeDataService {
         timeLimitMs: 1000,
         memoryLimitBytes: 64 * 1024 * 1024,
         outputLimitBytes: 64 * 1024,
-        checker: 'EXACT_BYTES',
+        checker: 'TOKEN_WHITESPACE',
         allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
       });
     const input = validateObjectRef(b.input);
@@ -411,7 +411,7 @@ export class ProblemJudgeDataService {
         timeLimitMs: 1000,
         memoryLimitBytes: 64 * 1024 * 1024,
         outputLimitBytes: 64 * 1024,
-        checker: 'EXACT_BYTES',
+        checker: 'TOKEN_WHITESPACE',
         allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
       });
     const base = `judge-data/problems/${problemId}/draft/${id()}`;

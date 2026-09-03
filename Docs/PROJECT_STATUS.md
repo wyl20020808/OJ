@@ -3,7 +3,13 @@
 Project: OJPlatform
 Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: UNIFIED JUDGE RUNTIME INTEGRATION V1 PASS
-Current Status: PRODUCT/JUDGE DEFECT REMEDIATION COMPLETE; CURRENT-SOURCE HOST-AGENT BROWSER AC/WA/CE/RE, SAFE JUDGE DATA ERRORS, AND DETAIL SMOKE PASS
+Current Status: PRODUCT/JUDGE DEFECT REMEDIATION COMPLETE; TOKEN_WHITESPACE IS THE NEW-DATA DEFAULT WITH EXPLICIT EXACT_BYTES ADVANCED SETTING
+
+Default Checker V1: PASS. New Judge Data drafts default to `TOKEN_WHITESPACE`
+in Product and Web fallbacks, while explicit `EXACT_BYTES` remains available
+in the advanced Judge settings. Existing drafts and published immutable
+versions retain their stored checker. See
+`OJPLATFORM_DEFAULT_CHECKER_TOKEN_WHITESPACE_V1_REPORT.md`.
 
 Product Judge Runtime Defect Remediation V1: PASS. The local Product path now
 rejects non-executable Judge Data before publication, verifies fetched object

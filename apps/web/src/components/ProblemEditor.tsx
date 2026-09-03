@@ -31,7 +31,7 @@ const fallbackDefaults: ProblemJudgeDefaults = {
   timeLimitMs: 1000,
   memoryLimitBytes: 256 * 1024 * 1024,
   outputLimitBytes: 64 * 1024 * 1024,
-  checker: 'EXACT_BYTES',
+  checker: 'TOKEN_WHITESPACE',
   allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
 };
 const emptyValidation = { state: 'UNKNOWN' as const, errors: [], warnings: [] };
