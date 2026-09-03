@@ -1,0 +1,31 @@
+# Copy to config/dev-runtime.local.ps1 for machine-specific paths only.
+# Do not commit the copied file. Secrets are generated in .runtime/secrets.json.
+$OJPlatformRuntimeConfig = @{
+  WebPort = 5173
+  ApiPort = 3010
+  JudgeServicePort = 3100
+  HostAgentPort = 3180
+  SupervisorPort = 19092
+  WslDistro = 'Ubuntu-24.04'
+  SupervisorLinuxBinary = '/opt/ojplatform/bin/supervisor'
+  SupervisorProbeLinuxPath = '/opt/ojplatform/bin/trusted-probe'
+  SupervisorSandboxRoot = '/tmp/ojplatform-sandbox'
+  SupervisorRuncBinary = 'runc'
+  CompilerRootfsLinuxPath = '/opt/ojplatform/compiler-rootfs/cpp20-gcc-13-v1'
+  CompilerRootfsIdentity = ''
+  CompilerRootfsVersion = ''
+  WorkerBinary = ''
+  WorkerHealthPort = 18080
+  WorkerMaxConcurrency = 1
+  HostCpuUnits = 1
+  HostMemoryMb = 1024
+  PoolMode = 'MANUAL'
+  ProductDatabaseUrl = 'postgres://ojplatform:ojplatform_dev@127.0.0.1:55432/ojplatform'
+  JudgeDatabaseAdminUrl = 'postgres://ojplatform:ojplatform_dev@127.0.0.1:55432/postgres'
+  JudgeDatabaseUrl = 'postgres://oj_judge_service:CHANGE_ME@127.0.0.1:55432/ojplatform_judge'
+  JudgeDatabaseName = 'ojplatform_judge'
+  JudgeDatabaseRole = 'oj_judge_service'
+  JudgeDatabasePassword = ''
+  RedisUrl = 'redis://127.0.0.1:56379'
+  MinioEndpoint = 'http://127.0.0.1:59000'
+}
