@@ -69,6 +69,10 @@ import {
   type ProblemRevisionResolver,
   type Submission,
 } from './modules/submission/index.js';
+import {
+  registerCodeRunRoutes,
+  codeRunResultFromJob,
+} from './modules/code-run/routes.js';
 
 const operatorUserIds = () =>
   new Set(
@@ -315,6 +319,28 @@ export async function buildApp(options: AppOptions = {}) {
             process.env.JUDGE_SERVICE_TOKEN,
           )
         : undefined;
+    await registerCodeRunRoutes(app, {
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      submit: async (input) => {
+        if (!judgeService) throw new Error('JUDGE_SERVICE_UNAVAILABLE');
+        const result = await judgeService.submit(input);
+        return {
+          judgeJobId: result.judgeJobId,
+          status: result.status,
+          ...(result.codeRun ? { codeRun: result.codeRun } : {}),
+        };
+      },
+      get: async (runId) => {
+        if (!judgeService) return undefined;
+        const result = await judgeService.get(runId);
+        return {
+          judgeJobId: result.judgeJobId,
+          status: result.status,
+          ...(result.codeRun ? { codeRun: result.codeRun } : {}),
+        };
+      },
+    });
     await registerJudgeModule(app, {
       repository: judgeRepository,
       authorizationPolicy: createJudgeAuthorizationPolicy({
@@ -779,6 +805,24 @@ export async function buildApp(options: AppOptions = {}) {
     });
     const submissionRepository = new InMemorySubmissionRepository();
     const judgeRepository = new InMemoryJudgeJobRepository();
+    await registerCodeRunRoutes(app, {
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      submit: async (input) => {
+        const { clientRequestId, externalSubmissionId, ...job } = input as any;
+        const result = await judgeRepository.enqueue({
+          ...job,
+          submissionId: externalSubmissionId,
+          ownerUserId: 'code-run',
+          idempotencyKey: clientRequestId,
+        });
+        return { judgeJobId: result.job.id, status: result.job.status };
+      },
+      get: async (runId) => {
+        const job = await judgeRepository.getById(runId);
+        return job ? codeRunResultFromJob(job) : undefined;
+      },
+    });
     await registerJudgeModule(app, {
       repository: judgeRepository,
       authorizationPolicy: createJudgeAuthorizationPolicy({

@@ -47,6 +47,56 @@ const safeDiagnostics = (source: unknown) => {
     truncated,
   };
 };
+const safeOutput = (source: unknown) =>
+  typeof source === 'string'
+    ? Buffer.from(source, 'utf8')
+        .subarray(0, 64 * 1024)
+        .toString('utf8')
+    : '';
+const safeMetric = (source: unknown) =>
+  typeof source === 'number' && Number.isSafeInteger(source) && source >= 0
+    ? source
+    : null;
+const projectCodeRun = (
+  job: JudgeJob,
+): JudgeServiceResult['codeRun'] | undefined => {
+  if (job.problemId !== '__adhoc_code_run__' || !job.rawExecutionResult)
+    return undefined;
+  const raw = job.rawExecutionResult as Record<string, any>;
+  const runtime = value(raw.runtime);
+  const compile = value(raw.compile);
+  const diagnostics = safeDiagnostics(compile?.stderr);
+  const facts = value(runtime?.facts);
+  const codeStatus =
+    raw.pipeline_outcome === 'PIPELINE_COMPILE_FAILED'
+      ? 'COMPILE_ERROR'
+      : raw.pipeline_outcome === 'PIPELINE_LIMIT_HIT' &&
+          facts?.memory_limit_event
+        ? 'MEMORY_LIMIT'
+        : raw.pipeline_outcome === 'PIPELINE_LIMIT_HIT'
+          ? 'TIME_LIMIT'
+          : raw.pipeline_outcome === 'PIPELINE_CANCELLED'
+            ? 'CANCELLED'
+            : raw.pipeline_outcome === 'PIPELINE_INFRA_FAILURE'
+              ? 'INFRA_ERROR'
+              : runtime &&
+                  ((facts?.exit_code !== undefined && facts.exit_code !== 0) ||
+                    facts?.termination_signal)
+                ? 'RUNTIME_ERROR'
+                : 'SUCCEEDED';
+  return {
+    status: codeStatus,
+    stdout: safeOutput(runtime?.stdout),
+    stderr: safeOutput(runtime?.stderr),
+    compilerDiagnostics:
+      raw.pipeline_outcome === 'PIPELINE_COMPILE_FAILED'
+        ? (diagnostics?.diagnostics ?? null)
+        : null,
+    exitCode: safeMetric(runtime?.exit_code),
+    timeMs: safeMetric(runtime?.wall_time_ms),
+    memoryBytes: safeMetric(runtime?.memory_bytes),
+  };
+};
 
 const runtimeReason = (reasonCode: unknown, exitCode: number | undefined) => {
   if (reasonCode === 'TIME_LIMIT_ENFORCED')
@@ -162,6 +212,7 @@ export function projectJudgeServiceResult(
     verdicts.has(record.overall_user_verdict as JudgeServiceVerdict)
       ? (record.overall_user_verdict as JudgeServiceVerdict)
       : undefined;
+  const codeRun = projectCodeRun(job);
   const status: JudgeServiceStatus =
     job.status === 'QUEUED' || job.status === 'FAILED_RETRYABLE'
       ? 'QUEUED'
@@ -173,7 +224,11 @@ export function projectJudgeServiceResult(
             ? 'INFRA_FAILED'
             : job.status === 'COMPLETED' && verdict
               ? 'COMPLETED_WITH_VERDICT'
-              : 'NO_VERDICT';
+              : codeRun && job.status === 'COMPLETED'
+                ? raw?.pipeline_outcome === 'PIPELINE_COMPILE_FAILED'
+                  ? 'NO_VERDICT'
+                  : 'NO_VERDICT'
+                : 'NO_VERDICT';
   const resultDigest =
     status === 'COMPLETED_WITH_VERDICT' && typeof record?.digest === 'string'
       ? record.digest
@@ -203,6 +258,7 @@ export function projectJudgeServiceResult(
     ...(detail ? { detail } : {}),
     acceptedAt,
     updatedAt: job.updatedAt,
+    ...(codeRun ? { codeRun } : {}),
   };
 }
 
