@@ -30,6 +30,7 @@ try {
     '0014_problem_judge_data_integrity',
     '0015_submission_judge_data_binding',
     '0016_submission_evaluation_detail',
+    '0017_problem_authoring_v2',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {

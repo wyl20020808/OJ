@@ -129,6 +129,41 @@ describe('problem foundation', () => {
       'already exists',
     );
   });
+  it('persists ordered public samples and V2 fields without touching judge data', async () => {
+    const repo = new InMemoryProblemRepository();
+    const service = new ProblemService(repo, allow);
+    const created = await service.create(
+      {
+        ...input,
+        background: 'Background',
+        difficulty: '中等',
+        samples: [
+          { ordinal: 99, input: '2', output: '4' },
+          { ordinal: 3, input: '3', output: '9' },
+        ],
+      },
+      { userId: 'u1' },
+    );
+    expect(created).toMatchObject({
+      background: 'Background',
+      difficulty: '中等',
+      samples: [
+        { ordinal: 1, input: '2', output: '4' },
+        { ordinal: 2, input: '3', output: '9' },
+      ],
+      testdataVersion: 'v1',
+    });
+    const updated = await service.update(
+      created.id,
+      {
+        samples: [{ ordinal: 7, input: '5', output: '25' }],
+        visibility: 'private',
+      },
+      { userId: 'u1' },
+    );
+    expect(updated.samples).toEqual([{ ordinal: 1, input: '5', output: '25' }]);
+    expect(updated.testdataVersion).toBe('v1');
+  });
   it('serves the documented API error and pagination contract', async () => {
     const app = Fastify();
     await registerProblemModule(app, {

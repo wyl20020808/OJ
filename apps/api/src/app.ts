@@ -484,7 +484,6 @@ export async function buildApp(options: AppOptions = {}) {
             },
           );
         },
-          ),
         canViewSubmission: async (context, submission) =>
           (await submissionPolicy.canViewSubmission(
             { id: context.userId, status: 'active' },
@@ -910,7 +909,6 @@ export async function buildApp(options: AppOptions = {}) {
             },
           );
         },
-          ),
         canViewSubmission: async (context, submission) =>
           (await submissionPolicy.canViewSubmission(
             { id: context.userId, status: 'active' },

@@ -474,6 +474,31 @@ describe('ProblemEditor judge-data contract UI', () => {
     expect(screen.getByLabelText('输入样例 1')).toHaveValue('1 2');
   });
 
+  it('adds, removes, and saves ordered public samples through the problem API', async () => {
+    const updateProblem = vi.fn().mockResolvedValue(problem);
+    const api = makeApi({ updateProblem });
+    render(<ProblemEditor api={api} problemId="p1" />);
+    await screen.findByRole('heading', { name: /编辑题目：Hello World/ });
+    fireEvent.click(screen.getByRole('button', { name: '添加样例' }));
+    fireEvent.change(screen.getByLabelText('输入样例 1'), {
+      target: { value: '1 2' },
+    });
+    fireEvent.change(screen.getByLabelText('输出样例 1'), {
+      target: { value: '3' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '添加样例' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[1]!);
+    fireEvent.click(screen.getByRole('button', { name: '保存题面' }));
+    await waitFor(() =>
+      expect(updateProblem).toHaveBeenCalledWith(
+        'p1',
+        expect.objectContaining({
+          samples: [{ ordinal: 1, input: '1 2', output: '3' }],
+        }),
+      ),
+    );
+  });
+
   it('uses only Product judge-data paths and no privileged Judge/storage endpoints', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const fetcher = vi

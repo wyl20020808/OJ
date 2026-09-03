@@ -1165,32 +1165,36 @@ function formatMemoryLimit(bytes: number) {
 type Draft = {
   slug: string;
   title: string;
+  background: string;
   statement: string;
   inputDescription: string;
   outputDescription: string;
   constraints: string;
   notes: string;
-  examples: { input: string; output: string; note?: string }[];
+  samples: { ordinal: number; input: string; output: string }[];
   timeLimitMs: number;
   memoryLimitBytes: number;
   testdataVersion?: string | null;
   visibility: Problem['visibility'];
+  difficulty: NonNullable<Problem['difficulty']> | null;
   status: Problem['status'];
   updatedAt?: string;
 };
 const emptyDraft: Draft = {
   slug: '',
   title: '',
+  background: '',
   statement: '',
   inputDescription: '',
   outputDescription: '',
   constraints: '',
   notes: '',
-  examples: [{ input: '', output: '', note: '' }],
+  samples: [],
   timeLimitMs: 1000,
   memoryLimitBytes: 256 * 1024 * 1024,
   testdataVersion: null,
   visibility: 'private' as const,
+  difficulty: null,
   status: 'draft' as const,
 };
 
@@ -1208,8 +1212,16 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       .then((p) =>
         setForm({
           ...p,
+          background: p.background ?? '',
           notes: p.notes ?? '',
-          examples: p.examples.length ? p.examples : emptyDraft.examples,
+          samples:
+            p.samples ??
+            p.examples.map((sample, index) => ({
+              ordinal: index + 1,
+              input: sample.input,
+              output: sample.output,
+            })),
+          difficulty: p.difficulty ?? null,
         }),
       )
       .catch((e) => setError(e instanceof ApiError ? e : null))
@@ -1232,14 +1244,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     e.preventDefault();
     setMessage('');
     setError(null);
-    if (
-      !form.slug ||
-      !form.title ||
-      !form.statement ||
-      !form.inputDescription ||
-      !form.outputDescription ||
-      !form.constraints
-    ) {
+    if (!form.slug || !form.title || !form.statement) {
       setMessage('请先填写所有必填字段。');
       return;
     }
@@ -1248,15 +1253,18 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       const editable = {
         slug: form.slug,
         title: form.title,
+        background: form.background,
         statement: form.statement,
         inputDescription: form.inputDescription,
         outputDescription: form.outputDescription,
-        examples: form.examples,
+        samples: form.samples,
         constraints: form.constraints,
         notes: form.notes,
         timeLimitMs: form.timeLimitMs,
         memoryLimitBytes: form.memoryLimitBytes,
         testdataVersion: form.testdataVersion ?? null,
+        difficulty: form.difficulty,
+        visibility: form.visibility,
       };
       const result = id
         ? await api.updateProblem(id, editable)
@@ -1344,68 +1352,184 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
           </span>
         )}
       </div>
-      <form onSubmit={submit} noValidate>
-        <div className="form-grid">
-          <Field
-            label="题目标题"
-            value={form.title}
-            onChange={(e) => update('title', e.target.value)}
-            required
-          />
-          <Field
-            label="题目标识"
-            value={form.slug}
-            onChange={(e) => update('slug', e.target.value)}
-            required
-          />
-        </div>
-        <label>
-          题面
+      <form className="authoring-workspace" onSubmit={submit} noValidate>
+        <section className="authoring-section">
+          <h2>基本信息</h2>
+          <div className="form-grid">
+            <Field
+              label="题目标题"
+              value={form.title}
+              onChange={(e) => update('title', e.target.value)}
+              required
+            />
+            <Field
+              label="题目标识"
+              value={form.slug}
+              onChange={(e) => update('slug', e.target.value)}
+              required
+            />
+            <label>
+              难度
+              <select
+                value={form.difficulty ?? ''}
+                onChange={(e) =>
+                  update(
+                    'difficulty',
+                    e.target.value === '' ? null : e.target.value,
+                  )
+                }
+              >
+                <option value="">未设置</option>
+                <option value="入门">入门</option>
+                <option value="简单">简单</option>
+                <option value="中等">中等</option>
+                <option value="困难">困难</option>
+                <option value="专家">专家</option>
+              </select>
+            </label>
+            <label>
+              可见性
+              <select
+                value={form.visibility}
+                onChange={(e) => update('visibility', e.target.value)}
+              >
+                <option value="private">仅自己可见</option>
+                <option value="public">公开</option>
+              </select>
+            </label>
+          </div>
+        </section>
+        <section className="authoring-section">
+          <h2>题目背景</h2>
           <textarea
+            value={form.background}
+            onChange={(e) => update('background', e.target.value)}
+            rows={7}
+          />
+        </section>
+        <section className="authoring-section">
+          <h2>题目描述</h2>
+          <textarea
+            aria-label="题面"
             value={form.statement}
             onChange={(e) => update('statement', e.target.value)}
             rows={6}
             required
           />
-        </label>
-        <div className="form-grid">
+        </section>
+        <section className="authoring-section statement-grid">
           <label>
-            输入说明
+            输入格式
             <textarea
+              aria-label="输入说明"
               value={form.inputDescription}
               onChange={(e) => update('inputDescription', e.target.value)}
               rows={4}
-              required
             />
           </label>
           <label>
-            输出说明
+            输出格式
             <textarea
+              aria-label="输出说明"
               value={form.outputDescription}
               onChange={(e) => update('outputDescription', e.target.value)}
               rows={4}
-              required
             />
           </label>
-        </div>
-        <label>
-          数据范围
+        </section>
+        <section className="authoring-section">
+          <h2>样例</h2>
+          {form.samples.map((sample, index) => (
+            <div className="sample-editor" key={sample.ordinal}>
+              <div className="sample-heading">
+                <strong>样例 #{index + 1}</strong>
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() =>
+                    update(
+                      'samples',
+                      form.samples
+                        .filter((_, item) => item !== index)
+                        .map((item, ordinal) => ({
+                          ...item,
+                          ordinal: ordinal + 1,
+                        })),
+                    )
+                  }
+                >
+                  删除
+                </button>
+              </div>
+              <div className="statement-grid">
+                <label>
+                  输入
+                  <textarea
+                    rows={4}
+                    value={sample.input}
+                    onChange={(e) =>
+                      update(
+                        'samples',
+                        form.samples.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, input: e.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label>
+                  输出
+                  <textarea
+                    rows={4}
+                    value={sample.output}
+                    onChange={(e) =>
+                      update(
+                        'samples',
+                        form.samples.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, output: e.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+          <button
+            className="secondary"
+            type="button"
+            onClick={() =>
+              update('samples', [
+                ...form.samples,
+                { ordinal: form.samples.length + 1, input: '', output: '' },
+              ])
+            }
+          >
+            添加样例
+          </button>
+        </section>
+        <section className="authoring-section">
+          <h2>数据范围</h2>
           <textarea
+            aria-label="数据范围"
             value={form.constraints}
             onChange={(e) => update('constraints', e.target.value)}
             rows={4}
-            required
           />
-        </label>
-        <label>
-          补充说明
+        </section>
+        <section className="authoring-section">
+          <h2>说明 / 提示</h2>
           <textarea
             value={form.notes}
             onChange={(e) => update('notes', e.target.value)}
             rows={3}
           />
-        </label>
-        <div className="form-grid">
+        </section>
+        <section className="authoring-section statement-grid">
           <Field
             label="时间限制（毫秒）"
             type="number"
@@ -1422,54 +1546,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
             onChange={(e) => update('memoryLimitBytes', Number(e.target.value))}
             required
           />
-        </div>
-        <fieldset>
-          <legend>样例</legend>
-          <div className="form-grid">
-            <label>
-              输入
-              <textarea
-                value={form.examples[0]?.input ?? ''}
-                onChange={(e) =>
-                  update('examples', [
-                    {
-                      ...form.examples[0],
-                      input: e.target.value,
-                      output: form.examples[0]?.output ?? '',
-                    },
-                  ])
-                }
-                rows={3}
-              />
-            </label>
-            <label>
-              输出
-              <textarea
-                value={form.examples[0]?.output ?? ''}
-                onChange={(e) =>
-                  update('examples', [
-                    {
-                      ...form.examples[0],
-                      output: e.target.value,
-                      input: form.examples[0]?.input ?? '',
-                    },
-                  ])
-                }
-                rows={3}
-              />
-            </label>
-          </div>
-        </fieldset>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={form.visibility === 'public'}
-            onChange={(e) =>
-              update('visibility', e.target.checked ? 'public' : 'private')
-            }
-          />{' '}
-          对外公开
-        </label>
+        </section>
         {(message || error) && (
           <FormMessage error={message || error?.message || ''} />
         )}
