@@ -14,6 +14,7 @@
 - Added `Docs/LOCAL_RUNTIME.md`, local configuration example and the canonical-manager rule to `AGENTS.md`.
 - Supervisor startup now uses a named `systemd-run --user` unit with `Delegate=yes`, explicit WSL user-bus environment, and exact stale-scope recovery. This keeps runc execution under the delegated `oj-sandbox` cgroup instead of WSL init scope.
 - Product API starts in parallel with Judge Service after migrations; Host Agent remains gated on Judge readiness, and Web remains gated on Worker ONLINE and API readiness.
+- Worker source identity hashing uses built-in .NET SHA-256 APIs, so the BAT entry point works under Windows PowerShell 5.1 without requiring the optional `Get-FileHash` command module.
 
 ## TESTED
 
@@ -29,10 +30,13 @@
 - Stop -> Start recovery: PASS; full website returned at `http://127.0.0.1:5173`.
 - Standalone real Judge qualification: PASS for AC, WA, CE, RE, TLE, MLE, cancellation, duplicate submission idempotency and generation 1 -> 2 rejudge history.
 - `doctor`: PASS; WSL distro, non-root `oj-sandbox`, cgroup v2, runc, Docker infrastructure, rootfs identity/version, trusted probe, Worker source identity and canonical origin all passed.
+- `OJPlatform-Doctor.bat`: PASS under Windows PowerShell 5.1; no compiler-rootfs or Worker-binary blocker remained.
+- `OJPlatform-Start.bat` / `OJPlatform-Restart.bat` / `OJPlatform-Status.bat`: PASS on the current machine; final Start left the full runtime running.
+- Minimal Product -> Judge AC smoke: PASS (`COMPLETED_WITH_VERDICT`, verdict `AC`).
 
 ## NOT VERIFIED / BLOCKED
 
-- Product browser A+B was not rerun as part of this manager-only change; the existing Phase 3D real Product/browser evidence remains the applicable application-flow qualification. A fresh browser rerun is a follow-up if the local machine configuration changes.
+- Browser automation helper was unavailable in this environment (`failed to write kernel assets`); direct canonical Web HTTP probe returned `200 text/html` and the existing Phase 3D real Product/browser evidence remains the application-flow qualification.
 
 ## Architecture
 

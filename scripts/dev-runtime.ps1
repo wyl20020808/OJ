@@ -135,16 +135,19 @@ function Invoke-Wsl([string[]]$Arguments, [int]$TimeoutMs = 30000) { return ((In
 function Convert-WindowsPathToWsl([string]$Path) { if ($Path -match '^([A-Za-z]):\\(.*)$') { return "/mnt/$($Matches[1].ToLower())/$($Matches[2].Replace('\\','/'))" }; return $Path.Replace('\\','/') }
 function Get-SourceIdentity([string]$Root, [string[]]$Patterns) {
   $hash = [Security.Cryptography.SHA256]::Create()
+  $fileHash = [Security.Cryptography.SHA256]::Create()
   try {
     $entries = @(Get-ChildItem -LiteralPath $Root -Recurse -File | Where-Object { $Patterns -contains $_.Name -or ($Patterns -contains '*.go' -and $_.Extension -eq '.go') } | Sort-Object FullName)
     foreach ($entry in $entries) {
       $relative = $entry.FullName.Substring($Root.TrimEnd('\\').Length + 1).Replace('\\','/')
-      $line = "$relative`n$((Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256).Hash.ToLowerInvariant())`n"
+      $bytesForFile = [IO.File]::ReadAllBytes($entry.FullName)
+      $fileDigest = [BitConverter]::ToString($fileHash.ComputeHash($bytesForFile)) -replace '-',''
+      $line = "$relative`n$($fileDigest.ToLowerInvariant())`n"
       $bytes = [Text.Encoding]::UTF8.GetBytes($line); $hash.TransformBlock($bytes, 0, $bytes.Length, $bytes, 0) | Out-Null
     }
     $hash.TransformFinalBlock([byte[]]::new(0), 0, 0) | Out-Null
     return ([BitConverter]::ToString($hash.Hash) -replace '-','').ToLowerInvariant()
-  } finally { $hash.Dispose() }
+  } finally { $hash.Dispose(); $fileHash.Dispose() }
 }
 function Test-WslFile([string]$Path, [switch]$Executable, [switch]$Directory) { try { $test = if ($Executable) { 'test -x' } elseif ($Directory) { 'test -d' } else { 'test -f' }; Invoke-Wsl @('-d',$Config.WslDistro,'--','bash','-lc',"$test '$Path'") 10000 | Out-Null; return $true } catch { return $false } }
 function Ensure-SupervisorBinaries {
