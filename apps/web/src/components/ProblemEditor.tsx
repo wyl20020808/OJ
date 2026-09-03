@@ -427,6 +427,12 @@ export function ProblemEditor({
             出题工作台 / Problem {problem.slug || problem.id}
           </p>
           <h1>编辑题目：{statement.title || '未命名题目'}</h1>
+          <a
+            className="editor-back-link"
+            href={`/problems/${encodeURIComponent(problem.slug || problem.id)}`}
+          >
+            ← 返回题目
+          </a>
           <p className="editor-meta">
             <span className="draft-badge">DRAFT</span> 最后更新{' '}
             {new Date(draft.updatedAt).toLocaleString('zh-CN')}

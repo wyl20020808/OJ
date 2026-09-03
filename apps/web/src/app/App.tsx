@@ -185,20 +185,37 @@ function Link({
 
 type BreadcrumbItem = { label: string; to: string };
 const breadcrumbStorageKey = 'ojplatform:breadcrumb-history:v1';
+export function dedupeBreadcrumbHistory(
+  items: BreadcrumbItem[],
+  current?: BreadcrumbItem,
+): BreadcrumbItem[] {
+  const unique = items.reduce<BreadcrumbItem[]>((result, item) => {
+    const existing = result.findIndex((entry) => entry.to === item.to);
+    if (existing >= 0) result.splice(existing, 1);
+    result.push(item);
+    return result;
+  }, []);
+  if (current) {
+    const existing = unique.findIndex((entry) => entry.to === current.to);
+    if (existing >= 0) unique.splice(existing, 1);
+    unique.push(current);
+  }
+  return unique.slice(-5);
+}
 const breadcrumbHistory = (): BreadcrumbItem[] => {
   try {
     const value = JSON.parse(
       window.sessionStorage.getItem(breadcrumbStorageKey) ?? '[]',
     );
     return Array.isArray(value)
-      ? value
-          .filter(
+      ? dedupeBreadcrumbHistory(
+          value.filter(
             (item): item is BreadcrumbItem =>
               typeof item?.label === 'string' &&
               typeof item?.to === 'string' &&
               item.to.startsWith('/'),
-          )
-          .slice(-5)
+          ),
+        )
       : [];
   } catch {
     return [];
@@ -249,11 +266,7 @@ function Breadcrumbs({ current }: { current: Route }) {
   useEffect(() => {
     if (transient.includes(current.name)) return;
     setHistory((previous) => {
-      const last = previous.at(-1);
-      const next =
-        last?.to === currentItem.to
-          ? [...previous.slice(0, -1), currentItem]
-          : [...previous, currentItem].slice(-5);
+      const next = dedupeBreadcrumbHistory(previous, currentItem);
       try {
         window.sessionStorage.setItem(
           breadcrumbStorageKey,
@@ -1857,11 +1870,7 @@ function SubmissionForm({
   );
 }
 
-function SubmissionHistory({
-  api,
-}: {
-  api: ApiClient;
-}) {
+function SubmissionHistory({ api }: { api: ApiClient }) {
   const [items, setItems] = useState<EvaluationListItem[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState('');

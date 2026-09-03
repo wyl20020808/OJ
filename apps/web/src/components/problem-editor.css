@@ -12,6 +12,11 @@
   margin: 0.35rem 0;
   font-size: clamp(1.55rem, 3vw, 2.2rem);
 }
+.editor-back-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-weight: 700;
+}
 .editor-meta {
   color: var(--muted);
   font-size: 0.78rem;

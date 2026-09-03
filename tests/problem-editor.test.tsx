@@ -126,6 +126,10 @@ describe('ProblemEditor judge-data contract UI', () => {
     expect(
       await screen.findByRole('heading', { name: /编辑题目：Hello World/ }),
     ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '← 返回题目' })).toHaveAttribute(
+      'href',
+      '/problems/hello-world',
+    );
     expect(
       screen.getByRole('navigation', { name: '题目编辑分区' }),
     ).toHaveTextContent('题面评测数据评测设置');
