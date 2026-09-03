@@ -6,6 +6,7 @@ $OJPlatformRuntimeConfig = @{
   JudgeServicePort = 3100
   HostAgentPort = 3180
   SupervisorPort = 19092
+  ComposeProjectName = 'ojplatform-local'
   WslDistro = 'Ubuntu-24.04'
   SupervisorLinuxBinary = '/opt/ojplatform/bin/supervisor'
   SupervisorSystemdUnit = 'ojplatform-local-supervisor.service'

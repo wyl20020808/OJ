@@ -1,5 +1,22 @@
 # OJPlatform Local Runtime
 
+## Infrastructure recovery contract
+
+`scripts/dev-runtime.ps1 start` uses WSL-native Docker in `Ubuntu-24.04`.
+The Compose project is always `ojplatform-local`, independent of checkout path.
+Infrastructure services are reconciled individually: existing healthy containers
+with expected health, `ojplatform-local` network, published ports `55432`,
+`56379`, `59000`, and Windows host reachability are reused. Missing, stopped,
+unhealthy, or stale services are started; stale port/network/Compose metadata is
+recreated only for that service with `--force-recreate`.
+
+Start performs WSL, Docker daemon, and Compose preflight before waiting for
+ports. Failures retain container state and emit a specific code such as
+`DOCKER_DAEMON_UNAVAILABLE`, `PORT_MAPPING_MISSING`, `CONTAINER_UNHEALTHY`,
+`HOST_PORT_UNREACHABLE`, `NETWORK_CONFIGURATION_STALE`, or `COMPOSE_FAILURE`.
+No infrastructure cleanup runs when an application service later fails. Named
+PostgreSQL, Redis, and MinIO volumes are never removed by the Runtime Manager.
+
 启动：
 双击 `OJPlatform-Start.bat`
 

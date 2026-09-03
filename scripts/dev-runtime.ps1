@@ -24,6 +24,7 @@ $LogRoot = Join-Path $RuntimeRoot 'logs'
 
 $Config = @{
   WebPort = 5173; ApiPort = 3010; JudgeServicePort = 3100; HostAgentPort = 3180; SupervisorPort = 19092
+  ComposeProjectName = 'ojplatform-local'
   WslDistro = 'Ubuntu-24.04'; SupervisorLinuxBinary = '/opt/ojplatform/bin/supervisor'
   SupervisorSystemdUnit = 'ojplatform-local-supervisor.service'
   SupervisorProbeLinuxPath = '/opt/ojplatform/bin/trusted-probe'; SupervisorSandboxRoot = '/tmp/ojplatform-sandbox'
@@ -139,6 +140,85 @@ function Stop-Managed([string]$Name, $state) {
   Write-Host "$Name STOP"
 }
 function Invoke-Wsl([string[]]$Arguments, [int]$TimeoutMs = 30000) { return ((Invoke-ProcessCommand 'wsl.exe' $Arguments @{} $TimeoutMs) -replace "`0", '') }
+function Get-ComposePath { return '/mnt/' + ($ProjectRoot.Substring(0,1).ToLower()) + $ProjectRoot.Substring(2).Replace('\','/') + '/deploy/docker/compose.yml' }
+function Invoke-Compose([string[]]$Arguments, [int]$TimeoutMs = 120000) {
+  $compose = Get-ComposePath
+  return Invoke-Wsl (@('-d',$Config.WslDistro,'--','docker','compose','-p',$Config.ComposeProjectName,'-f',$compose) + $Arguments) $TimeoutMs
+}
+function Ensure-DockerPreflight($state) {
+  if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { throw 'WSL_PREFLIGHT_FAILED: wsl.exe is unavailable.' }
+  try {
+    $distros = Invoke-Wsl @('-l','-q') 15000
+    if ($distros -notmatch [regex]::Escape([string]$Config.WslDistro)) { throw "distro $($Config.WslDistro) not registered" }
+  } catch { throw "WSL_PREFLIGHT_FAILED: $($_.Exception.Message)" }
+  try { Invoke-Wsl @('-d',$Config.WslDistro,'--','true') 15000 | Out-Null } catch { throw "WSL_PREFLIGHT_FAILED: could not start $($Config.WslDistro): $($_.Exception.Message)" }
+  $marker = 'ojplatform-local-runtime-keepalive'
+  $keepalive = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'wsl.exe' -and $_.CommandLine -and $_.CommandLine -match [regex]::Escape($marker) } | Select-Object -First 1)
+  if (-not $keepalive) {
+    try {
+      $result = Start-ProcessDetached 'wsl.exe' @('-d',$Config.WslDistro,'--','bash','-lc',"exec -a $marker sleep infinity") @{} (Join-Path $LogRoot 'wsl-keepalive.log') (Join-Path $LogRoot 'wsl-keepalive.error.log')
+      $state.processes['wsl-keepalive'] = @{ pid=[int]$result.pid; port=0; health=''; startedAt=(Get-Date).ToUniversalTime().ToString('o'); command="wsl.exe -d $($Config.WslDistro) -- bash -lc exec -a $marker sleep infinity"; cwd=$ProjectRoot; signature=$marker; log=(Join-Path $LogRoot 'wsl-keepalive.log'); errorLog=(Join-Path $LogRoot 'wsl-keepalive.error.log'); sourceAuthority='OJPlatform-Local-Runtime-Manager-V1' }
+    } catch { throw "WSL_PREFLIGHT_FAILED: could not keep $($Config.WslDistro) alive: $($_.Exception.Message)" }
+  }
+  $dockerReady = $false
+  try { Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','info') 15000 | Out-Null; $dockerReady = $true } catch {}
+  if (-not $dockerReady) {
+    foreach ($startArgs in @(@('systemctl','start','docker'),@('sudo','-n','systemctl','start','docker'),@('service','docker','start'))) {
+      try { Invoke-Wsl (@('-d',$Config.WslDistro,'--') + $startArgs) 15000 | Out-Null; break } catch {}
+    }
+    try { Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','info') 15000 | Out-Null; $dockerReady = $true } catch {}
+  }
+  if (-not $dockerReady) { throw 'DOCKER_DAEMON_UNAVAILABLE: Docker daemon is not reachable in WSL.' }
+  try { Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','compose','version') 15000 | Out-Null } catch { throw "COMPOSE_UNAVAILABLE: Docker Compose is unavailable in $($Config.WslDistro)." }
+  Write-Host "Docker preflight PASS ($($Config.WslDistro), WSL-native Docker)"
+}
+function Get-ComposeInspection([string]$Service) {
+  $container = "$($Config.ComposeProjectName)-$Service-1"
+  try {
+    $format = '{"State":{"Status":"{{.State.Status}}","Health":{"Status":"{{if .State.Health}}{{.State.Health.Status}}{{end}}"}},"HostConfig":{"PortBindings":{{json .HostConfig.PortBindings}}},"NetworkSettings":{"Networks":{{if index .NetworkSettings.Networks "ojplatform-local"}}{"ojplatform-local":{}}{{else}}{}{{end}}},"Config":{"Labels":{"com.docker.compose.project":"{{index .Config.Labels "com.docker.compose.project"}}","com.docker.compose.service":"{{index .Config.Labels "com.docker.compose.service"}}"}}}'
+    return (ConvertFrom-Json -InputObject (Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','inspect','--format',$format,$container) 15000))
+  } catch { return $null }
+}
+function Get-ContainerLabel($Inspection, [string]$Name) {
+  if (-not $Inspection -or -not $Inspection.Config -or -not $Inspection.Config.Labels) { return $null }
+  $property = $Inspection.Config.Labels.PSObject.Properties | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
+  if ($property) { return [string]$property.Value }
+  return $null
+}
+function Test-ContainerPortMapping($Inspection, [string]$ContainerPort, [int]$HostPort) {
+  if (-not $Inspection -or -not $Inspection.HostConfig -or -not $Inspection.HostConfig.PortBindings) { return $false }
+  $property = $Inspection.HostConfig.PortBindings.PSObject.Properties | Where-Object { $_.Name -eq $ContainerPort } | Select-Object -First 1
+  if (-not $property -or -not $property.Value) { return $false }
+  return @($property.Value | Where-Object { [int]$_.HostPort -eq $HostPort }).Count -gt 0
+}
+function Test-ContainerNetwork($Inspection, [string]$NetworkName) {
+  if (-not $Inspection -or -not $Inspection.NetworkSettings -or -not $Inspection.NetworkSettings.Networks) { return $false }
+  return @($Inspection.NetworkSettings.Networks.PSObject.Properties | Where-Object { $_.Name -eq $NetworkName }).Count -gt 0
+}
+function Get-InfrastructureStatus([string]$Service, [string]$ContainerPort, [int]$HostPort) {
+  $inspection = Get-ComposeInspection $Service
+  $result = [ordered]@{ service=$Service; container="$($Config.ComposeProjectName)-$Service-1"; exists=[bool]$inspection; running=$false; healthy=$false; mapping=$false; network=$false; hostReachable=$false; code='CONTAINER_DOWN'; detail='' ; inspection=$inspection }
+  if (-not $inspection) { $result.detail = 'expected container is missing'; return [pscustomobject]$result }
+  $result.running = [string]$inspection.State.Status -eq 'running'
+  $result.healthy = $result.running -and $inspection.State.Health -and ([string]$inspection.State.Health.Status -eq 'healthy')
+  $result.mapping = Test-ContainerPortMapping $inspection $ContainerPort $HostPort
+  $result.network = Test-ContainerNetwork $inspection $Config.ComposeProjectName
+  $projectLabel = Get-ContainerLabel $inspection 'com.docker.compose.project'
+  $serviceLabel = Get-ContainerLabel $inspection 'com.docker.compose.service'
+  if ($projectLabel -ne [string]$Config.ComposeProjectName -or $serviceLabel -ne $Service) { $result.code='NETWORK_CONFIGURATION_STALE'; $result.detail='Compose project/service labels do not match canonical identity'; return [pscustomobject]$result }
+  if (-not $result.running) { $result.code='CONTAINER_DOWN'; $result.detail="container state=$($inspection.State.Status)"; return [pscustomobject]$result }
+  if (-not $result.healthy) { $result.code='CONTAINER_UNHEALTHY'; $result.detail="health=$([string]$inspection.State.Health.Status)"; return [pscustomobject]$result }
+  if (-not $result.mapping) { $result.code='PORT_MAPPING_MISSING'; $result.detail="expected host port $HostPort -> $ContainerPort"; return [pscustomobject]$result }
+  if (-not $result.network) { $result.code='NETWORK_CONFIGURATION_STALE'; $result.detail="expected network $($Config.ComposeProjectName)"; return [pscustomobject]$result }
+  $result.hostReachable = Test-TcpPort $HostPort
+  if (-not $result.hostReachable) { $result.code='HOST_PORT_UNREACHABLE'; $result.detail="127.0.0.1:$HostPort is not reachable"; return [pscustomobject]$result }
+  $result.code='READY'; $result.detail='container, health, mapping, network, and host reachability valid'; return [pscustomobject]$result
+}
+function Write-InfrastructureDiagnostics($Statuses) {
+  $lines = @("$(Get-Date -Format o) infrastructure reconciliation")
+  foreach ($status in $Statuses) { $lines += "$($status.service): $($status.code) - $($status.detail)"; Write-Host "Infrastructure $($status.service): $($status.code) ($($status.detail))" }
+  Ensure-RuntimeFolders; Add-Content -LiteralPath (Join-Path $LogRoot 'infrastructure.log') -Value $lines
+}
 function Convert-WindowsPathToWsl([string]$Path) { if ($Path -match '^([A-Za-z]):\\(.*)$') { return "/mnt/$($Matches[1].ToLower())/$($Matches[2].Replace('\\','/'))" }; return $Path.Replace('\\','/') }
 function Get-SourceIdentity([string]$Root, [string[]]$Patterns) {
   $hash = [Security.Cryptography.SHA256]::Create()
@@ -211,7 +291,47 @@ function Repair-SupervisorUserManager {
   $state = (Invoke-Wsl @('-d',$Config.WslDistro,'--user','oj-sandbox','--','env','XDG_RUNTIME_DIR=/run/user/1000','DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus','systemctl','--user','is-system-running') 10000).Trim()
   if ($state -ne 'running') { throw "Supervisor systemd user manager is unavailable: $state" }
 }
-function Ensure-Infrastructure($state) { $started = Get-Date; if ((Test-TcpPort 55432) -and (Test-TcpPort 56379) -and (Test-TcpPort 59000)) { Write-Host 'Infrastructure REUSE (reachable)'; $state.timings.infra = 0; return }; $compose = '/mnt/' + ($ProjectRoot.Substring(0,1).ToLower()) + $ProjectRoot.Substring(2).Replace('\','/') + '/deploy/docker/compose.yml'; Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','compose','-f',$compose,'up','-d') 120000 | Out-Null; $deadline = (Get-Date).AddSeconds(90); do { if ((Test-TcpPort 55432) -and (Test-TcpPort 56379) -and (Test-TcpPort 59000)) { $state.infrastructure = @{ managed = $true; compose = $compose; startedAt = (Get-Date).ToUniversalTime().ToString('o') }; $state.timings.infra = [int]((Get-Date)-$started).TotalMilliseconds; Save-State $state; Write-Host "Infrastructure START ($($state.timings.infra) ms)"; return }; Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline); throw 'Infrastructure did not become reachable within 90 seconds.' }
+function Ensure-Infrastructure($state) {
+  $started = Get-Date
+  Ensure-DockerPreflight $state
+  $compose = Get-ComposePath
+  $services = @(
+    @{ name='postgres'; containerPort='5432/tcp'; hostPort=55432 },
+    @{ name='redis'; containerPort='6379/tcp'; hostPort=56379 },
+    @{ name='minio'; containerPort='9000/tcp'; hostPort=59000 }
+  )
+  $statuses = @($services | ForEach-Object { Get-InfrastructureStatus $_.name $_.containerPort $_.hostPort })
+  Write-InfrastructureDiagnostics $statuses
+  if (@($statuses | Where-Object { $_.code -eq 'READY' }).Count -eq $services.Count) {
+    $state.infrastructure = @{ managed=$true; project=$Config.ComposeProjectName; compose=$compose; startedAt=(Get-Date).ToUniversalTime().ToString('o') }
+    $state.timings.infra = 0; Save-State $state; Write-Host 'Infrastructure REUSE (healthy, canonical project/mapping/network)'; return
+  }
+  foreach ($status in $statuses | Where-Object { $_.code -ne 'READY' }) {
+    $recreate = $status.exists -and ((-not $status.mapping) -or (-not $status.network) -or ((Get-ContainerLabel $status.inspection 'com.docker.compose.project') -ne [string]$Config.ComposeProjectName) -or ((Get-ContainerLabel $status.inspection 'com.docker.compose.service') -ne $status.service))
+    try {
+      if ($recreate) { Write-Host "Infrastructure $($status.service) RECREATE (stale configuration)"; Invoke-Compose @('up','-d','--force-recreate',$status.service) 120000 | Out-Null }
+      else { Write-Host "Infrastructure $($status.service) START/REUSE"; Invoke-Compose @('up','-d',$status.service) 120000 | Out-Null }
+    } catch {
+      $message = $_.Exception.Message
+      if ($message -match 'address already in use' -and $status.exists -and -not $status.running) {
+        try { Write-Host "Infrastructure $($status.service) REMOVE stopped container (port state recovery)"; Invoke-Compose @('rm','-sf',$status.service) 30000 | Out-Null; Invoke-Compose @('up','-d',$status.service) 120000 | Out-Null }
+        catch { throw "COMPOSE_FAILURE: $($status.service): $($_.Exception.Message)" }
+      } else { throw "COMPOSE_FAILURE: $($status.service): $message" }
+    }
+  }
+  $deadline = (Get-Date).AddSeconds(90)
+  do {
+    $statuses = @($services | ForEach-Object { Get-InfrastructureStatus $_.name $_.containerPort $_.hostPort })
+    if (@($statuses | Where-Object { $_.code -eq 'READY' }).Count -eq $services.Count) {
+      $state.infrastructure = @{ managed=$true; project=$Config.ComposeProjectName; compose=$compose; startedAt=(Get-Date).ToUniversalTime().ToString('o') }
+      $state.timings.infra = [int]((Get-Date)-$started).TotalMilliseconds; Save-State $state; Write-Host "Infrastructure START ($($state.timings.infra) ms)"; return
+    }
+    Start-Sleep -Milliseconds 750
+  } while ((Get-Date) -lt $deadline)
+  Write-InfrastructureDiagnostics $statuses
+  $first = $statuses | Where-Object { $_.code -ne 'READY' } | Select-Object -First 1
+  throw "Infrastructure readiness failed: $($first.code) [$($first.service)] $($first.detail)"
+}
 function Ensure-JudgeDatabase {
   Write-Host 'Judge DB bootstrap: checking'
   $password = if ($Config.JudgeDatabasePassword) { [string]$Config.JudgeDatabasePassword } else { [string]$script:Secrets.judgeDatabasePassword }
@@ -244,13 +364,13 @@ function Start-Supervisor($state) {
   Wait-Http "$($Config.SupervisorOrigin)/v1/health" 60 | Out-Null
   $state.timings.supervisor=[int]((Get-Date)-$started).TotalMilliseconds; Save-State $state
 }
-function Start-HostAgent($state) { $template=@{templateId='cpp20-gcc-13-v1';displayName='Local C++20 GCC 13 (trusted)';executable=$Config.WorkerBinary;args=@();env=@{REDIS_URL=$Config.RedisUrl;QUEUE_PREFIX=$Config.JudgeRedisPrefix;REAL_SUBMISSION_EXECUTION='true';JUDGE_SERVICE_URL=$Config.JudgeOrigin;JUDGE_NODE_TOKEN=$script:Secrets.judgeNodeToken;OJPLATFORM_SANDBOX_SUPERVISOR_URL=$Config.SupervisorOrigin;MAX_CONCURRENCY=[string]$Config.WorkerMaxConcurrency;HEALTH_ADDR="127.0.0.1:$($Config.WorkerHealthPort)"};maxConcurrentJobs=[int]$Config.WorkerMaxConcurrency;cpuUnits=[double]$Config.HostCpuUnits;memoryMb=[double]$Config.HostMemoryMb;enabled=$true}; $env=@{JUDGE_HOST_AGENT_TOKEN=$script:Secrets.hostAgentToken;JUDGE_HOST_AGENT_PORT=[string]$Config.HostAgentPort;JUDGE_HOST_AGENT_STATE_PATH=(Join-Path $RuntimeRoot 'host-agent-state.json');JUDGE_HOST_AGENT_TEMPLATES_JSON=('[' + ($template|ConvertTo-Json -Compress) + ']');JUDGE_HOST_CPU_UNITS=[string]$Config.HostCpuUnits;JUDGE_HOST_MEMORY_MB=[string]$Config.HostMemoryMb}; Start-Managed 'host-agent' 'node' @('--import','tsx','apps/judge-host-agent/src/server.ts') $env $Config.HostAgentPort "$($Config.HostOrigin)/health" 'apps/judge-host-agent/src/server.ts' $state @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken} }
+function Start-HostAgent($state) { $template=@{templateId='cpp20-gcc-13-v1';displayName='Local C++20 GCC 13 (trusted)';executable=$Config.WorkerBinary;args=@();env=@{REDIS_URL=$Config.RedisUrl;QUEUE_PREFIX=$Config.JudgeRedisPrefix;REAL_SUBMISSION_EXECUTION='true';JUDGE_SERVICE_URL=$Config.JudgeOrigin;JUDGE_NODE_TOKEN=$script:Secrets.judgeNodeToken;OJPLATFORM_SANDBOX_SUPERVISOR_URL=$Config.SupervisorOrigin;MAX_CONCURRENCY=[string]$Config.WorkerMaxConcurrency;HEALTH_ADDR="127.0.0.1:$($Config.WorkerHealthPort)"};maxConcurrentJobs=[int]$Config.WorkerMaxConcurrency;cpuUnits=[double]$Config.HostCpuUnits;memoryMb=[double]$Config.HostMemoryMb;enabled=$true}; $templatesJson = ConvertTo-Json -InputObject @($template) -Compress; $env=@{JUDGE_HOST_AGENT_TOKEN=$script:Secrets.hostAgentToken;JUDGE_HOST_AGENT_PORT=[string]$Config.HostAgentPort;JUDGE_HOST_AGENT_STATE_PATH=(Join-Path $RuntimeRoot 'host-agent-state.json');JUDGE_HOST_AGENT_TEMPLATES_JSON=$templatesJson;JUDGE_HOST_CPU_UNITS=[string]$Config.HostCpuUnits;JUDGE_HOST_MEMORY_MB=[string]$Config.HostMemoryMb}; Start-Managed 'host-agent' 'node' @('--import','tsx','apps/judge-host-agent/src/server.ts') $env $Config.HostAgentPort "$($Config.HostOrigin)/health" 'apps/judge-host-agent/src/server.ts' $state @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken} }
 function Start-JudgeService($state) { $env=@{JUDGE_SERVICE_HOST='127.0.0.1';JUDGE_SERVICE_PORT=[string]$Config.JudgeServicePort;JUDGE_DATABASE_URL=(Get-JudgeDatabaseUrl);JUDGE_REDIS_URL=$Config.RedisUrl;JUDGE_REDIS_PREFIX=$Config.JudgeRedisPrefix;JUDGE_SERVICE_TOKEN=$script:Secrets.judgeServiceToken;JUDGE_NODE_TOKEN=$script:Secrets.judgeNodeToken;JUDGE_HOST_AGENT_URL=$Config.HostOrigin;JUDGE_HOST_AGENT_TOKEN=$script:Secrets.hostAgentToken;JUDGE_AUTOSCALER_INTERVAL_MS='5000'}; Start-Managed 'judge-service' 'node' @('--import','tsx','apps/judge-service/src/server.ts') $env $Config.JudgeServicePort "$($Config.JudgeOrigin)/health" 'apps/judge-service/src/server.ts' $state }
 function Ensure-Worker($state) { $started=Get-Date; $headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken}; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers; if(-not $nodes){throw 'Judge Service node registry is unavailable.'}; $compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.heartbeatAgeMs -lt 15000}); if($compatible.Count -gt 0){Write-Host "worker REUSE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;return}; $candidate=@($nodes.body.items|Where-Object{$_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.desiredState -ne 'ONLINE'}|Sort-Object heartbeatAgeMs|Select-Object -First 1); if($candidate){ try { $body=@{templateId='cpp20-gcc-13-v1'}|ConvertTo-Json; Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes/$([uri]::EscapeDataString($candidate.nodeId))/start" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -UseBasicParsing -TimeoutSec 15|Out-Null; Write-Host "worker START ($($candidate.nodeId))"; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers } catch { Write-Warning "Worker recovery start was rejected: $($_.Exception.Message)" } }; $compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.heartbeatAgeMs -lt 15000}); if($compatible.Count -gt 0){Write-Host "worker REUSE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;return}; $body=@{templateId='cpp20-gcc-13-v1';count=1}|ConvertTo-Json; Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -UseBasicParsing -TimeoutSec 10|Out-Null; $deadline=(Get-Date).AddSeconds(60); do{Start-Sleep -Milliseconds 500;$nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers;$compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.heartbeatAgeMs -lt 15000});if($compatible.Count -gt 0){Write-Host "worker ONLINE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;Save-State $state;return}}while((Get-Date)-lt $deadline);throw 'No healthy REAL_SANDBOXED_EXECUTION worker became ONLINE within 60 seconds.' }
 function Start-Api($state) { $env=@{PORT=[string]$Config.ApiPort;HOST='127.0.0.1';OJPLATFORM_INFRA='true';REAL_SUBMISSION_EXECUTION='true';OJPLATFORM_CORS_ORIGINS=$Config.WebOrigin;DATABASE_URL=$Config.ProductDatabaseUrl;REDIS_URL=$Config.RedisUrl;S3_ENDPOINT=$Config.MinioEndpoint;S3_REGION='us-east-1';S3_ACCESS_KEY='ojplatform';S3_SECRET_KEY='ojplatform_dev_secret';S3_BUCKET='ojplatform-dev';JUDGE_SERVICE_URL=$Config.JudgeOrigin;JUDGE_SERVICE_TOKEN=$script:Secrets.judgeServiceToken;OJPLATFORM_SANDBOX_SUPERVISOR_URL=$Config.SupervisorOrigin};Start-Managed 'api' 'node' @('--import','tsx','apps/api/src/server.ts') $env $Config.ApiPort "$($Config.ApiOrigin)/health" 'apps/api/src/server.ts' $state }
 function Start-Web($state) { Start-Managed 'web' 'pnpm.cmd' @('--filter','@ojplatform/web','dev','--host','127.0.0.1','--port',[string]$Config.WebPort) @{OJPLATFORM_API_PORT=[string]$Config.ApiPort} $Config.WebPort "$($Config.WebOrigin)/" '@ojplatform/web' $state }
 function Stop-WorkerThroughControlPlane($state) { if(-not(Get-HttpJson "$($Config.JudgeOrigin)/health")){return};$headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken};$nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers;foreach($node in @($nodes.body.items|Where-Object{$_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.desiredState -ne 'OFFLINE'})){try{Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes/$([uri]::EscapeDataString($node.nodeId))/stop" -Method Post -Headers $headers -ContentType 'application/json' -Body '{}' -UseBasicParsing -TimeoutSec 10|Out-Null}catch{Write-Warning "Worker $($node.nodeId) drain/stop was rejected: $($_.Exception.Message)"}} }
-function Stop-Infrastructure($state) { if($state.infrastructure.managed -and $state.infrastructure.compose){Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','compose','-f',$state.infrastructure.compose,'stop') 60000|Out-Null;$state.infrastructure.managed=$false;Save-State $state;Write-Host 'Infrastructure STOP'} }
+function Stop-Infrastructure($state) { if($state.infrastructure.managed -and $state.infrastructure.compose){Invoke-Compose @('stop') 60000|Out-Null;$keepalive=$state.processes['wsl-keepalive'];if($keepalive -and (Test-OwnedProcess $keepalive)){try{Stop-Process -Id ([int]$keepalive.pid) -Force -ErrorAction SilentlyContinue}catch{}};$state.processes.Remove('wsl-keepalive');$state.infrastructure.managed=$false;Save-State $state;Write-Host 'Infrastructure STOP'} }
 function Test-HttpOk([string]$Url) { try { return ([int](Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3).StatusCode) -eq 200 } catch { return $false } }
 function Test-DatabaseConnection([string]$Url) { if (-not $Url) { return $false }; try { $probe = "import pg from 'pg'; const c=new pg.Client({connectionString:process.env.RUNTIME_DATABASE_URL,connectionTimeoutMillis:3000}); await c.connect(); await c.query('select 1'); await c.end();"; Invoke-ProcessCommand 'node' @('--input-type=module','-e',$probe) @{ RUNTIME_DATABASE_URL = $Url } 10000 | Out-Null; return $true } catch { return $false } }
 function Show-Status($state) {
