@@ -2,6 +2,10 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type {
   AuthContext,
   ProblemRevisionResolver,
+  GlobalEvaluationListItem,
+  GlobalSubmissionListQuery,
+  SubmissionEvaluationStatus,
+  SubmissionVerdict,
   Submission,
   SubmissionAuthorizationPolicy,
   SubmissionJudgeDataResolver,
@@ -34,6 +38,9 @@ export type SubmissionModuleContext = {
       ReturnType<NonNullable<SubmissionRepository['listEvaluationHistory']>>
     >
   >;
+  projectGlobalListItem?: (
+    submission: Submission,
+  ) => Promise<Pick<GlobalEvaluationListItem, 'problem' | 'submitter'>>;
 };
 const error = (
   reply: FastifyReply,
@@ -54,8 +61,9 @@ export async function registerSubmissionModule(
   app: FastifyInstance,
   context: SubmissionModuleContext,
 ) {
+  const repository = context.repository ?? new InMemorySubmissionRepository();
   const service = new SubmissionService(
-    context.repository ?? new InMemorySubmissionRepository(),
+    repository,
     context.authorizationPolicy,
     context.problemResolver,
     context.judgeDataResolver,
@@ -158,6 +166,103 @@ export async function registerSubmissionModule(
   app.get('/api/submissions', async (request, reply) =>
     listRoute(service, request, reply, await auth(request), project),
   );
+  app.get('/api/evaluations', async (request, reply) => {
+    const query = request.query as Record<string, unknown>;
+    const limit = Number(query.limit ?? 20);
+    const status =
+      typeof query.status === 'string' ? query.status.toUpperCase() : undefined;
+    const verdict =
+      typeof query.verdict === 'string'
+        ? query.verdict.toUpperCase()
+        : undefined;
+    const allowedStatuses = new Set([
+      'QUEUED',
+      'RUNNING',
+      'COMPLETED_WITH_VERDICT',
+      'CANCELLED',
+      'INFRA_FAILED',
+      'NO_VERDICT',
+      'INCOMPLETE',
+      'REJUDGE_PENDING',
+      'REJUDGING',
+    ]);
+    const allowedVerdicts = new Set(['AC', 'WA', 'CE', 'RE', 'TLE', 'MLE']);
+    const stringFilter = (value: unknown) =>
+      typeof value === 'string' && value.trim() ? value.trim() : undefined;
+    if (
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > 100 ||
+      (status && !allowedStatuses.has(status)) ||
+      (verdict && !allowedVerdicts.has(verdict))
+    )
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid query');
+    try {
+      const listQuery: GlobalSubmissionListQuery = { limit };
+      const cursor = stringFilter(query.cursor);
+      const problemId = stringFilter(query.problemId);
+      const submitterId = stringFilter(query.submitterId);
+      const languageId = stringFilter(query.language);
+      if (cursor) listQuery.cursor = cursor;
+      if (problemId) listQuery.problemId = problemId;
+      if (submitterId) listQuery.ownerUserId = submitterId;
+      if (languageId) listQuery.languageId = languageId;
+      if (status)
+        listQuery.evaluationStatus = status as SubmissionEvaluationStatus;
+      if (verdict) listQuery.verdict = verdict as SubmissionVerdict;
+      const result = await service.listGlobal(listQuery, await auth(request));
+      const items = await Promise.all(
+        result.items.map(async (submission) => {
+          const [metadata, evaluation] = await Promise.all([
+            context.projectGlobalListItem
+              ? context.projectGlobalListItem(submission)
+              : Promise.resolve({
+                  problem: {
+                    id: submission.problemId,
+                    slug: submission.problemId,
+                    title: 'Unavailable',
+                  },
+                  submitter: {
+                    id: submission.ownerUserId,
+                    displayName: 'User',
+                  },
+                }),
+            repository.getEvaluation?.(submission.id),
+          ]);
+          return {
+            submissionId: submission.id,
+            ...metadata,
+            languageProfileId: submission.languageId,
+            status: evaluation?.status ?? submission.status,
+            ...(evaluation?.verdict ? { verdict: evaluation.verdict } : {}),
+            createdAt: submission.createdAt,
+            ...(evaluation?.completedAt
+              ? { completedAt: evaluation.completedAt }
+              : {}),
+            ...(evaluation?.detail?.totalTimeMs !== undefined
+              ? { totalTimeMs: evaluation.detail.totalTimeMs }
+              : {}),
+            ...(evaluation?.detail?.peakMemoryBytes !== undefined
+              ? { peakMemoryBytes: evaluation.detail.peakMemoryBytes }
+              : {}),
+          } satisfies GlobalEvaluationListItem;
+        }),
+      );
+      return reply.send({ items, nextCursor: result.nextCursor ?? null });
+    } catch (e) {
+      if (e instanceof Error && e.message === 'FORBIDDEN')
+        return error(
+          reply,
+          request,
+          403,
+          'FORBIDDEN',
+          'Evaluation list is forbidden',
+        );
+      if (e instanceof Error && e.message === 'VALIDATION_ERROR')
+        return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid query');
+      throw e;
+    }
+  });
   app.get('/api/submissions/:id', async (request, reply) => {
     try {
       return reply.send(

@@ -23,6 +23,12 @@ export type Problem = {
   updatedAt: string;
   currentRevisionId?: string;
 };
+export type ProblemCapabilities = {
+  canEdit: boolean;
+};
+export type ProblemProjection = Problem & {
+  capabilities: ProblemCapabilities;
+};
 export type ProblemRevision = Omit<Problem, 'currentRevisionId'> & {
   revisionId: string;
   revisionNumber: number;

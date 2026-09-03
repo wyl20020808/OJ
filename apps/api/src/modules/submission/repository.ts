@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   Submission,
   SubmissionCreateInput,
+  GlobalSubmissionListQuery,
   SubmissionListQuery,
   SubmissionEvaluation,
   SubmissionEvaluationDetail,
@@ -28,6 +29,9 @@ export interface SubmissionRepository {
   get(id: string): Promise<Submission | undefined>;
   list(
     query: SubmissionListQuery,
+  ): Promise<{ items: Submission[]; nextCursor?: string }>;
+  listGlobal(
+    query: GlobalSubmissionListQuery,
   ): Promise<{ items: Submission[]; nextCursor?: string }>;
   getEvaluation?(
     submissionId: string,
@@ -278,6 +282,38 @@ export class InMemorySubmissionRepository implements SubmissionRepository {
         : {}),
     };
   }
+  async listGlobal(query: GlobalSubmissionListQuery) {
+    const cursor = decodeGlobalCursor(query.cursor);
+    const rows = [...this.rows.values()]
+      .filter((row) => {
+        const evaluation = this.evaluations
+          .get(row.id)
+          ?.find((item) => item.current);
+        return (
+          (!query.ownerUserId || row.ownerUserId === query.ownerUserId) &&
+          (!query.problemId || row.problemId === query.problemId) &&
+          (!query.languageId || row.languageId === query.languageId) &&
+          (!query.evaluationStatus ||
+            evaluation?.status === query.evaluationStatus) &&
+          (!query.verdict || evaluation?.verdict === query.verdict) &&
+          (!cursor ||
+            row.createdAt < cursor.createdAt ||
+            (row.createdAt === cursor.createdAt && row.id < cursor.id))
+        );
+      })
+      .sort(
+        (a, b) =>
+          b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+      );
+    const page = rows.slice(0, query.limit + 1);
+    const items = page.slice(0, query.limit).map((row) => ({ ...row }));
+    return {
+      items,
+      ...(page.length > query.limit && items.length
+        ? { nextCursor: encodeGlobalCursor(items.at(-1)!) }
+        : {}),
+    };
+  }
 }
 
 function intakeStatus(
@@ -345,6 +381,51 @@ export class PostgresSubmissionRepository implements SubmissionRepository {
       items,
       ...(items.length === query.limit
         ? { nextCursor: encodeCursor(offset + items.length) }
+        : {}),
+    };
+  }
+  async listGlobal(query: GlobalSubmissionListQuery) {
+    const cursor = decodeGlobalCursor(query.cursor);
+    const params: unknown[] = [];
+    const clauses: string[] = [];
+    if (query.ownerUserId) {
+      params.push(query.ownerUserId);
+      clauses.push(`s.owner_user_id=$${params.length}`);
+    }
+    if (query.problemId) {
+      params.push(query.problemId);
+      clauses.push(`s.problem_id=$${params.length}`);
+    }
+    if (query.languageId) {
+      params.push(query.languageId);
+      clauses.push(`s.language_id=$${params.length}`);
+    }
+    if (query.evaluationStatus) {
+      params.push(query.evaluationStatus);
+      clauses.push(`e.status=$${params.length}`);
+    }
+    if (query.verdict) {
+      params.push(query.verdict);
+      clauses.push(`e.verdict=$${params.length}`);
+    }
+    if (cursor) {
+      params.push(cursor.createdAt, cursor.id);
+      clauses.push(
+        `(s.created_at < $${params.length - 1} OR (s.created_at = $${params.length - 1} AND s.id < $${params.length}))`,
+      );
+    }
+    params.push(query.limit + 1);
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    const result = await this.pool.query(
+      `SELECT s.* FROM submissions s LEFT JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=true ${where} ORDER BY s.created_at DESC,s.id DESC LIMIT $${params.length}`,
+      params,
+    );
+    const page = result.rows.map(mapRow);
+    const items = page.slice(0, query.limit);
+    return {
+      items,
+      ...(page.length > query.limit && items.length
+        ? { nextCursor: encodeGlobalCursor(items.at(-1)!) }
         : {}),
     };
   }
@@ -533,6 +614,30 @@ function decodeCursor(cursor?: string) {
   if (!cursor) return 0;
   const value = Number(Buffer.from(cursor, 'base64url').toString('utf8'));
   return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+function encodeGlobalCursor(submission: Submission) {
+  return Buffer.from(
+    JSON.stringify({ createdAt: submission.createdAt, id: submission.id }),
+    'utf8',
+  ).toString('base64url');
+}
+function decodeGlobalCursor(cursor?: string) {
+  if (!cursor) return undefined;
+  try {
+    const value: unknown = JSON.parse(
+      Buffer.from(cursor, 'base64url').toString('utf8'),
+    );
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      typeof (value as { createdAt?: unknown }).createdAt !== 'string' ||
+      typeof (value as { id?: unknown }).id !== 'string'
+    )
+      throw new Error('INVALID_CURSOR');
+    return value as { createdAt: string; id: string };
+  } catch {
+    throw new Error('INVALID_CURSOR');
+  }
 }
 function mapRow(row: Record<string, unknown>): Submission {
   return {

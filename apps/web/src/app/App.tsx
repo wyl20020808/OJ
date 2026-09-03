@@ -14,6 +14,7 @@ import {
   type ApiClient,
   type AuthenticatedUser,
   type BackendContest,
+  type EvaluationListItem,
   type Language,
   type Problem,
   type ProfileContest,
@@ -1490,15 +1491,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     </section>
   );
 }
-function ProblemDetail({
-  api,
-  id,
-  user,
-}: {
-  api: ApiClient;
-  id: string;
-  user: AuthenticatedUser | null;
-}) {
+function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
@@ -1528,7 +1521,7 @@ function ProblemDetail({
       <State title="题目暂不可用" text={error.message} />
     );
   if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
-  const canEdit = problem.authorId === user?.id;
+  const canEdit = problem.capabilities?.canEdit === true;
   return (
     <article className="problem-detail-v4">
       <div className="problem-main">
@@ -1773,12 +1766,10 @@ function SubmissionForm({
 
 function SubmissionHistory({
   api,
-  user,
 }: {
   api: ApiClient;
-  user: AuthenticatedUser | null;
 }) {
-  const [items, setItems] = useState<Submission[] | null>(null);
+  const [items, setItems] = useState<EvaluationListItem[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [cursor, setCursor] = useState<string | undefined>();
@@ -1788,7 +1779,7 @@ function SubmissionHistory({
     setItems(null);
     setError('');
     void api
-      .submissions(cursor)
+      .evaluations(cursor)
       .then((d) => {
         if (version !== requestVersion.current) return;
         setItems(d.items);
@@ -1806,14 +1797,6 @@ function SubmissionHistory({
     },
     [],
   );
-  if (!user)
-    return (
-      <State
-        title="请先登录"
-        text="登录后才能查看评测列表。"
-        action={<Link to="/login">登录</Link>}
-      />
-    );
   if (error)
     return (
       <State
@@ -1823,7 +1806,7 @@ function SubmissionHistory({
       />
     );
   if (!items)
-    return <State title="正在加载评测列表" text="正在获取你的评测记录…" />;
+    return <State title="正在加载评测列表" text="正在获取全站评测记录…" />;
   return (
     <section>
       <div className="page-heading">
@@ -1833,27 +1816,37 @@ function SubmissionHistory({
         </div>
       </div>
       {items.length === 0 ? (
-        <State title="暂无评测记录" text="你的提交评测会显示在这里。" />
+        <State title="暂无评测记录" text="新的提交评测会显示在这里。" />
       ) : (
         <div className="evaluation-list" role="table" aria-label="评测列表">
           <div className="evaluation-list-header" role="row">
             <span role="columnheader">评测 ID</span>
             <span role="columnheader">题目</span>
+            <span role="columnheader">提交者</span>
             <span role="columnheader">语言</span>
             <span role="columnheader">状态</span>
+            <span role="columnheader">资源</span>
             <span role="columnheader">时间</span>
           </div>
           {items.map((s) => (
             <Link
-              key={s.id}
-              to={`/submissions/${encodeURIComponent(s.id)}`}
+              key={s.submissionId}
+              to={`/submissions/${encodeURIComponent(s.submissionId)}`}
               className="evaluation-row"
-              ariaLabel={`查看评测 ${s.id}`}
+              ariaLabel={`查看评测 ${s.submissionId}`}
             >
-              <span>#{s.id}</span>
-              <span>{s.problemId}</span>
-              <span>{s.languageId}</span>
-              <JudgeStatus submission={s} />
+              <span>#{s.submissionId}</span>
+              <span>
+                <strong>{s.problem.title}</strong>
+                <small>{s.problem.slug}</small>
+              </span>
+              <span>{s.submitter.displayName}</span>
+              <span>{s.languageProfileId}</span>
+              <strong className="judge-status">{s.verdict ?? s.status}</strong>
+              <span>
+                {formatMilliseconds(s.totalTimeMs)} /{' '}
+                {formatBytes(s.peakMemoryBytes)}
+              </span>
               <time>{formatDate(s.createdAt)}</time>
             </Link>
           ))}
@@ -2476,6 +2469,7 @@ export function App() {
   const [authState, setAuthState] = useState<
     'loading' | 'authenticated' | 'unauthenticated' | 'unavailable'
   >('loading');
+  const [canViewJudgeAdmin, setCanViewJudgeAdmin] = useState(false);
   useEffect(() => {
     const h = () => setCurrent(route());
     window.addEventListener('popstate', h);
@@ -2484,9 +2478,14 @@ export function App() {
       .then((value) => {
         setUser(value);
         setAuthState('authenticated');
+        void api
+          .judgeAdminCapabilities()
+          .then((capability) => setCanViewJudgeAdmin(capability.canView))
+          .catch(() => setCanViewJudgeAdmin(false));
       })
       .catch((error) => {
         setUser(null);
+        setCanViewJudgeAdmin(false);
         setAuthState(
           error instanceof ApiError && error.status === 401
             ? 'unauthenticated'
@@ -2507,6 +2506,10 @@ export function App() {
         onUser={(value) => {
           setUser(value);
           setAuthState('authenticated');
+          void api
+            .judgeAdminCapabilities()
+            .then((capability) => setCanViewJudgeAdmin(capability.canView))
+            .catch(() => setCanViewJudgeAdmin(false));
         }}
         onNavigate={navigate}
       />
@@ -2568,7 +2571,7 @@ export function App() {
     ) : current.name === 'submit' ? (
       <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
     ) : current.name === 'submissions' ? (
-      <SubmissionHistory api={api} user={user} />
+      <SubmissionHistory api={api} />
     ) : current.name === 'submission' ? (
       user && current.id ? (
         <SubmissionDetail api={api} id={current.id} user={user} />
@@ -2636,7 +2639,7 @@ export function App() {
         />
       )
     ) : current.name === 'problem' ? (
-      <ProblemDetail api={api} id={current.id ?? ''} user={user} />
+      <ProblemDetail api={api} id={current.id ?? ''} />
     ) : (
       <NotFound />
     );
@@ -2708,6 +2711,14 @@ export function App() {
           >
             评测列表
           </Link>
+          {canViewJudgeAdmin && (
+            <Link
+              to="/admin/judge/nodes"
+              className={current.name.startsWith('judge-') ? 'active' : ''}
+            >
+              管理
+            </Link>
+          )}
           <Link
             to="/messages"
             className={current.name === 'messages' ? 'active' : ''}
@@ -2738,6 +2749,7 @@ export function App() {
                 onClick={() => {
                   void api.logout().finally(() => {
                     setUser(null);
+                    setCanViewJudgeAdmin(false);
                     setAuthState('unauthenticated');
                     navigate('/');
                   });

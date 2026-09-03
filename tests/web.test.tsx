@@ -418,6 +418,18 @@ describe('Web platform shell', () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    const evaluation = {
+      submissionId: submission.id,
+      problem: {
+        id: submission.problemId,
+        slug: 'problem-p1',
+        title: 'Problem p1',
+      },
+      submitter: { id: submission.ownerUserId, displayName: 'User' },
+      languageProfileId: submission.languageId,
+      status: submission.status,
+      createdAt: submission.createdAt,
+    };
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
@@ -442,7 +454,7 @@ describe('Web platform shell', () => {
           return { status: 200, json: async () => submission };
         return {
           status: 200,
-          json: async () => ({ items: [submission], nextCursor: null }),
+          json: async () => ({ items: [evaluation], nextCursor: null }),
         };
       }),
     );

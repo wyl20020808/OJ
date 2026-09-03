@@ -86,7 +86,9 @@ const normalizePhone = (value: string) => {
     .trim()
     .replace(/[\s().-]/g, '');
   if (normalized.startsWith('00')) normalized = `+${normalized.slice(2)}`;
-  if (!normalized.startsWith('+')) normalized = `+${normalized}`;
+  if (!normalized.startsWith('+'))
+    normalized =
+      /^1\d{10}$/.test(normalized) ? `+86${normalized}` : `+${normalized}`;
   return /^\+[1-9]\d{7,14}$/.test(normalized) ? normalized : null;
 };
 const validEmail = (value: string) =>

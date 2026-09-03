@@ -330,7 +330,7 @@ export async function buildApp(options: AppOptions = {}) {
         process.env.OJPLATFORM_PHASE1E_QUALIFICATION_CONTROL_KEY,
     });
     const problemRepository = new PostgresProblemRepository(database.pool);
-    const hasProblemPermissions = async (
+    const hasPermissions = async (
       userId: string,
       required: readonly string[],
     ) => {
@@ -366,7 +366,7 @@ export async function buildApp(options: AppOptions = {}) {
           if (problem.authorId === context.userId) return true;
           return (
             context.strength === 'password' &&
-            (await hasProblemPermissions(context.userId, ['problem.edit']))
+            (await hasPermissions(context.userId, ['problem.edit']))
           );
         },
       },
@@ -484,8 +484,9 @@ export async function buildApp(options: AppOptions = {}) {
             },
           );
         },
-        canViewSubmission: (context, submission) =>
-          submissionPolicy.canViewSubmission(
+          ),
+        canViewSubmission: async (context, submission) =>
+          (await submissionPolicy.canViewSubmission(
             { id: context.userId, status: 'active' },
             {
               id: submission.id,
@@ -494,12 +495,15 @@ export async function buildApp(options: AppOptions = {}) {
               problemRevisionId: '',
               status: 'PENDING',
             },
-          ),
+          )) ||
+          (context.strength === 'password' &&
+            (await hasPermissions(context.userId, ['submission:view:any']))),
         listOwnSubmissions: (context) =>
           submissionPolicy.canListOwnSubmissions({
             id: context.userId,
             status: 'active',
           }),
+        canListGlobalSubmissions: () => true,
       },
       problemResolver,
       judgeDataResolver: submissionJudgeData,
@@ -569,6 +573,25 @@ export async function buildApp(options: AppOptions = {}) {
       evaluationHistory: async (submissionId) =>
         (await submissionRepository.listEvaluationHistory?.(submissionId)) ??
         [],
+      projectGlobalListItem: async (submission) => {
+        const [problem, submitter] = await Promise.all([
+          problemRepository.get(submission.problemId),
+          auth.getUser(submission.ownerUserId),
+        ]);
+        return {
+          problem: problem
+            ? { id: problem.id, slug: problem.slug, title: problem.title }
+            : {
+                id: submission.problemId,
+                slug: submission.problemId,
+                title: 'Unavailable',
+              },
+          submitter: {
+            id: submission.ownerUserId,
+            displayName: submitter?.displayName ?? 'Unknown user',
+          },
+        };
+      },
       projectJudge: async (submission) => {
         if (judgeService) {
           const current = await submissionRepository.getEvaluation?.(
@@ -773,10 +796,7 @@ export async function buildApp(options: AppOptions = {}) {
     });
     const problemRepository = new InMemoryProblemRepository();
     const guestAuthoringLimiter = createMemoryGuestAuthoringLimiter();
-    const hasProblemPermissions = (
-      userId: string,
-      required: readonly string[],
-    ) =>
+    const hasPermissions = (userId: string, required: readonly string[]) =>
       required.every((permission) =>
         options.judgeAdminPermissions?.get(userId)?.has(permission),
       );
@@ -800,7 +820,7 @@ export async function buildApp(options: AppOptions = {}) {
           if (problem.authorId === context.userId) return true;
           return (
             context.strength === 'password' &&
-            hasProblemPermissions(context.userId, ['problem.edit'])
+            hasPermissions(context.userId, ['problem.edit'])
           );
         },
       },
@@ -890,8 +910,9 @@ export async function buildApp(options: AppOptions = {}) {
             },
           );
         },
-        canViewSubmission: (context, submission) =>
-          submissionPolicy.canViewSubmission(
+          ),
+        canViewSubmission: async (context, submission) =>
+          (await submissionPolicy.canViewSubmission(
             { id: context.userId, status: 'active' },
             {
               id: submission.id,
@@ -900,12 +921,15 @@ export async function buildApp(options: AppOptions = {}) {
               problemRevisionId: '',
               status: 'PENDING',
             },
-          ),
+          )) ||
+          (context.strength === 'password' &&
+            hasPermissions(context.userId, ['submission:view:any'])),
         listOwnSubmissions: (context) =>
           submissionPolicy.canListOwnSubmissions({
             id: context.userId,
             status: 'active',
           }),
+        canListGlobalSubmissions: () => true,
       },
       problemResolver: {
         getRevision: async (problemId, revisionId) => {
@@ -962,6 +986,25 @@ export async function buildApp(options: AppOptions = {}) {
       evaluationHistory: async (submissionId) =>
         (await submissionRepository.listEvaluationHistory?.(submissionId)) ??
         [],
+      projectGlobalListItem: async (submission) => {
+        const [problem, submitter] = await Promise.all([
+          problemRepository.get(submission.problemId),
+          auth.getUser(submission.ownerUserId),
+        ]);
+        return {
+          problem: problem
+            ? { id: problem.id, slug: problem.slug, title: problem.title }
+            : {
+                id: submission.problemId,
+                slug: submission.problemId,
+                title: 'Unavailable',
+              },
+          submitter: {
+            id: submission.ownerUserId,
+            displayName: submitter?.displayName ?? 'Unknown user',
+          },
+        };
+      },
       projectJudge: async (submission) => {
         const job = await judgeRepository.getBySubmissionId(submission.id);
         if (!job) return {};

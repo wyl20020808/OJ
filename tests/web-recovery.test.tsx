@@ -37,6 +37,18 @@ const submission = (
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...extra,
   }) as Submission;
+const evaluation = (value: Submission) => ({
+  submissionId: value.id,
+  problem: {
+    id: value.problemId,
+    slug: `problem-${value.problemId}`,
+    title: 'Problem',
+  },
+  submitter: { id: value.ownerUserId, displayName: 'User' },
+  languageProfileId: value.languageId,
+  status: value.status,
+  createdAt: value.createdAt,
+});
 
 afterEach(() => {
   cleanup();
@@ -166,7 +178,7 @@ describe('PHASE 1E-R Web recovery matrix', () => {
         return {
           status: 200,
           json: async () => ({
-            items: [submission('QUEUED')],
+            items: [evaluation(submission('QUEUED'))],
             nextCursor: null,
           }),
         };
