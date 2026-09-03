@@ -7,6 +7,11 @@ export type ProblemSolveEditorContext = {
   readonly problemId: string;
   readonly slug: string;
   readonly samples: readonly PublicProblemSample[];
+  readonly problemRevisionId?: string;
+  readonly checker?: 'EXACT_BYTES' | 'TOKEN_WHITESPACE';
+  readonly codeRunAdapter?: unknown;
+  readonly submissionAdapter?: unknown;
+  readonly onViewSubmission?: (submissionId: string) => void;
 };
 export type PluginContext = { readonly sdkVersion: string };
 export type PluginContribution = { readonly slot: string; readonly render: (context: unknown) => unknown };

@@ -30,6 +30,9 @@ import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
 import { ProblemEditor } from '../components/ProblemEditor.js';
+import { ProblemSolveEditorSlot } from '../plugins/ProblemSolveEditorSlot.js';
+import { HttpCodeRunAdapter } from '@ojplatform/online-code-editor/run/HttpCodeRunAdapter';
+import { HttpSubmissionAdapter } from '@ojplatform/online-code-editor/submission/SubmissionAdapter';
 import {
   ContestExperience,
   HomeworkPage,
@@ -1598,10 +1601,13 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     </section>
   );
 }
-export function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
+export function ProblemDetail({ api, id, user }: { api: ApiClient; id: string; user?: AuthenticatedUser | null }) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
+  const [checker, setChecker] = useState<'EXACT_BYTES' | 'TOKEN_WHITESPACE'>('EXACT_BYTES');
+  const codeRunAdapter = useMemo(() => new HttpCodeRunAdapter(), []);
+  const submissionAdapter = useMemo(() => new HttpSubmissionAdapter(), []);
   useEffect(() => {
     void api
       .problem(id)
@@ -1621,6 +1627,9 @@ export function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
         ),
       );
   }, [api, id]);
+  useEffect(() => {
+    void api.judgeData(id).then((data) => setChecker(data.defaults.checker)).catch(() => undefined);
+  }, [api, id]);
   if (error)
     return error.code === 'NOT_FOUND' ? (
       <State title="题目不存在" text="该题目不存在或当前不可用。" />
@@ -1630,6 +1639,7 @@ export function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
   if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
   const canEdit = problem.capabilities?.canEdit === true;
   return (
+    <>
     <article className="problem-detail-v4">
       <div className="problem-main">
         <header className="problem-heading">
@@ -1740,6 +1750,19 @@ export function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
         </p>
       </aside>
     </article>
+    <section className="problem-editor-slot" aria-label="OnlineCodeEditor">
+      <ProblemSolveEditorSlot context={{
+        problemId: problem.id,
+        slug: problem.slug,
+        samples: problem.examples.map((sample, index) => ({ input: sample.input, output: sample.output, label: `样例 ${index + 1}` })),
+        problemRevisionId: problem.currentRevisionId ?? '',
+        checker,
+        codeRunAdapter,
+        ...(user ? { submissionAdapter } : {}),
+        onViewSubmission: (submissionId: string) => navigate(`/submissions/${encodeURIComponent(submissionId)}`),
+      } as import('@ojplatform/plugin-sdk').ProblemSolveEditorContext} />
+    </section>
+    </>
   );
 }
 
@@ -2821,7 +2844,7 @@ export function App() {
         />
       )
     ) : current.name === 'problem' ? (
-      <ProblemDetail api={api} id={current.id ?? ''} />
+      <ProblemDetail api={api} id={current.id ?? ''} user={user} />
     ) : (
       <NotFound />
     );
