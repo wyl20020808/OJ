@@ -1717,28 +1717,22 @@ export function ProfileExperience({
         <span>OJPlatform</span>
       </div>
       <div className="profile-identity">
-        <div className="profile-avatar" aria-label="默认头像">
-          {displayName?.slice(0, 1).toUpperCase() ?? 'OJ'}
-        </div>
-        <h1>{displayName ?? '个人主页'}</h1>
-        <p>
-          {displayUsername ? `@${displayUsername}` : '公开资料服务正在接入'}
-        </p>
-        {!isPublic && user?.guest && (
-          <span className="guest-badge profile-guest-badge">游客账号</span>
-        )}
-        <p className="profile-bio">
-          {isPublic
-            ? `加入于 ${profileDate(publicProfile?.createdAt ?? '')}`
-            : user
-              ? '个人签名尚未提供。'
-              : '登录后可查看自己的真实账户资料。'}
-        </p>
-        {!isPublic && user?.guest && (
-          <p className="guest-upgrade-hint">
-            {user.upgradeHint ?? '绑定邮箱、手机号或第三方账号以升级账户。'}
+        <div className="profile-identity-main">
+          <div className="profile-avatar" aria-label="默认头像">
+            {displayName?.slice(0, 1).toUpperCase() ?? 'OJ'}
+          </div>
+          <h1>{displayName ?? '个人主页'}</h1>
+          <p>
+            {displayUsername ? `@${displayUsername}` : '公开资料服务正在接入'}
           </p>
-        )}
+          <p className="profile-bio">
+            {isPublic
+              ? `加入于 ${profileDate(publicProfile?.createdAt ?? '')}`
+              : user
+                ? '个人签名尚未提供。'
+                : '登录后可查看自己的真实账户资料。'}
+          </p>
+        </div>
         {!isPublic && user && (
           <div className="profile-actions">
             <button

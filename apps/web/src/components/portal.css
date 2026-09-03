@@ -205,12 +205,18 @@
   font-weight: 800;
 }
 .profile-identity {
-  display: grid;
-  justify-items: center;
-  align-items: center;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
   margin-bottom: 1.3rem;
   padding: 0 var(--space-4);
-  text-align: center;
+  text-align: left;
+}
+.profile-identity-main {
+  display: grid;
+  justify-items: start;
+  min-width: 0;
 }
 .profile-avatar {
   display: grid;
@@ -226,7 +232,7 @@
   font-weight: 850;
   z-index: 1;
 }
-.profile-identity > :not(.profile-avatar, .profile-actions) {
+.profile-identity-main > :not(.profile-avatar) {
   max-width: 100%;
 }
 .profile-identity h1 {
@@ -243,11 +249,13 @@
 }
 .profile-actions {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   gap: var(--space-2);
+  flex: 0 0 auto;
   min-width: 0;
   flex-wrap: wrap;
   margin-top: var(--space-3);
+  margin-left: auto;
 }
 .profile-section {
   margin-top: var(--space-6);
@@ -670,12 +678,16 @@
     padding-left: var(--space-3);
   }
   .profile-identity {
+    display: grid;
     grid-template-columns: 1fr;
-    justify-items: center;
+    justify-items: stretch;
     padding: 0 var(--space-2);
-    text-align: center;
+    text-align: left;
   }
-  .profile-identity > :not(.profile-avatar, .profile-actions) {
+  .profile-identity-main {
+    justify-items: start;
+  }
+  .profile-identity-main > :not(.profile-avatar) {
     grid-column: auto;
   }
   .profile-avatar {
@@ -683,7 +695,7 @@
   }
   .profile-actions {
     grid-column: auto;
-    justify-content: center;
+    justify-content: flex-end;
   }
   .profile-overview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
