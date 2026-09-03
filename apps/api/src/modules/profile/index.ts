@@ -246,7 +246,7 @@ export async function registerProfileModule(
       ? ''
       : " AND visibility='public' AND status='published'";
     const result = await options.pool.query(
-      `SELECT id,slug,title,status,visibility,created_at,updated_at FROM problems WHERE author_id=$1${filter}
+      `SELECT id,public_number,slug,title,status,visibility,created_at,updated_at FROM problems WHERE author_id=$1${filter}
        ${cursor ? 'AND (created_at,id)<($2,$3)' : ''} ORDER BY created_at DESC,id DESC LIMIT $${cursor ? 4 : 2}`,
       cursor
         ? [String(target.user.id), cursor.createdAt, cursor.id, limit]
@@ -258,6 +258,8 @@ export async function registerProfileModule(
     );
     const items = result.rows.map((row) => ({
       id: String(row.id),
+      publicNumber: Number(row.public_number),
+      publicId: `P${String(row.public_number).padStart(4, '0')}`,
       slug: String(row.slug),
       title: String(row.title),
       status: String(row.status),
@@ -443,7 +445,7 @@ export async function registerProfileModule(
         'Invalid pagination',
       );
     const result = await options.pool.query(
-      `SELECT id,slug,title,status,visibility,created_at,updated_at FROM problems WHERE author_id=$1
+      `SELECT id,public_number,slug,title,status,visibility,created_at,updated_at FROM problems WHERE author_id=$1
        ${cursor ? 'AND (created_at,id)<($2,$3)' : ''} ORDER BY created_at DESC,id DESC LIMIT $${cursor ? 4 : 2}`,
       cursor
         ? [auth.userId, cursor.createdAt, cursor.id, limit]
@@ -455,6 +457,8 @@ export async function registerProfileModule(
     );
     const items = result.rows.map((row) => ({
       id: String(row.id),
+      publicNumber: Number(row.public_number),
+      publicId: `P${String(row.public_number).padStart(4, '0')}`,
       slug: String(row.slug),
       title: String(row.title),
       status: String(row.status),

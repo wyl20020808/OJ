@@ -399,6 +399,16 @@ export async function buildApp(options: AppOptions = {}) {
       auditHook: problemAuditHook,
       guardGuestMutation: (action, context) =>
         guardGuestAuthoring(guestAuthoringLimiter, context, action),
+      projectMetadata: async (problem) => {
+        const creator = problem.authorId
+          ? await auth.getUser(problem.authorId)
+          : undefined;
+        return {
+          sourceType: 'CREATOR' as const,
+          source:
+            creator?.displayName ?? (problem.authorId ? 'Unknown user' : null),
+        };
+      },
     });
     const judgeDataRepository = new PostgresJudgeDataRepository(database.pool);
     const judgeDataStorage = new S3ByteStorage(storage.client, storage.bucket);
@@ -605,7 +615,12 @@ export async function buildApp(options: AppOptions = {}) {
         ]);
         return {
           problem: problem
-            ? { id: problem.id, slug: problem.slug, title: problem.title }
+            ? {
+                id: problem.id,
+                slug: problem.slug,
+                title: problem.title,
+                publicId: problem.publicId,
+              }
             : {
                 id: submission.problemId,
                 slug: submission.problemId,
@@ -870,6 +885,16 @@ export async function buildApp(options: AppOptions = {}) {
       auditHook: problemAuditHook,
       guardGuestMutation: (action, context) =>
         guardGuestAuthoring(guestAuthoringLimiter, context, action),
+      projectMetadata: async (problem) => {
+        const creator = problem.authorId
+          ? await auth.getUser(problem.authorId)
+          : undefined;
+        return {
+          sourceType: 'CREATOR' as const,
+          source:
+            creator?.displayName ?? (problem.authorId ? 'Unknown user' : null),
+        };
+      },
     });
     const judgeDataRepository = new InMemoryJudgeDataRepository();
     const judgeDataStorage = new MemoryByteStorage();
@@ -1035,7 +1060,12 @@ export async function buildApp(options: AppOptions = {}) {
         ]);
         return {
           problem: problem
-            ? { id: problem.id, slug: problem.slug, title: problem.title }
+            ? {
+                id: problem.id,
+                slug: problem.slug,
+                title: problem.title,
+                publicId: problem.publicId,
+              }
             : {
                 id: submission.problemId,
                 slug: submission.problemId,

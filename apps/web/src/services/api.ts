@@ -79,6 +79,8 @@ export type ProblemSample = {
 };
 export type Problem = {
   id: string;
+  publicNumber?: number;
+  publicId?: string;
   slug: string;
   title: string;
   background?: string;
@@ -262,6 +264,8 @@ export type ProfileContestList = {
 };
 export type ProfileProblem = {
   id: string;
+  publicNumber?: number;
+  publicId?: string;
   slug: string;
   title: string;
   status: Problem['status'];
@@ -311,6 +315,7 @@ export type ExecutionStage =
   | 'WORKER_DEGRADED'
   | 'WORKER_OFFLINE';
 export type SubmissionEvaluation = {
+  publicNumber?: number;
   evaluationGeneration: number;
   attemptGeneration: number;
   status:
@@ -425,7 +430,8 @@ export type SandboxProbe = {
 export type SubmissionList = { items: Submission[]; nextCursor: string | null };
 export type EvaluationListItem = {
   submissionId: string;
-  problem: { id: string; slug: string; title: string };
+  publicNumber?: number;
+  problem: { id: string; slug: string; title: string; publicId?: string };
   submitter: { id: string; displayName: string };
   languageProfileId: string;
   status: string;
@@ -448,6 +454,8 @@ export type EvaluationFilters = {
 export type ProblemInput = Omit<
   Problem,
   | 'id'
+  | 'publicNumber'
+  | 'publicId'
   | 'createdAt'
   | 'updatedAt'
   | 'authorId'

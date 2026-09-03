@@ -81,6 +81,33 @@ const examples = (samples: ProblemSample[]) =>
     ...(explanation ? { note: explanation } : {}),
   }));
 
+const tags = (value: unknown): string[] => {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > 50)
+    throw new ProblemValidationError({
+      tags: 'must be an array of at most 50 strings',
+    });
+  const seen = new Set<string>();
+  return value.map((item, index) => {
+    if (
+      typeof item !== 'string' ||
+      item.trim().length === 0 ||
+      item.length > 64
+    )
+      throw new ProblemValidationError({
+        [`tags.${index}`]: 'must be a bounded non-empty string',
+      });
+    const normalized = item.trim().replace(/\s+/g, ' ');
+    const key = normalized.toLocaleLowerCase();
+    if (seen.has(key))
+      throw new ProblemValidationError({
+        tags: 'must not contain duplicate tags',
+      });
+    seen.add(key);
+    return normalized;
+  });
+};
+
 export function validateCreate(input: unknown): ProblemCreateInput {
   if (!input || typeof input !== 'object')
     throw new ProblemValidationError({ body: 'must be an object' });
@@ -131,6 +158,7 @@ export function validateCreate(input: unknown): ProblemCreateInput {
       value.authorId === null || value.authorId === undefined
         ? null
         : text(value.authorId, 'authorId', 128),
+    tags: tags(value.tags),
   };
   if (value.id !== undefined) result.id = text(value.id, 'id', 128);
   return result;
@@ -156,6 +184,7 @@ export function validateUpdate(input: unknown): ProblemUpdateInput {
     'timeLimitMs',
     'memoryLimitBytes',
     'testdataVersion',
+    'tags',
   ];
   const unknown = Object.keys(source).find((key) => !allowed.includes(key));
   if (unknown)
@@ -199,6 +228,7 @@ export function validateUpdate(input: unknown): ProblemUpdateInput {
     result.examples = examples(normalized);
   }
   if ('difficulty' in source) result.difficulty = difficulty(source.difficulty);
+  if ('tags' in source) result.tags = tags(source.tags);
   if (
     'visibility' in source &&
     source.visibility !== 'private' &&

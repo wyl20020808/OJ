@@ -21,6 +21,9 @@ export class ProblemService {
       action: 'create' | 'update' | 'transition',
       context: AuthContext,
     ) => Promise<void>,
+    private readonly projectMetadata?: (
+      problem: Problem,
+    ) => Promise<Partial<Problem>> | Partial<Problem>,
   ) {}
   async list(query: {
     limit: number;
@@ -56,7 +59,11 @@ export class ProblemService {
       offset: 0,
       publicOnly: true,
     });
-    return { recentProblems: recent.items };
+    return {
+      recentProblems: await Promise.all(
+        recent.items.map((problem) => this.project(problem)),
+      ),
+    };
   }
   async detail(key: string, context?: AuthContext): Promise<ProblemProjection> {
     const row = await this.repository.get(key);
@@ -197,6 +204,10 @@ export class ProblemService {
         type: 'problem',
       })),
     );
-    return { ...problem, capabilities: { canEdit } };
+    return {
+      ...problem,
+      ...(this.projectMetadata ? await this.projectMetadata(problem) : {}),
+      capabilities: { canEdit },
+    };
   }
 }

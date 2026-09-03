@@ -231,6 +231,9 @@ export async function registerSubmissionModule(
           ]);
           return {
             submissionId: submission.id,
+            ...(evaluation?.publicNumber !== undefined
+              ? { publicNumber: evaluation.publicNumber }
+              : {}),
             ...metadata,
             languageProfileId: submission.languageId,
             status: evaluation?.status ?? submission.status,
