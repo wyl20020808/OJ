@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@ojplatform/contracts": "workspace:*",
+    "@ojplatform/plugin-sdk": "workspace:*",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

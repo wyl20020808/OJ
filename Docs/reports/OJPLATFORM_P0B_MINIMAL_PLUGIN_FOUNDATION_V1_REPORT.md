@@ -1,0 +1,18 @@
+# OJPLATFORM P0B Minimal Plugin Foundation V1
+
+OJPLATFORM P0B PLUGIN FOUNDATION = PARTIAL
+
+BASE = c06c5a9
+PLUGIN SDK REUSED = PASS (`packages/plugin-sdk`)
+MANIFEST V1 = PASS
+PLUGIN REGISTRY = PASS
+PLUGIN HOST = PASS
+API VERSION CHECK = PASS
+ENABLE/DISABLE = PASS
+PROBLEM.SOLVE.EDITOR SLOT = PASS
+SLOT LOCATION = PASS, after complete problem statement sections
+FOCUSED TESTS = PASS
+TYPECHECK = NOT VERIFIED (worktree dependency install blocked by EPERM; no errors isolated to touched plugin files)
+DIFF CHECK = PASS
+
+FINAL COMMIT = pending

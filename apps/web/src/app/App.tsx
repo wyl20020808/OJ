@@ -1598,7 +1598,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     </section>
   );
 }
-function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
+export function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
