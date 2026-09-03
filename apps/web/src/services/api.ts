@@ -12,6 +12,7 @@ export type AuthenticatedUser = {
   status: 'active';
   guest?: boolean;
   upgradeHint?: string;
+  capabilities?: { canViewJudgeAdmin?: boolean };
 };
 export type Account = AuthenticatedUser & {
   createdAt: string;
@@ -511,6 +512,8 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
   return {
     me: () =>
       request<AuthenticatedUser>(baseUrl, '/api/auth/me', undefined, fetcher),
+    judgeAdminCapabilities: () =>
+      request<{ canView: boolean }>(baseUrl, '/api/admin/judge/capabilities', undefined, fetcher),
     login: (identity: string, password: string) =>
       request<AuthenticatedUser>(
         baseUrl,

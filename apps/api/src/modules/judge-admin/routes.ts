@@ -89,6 +89,10 @@ export async function registerJudgeAdminRoutes(
     }
     return ctx;
   };
+  app.get('/api/admin/judge/capabilities', async (request: any, reply: any) => {
+    const ctx = await o.getAuthContext(request);
+    return reply.send({ canView: Boolean(await o.can(ctx, 'judge.view')) });
+  });
   const query = (r: any) => ({
     limit: Math.min(100, Math.max(1, Number(r.query?.limit ?? 25) || 25)),
     ...(typeof r.query?.cursor === 'string' ? { cursor: r.query.cursor } : {}),

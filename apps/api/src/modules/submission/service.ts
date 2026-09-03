@@ -78,10 +78,9 @@ export class SubmissionService {
     return submission;
   }
   async listGlobal(query: GlobalSubmissionListQuery, context?: AuthContext) {
-    if (!context) throw new Error('UNAUTHENTICATED');
     if (query.cursor && !/^[A-Za-z0-9_-]+$/.test(query.cursor))
       throw new Error('VALIDATION_ERROR');
-    if (
+    if (context &&
       !(await (this.policy.canListGlobalSubmissions?.(context) ??
         this.policy.listOwnSubmissions(context)))
     )

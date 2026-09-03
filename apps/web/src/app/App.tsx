@@ -1756,10 +1756,8 @@ function SubmissionForm({
 
 function SubmissionHistory({
   api,
-  user,
 }: {
   api: ApiClient;
-  user: AuthenticatedUser | null;
 }) {
   const [items, setItems] = useState<EvaluationListItem[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
@@ -1789,14 +1787,6 @@ function SubmissionHistory({
     },
     [],
   );
-  if (!user)
-    return (
-      <State
-        title="请先登录"
-        text="登录后才能查看评测列表。"
-        action={<Link to="/login">登录</Link>}
-      />
-    );
   if (error)
     return (
       <State
@@ -2469,6 +2459,7 @@ export function App() {
   const [authState, setAuthState] = useState<
     'loading' | 'authenticated' | 'unauthenticated' | 'unavailable'
   >('loading');
+  const [canViewJudgeAdmin, setCanViewJudgeAdmin] = useState(false);
   useEffect(() => {
     const h = () => setCurrent(route());
     window.addEventListener('popstate', h);
@@ -2477,9 +2468,14 @@ export function App() {
       .then((value) => {
         setUser(value);
         setAuthState('authenticated');
+        void api
+          .judgeAdminCapabilities()
+          .then((capability) => setCanViewJudgeAdmin(capability.canView))
+          .catch(() => setCanViewJudgeAdmin(false));
       })
       .catch((error) => {
         setUser(null);
+        setCanViewJudgeAdmin(false);
         setAuthState(
           error instanceof ApiError && error.status === 401
             ? 'unauthenticated'
@@ -2500,6 +2496,10 @@ export function App() {
         onUser={(value) => {
           setUser(value);
           setAuthState('authenticated');
+          void api
+            .judgeAdminCapabilities()
+            .then((capability) => setCanViewJudgeAdmin(capability.canView))
+            .catch(() => setCanViewJudgeAdmin(false));
         }}
         onNavigate={navigate}
       />
@@ -2561,7 +2561,7 @@ export function App() {
     ) : current.name === 'submit' ? (
       <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
     ) : current.name === 'submissions' ? (
-      <SubmissionHistory api={api} user={user} />
+      <SubmissionHistory api={api} />
     ) : current.name === 'submission' ? (
       user && current.id ? (
         <SubmissionDetail api={api} id={current.id} user={user} />
@@ -2701,6 +2701,14 @@ export function App() {
           >
             评测列表
           </Link>
+          {canViewJudgeAdmin && (
+            <Link
+              to="/admin/judge/nodes"
+              className={current.name.startsWith('judge-') ? 'active' : ''}
+            >
+              管理
+            </Link>
+          )}
           <Link
             to="/messages"
             className={current.name === 'messages' ? 'active' : ''}
@@ -2731,6 +2739,7 @@ export function App() {
                 onClick={() => {
                   void api.logout().finally(() => {
                     setUser(null);
+                    setCanViewJudgeAdmin(false);
                     setAuthState('unauthenticated');
                     navigate('/');
                   });

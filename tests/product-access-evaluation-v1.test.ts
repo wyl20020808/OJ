@@ -90,6 +90,14 @@ describe('Product Access & Evaluation V1', () => {
         headers: requestHeaders(cookies(guest)),
       });
       expect(guestDetail.json().capabilities).toEqual({ canEdit: true });
+      expect(
+        (
+          await app.inject({
+            method: 'GET',
+            url: `/api/problems/${guestProblem.json().id as string}`,
+          })
+        ).statusCode,
+      ).toBe(404);
 
       const owner = await registerAndLogin(app, 'owner-v1');
       const created = await app.inject({
@@ -100,6 +108,11 @@ describe('Product Access & Evaluation V1', () => {
       });
       expect(created.statusCode).toBe(201);
       const problemId = created.json().id as string;
+      const anonymousPublic = await app.inject({
+        method: 'GET',
+        url: `/api/problems/${problemId}`,
+      });
+      expect(anonymousPublic.statusCode).toBe(200);
       const ownerDetail = await app.inject({
         method: 'GET',
         url: `/api/problems/${problemId}`,
@@ -251,6 +264,12 @@ describe('Product Access & Evaluation V1', () => {
         verdict: 'WA',
       });
       expect(pageOne.body).not.toContain('secret-source');
+      const anonymousPage = await app.inject({
+        method: 'GET',
+        url: '/api/evaluations?limit=2',
+      });
+      expect(anonymousPage.statusCode).toBe(200);
+      expect(anonymousPage.body).not.toContain('secret-source');
       const pageTwo = await app.inject({
         method: 'GET',
         url: `/api/evaluations?limit=2&cursor=${encodeURIComponent(pageOne.json().nextCursor as string)}`,

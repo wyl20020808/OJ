@@ -501,11 +501,7 @@ export async function buildApp(options: AppOptions = {}) {
             id: context.userId,
             status: 'active',
           }),
-        canListGlobalSubmissions: (context) =>
-          submissionPolicy.canListOwnSubmissions({
-            id: context.userId,
-            status: 'active',
-          }),
+        canListGlobalSubmissions: () => true,
       },
       problemResolver,
       judgeDataResolver: submissionJudgeData,
@@ -924,11 +920,7 @@ export async function buildApp(options: AppOptions = {}) {
             id: context.userId,
             status: 'active',
           }),
-        canListGlobalSubmissions: (context) =>
-          submissionPolicy.canListOwnSubmissions({
-            id: context.userId,
-            status: 'active',
-          }),
+        canListGlobalSubmissions: () => true,
       },
       problemResolver: {
         getRevision: async (problemId, revisionId) => {

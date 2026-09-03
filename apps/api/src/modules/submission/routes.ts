@@ -250,14 +250,6 @@ export async function registerSubmissionModule(
       );
       return reply.send({ items, nextCursor: result.nextCursor ?? null });
     } catch (e) {
-      if (e instanceof Error && e.message === 'UNAUTHENTICATED')
-        return error(
-          reply,
-          request,
-          401,
-          'UNAUTHENTICATED',
-          'Authentication required',
-        );
       if (e instanceof Error && e.message === 'FORBIDDEN')
         return error(
           reply,
