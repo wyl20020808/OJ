@@ -311,6 +311,57 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
     await server.close();
   });
 
+  it('keeps email password verification compatible and generic on failure', async () => {
+    const { server } = await setup();
+    const challenge = await requestCode(
+      server,
+      'EMAIL',
+      'known-good@example.test',
+    );
+    const grant = await verifyCode(
+      server,
+      challenge.challengeId,
+      emailCodes.at(-1)!,
+    );
+    const registration = await server.inject({
+      method: 'POST',
+      url: '/api/auth/register/email',
+      payload: {
+        grantId: grant.grantId,
+        identifierType: 'EMAIL',
+        username: 'known-good',
+        displayName: 'Known Good',
+        password: 'KnownGoodPass123!',
+      },
+    });
+    expect(registration.statusCode).toBe(201);
+    const login = await server.inject({
+      method: 'POST',
+      url: '/api/auth/login/password',
+      payload: {
+        identifierType: 'EMAIL',
+        identifier: ' Known-Good@EXAMPLE.TEST ',
+        password: 'KnownGoodPass123!',
+      },
+    });
+    expect(login.statusCode).toBe(200);
+    const wrong = await server.inject({
+      method: 'POST',
+      url: '/api/auth/login/password',
+      payload: {
+        identifierType: 'EMAIL',
+        identifier: 'known-good@example.test',
+        password: 'WrongPassword123!',
+      },
+    });
+    expect(wrong.statusCode).toBe(401);
+    expect(wrong.json()).toMatchObject({
+      code: 'UNAUTHENTICATED',
+      message: 'Invalid credentials',
+    });
+    await server.close();
+  });
+
   it('logs in existing OTP identity and creates a JIT continuation for a new identity', async () => {
     const { server, repository } = await setup();
     const registrationChallenge = await requestCode(

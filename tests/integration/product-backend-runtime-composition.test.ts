@@ -169,22 +169,17 @@ describe('product backend central runtime composition', () => {
       payload: {},
     });
     expect(resumed.json()).toMatchObject({ id: guestId, resumed: true });
-    const rotatedResume = cookies(resumed.headers['set-cookie']).find((value) =>
-      value.startsWith('oj_guest_resume='),
-    )!;
     const resumedGuestSession = cookies(resumed.headers['set-cookie']).find(
       (value) => value.startsWith('oj_session='),
     )!;
-    expect(
-      (
-        await app.inject({
-          method: 'POST',
-          url: '/api/auth/guest/continue',
-          headers: { cookie: guestResume },
-          payload: {},
-        })
-      ).statusCode,
-    ).toBe(401);
+    const repeatedResume = await app.inject({
+      method: 'POST',
+      url: '/api/auth/guest/continue',
+      headers: { cookie: guestResume },
+      payload: {},
+    });
+    expect(repeatedResume.statusCode).toBe(200);
+    expect(repeatedResume.json()).toMatchObject({ id: guestId, resumed: true });
 
     const contest = await app.inject({
       method: 'POST',
@@ -528,7 +523,7 @@ describe('product backend central runtime composition', () => {
         await restarted.inject({
           method: 'POST',
           url: '/api/auth/guest/continue',
-          headers: { cookie: rotatedResume },
+          headers: { cookie: guestResume },
           payload: {},
         })
       ).json(),

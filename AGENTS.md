@@ -114,6 +114,10 @@ GOAL -> PHASE -> READ -> PLAN -> IMPLEMENT -> TEST -> REVIEW
 
 Before a new Phase, read this file, the nearest scoped `AGENTS.md`, the Architecture Baseline, and the current Goal; check Git status; understand Scope and Non-goals; then write.
 
+Complete local Runtime startup, shutdown, and status MUST use `scripts/dev-runtime.ps1`
+or its `OJPlatform-*.bat` entry points. Unless the Runtime Manager itself is broken,
+agents MUST NOT manually orchestrate the full service set.
+
 ## Scoped AGENTS.md
 
 Future directories may add module-specific rules, such as `apps/web/AGENTS.md`, `apps/api/AGENTS.md`, `apps/judge-worker/AGENTS.md`, `packages/plugin-sdk/AGENTS.md`, and `tests/security/AGENTS.md`. Scoped files may add framework or security requirements but MUST NOT weaken root hard architecture or safety rules unless a formal architecture decision changes them.

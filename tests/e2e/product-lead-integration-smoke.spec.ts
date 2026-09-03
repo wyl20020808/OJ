@@ -65,10 +65,17 @@ test('product lead integration smoke uses the real product runtime', async ({
 
   const seeded = await page.evaluate(
     async (payload) => {
+      const csrf = document.cookie
+        .split('; ')
+        .find((value) => value.startsWith('oj_csrf='))
+        ?.slice('oj_csrf='.length);
       const response = await fetch('/api/problems', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(csrf ? { 'x-csrf-token': decodeURIComponent(csrf) } : {}),
+        },
         body: JSON.stringify(payload),
       });
       return { status: response.status, body: await response.json() };

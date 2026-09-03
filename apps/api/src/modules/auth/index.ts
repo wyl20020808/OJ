@@ -100,7 +100,8 @@ export async function registerAuthModule(
   options: AuthModuleOptions,
 ) {
   const ttl = options.sessionTtlMs ?? 7 * 24 * 60 * 60 * 1000;
-  const guestTtl = options.guestResumeTtlMs ?? 30 * 24 * 60 * 60 * 1000;
+  // Guest identity credentials outlive auth sessions, while remaining bounded.
+  const guestTtl = options.guestResumeTtlMs ?? 365 * 24 * 60 * 60 * 1000;
   const guestAvailable = Boolean(
     options.guestStore && options.guestRateLimiter,
   );
@@ -198,21 +199,17 @@ export async function registerAuthModule(
         sessionTokenHash: tokenHash(session),
         sessionExpiresAt: new Date(Date.now() + ttl),
       };
-      const result = oldToken
+      let resumed = false;
+      let result = oldToken
         ? await options.guestStore.resumeGuest({
             ...input,
             oldTokenHash: guestTokenHash(oldToken),
           })
-        : await options.guestStore.createGuest(input);
-      if (!result)
-        return error(
-          reply,
-          401,
-          'INVALID_GUEST_RESUME',
-          'Guest resume credential is invalid or expired',
-        );
+        : null;
+      if (result) resumed = true;
+      else result = await options.guestStore.createGuest(input);
       setSessionCookie(reply, session);
-      setGuestResumeCookie(reply, resume);
+      setGuestResumeCookie(reply, resumed && oldToken ? oldToken : resume);
       setCsrfCookie(reply);
       await audit(
         {
@@ -220,14 +217,14 @@ export async function registerAuthModule(
           sessionId: result.sessionId,
           strength: 'guest',
         },
-        oldToken ? 'guest:resume' : 'guest:create',
+        resumed ? 'guest:resume' : oldToken ? 'guest:recover' : 'guest:create',
         'allowed',
         request.id,
         result.user.id,
       );
       return reply.send({
         ...(await projectUser(result.user)),
-        resumed: Boolean(oldToken),
+        resumed,
       });
     } catch (cause) {
       if (cause instanceof Error && cause.message === 'RATE_LIMITED')

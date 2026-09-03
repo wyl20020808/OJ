@@ -5,6 +5,12 @@ Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: UNIFIED JUDGE RUNTIME INTEGRATION V1 PASS
 Current Status: PRODUCT/JUDGE DEFECT REMEDIATION COMPLETE; TOKEN_WHITESPACE IS THE NEW-DATA DEFAULT WITH EXPLICIT EXACT_BYTES ADVANCED SETTING
 
+Auth real-runtime remediation: PASS for password verifier/diagnostics and
+durable Guest identity/session recovery. The active Product runtime database
+does not contain the reported root email, so `ROOT PASSWORD CREDENTIAL STATUS`
+is `UNKNOWN`; no root credential was changed. Canonical local Web origin is
+`http://127.0.0.1:5173` and no localhost/127.0.0.1 cookie split was found.
+
 Default Checker V1: PASS. New Judge Data drafts default to `TOKEN_WHITESPACE`
 in Product and Web fallbacks, while explicit `EXACT_BYTES` remains available
 in the advanced Judge settings. Existing drafts and published immutable
@@ -67,7 +73,7 @@ PHASE 2C.2: PASS / REAL EXECUTION LIFECYCLE, INTEGRITY & RELIABILITY QUALIFIED
 PHASE 2C.3: PASS / DETERMINISTIC SINGLE-TESTCASE EXECUTION & MEASUREMENT RECORD QUALIFIED
 PHASE 2C.4: PASS / TESTCASE-SET EXECUTION-FACT AGGREGATION FOUNDATION QUALIFIED
 REAL C++20 EXECUTION: QUALIFICATION ONLY
-VERDICT ENGINE: HISTORICAL "NOT STARTED" SUMMARY; 2C.5/2C.6 and Phase 3D authoritative verdict paths are implemented and qualified in their recorded scopes
+VERDICT ENGINE: 2C.5/2C.6 and Phase 3D authoritative verdict paths are implemented and qualified in their recorded scopes; the historical "NOT STARTED" wording is retained only in older reports
 PHASE 2D: NOT STARTED
 READY FOR NEXT PHASE 2C GOAL: YES
 
@@ -151,3 +157,9 @@ production HA, and production deployment are not qualified; Phase 2D is not
 started.
 
 Last Updated: 2026-09-02
+
+Local Runtime Manager V1: PARTIAL / IMPLEMENTED_NOT_RUNTIME_QUALIFIED. Canonical
+PowerShell/BAT startup, shutdown, status, logs and doctor tooling is present with
+ignored runtime state, generated local tokens, migration ledger, WSL Compose reuse,
+and Host-Agent-owned worker control. Full local runtime and A+B browser evidence
+remain blocked until machine-local Supervisor/rootfs/Worker paths are configured.

@@ -70,6 +70,60 @@ duplicate dispatch, cancellation, and rejudge history through the same Worker
 and Supervisor chain. Historical runtime records were not used as evidence for
 this merge.
 
+## Auth Real-Runtime Remediation Addendum
+
+The current Product API runtime was requalified from the unified source after
+the Guest identity/session fix. Its configured Product database is
+`ojplatform_product_unified_runtime_20260902`; that database contained three
+active Guest users, no `root` username, no `2846547486@qq.com` email, and no
+password credentials. The reported root email 401 therefore has a confirmed
+root cause of Product API/database mismatch or missing account in the active
+runtime database. No root password or credential was reset.
+
+Password diagnostics now record only identifier type, redacted normalized
+identifier, user/status presence, password-login enablement, credential
+presence, non-secret scrypt metadata, verifier outcome, request ID, and the
+runtime database name. Passwords, hashes, peppers, secrets, and session tokens
+are never logged. A real temporary account on this Product API registered with
+the current writer (`201`), logged in with the correct password (`200`), and
+returned the generic `Invalid credentials` response for a wrong password
+(`401`); the account was deleted afterward. `ROOT PASSWORD CREDENTIAL STATUS`
+remains `UNKNOWN` because the target account is absent from the active Product
+database.
+
+Guest durable identity now survives session expiry, API restart, stale legacy
+resume cookies, and concurrent continue calls without normal token rotation.
+The Browser smoke on canonical `http://127.0.0.1:5173` observed Guest A,
+session-cookie removal -> Guest A, stale-cookie recovery -> Guest A, and a new
+browser context -> distinct Guest B, all with `200`. Web proxy, API host,
+cookies, CSRF, and runtime startup consistently use `127.0.0.1`; no
+`localhost:5173` split was found. Focused Auth/Guest tests passed 25/25,
+full unit tests passed 779 with 5 existing skips, integration passed 9/9, and
+all type/lint/format/build/architecture gates passed. The Product Lead Browser
+smoke was corrected to send the existing CSRF header and passed 1/1; the
+companion Web UI smoke passed 1/1. The complete legacy E2E collection still
+has seven unrelated historical failures in Phase 1/admin shell fixtures (and
+13 opt-in skips), so those are recorded as test debt rather than auth/runtime
+failures.
+
+`PASSWORD AUTH VERIFIER = PASS`
+
+`ROOT LOGIN 401 ROOT CAUSE = active Product API database has no target root/email account`
+
+`ROOT PASSWORD CREDENTIAL STATUS = UNKNOWN`
+
+`SAME BROWSER SAME GUEST = PASS`
+
+`SESSION EXPIRY PRESERVES GUEST = PASS`
+
+`STALE COOKIE 401 LOOP = FIXED`
+
+`CANONICAL LOCAL WEB ORIGIN = http://127.0.0.1:5173`
+
+`localhost/127.0.0.1 SPLIT FOUND = NO`
+
+`AUTH REGRESSION = PASS`
+
 ## Status
 
 `CODE EXISTS`: YES.

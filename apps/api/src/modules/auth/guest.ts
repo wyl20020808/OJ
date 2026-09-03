@@ -75,16 +75,11 @@ export function createMemoryGuestAuthStore(
     },
     async resumeGuest(input) {
       const current = resumes.get(input.oldTokenHash);
-      if (!current || current.revoked || current.expiresAt <= new Date())
-        return null;
+      if (!current || current.revoked) return null;
       const user = users.get(current.userId);
       if (!user || user.status !== 'active') return null;
-      current.revoked = true;
-      resumes.set(input.resumeTokenHash, {
-        userId: user.id,
-        expiresAt: input.resumeExpiresAt,
-        revoked: false,
-      });
+      current.expiresAt = input.resumeExpiresAt;
+      current.revoked = false;
       const sessionId = sessionRepository
         ? (
             await sessionRepository.createSession({
@@ -101,13 +96,13 @@ export function createMemoryGuestAuthStore(
     async revokeResume(hash) {
       const value = resumes.get(hash);
       if (!value || value.revoked) return false;
-      value.revoked = true;
+      for (const credential of resumes.values())
+        if (credential.userId === value.userId) credential.revoked = true;
       return true;
     },
     async isGuest(userId) {
-      return (
-        [...resumes.values()].some((resume) => resume.userId === userId) ||
-        [...users.keys()].includes(userId)
+      return [...resumes.values()].some(
+        (resume) => resume.userId === userId && !resume.revoked,
       );
     },
     async findUser(userId) {
@@ -182,7 +177,7 @@ export function createPostgresGuestAuthStore(pool: DbPool): GuestAuthStore {
         await client.query('BEGIN');
         const found = (
           await client.query(
-            "SELECT gi.id guest_identity_id,u.id,u.username,u.email,u.display_name,u.status,u.created_at,u.updated_at FROM guest_resume_credentials grc JOIN guest_identities gi ON gi.id=grc.guest_identity_id JOIN users u ON u.id=gi.user_id WHERE grc.token_hash=$1 AND grc.revoked_at IS NULL AND grc.expires_at>now() AND gi.revoked_at IS NULL AND u.status='active' FOR UPDATE OF grc,gi,u",
+            "SELECT gi.id guest_identity_id,u.id,u.username,u.email,u.display_name,u.status,u.created_at,u.updated_at FROM guest_resume_credentials grc JOIN guest_identities gi ON gi.id=grc.guest_identity_id JOIN users u ON u.id=gi.user_id WHERE grc.token_hash=$1 AND gi.revoked_at IS NULL AND gi.upgraded_at IS NULL AND u.status='active' FOR UPDATE OF gi,u",
             [input.oldTokenHash],
           )
         ).rows[0];
@@ -191,12 +186,8 @@ export function createPostgresGuestAuthStore(pool: DbPool): GuestAuthStore {
           return null;
         }
         await client.query(
-          'UPDATE guest_resume_credentials SET revoked_at=now(),last_used_at=now() WHERE token_hash=$1',
-          [input.oldTokenHash],
-        );
-        await client.query(
-          'INSERT INTO guest_resume_credentials(guest_identity_id,token_hash,token_version,expires_at,rotated_from_id) SELECT guest_identity_id,$2,token_version+1,$3,id FROM guest_resume_credentials WHERE token_hash=$1',
-          [input.oldTokenHash, input.resumeTokenHash, input.resumeExpiresAt],
+          'UPDATE guest_resume_credentials SET revoked_at=NULL,expires_at=$2,last_used_at=now() WHERE token_hash=$1',
+          [input.oldTokenHash, input.resumeExpiresAt],
         );
         await client.query(
           'UPDATE guest_identities SET last_used_at=now() WHERE id=$1',
@@ -219,7 +210,11 @@ export function createPostgresGuestAuthStore(pool: DbPool): GuestAuthStore {
     },
     async revokeResume(hash) {
       const result = await pool.query(
-        'UPDATE guest_resume_credentials SET revoked_at=COALESCE(revoked_at,now()) WHERE token_hash=$1 AND revoked_at IS NULL RETURNING id',
+        'UPDATE guest_identities SET revoked_at=COALESCE(revoked_at,now()) WHERE id IN (SELECT guest_identity_id FROM guest_resume_credentials WHERE token_hash=$1) AND revoked_at IS NULL RETURNING id',
+        [hash],
+      );
+      await pool.query(
+        'UPDATE guest_resume_credentials SET revoked_at=COALESCE(revoked_at,now()) WHERE guest_identity_id IN (SELECT guest_identity_id FROM guest_resume_credentials WHERE token_hash=$1)',
         [hash],
       );
       return Boolean(result.rows[0]);

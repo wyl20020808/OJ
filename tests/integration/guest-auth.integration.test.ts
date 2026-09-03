@@ -137,13 +137,14 @@ describe('Guest Auth PostgreSQL and Redis integration', () => {
     });
     expect(me.statusCode).toBe(200);
     expect(me.json()).toMatchObject({ id: firstUserId, guest: true });
-    const old = await restarted.inject({
+    const repeated = await restarted.inject({
       method: 'POST',
       url: '/api/auth/guest/continue',
       headers: { cookie: firstResume! },
       payload: {},
     });
-    expect(old.statusCode).toBe(401);
+    expect(repeated.statusCode).toBe(200);
+    expect(repeated.json()).toMatchObject({ id: firstUserId, resumed: true });
     const revoke = await restarted.inject({
       method: 'DELETE',
       url: '/api/auth/guest/resume',

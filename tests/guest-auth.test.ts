@@ -36,7 +36,7 @@ async function makeApp(
 }
 
 describe('guest auth contract', () => {
-  it('creates a real guest, resumes the same identity, and rotates the credential', async () => {
+  it('creates a real guest and resumes the same durable identity', async () => {
     const server = await makeApp();
     const first = await server.inject({
       method: 'POST',
@@ -66,19 +66,19 @@ describe('guest auth contract', () => {
       guest: true,
       resumed: true,
     });
-    const rotated = cookiesFrom(second).find((v) =>
+    const resumedCookie = cookiesFrom(second).find((v) =>
       v.startsWith('oj_guest_resume='),
     )!;
-    expect(rotated).not.toBe(resumeCookie);
+    expect(resumedCookie).toBe(resumeCookie);
 
-    const oldToken = await server.inject({
+    const repeated = await server.inject({
       method: 'POST',
       url: '/api/auth/guest/continue',
       headers: { cookie: cookieHeader([resumeCookie]) },
       payload: {},
     });
-    expect(oldToken.statusCode).toBe(401);
-    expect(oldToken.json().code).toBe('INVALID_GUEST_RESUME');
+    expect(repeated.statusCode).toBe(200);
+    expect(repeated.json().id).toBe(first.json().id);
     await server.close();
   });
 
@@ -106,22 +106,52 @@ describe('guest auth contract', () => {
       payload: {},
     });
     expect(continued.statusCode).toBe(200);
-    const rotated = cookiesFrom(continued).find((v) =>
-      v.startsWith('oj_guest_resume='),
-    )!;
     const revoke = await server.inject({
       method: 'DELETE',
       url: '/api/auth/guest/resume',
-      headers: { cookie: rotated },
+      headers: { cookie: resume },
     });
     expect(revoke.statusCode).toBe(204);
-    const invalid = await server.inject({
+    const replacement = await server.inject({
       method: 'POST',
       url: '/api/auth/guest/continue',
-      headers: { cookie: rotated },
+      headers: { cookie: resume },
       payload: {},
     });
-    expect(invalid.statusCode).toBe(401);
+    expect(replacement.statusCode).toBe(200);
+    expect(replacement.json().id).not.toBe(first.json().id);
+    await server.close();
+  });
+
+  it('replaces an unknown stale cookie and converges concurrent tabs on one guest', async () => {
+    const server = await makeApp();
+    const stale = await server.inject({
+      method: 'POST',
+      url: '/api/auth/guest/continue',
+      headers: { cookie: 'oj_guest_resume=stale-token' },
+      payload: {},
+    });
+    expect(stale.statusCode).toBe(200);
+    const cookies = cookiesFrom(stale);
+    const resume = cookies.find((v) => v.startsWith('oj_guest_resume='))!;
+    const [one, two] = await Promise.all([
+      server.inject({
+        method: 'POST',
+        url: '/api/auth/guest/continue',
+        headers: { cookie: resume },
+        payload: {},
+      }),
+      server.inject({
+        method: 'POST',
+        url: '/api/auth/guest/continue',
+        headers: { cookie: resume },
+        payload: {},
+      }),
+    ]);
+    expect(one.statusCode).toBe(200);
+    expect(two.statusCode).toBe(200);
+    expect(one.json().id).toBe(stale.json().id);
+    expect(two.json().id).toBe(stale.json().id);
     await server.close();
   });
 

@@ -6,10 +6,11 @@ import {
 } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
+  describePasswordHash,
   hashPassword,
   sessionToken,
   tokenHash,
-  verifyPassword,
+  verifyPasswordDiagnostic,
 } from './crypto.js';
 import { publicUser, type AuthContext, type AuthRepository } from './types.js';
 import {
@@ -110,6 +111,15 @@ const safeReturnPath = (value: string) =>
   value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')
     ? value
     : null;
+
+const productDatabaseName = () => {
+  try {
+    const pathname = new URL(process.env.DATABASE_URL ?? '').pathname;
+    return pathname.replace(/^\//, '') || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+};
 
 const sendError = (
   reply: FastifyReply,
@@ -950,11 +960,35 @@ export async function registerAuthV2Routes(
           (await options.repository.findById(identity.userId))?.username ?? '',
         )
       : await options.repository.findByIdentity(identifier);
+    const credentialMetadata = found
+      ? describePasswordHash(found.passwordHash)
+      : null;
+    const verification = found
+      ? await verifyPasswordDiagnostic(password, found.passwordHash)
+      : null;
+    app.log.info(
+      {
+        event: 'auth.password_login_diagnostic',
+        requestId: request.id,
+        identifierType: type,
+        identifier: masked(identifier, type),
+        normalized: true,
+        userFound: Boolean(found),
+        userId: found?.id,
+        userStatus: found?.status,
+        passwordLoginEnabled: found?.passwordLoginEnabled !== false,
+        credentialPresent: Boolean(found?.passwordHash),
+        credential: credentialMetadata,
+        verifier: verification?.reason ?? 'not-run',
+        database: productDatabaseName(),
+      },
+      'Password login diagnostic',
+    );
     if (
       !found ||
       found.status !== 'active' ||
       found.passwordLoginEnabled === false ||
-      !(await verifyPassword(password, found.passwordHash))
+      !verification?.ok
     ) {
       await audit(undefined, 'identity:password_login', 'denied', request.id);
       return sendError(reply, 401, 'UNAUTHENTICATED', 'Invalid credentials');
