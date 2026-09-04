@@ -360,7 +360,8 @@ export class LocalJudgeHostAgent {
           OJ_JUDGE_NODE_INCARNATION: incarnation,
           OJ_JUDGE_LAUNCH_NONCE: nonce,
         },
-        stdio: 'ignore',
+        // Runtime Manager redirects the Agent log; retain Worker diagnostics there.
+        stdio: 'inherit',
         // A Host Agent restart must not terminate an active Judge Worker.
         detached: true,
         windowsHide: true,
