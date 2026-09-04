@@ -37,10 +37,15 @@ Start plugin main: `560a5ae2eeff704e4b00f99704bf868bd409ac5c`.
 both migration ledgers, Supervisor readiness, and Worker binary build, then
 Judge Service failed to bind `127.0.0.1:3100` with `EADDRINUSE`.
 
-The shared registry reported only PostgreSQL, Redis, and MinIO as owned. This
-is a cross-worktree runtime listener/registry conflict. This Goal explicitly
-forbids changing Runtime Manager control-plane files, and no process was
-manually terminated.
+A subsequent official `scripts/dev-runtime.ps1 stop` was attempted from this
+worktree. It correctly did not manually terminate a process: the shared Judge
+Service rejected drain/stop for three existing Workers with HTTP `409`, so
+application services remained owned by
+`D:\OJPlatform-worktrees\final-feature-integration`. Shared Judge Service logs
+also showed a different Worker repeatedly receiving `401` for heartbeat and
+assignment claims. This is a cross-worktree runtime ownership and credential
+mix, not evidence from this branch. The Goal forbids modifying Runtime Manager
+control-plane files, so no workaround was applied.
 
 Consequently the following are **not runtime verified**:
 

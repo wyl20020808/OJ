@@ -3,9 +3,11 @@
 Product + Judge + UI Remediation V1: PARTIAL. Judge Data immutable-version
 draft cloning, evaluation/list testcase presentation, China-mainland login
 classification, and Product Judge Admin runtime-config consumption are
-implemented and focused-tested. Managed runtime qualification is blocked by an
-unregistered listener on Judge Service port 3100; Issue 1 root cause and all
-required browser/SSE/runtime assertions remain unverified. See
+implemented and focused-tested. Managed runtime qualification is blocked by a
+shared Runtime Manager registry owned by `final-feature-integration`: official
+stop was rejected by Worker drain HTTP 409 responses, and a foreign Worker is
+receiving Judge Service 401 responses. Issue 1 root cause and all required
+browser/SSE/runtime assertions remain unverified. See
 `OJPLATFORM_PRODUCT_JUDGE_UI_REMEDIATION_V1_REPORT.md`.
 
 - Goal B JudgeData 100 MiB Streaming V1: implementation complete; focused Product/ZIP and Worker validation pass. Supervisor runtime qualification blocked by existing Linux-only/runtime environment failures. See `Docs/reports/OJPLATFORM_JUDGEDATA_100MB_STREAMING_V1_REPORT.md`.
