@@ -168,6 +168,14 @@ started.
 
 Last Updated: 2026-09-03
 
+WSL Docker + Runtime Final Qualification (2026-09-04): PASS. Ubuntu-24.04
+ordinary-user Docker access was repaired through the `docker` group and
+verified without sudo. Runtime port reconciliation branch `fa82b98` passed
+real start/reuse/stop/stop-all recovery with PostgreSQL, Redis, MinIO,
+Supervisor, Host Agent, Worker and Web evidence; current unified checkout also
+started successfully after targeted stale Worker recovery. See
+`Docs/reports/OJPLATFORM_WSL_DOCKER_RUNTIME_FINAL_QUALIFICATION_REPORT.md`.
+
 Local Runtime Manager V1: PASS / LOCAL RUNTIME QUALIFIED. Canonical
 PowerShell/BAT startup, shutdown, status, logs and doctor tooling is present with
 ignored runtime state, generated local tokens, migration ledger, WSL Compose reuse,
