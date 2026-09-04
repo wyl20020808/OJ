@@ -19,7 +19,7 @@ ORIGINAL HEAD = 60e4fa2
 ORIGINAL BRANCH = codex/unified-judge-runtime-integration-v1
 CANDIDATE BEFORE CONSOLIDATION = codex/final-feature-integration-v1 @ b83c33c
 CANONICAL MAIN = main
-CANONICAL MAIN FUNCTIONAL BASELINE = d5d6991
+CANONICAL MAIN FUNCTIONAL BASELINE = b83c33c plus normal evidence/report commits
 MAIN CREATED / UPDATED = YES
 LOCAL BRANCH COUNT = 80
 WORKTREE COUNT = 23
@@ -45,12 +45,11 @@ and `cf701f8` plus final cross-worktree runtime control respectively.
 They are not branches, stashes, or worktrees. Commit subjects correspond to
 superseded or already-integrated historical work; they were left untouched.
 
-The root worktree has 28 untracked artifacts. They are preserved as user or
+The root worktree has 27 untracked artifacts. They are preserved as user or
 unknown artifacts, including goal-read directories, temporary inspection
-directories, `Goals/`, fixtures, and the runtime qualification report before it
-was explicitly committed. No untracked artifact was deleted. The former tracked
-change to `Docs/PROJECT_STATUS.md` was validated with its accompanying runtime
-qualification report, committed, and merged into `main`.
+directories, `Goals/`, and fixtures. No untracked artifact was deleted. The
+former tracked change to `Docs/PROJECT_STATUS.md` was validated with its
+accompanying runtime qualification report, committed, and merged into `main`.
 
 ## OnlineCodeEditor
 
@@ -132,7 +131,7 @@ STASHES REQUIRING ACTION = 0
 USER ARTIFACTS DELETED = NO
 FAILED / SUPERSEDED BRANCHES MERGED = NO
 REMOTE HISTORY REWRITTEN = NO
-OJPLATFORM CANONICAL BASELINE = d5d6991
+OJPLATFORM CANONICAL BASELINE = final `main` commit after this report
 ONLINE CODE EDITOR CANONICAL BASELINE = 560a5ae
 PROJECT CONSOLIDATION = PASS
 REMAINING ACTIONS = NONE
