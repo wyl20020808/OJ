@@ -1,6 +1,6 @@
 # OJPlatform Launcher Status/Stop Regression V1
 
-Status: PARTIAL
+Status: PASS (merge/static integration); real Stop smoke deferred.
 
 ## Root Cause
 
@@ -27,4 +27,9 @@ Canonical source resolution ran before `status` and `stop`. This made read-only 
 
 ## Safety
 
-No user artifacts deleted or moved. No Product/JudgeData/UI changes. No merge to main.
+No user artifacts deleted or moved. No Product/JudgeData/UI changes.
+
+Launcher fix merged to canonical `main` with merge commit
+`2b51c63984fb4fdf2e01b346a3d52123e6153089`. `D:\OJPlatform` normalized to
+branch `main` at the same merge commit. Root Status BAT produced visible
+all-down/runtime output. Real Stop smoke remained deferred.
