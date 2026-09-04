@@ -3,10 +3,10 @@
 Product + Judge + UI Remediation V1: PARTIAL. Judge Data immutable-version
 draft cloning, evaluation/list testcase presentation, China-mainland login
 classification, and Product Judge Admin runtime-config consumption are
-implemented and focused-tested. Managed runtime qualification is blocked by a
-shared Runtime Manager registry owned by `final-feature-integration`: official
-stop was rejected by Worker drain HTTP 409 responses, and a foreign Worker is
-receiving Judge Service 401 responses. Issue 1 root cause and all required
+implemented and focused-tested. Worker/Supervisor execution-set rejections now
+retain bounded contract diagnostics. Managed runtime qualification is blocked:
+official start reaches Judge Service `EADDRINUSE`, while official drain is
+rejected for an old Worker with active work. Issue 1 root cause and all required
 browser/SSE/runtime assertions remain unverified. See
 `OJPLATFORM_PRODUCT_JUDGE_UI_REMEDIATION_V1_REPORT.md`.
 

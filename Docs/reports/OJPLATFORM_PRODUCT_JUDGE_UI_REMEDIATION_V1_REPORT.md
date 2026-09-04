@@ -60,6 +60,15 @@ retain a lower-level Worker/Supervisor error. Therefore no `100 MiB`, JSON body
 limit, or large-JudgeData root cause is claimed; execution-set handoff evidence
 from an owned Runtime is still required.
 
+This remediation adds bounded diagnostic evidence for that handoff: the Worker
+retains a non-2xx Supervisor response body in its local error, and the
+Supervisor returns its strict-decode or contract-validation reason for a
+rejected execution-set request. The focused Worker and Supervisor tests pass.
+This is an observability fix only; it does not claim that the underlying
+`REAL_EXECUTION_SET_INFRA_FAILURE` is fixed. Runtime Control reused the running
+Supervisor binary, so this branch's diagnostic response could not be observed
+in a fresh formal submission.
+
 Consequently the following are **not runtime verified**:
 
 - Issue 1: no fresh small/large formal submission comparison, no lower-level
@@ -94,8 +103,9 @@ Consequently the following are **not runtime verified**:
 - Product Web build: PASS.
 - Product API build: PASS.
 - Judge Worker `go test ./...`: PASS, 63 tests in 9 packages.
-- Supervisor `go test ./...`: BLOCKED on Windows by existing Linux syscall and
-  runtime-dependent failures; no Supervisor source was changed.
+- Supervisor focused `go test ./cmd/supervisor`: PASS, 11 tests. Full
+  `go test ./...` remains BLOCKED on Windows by existing Linux syscall and
+  runtime-dependent failures.
 - Plugin tests: PASS, 31 tests in 17 files.
 - Plugin typecheck and build: PASS.
 - Browser smoke: NOT VERIFIED because the managed application runtime did not

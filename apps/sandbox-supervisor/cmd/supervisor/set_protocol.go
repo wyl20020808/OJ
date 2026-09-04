@@ -163,8 +163,12 @@ func (s *protocolServer) startExecutionSet(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var request model.RealExecutionSetRequest
-	if err := decodeStrict(w, r, &request, maxExecutionSetRequestBytes); err != nil || supervisor.ValidateRealExecutionSetRequest(request) != nil {
-		http.Error(w, "real execution-set request rejected", http.StatusBadRequest)
+	if err := decodeStrict(w, r, &request, maxExecutionSetRequestBytes); err != nil {
+		http.Error(w, "invalid execution-set request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := supervisor.ValidateRealExecutionSetRequest(request); err != nil {
+		http.Error(w, "invalid execution-set request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	identity := setRequestIdentity(request)
