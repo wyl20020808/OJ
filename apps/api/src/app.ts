@@ -76,6 +76,11 @@ import {
   registerCodeRunRoutes,
   codeRunResultFromJob,
 } from './modules/code-run/routes.js';
+import {
+  InMemoryEditorDraftRepository,
+  PostgresEditorDraftRepository,
+  registerEditorDraftModule,
+} from './modules/editor-draft/index.js';
 
 const operatorUserIds = () =>
   new Set(
@@ -423,6 +428,12 @@ export async function buildApp(options: AppOptions = {}) {
         };
       },
     });
+    await registerEditorDraftModule(app, {
+      repository: new PostgresEditorDraftRepository(database.pool),
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      resolveProblemId: async (key) => (await problemRepository.get(key))?.id,
+    });
     const judgeDataRepository = new PostgresJudgeDataRepository(database.pool);
     const judgeDataStorage = new S3ByteStorage(storage.client, storage.bucket);
     const judgeData = new ProblemJudgeDataService(
@@ -574,6 +585,14 @@ export async function buildApp(options: AppOptions = {}) {
           await submissionRepository.beginEvaluation?.(
             submission.id,
             job.judgeJobId,
+            {
+              testcaseCount: testcaseSet.entries.length,
+              completedTestcaseCount: 0,
+              testcases: testcaseSet.entries.map((entry) => ({
+                ordinal: entry.index + 1,
+                status: 'WAITING' as const,
+              })),
+            },
           );
           return;
         }
@@ -584,7 +603,14 @@ export async function buildApp(options: AppOptions = {}) {
             testcaseSet,
           ),
         );
-        await submissionRepository.beginEvaluation?.(submission.id, job.id);
+        await submissionRepository.beginEvaluation?.(submission.id, job.id, {
+          testcaseCount: testcaseSet.entries.length,
+          completedTestcaseCount: 0,
+          testcases: testcaseSet.entries.map((entry) => ({
+            ordinal: entry.index + 1,
+            status: 'WAITING' as const,
+          })),
+        });
       },
       onRejudge: async (submission) => {
         const current = await submissionRepository.getEvaluation?.(
@@ -656,9 +682,27 @@ export async function buildApp(options: AppOptions = {}) {
           const publication = productPublication(job);
           if (publication)
             await submissionRepository.publishEvaluation?.(publication);
-          const evaluation = await submissionRepository.getEvaluation?.(
+          let evaluation = await submissionRepository.getEvaluation?.(
             submission.id,
           );
+          if (
+            evaluation &&
+            job.status === 'RUNNING' &&
+            evaluation.status === 'QUEUED'
+          ) {
+            await submissionRepository.publishEvaluation?.({
+              submissionId: evaluation.submissionId,
+              judgeJobId: evaluation.judgeJobId,
+              evaluationGeneration: evaluation.evaluationGeneration,
+              attemptGeneration: job.attemptGeneration,
+              status: 'RUNNING',
+              ...(evaluation.detail ? { detail: evaluation.detail } : {}),
+              evaluationRecordDigest: `${evaluation.judgeJobId}:RUNNING:${job.attemptGeneration}`,
+            });
+            evaluation = await submissionRepository.getEvaluation?.(
+              submission.id,
+            );
+          }
           return {
             judgeJobId: job.judgeJobId,
             status:
@@ -685,9 +729,27 @@ export async function buildApp(options: AppOptions = {}) {
         const publication = publicationFromJudgeJob(job);
         if (publication)
           await submissionRepository.publishEvaluation?.(publication);
-        const evaluation = await submissionRepository.getEvaluation?.(
+        let evaluation = await submissionRepository.getEvaluation?.(
           submission.id,
         );
+        if (
+          evaluation &&
+          ['LEASED', 'LEASED_FAKE'].includes(job.status) &&
+          evaluation.status === 'QUEUED'
+        ) {
+          await submissionRepository.publishEvaluation?.({
+            submissionId: evaluation.submissionId,
+            judgeJobId: evaluation.judgeJobId,
+            evaluationGeneration: evaluation.evaluationGeneration,
+            attemptGeneration: job.attempt,
+            status: 'RUNNING',
+            ...(evaluation.detail ? { detail: evaluation.detail } : {}),
+            evaluationRecordDigest: `${evaluation.judgeJobId}:RUNNING:${job.attempt}`,
+          });
+          evaluation = await submissionRepository.getEvaluation?.(
+            submission.id,
+          );
+        }
         const status =
           job.status === 'QUEUED'
             ? 'QUEUED'
@@ -1013,6 +1075,12 @@ export async function buildApp(options: AppOptions = {}) {
             creator?.displayName ?? (problem.authorId ? 'Unknown user' : null),
         };
       },
+    });
+    await registerEditorDraftModule(app, {
+      repository: new InMemoryEditorDraftRepository(),
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      resolveProblemId: async (key) => (await problemRepository.get(key))?.id,
     });
     const judgeDataRepository = new InMemoryJudgeDataRepository();
     const judgeDataStorage = new MemoryByteStorage();

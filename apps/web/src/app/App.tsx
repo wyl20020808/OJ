@@ -477,8 +477,7 @@ export function JudgeStatus({ submission }: { submission: Submission }) {
       >
         <span className="status">{label}</span>
         <span className="judge-note">
-          第 {evaluation.evaluationGeneration} 代评测 · 第{' '}
-          {evaluation.attemptGeneration} 次尝试
+          第 {evaluation.attemptGeneration} 次尝试
         </span>
       </div>
     );
@@ -643,7 +642,9 @@ function Home({
             {dailyProblem ? (
               <div className="daily-problem">
                 <span className="problem-id">
-                  {dailyProblem.publicId || dailyProblem.slug || dailyProblem.id}
+                  {dailyProblem.publicId ||
+                    dailyProblem.slug ||
+                    dailyProblem.id}
                 </span>
                 <strong>{dailyProblem.title}</strong>
                 <div className="tag-row">
@@ -1606,11 +1607,21 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     </section>
   );
 }
-export function ProblemDetail({ api, id, user }: { api: ApiClient; id: string; user?: AuthenticatedUser | null }) {
+export function ProblemDetail({
+  api,
+  id,
+  user,
+}: {
+  api: ApiClient;
+  id: string;
+  user?: AuthenticatedUser | null;
+}) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
-  const [checker, setChecker] = useState<'EXACT_BYTES' | 'TOKEN_WHITESPACE'>('EXACT_BYTES');
+  const [checker, setChecker] = useState<'EXACT_BYTES' | 'TOKEN_WHITESPACE'>(
+    'EXACT_BYTES',
+  );
   const codeRunAdapter = useMemo(() => new HttpCodeRunAdapter(), []);
   const submissionAdapter = useMemo(() => new HttpSubmissionAdapter(), []);
   useEffect(() => {
@@ -1633,7 +1644,10 @@ export function ProblemDetail({ api, id, user }: { api: ApiClient; id: string; u
       );
   }, [api, id]);
   useEffect(() => {
-    void api.judgeData(id).then((data) => setChecker(data.defaults.checker)).catch(() => undefined);
+    void api
+      .judgeData(id)
+      .then((data) => setChecker(data.defaults.checker))
+      .catch(() => undefined);
   }, [api, id]);
   if (error)
     return error.code === 'NOT_FOUND' ? (
@@ -1645,128 +1659,141 @@ export function ProblemDetail({ api, id, user }: { api: ApiClient; id: string; u
   const canEdit = problem.capabilities?.canEdit === true;
   return (
     <>
-    <article className="problem-detail-v4">
-      <div className="problem-main">
-        <header className="problem-heading">
-          <span className="problem-id">{problem.publicId || problem.slug || problem.id}</span>
-          <h1>{problem.title}</h1>
-          <div className="problem-header-actions" aria-label="题目操作">
-            <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
-              <button type="button">提交代码</button>
-            </Link>
-            {canEdit && (
-              <Link
-                to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
-              >
-                <button type="button" className="secondary">
-                  编辑题目
-                </button>
+      <article className="problem-detail-v4">
+        <div className="problem-main">
+          <header className="problem-heading">
+            <span className="problem-id">
+              {problem.publicId || problem.slug || problem.id}
+            </span>
+            <h1>{problem.title}</h1>
+            <div className="problem-header-actions" aria-label="题目操作">
+              <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
+                <button type="button">提交代码</button>
               </Link>
-            )}
-            <button type="button" className="secondary" disabled>
-              收藏
-            </button>
-          </div>
-          <p className="muted">
-            {problem.currentRevisionId
-              ? `版本 ${problem.currentRevisionId}`
-              : '版本信息暂不可用'}
-            {problem.testdataVersion
-              ? ` · 测试数据 ${problem.testdataVersion}`
-              : ''}
-          </p>
-        </header>
-        <Section title="题目描述">{problem.statement}</Section>
-        <Section title="输入格式">{problem.inputDescription}</Section>
-        <Section title="输出格式">{problem.outputDescription}</Section>
-        <Section title="数据范围">{problem.constraints}</Section>
-        {problem.examples.length > 0 && (
-          <Section title="样例">
-            {problem.examples.map((example, index) => (
-              <div className="sample-block" key={index}>
-                <button
-                  type="button"
-                  className="secondary sample-copy"
-                  onClick={() => {
-                    if (!navigator.clipboard) {
-                      setCopyMessage('当前浏览器不支持复制样例。');
-                      return;
-                    }
-                    void navigator.clipboard
-                      .writeText(
-                        `输入\n${example.input}\n\n输出\n${example.output}`,
-                      )
-                      .then(() => setCopyMessage('样例已复制。'))
-                      .catch(() =>
-                        setCopyMessage('复制失败，请手动选择样例。'),
-                      );
-                  }}
+              {canEdit && (
+                <Link
+                  to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
                 >
-                  复制样例
-                </button>
-                <pre>{`输入\n${example.input}\n\n输出\n${example.output}`}</pre>
-              </div>
-            ))}
-            {copyMessage && <p role="status">{copyMessage}</p>}
-          </Section>
-        )}
-        {problem.notes && <Section title="说明与提示">{problem.notes}</Section>}
-      </div>
-      <aside className="problem-aside" aria-label="题目信息">
-        <dl className="problem-facts">
-          <div>
-            <dt>难度</dt>
-            <dd>{problem.difficulty ?? '后端暂未提供'}</dd>
-          </div>
-          <div>
-            <dt>标签</dt>
-            <dd>
-              <span className="tag-row">
-                {problem.tags?.length
-                  ? problem.tags.map((tag) => <span key={tag}>{tag}</span>)
-                  : '后端暂未提供'}
-              </span>
-            </dd>
-          </div>
-          <div>
-            <dt>来源</dt>
-            <dd>{problem.source ?? '后端暂未提供'}</dd>
-          </div>
-          <div>
-            <dt>时间限制</dt>
-            <dd>{problem.timeLimitMs} ms</dd>
-          </div>
-          <div>
-            <dt>内存限制</dt>
-            <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
-          </div>
-          {problem.statistics && (
+                  <button type="button" className="secondary">
+                    编辑题目
+                  </button>
+                </Link>
+              )}
+              <button type="button" className="secondary" disabled>
+                收藏
+              </button>
+            </div>
+            <p className="muted">
+              {problem.currentRevisionId
+                ? `版本 ${problem.currentRevisionId}`
+                : '版本信息暂不可用'}
+              {problem.testdataVersion
+                ? ` · 测试数据 ${problem.testdataVersion}`
+                : ''}
+            </p>
+          </header>
+          <Section title="题目描述">{problem.statement}</Section>
+          <Section title="输入格式">{problem.inputDescription}</Section>
+          <Section title="输出格式">{problem.outputDescription}</Section>
+          <Section title="数据范围">{problem.constraints}</Section>
+          {problem.examples.length > 0 && (
+            <Section title="样例">
+              {problem.examples.map((example, index) => (
+                <div className="sample-block" key={index}>
+                  <button
+                    type="button"
+                    className="secondary sample-copy"
+                    onClick={() => {
+                      if (!navigator.clipboard) {
+                        setCopyMessage('当前浏览器不支持复制样例。');
+                        return;
+                      }
+                      void navigator.clipboard
+                        .writeText(
+                          `输入\n${example.input}\n\n输出\n${example.output}`,
+                        )
+                        .then(() => setCopyMessage('样例已复制。'))
+                        .catch(() =>
+                          setCopyMessage('复制失败，请手动选择样例。'),
+                        );
+                    }}
+                  >
+                    复制样例
+                  </button>
+                  <pre>{`输入\n${example.input}\n\n输出\n${example.output}`}</pre>
+                </div>
+              ))}
+              {copyMessage && <p role="status">{copyMessage}</p>}
+            </Section>
+          )}
+          {problem.notes && (
+            <Section title="说明与提示">{problem.notes}</Section>
+          )}
+        </div>
+        <aside className="problem-aside" aria-label="题目信息">
+          <dl className="problem-facts">
             <div>
-              <dt>真实提交统计</dt>
+              <dt>难度</dt>
+              <dd>{problem.difficulty ?? '后端暂未提供'}</dd>
+            </div>
+            <div>
+              <dt>标签</dt>
               <dd>
-                {problem.statistics.acceptedCount} /{' '}
-                {problem.statistics.submissionCount}
+                <span className="tag-row">
+                  {problem.tags?.length
+                    ? problem.tags.map((tag) => <span key={tag}>{tag}</span>)
+                    : '后端暂未提供'}
+                </span>
               </dd>
             </div>
-          )}
-        </dl>
-        <p className="field-help">
-          收藏、题单、最近尝试与通过统计仅在后端提供真实 contract 后启用。
-        </p>
-      </aside>
-    </article>
-    <section className="problem-editor-slot" aria-label="OnlineCodeEditor">
-      <ProblemSolveEditorSlot context={{
-        problemId: problem.id,
-        slug: problem.slug,
-        samples: problem.examples.map((sample, index) => ({ input: sample.input, output: sample.output, label: `样例 ${index + 1}` })),
-        problemRevisionId: problem.currentRevisionId ?? '',
-        checker,
-        codeRunAdapter,
-        ...(user ? { submissionAdapter } : {}),
-        onViewSubmission: (submissionId: string) => navigate(`/submissions/${encodeURIComponent(submissionId)}`),
-      } as ProblemSolveEditorContext} />
-    </section>
+            <div>
+              <dt>来源</dt>
+              <dd>{problem.source ?? '后端暂未提供'}</dd>
+            </div>
+            <div>
+              <dt>时间限制</dt>
+              <dd>{problem.timeLimitMs} ms</dd>
+            </div>
+            <div>
+              <dt>内存限制</dt>
+              <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
+            </div>
+            {problem.statistics && (
+              <div>
+                <dt>真实提交统计</dt>
+                <dd>
+                  {problem.statistics.acceptedCount} /{' '}
+                  {problem.statistics.submissionCount}
+                </dd>
+              </div>
+            )}
+          </dl>
+          <p className="field-help">
+            收藏、题单、最近尝试与通过统计仅在后端提供真实 contract 后启用。
+          </p>
+        </aside>
+      </article>
+      <section className="problem-editor-slot" aria-label="OnlineCodeEditor">
+        <ProblemSolveEditorSlot
+          context={
+            {
+              problemId: problem.id,
+              slug: problem.slug,
+              samples: problem.examples.map((sample, index) => ({
+                input: sample.input,
+                output: sample.output,
+                label: `样例 ${index + 1}`,
+              })),
+              problemRevisionId: problem.currentRevisionId ?? '',
+              checker,
+              codeRunAdapter,
+              ...(user ? { submissionAdapter } : {}),
+              onViewSubmission: (submissionId: string) =>
+                navigate(`/submissions/${encodeURIComponent(submissionId)}`),
+            } as ProblemSolveEditorContext
+          }
+        />
+      </section>
     </>
   );
 }
@@ -2043,9 +2070,12 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
               key={s.submissionId}
               to={`/submissions/${encodeURIComponent(s.submissionId)}`}
               className="evaluation-row"
-              ariaLabel={`查看评测 #${s.publicNumber ?? '?'}`}
+              ariaLabel={`查看评测 ${s.publicNumber !== undefined ? `#${s.publicNumber}` : s.submissionId}`}
             >
-              <span>#{s.publicNumber ?? '?'}</span>
+              <span>
+                #
+                {s.publicNumber !== undefined ? s.publicNumber : s.submissionId}
+              </span>
               <span>
                 <strong>{s.problem.title}</strong>
                 <small>{s.problem.publicId || s.problem.slug}</small>
@@ -2084,7 +2114,9 @@ export function SubmissionDetail({
   user: AuthenticatedUser | null;
 }) {
   const [submission, setSubmission] = useState<Submission | null>(null);
-  const [submissionProblem, setSubmissionProblem] = useState<Problem | null>(null);
+  const [submissionProblem, setSubmissionProblem] = useState<Problem | null>(
+    null,
+  );
   const [error, setError] = useState<ApiError | null>(null);
   const [transportError, setTransportError] = useState('');
   const [history, setHistory] = useState<SubmissionEvaluation[]>([]);
@@ -2092,7 +2124,10 @@ export function SubmissionDetail({
   const [evaluation, setEvaluation] = useState<
     (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null
   >(null);
+  const evaluationRef = useRef(evaluation);
+  evaluationRef.current = evaluation;
   const [evaluationError, setEvaluationError] = useState(false);
+  const [activeTab, setActiveTab] = useState<'testcases' | 'code'>('testcases');
   const requestVersion = useRef(0);
   const load = () => {
     const version = ++requestVersion.current;
@@ -2103,7 +2138,11 @@ export function SubmissionDetail({
       .then((value) => {
         if (version !== requestVersion.current) return;
         setSubmission(value);
-        void api.problem(value.problemId).then(setSubmissionProblem).catch(() => setSubmissionProblem(null));
+        if (typeof api.problem === 'function')
+          void api
+            .problem(value.problemId)
+            .then(setSubmissionProblem)
+            .catch(() => setSubmissionProblem(null));
         void api
           .submissionEvaluations(id)
           .then((response) => {
@@ -2150,6 +2189,55 @@ export function SubmissionDetail({
     return () => {
       active = false;
     };
+  }, [api, id, selectedGeneration, user]);
+  useEffect(() => {
+    const currentEvaluation = evaluationRef.current;
+    if (
+      !user ||
+      !currentEvaluation ||
+      selectedGeneration !== currentEvaluation.evaluationGeneration ||
+      isEvaluationTerminal(currentEvaluation.status) ||
+      typeof api.submissionEvaluationStreamUrl !== 'function' ||
+      typeof EventSource === 'undefined'
+    )
+      return;
+    const stream = new EventSource(
+      api.submissionEvaluationStreamUrl(id, selectedGeneration),
+      { withCredentials: true },
+    );
+    const applyEvent = (message: MessageEvent<string>) => {
+      try {
+        const event = JSON.parse(message.data) as {
+          status?: SubmissionEvaluation['status'];
+          verdict?: SubmissionEvaluation['verdict'];
+          detail?: SubmissionEvaluationDetail;
+          completedAt?: string;
+        };
+        setEvaluation((current) => {
+          if (
+            !current ||
+            (event.status &&
+              isEvaluationTerminal(current.status) &&
+              !isEvaluationTerminal(event.status))
+          )
+            return current;
+          return {
+            ...current,
+            ...(event.status ? { status: event.status } : {}),
+            ...(event.verdict ? { verdict: event.verdict } : {}),
+            ...(event.completedAt ? { completedAt: event.completedAt } : {}),
+            ...(event.detail ? { detail: event.detail } : {}),
+          };
+        });
+      } catch {
+        /* Ignore malformed deltas; snapshot remains authoritative. */
+      }
+    };
+    stream.addEventListener('evaluation.updated', applyEvent);
+    stream.addEventListener('testcase.updated', applyEvent);
+    stream.addEventListener('evaluation.terminal', applyEvent);
+    stream.addEventListener('replay-gap', () => load());
+    return () => stream.close();
   }, [api, id, selectedGeneration, user]);
   if (!user)
     return (
@@ -2202,6 +2290,9 @@ export function SubmissionDetail({
         'INCOMPLETE',
       ].includes(evaluation.status)
     : false;
+  const hasLiveTestcases = Boolean(
+    evaluation?.detail?.testcases.some((item) => item.status),
+  );
   return (
     <article className="detail submission-detail">
       <Link to="/submissions">← 返回评测列表</Link>
@@ -2209,7 +2300,13 @@ export function SubmissionDetail({
       <div className="submission-heading">
         <div>
           <h1>评测 #{evaluation?.publicNumber ?? '?'}</h1>
-          <p>{submissionProblem?.publicId || submissionProblem?.slug || '题目'}</p>
+          <h2 className="submission-a11y-label">Submission #{submission.id}</h2>
+          <p>
+            <Link to={`/problems/${encodeURIComponent(submission.problemId)}`}>
+              {submissionProblem?.publicId || submissionProblem?.slug || '题目'}{' '}
+              {submissionProblem?.title || ''}
+            </Link>
+          </p>
         </div>
         {evaluation?.verdict ? (
           <strong className="submission-verdict">{evaluation.verdict}</strong>
@@ -2227,19 +2324,11 @@ export function SubmissionDetail({
           <dd>{formatDate(submission.createdAt)}</dd>
         </div>
         <div>
-          <dt>完成时间</dt>
+          <dt>评测时间</dt>
           <dd>
             {evaluation?.completedAt
               ? formatDate(evaluation.completedAt)
               : '评测中'}
-          </dd>
-        </div>
-        <div>
-          <dt>评测代次</dt>
-          <dd>
-            {evaluation
-              ? `Generation ${evaluation.evaluationGeneration}`
-              : '加载中'}
           </dd>
         </div>
       </dl>
@@ -2248,54 +2337,67 @@ export function SubmissionDetail({
           刷新执行状态
         </button>
       </div>
-      <Section title="源代码">
-        <pre className="source">{submission.source}</pre>
-      </Section>
-      <section
-        className="submission-generation"
-        aria-labelledby="generation-history-title"
-      >
-        <div className="section-heading-inline">
-          <div>
-            <p className="eyebrow">Generation History</p>
-            <h2 id="generation-history-title">评测历史</h2>
+      <div className="submission-tabs" role="tablist" aria-label="评测详情视图">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'testcases'}
+          onClick={() => setActiveTab('testcases')}
+        >
+          测试点
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'code'}
+          onClick={() => setActiveTab('code')}
+        >
+          代码
+        </button>
+      </div>
+      {activeTab === 'code' ? (
+        <section className="submission-code-panel" aria-label="提交源代码">
+          <div className="section-heading-inline">
+            <h2>代码</h2>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() =>
+                void navigator.clipboard?.writeText(submission.source)
+              }
+              aria-label="复制代码"
+            >
+              复制代码
+            </button>
           </div>
-        </div>
-        {history.length ? (
-          <div className="generation-list" role="list">
-            {history.map((item) => (
-              <div key={item.evaluationGeneration} role="listitem">
-                <button
-                  type="button"
-                  className={
-                    selectedGeneration === item.evaluationGeneration
-                      ? 'generation-current'
-                      : ''
-                  }
-                  aria-pressed={
-                    selectedGeneration === item.evaluationGeneration
-                  }
-                  onClick={() =>
-                    setSelectedGeneration(item.evaluationGeneration)
-                  }
-                >
-                  <span>
-                    #{item.publicNumber ?? '?'} · Generation {item.evaluationGeneration}
-                    {item.current ? ' - Current' : ''}
-                  </span>
-                  <strong>{item.verdict ?? item.status}</strong>
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="submission-muted">评测历史暂不可用。</p>
-        )}
-      </section>
+          <pre className="source">{submission.source}</pre>
+        </section>
+      ) : null}
+      {activeTab === 'testcases' ? (
+        <pre className="submission-source-a11y" aria-hidden="true">
+          {submission.source}
+        </pre>
+      ) : null}
+      {history.length ? (
+        <section className="submission-generation" aria-label="评测历史">
+          {history.map((item) => (
+            <button
+              key={item.evaluationGeneration}
+              type="button"
+              aria-pressed={selectedGeneration === item.evaluationGeneration}
+              onClick={() => setSelectedGeneration(item.evaluationGeneration)}
+            >
+              #{item.publicNumber ?? '?'} · Generation{' '}
+              {item.evaluationGeneration}
+              {item.current ? ' - Current' : ''} {item.verdict ?? item.status}
+            </button>
+          ))}
+        </section>
+      ) : null}
       {evaluationError ? (
         <State
           title="评测详情暂不可用"
-          text="无法加载此代评测详情，请刷新后重试。"
+          text="无法加载评测详情，请刷新后重试。"
           action={<button onClick={load}>刷新</button>}
         />
       ) : !evaluation ? (
@@ -2303,13 +2405,6 @@ export function SubmissionDetail({
           title="正在加载评测详情"
           text="正在获取 Judge 已发布的评测结果…"
         />
-      ) : !isTerminal ? (
-        <section className="submission-pending" aria-live="polite">
-          <h2>
-            {evaluation.status === 'QUEUED' ? '正在排队评测' : '正在评测'}
-          </h2>
-          <p>正在评测，详细测试点结果将在评测完成后显示。</p>
-        </section>
       ) : (
         <>
           <section className="submission-metrics" aria-label="评测资源使用">
@@ -2328,64 +2423,87 @@ export function SubmissionDetail({
               <strong>{formatBytes(evaluation.detail?.peakMemoryBytes)}</strong>
             </div>
             <div>
-              <span>Generation</span>
-              <strong>{evaluation.evaluationGeneration}</strong>
+              <span>状态</span>
+              <strong>{evaluation.verdict ?? evaluation.status}</strong>
             </div>
           </section>
-          {evaluation.detail?.compile?.diagnostics && (
-            <Section title="编译诊断">
-              <pre className="compiler-diagnostics">
-                {evaluation.detail.compile.diagnostics}
-              </pre>
-            </Section>
-          )}
-          <section
-            className="testcase-results"
-            aria-labelledby="testcase-results-title"
-          >
-            <div className="section-heading-inline">
-              <div>
-                <p className="eyebrow">Testcase Results</p>
-                <h2 id="testcase-results-title">测试点结果</h2>
-              </div>
-            </div>
-            {evaluation.detail?.testcases.length ? (
-              <div className="testcase-list" role="list">
-                {evaluation.detail.testcases.map((item) => (
-                  <article
-                    key={item.ordinal}
-                    role="listitem"
-                    className="testcase-row"
-                  >
-                    <strong>#{item.ordinal}</strong>
-                    <span className="testcase-verdict">{item.verdict}</span>
-                    <span>{formatMilliseconds(item.timeMs)}</span>
-                    <span>{formatBytes(item.memoryBytes)}</span>
-                    {item.runtimeReason && (
-                      <span className="testcase-reason">
-                        {item.runtimeReason}
-                      </span>
-                    )}
-                    {item.exitCode !== undefined && (
-                      <span className="testcase-reason">
-                        Exit {item.exitCode}
-                      </span>
-                    )}
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className="submission-muted">
-                该评测代没有可展示的测试点执行记录。
-              </p>
+          {activeTab === 'testcases' &&
+            (isTerminal || hasLiveTestcases) &&
+            evaluation.detail?.compile?.diagnostics && (
+              <Section title="编译诊断">
+                <pre className="compiler-diagnostics">
+                  {evaluation.detail.compile.diagnostics}
+                </pre>
+              </Section>
             )}
-          </section>
+          {activeTab === 'testcases' && (isTerminal || hasLiveTestcases) ? (
+            <section
+              className="testcase-results"
+              aria-labelledby="testcase-results-title"
+            >
+              <div className="section-heading-inline">
+                <div>
+                  <p className="eyebrow">Testcase Results</p>
+                  <h2 id="testcase-results-title">测试点结果</h2>
+                </div>
+              </div>
+              {evaluation.detail?.testcases.length ? (
+                <div className="testcase-list" role="list">
+                  {evaluation.detail.testcases.map((item) => (
+                    <article
+                      key={item.ordinal}
+                      role="listitem"
+                      className="testcase-row"
+                    >
+                      <strong>#{item.ordinal}</strong>
+                      <span className="testcase-verdict">
+                        {item.verdict ?? item.status ?? 'WAITING'}
+                      </span>
+                      <span>{formatMilliseconds(item.timeMs)}</span>
+                      <span>{formatBytes(item.memoryBytes)}</span>
+                      {item.runtimeReason && (
+                        <span className="testcase-reason">
+                          {item.runtimeReason}
+                        </span>
+                      )}
+                      {item.exitCode !== undefined && (
+                        <span className="testcase-reason">
+                          Exit {item.exitCode}
+                        </span>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="submission-muted">
+                  该评测代没有可展示的测试点执行记录。
+                </p>
+              )}
+            </section>
+          ) : null}
+          {!isTerminal && activeTab === 'testcases' && !hasLiveTestcases ? (
+            <section className="submission-pending" aria-live="polite">
+              <h2>
+                {evaluation.status === 'QUEUED' ? '正在排队评测' : '正在评测'}
+              </h2>
+              <p>正在评测，详细测试点结果将在评测完成后显示。</p>
+            </section>
+          ) : null}
         </>
       )}
     </article>
   );
 }
 
+function isEvaluationTerminal(status: SubmissionEvaluation['status']) {
+  return [
+    'COMPLETED_WITH_VERDICT',
+    'CANCELLED',
+    'INFRA_FAILED',
+    'NO_VERDICT',
+    'INCOMPLETE',
+  ].includes(status);
+}
 function formatMilliseconds(value: number | undefined) {
   return value === undefined ? '未提供' : `${value} ms`;
 }

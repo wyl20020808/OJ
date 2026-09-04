@@ -34,7 +34,7 @@ export type SubmissionTestcaseDetail = {
     | 'MLE'
     | 'CANCELLED'
     | 'SKIPPED';
-  verdict: SubmissionVerdict;
+  verdict?: SubmissionVerdict;
   timeMs?: number;
   memoryBytes?: number;
   exitCode?: number;

@@ -43,6 +43,7 @@ export interface SubmissionRepository {
   beginEvaluation?(
     submissionId: string,
     judgeJobId: string,
+    detail?: SubmissionEvaluationDetail,
   ): Promise<SubmissionEvaluation>;
   startRejudge?(
     submissionId: string,
@@ -186,7 +187,11 @@ export class InMemorySubmissionRepository implements SubmissionRepository {
     submission.updatedAt = timestamp;
     return { ...record };
   }
-  async beginEvaluation(submissionId: string, judgeJobId: string) {
+  async beginEvaluation(
+    submissionId: string,
+    judgeJobId: string,
+    detail?: SubmissionEvaluationDetail,
+  ) {
     const submission = this.rows.get(submissionId);
     if (!submission) throw new Error('SUBMISSION_NOT_FOUND');
     const history = this.evaluations.get(submissionId) ?? [];
@@ -204,6 +209,7 @@ export class InMemorySubmissionRepository implements SubmissionRepository {
       judgeJobId,
       status: 'QUEUED',
       evaluationRecordDigest: '',
+      ...(detail ? { detail } : {}),
       createdAt: timestamp,
       updatedAt: timestamp,
       current: true,
@@ -447,10 +453,14 @@ export class PostgresSubmissionRepository implements SubmissionRepository {
     );
     return result.rows.map(mapEvaluation);
   }
-  async beginEvaluation(submissionId: string, judgeJobId: string) {
+  async beginEvaluation(
+    submissionId: string,
+    judgeJobId: string,
+    detail?: SubmissionEvaluationDetail,
+  ) {
     const result = await this.pool.query(
-      "WITH inserted AS (INSERT INTO submission_evaluations (submission_id,evaluation_generation,attempt_generation,judge_job_id,status,evaluation_record_digest,current) SELECT $1,1,0,$2,'QUEUED','',true WHERE NOT EXISTS (SELECT 1 FROM submission_evaluations WHERE submission_id=$1) RETURNING *) UPDATE submissions SET status='PENDING',updated_at=now() WHERE id=$1 AND EXISTS (SELECT 1 FROM inserted) RETURNING (SELECT row_to_json(inserted) FROM inserted) AS evaluation",
-      [submissionId, judgeJobId],
+      "WITH inserted AS (INSERT INTO submission_evaluations (submission_id,evaluation_generation,attempt_generation,judge_job_id,status,evaluation_record_digest,current,detail) SELECT $1,1,0,$2,'QUEUED','',true,$3::jsonb WHERE NOT EXISTS (SELECT 1 FROM submission_evaluations WHERE submission_id=$1) RETURNING *) UPDATE submissions SET status='PENDING',updated_at=now() WHERE id=$1 AND EXISTS (SELECT 1 FROM inserted) RETURNING (SELECT row_to_json(inserted) FROM inserted) AS evaluation",
+      [submissionId, judgeJobId, detail ? JSON.stringify(detail) : null],
     );
     if (result.rows[0]?.evaluation)
       return mapEvaluation(

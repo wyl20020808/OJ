@@ -3,6 +3,7 @@ import editorPlugin, { type EditorSlotContext } from '@ojplatform/online-code-ed
 import type { EditorHostContext } from '@ojplatform/online-code-editor/host/EditorHostContext';
 import type { ProblemSolveEditorContext } from '@ojplatform/plugin-sdk';
 import '@ojplatform/online-code-editor/app.css';
+import { HttpDraftAdapter } from '@ojplatform/online-code-editor/draft/DraftAdapter';
 
 export { editorPlugin as default };
 
@@ -16,12 +17,15 @@ type HostedProblemContext = ProblemSolveEditorContext & {
 
 export function OnlineCodeEditorContribution({ context }: { context: HostedProblemContext }) {
   const elementRef = useRef<HTMLDivElement>(null);
+  const draftAdapterRef = useRef(new HttpDraftAdapter(import.meta.env.VITE_API_URL ?? ''));
   useEffect(() => {
     const element = elementRef.current;
     if (!element) return;
     const hostContext: EditorHostContext = {
       problemId: context.problemId,
       problemRevisionId: context.problemRevisionId,
+      language: 'cpp20',
+      draftAdapter: draftAdapterRef.current,
       codeRunAdapter: context.codeRunAdapter,
       sampleProvider: { getSamples: () => context.samples },
       ...(context.submissionAdapter ? { submissionAdapter: context.submissionAdapter } : {}),
