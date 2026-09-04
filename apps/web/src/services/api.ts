@@ -4,7 +4,15 @@ export type ApiErrorBody = {
   requestId: string;
   details?: unknown;
 };
-export type EditorCodeDraft = { userId?: string; problemId: string; language: string; source: string; version: number; createdAt?: string; updatedAt?: string };
+export type EditorCodeDraft = {
+  userId?: string;
+  problemId: string;
+  language: string;
+  source: string;
+  version: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
 export type AuthenticatedUser = {
   id: string;
   username: string;
@@ -335,7 +343,19 @@ export type SubmissionEvaluation = {
 };
 export type SubmissionTestcaseResult = {
   ordinal: number;
-  verdict: 'AC' | 'WA' | 'CE' | 'RE' | 'TLE' | 'MLE';
+  status?:
+    | 'WAITING'
+    | 'RUNNING'
+    | 'PASS'
+    | 'AC'
+    | 'WA'
+    | 'CE'
+    | 'RE'
+    | 'TLE'
+    | 'MLE'
+    | 'CANCELLED'
+    | 'SKIPPED';
+  verdict?: 'AC' | 'WA' | 'CE' | 'RE' | 'TLE' | 'MLE';
   timeMs?: number;
   memoryBytes?: number;
   runtimeReason?: string;
@@ -1098,8 +1118,28 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
-    editorDraft: (problemId: string, language: string) => request<EditorCodeDraft | null>(baseUrl, `/api/editor/drafts/${encodeURIComponent(problemId)}/${encodeURIComponent(language)}`, undefined, fetcher),
-    saveEditorDraft: (problemId: string, language: string, source: string, version?: number | null) => request<EditorCodeDraft>(baseUrl, `/api/editor/drafts/${encodeURIComponent(problemId)}/${encodeURIComponent(language)}`, { method: 'PUT', body: JSON.stringify({ source, version: version ?? null }) }, fetcher),
+    editorDraft: (problemId: string, language: string) =>
+      request<EditorCodeDraft | null>(
+        baseUrl,
+        `/api/editor/drafts/${encodeURIComponent(problemId)}/${encodeURIComponent(language)}`,
+        undefined,
+        fetcher,
+      ),
+    saveEditorDraft: (
+      problemId: string,
+      language: string,
+      source: string,
+      version?: number | null,
+    ) =>
+      request<EditorCodeDraft>(
+        baseUrl,
+        `/api/editor/drafts/${encodeURIComponent(problemId)}/${encodeURIComponent(language)}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ source, version: version ?? null }),
+        },
+        fetcher,
+      ),
     createProblem: (input: ProblemInput) =>
       request<Problem>(
         baseUrl,
@@ -1342,6 +1382,8 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
+    submissionEvaluationStreamUrl: (id: string, generation: number) =>
+      `${baseUrl}/api/submissions/${encodeURIComponent(id)}/evaluations/${encodeURIComponent(String(generation))}/stream`,
     cancelSubmission: (id: string) =>
       request<{
         judgeJobId: string;

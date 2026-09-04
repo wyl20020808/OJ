@@ -7,6 +7,8 @@ Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: UNIFIED JUDGE RUNTIME INTEGRATION V1 PASS
 Current Status: PRODUCT/JUDGE DEFECT REMEDIATION COMPLETE; TOKEN_WHITESPACE IS THE NEW-DATA DEFAULT WITH EXPLICIT EXACT_BYTES ADVANCED SETTING
 
+Goal D Evaluation Detail + SSE Live Progress V1: PARTIAL. Evaluation Detail tabs, authoritative queued/running snapshots, authenticated bounded SSE, cursor replay, duplicate-safe browser merge, and focused tests are implemented on `d646a2b`. Real Judge testcase event emission and runtime SSE qualification remain blocked by JudgeData/runtime availability. See `reports/OJPLATFORM_EVALUATION_DETAIL_SSE_LIVE_PROGRESS_V1_REPORT.md`.
+
 Auth real-runtime remediation: PASS for password verifier/diagnostics and
 durable Guest identity/session recovery. The active Product runtime database
 does not contain the reported root email, so `ROOT PASSWORD CREDENTIAL STATUS`

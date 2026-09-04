@@ -22,7 +22,19 @@ export type SubmissionEvaluationStatus =
 
 export type SubmissionTestcaseDetail = {
   ordinal: number;
-  verdict: SubmissionVerdict;
+  status?:
+    | 'WAITING'
+    | 'RUNNING'
+    | 'PASS'
+    | 'AC'
+    | 'WA'
+    | 'CE'
+    | 'RE'
+    | 'TLE'
+    | 'MLE'
+    | 'CANCELLED'
+    | 'SKIPPED';
+  verdict?: SubmissionVerdict;
   timeMs?: number;
   memoryBytes?: number;
   exitCode?: number;

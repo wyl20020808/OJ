@@ -18,6 +18,7 @@ import {
 import { SubmissionService } from './service.js';
 import { LANGUAGE_CATALOG } from './languages.js';
 import { publicSubmissionEvaluation } from './outcome.js';
+import { EvaluationEventHub, type EvaluationEvent } from './events.js';
 
 export type SubmissionModuleContext = {
   repository?: SubmissionRepository;
@@ -41,6 +42,7 @@ export type SubmissionModuleContext = {
   projectGlobalListItem?: (
     submission: Submission,
   ) => Promise<Pick<GlobalEvaluationListItem, 'problem' | 'submitter'>>;
+  eventHub?: EvaluationEventHub;
 };
 const error = (
   reply: FastifyReply,
@@ -62,6 +64,7 @@ export async function registerSubmissionModule(
   context: SubmissionModuleContext,
 ) {
   const repository = context.repository ?? new InMemorySubmissionRepository();
+  const eventHub = context.eventHub ?? new EvaluationEventHub();
   const service = new SubmissionService(
     repository,
     context.authorizationPolicy,
@@ -69,10 +72,14 @@ export async function registerSubmissionModule(
     context.judgeDataResolver,
     context.guardCreate,
   );
-  const project = async (submission: Submission) =>
-    context.projectJudge
+  const project = async (submission: Submission) => {
+    const projected = context.projectJudge
       ? { ...submission, ...(await context.projectJudge(submission)) }
       : submission;
+    const evaluation = await repository.getEvaluation?.(submission.id);
+    if (evaluation) eventHub.publish(evaluation);
+    return projected;
+  };
   const auth = async (request: FastifyRequest) =>
     context.getAuthContext ? await context.getAuthContext(request) : undefined;
   app.get('/api/submissions/languages', async (_request, reply) =>
@@ -377,6 +384,96 @@ export async function registerSubmissionModule(
       throw e;
     }
   });
+  app.get(
+    '/api/submissions/:id/evaluations/:generation/stream',
+    async (request, reply) => {
+      try {
+        const submission = await service.detail(
+          (request.params as { id: string }).id,
+          await auth(request),
+        );
+        const generation = Number(
+          (request.params as { generation: string }).generation,
+        );
+        if (!Number.isSafeInteger(generation) || generation < 1)
+          return error(
+            reply,
+            request,
+            400,
+            'VALIDATION_ERROR',
+            'Invalid generation',
+          );
+        const evaluation = await repository.getEvaluation?.(submission.id);
+        if (!evaluation || evaluation.evaluationGeneration !== generation)
+          return error(
+            reply,
+            request,
+            404,
+            'NOT_FOUND',
+            'Evaluation not found',
+          );
+        const header = request.headers['last-event-id'];
+        const afterId =
+          typeof header === 'string' && /^\d+$/.test(header)
+            ? Number(header)
+            : undefined;
+        reply.hijack();
+        const raw = reply.raw;
+        raw.writeHead(200, {
+          'content-type': 'text/event-stream; charset=utf-8',
+          'cache-control': 'no-cache, no-transform',
+          connection: 'keep-alive',
+          'x-accel-buffering': 'no',
+        });
+        const subscription: { unsubscribe: () => void; replayGap: boolean } = {
+          unsubscribe: () => undefined,
+          replayGap: false,
+        };
+        let closed = false;
+        const cleanup = () => {
+          closed = true;
+          subscription.unsubscribe();
+          if (!raw.destroyed) raw.end();
+        };
+        const write = (event: EvaluationEvent) => {
+          if (event.evaluationGeneration !== generation) return;
+          raw.write(
+            `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          );
+          if (event.type === 'evaluation.terminal') cleanup();
+        };
+        const registered = eventHub.subscribe(submission.id, afterId, write);
+        subscription.replayGap = registered.replayGap;
+        subscription.unsubscribe = registered.unsubscribe;
+        if (closed) cleanup();
+        else eventHub.publish(evaluation);
+        if (subscription.replayGap)
+          raw.write('event: replay-gap\ndata: {"refresh":true}\n\n');
+        raw.once('close', cleanup);
+        return reply;
+      } catch (e) {
+        if (e instanceof SubmissionNotFoundError)
+          return error(reply, request, 404, 'NOT_FOUND', e.message);
+        if (e instanceof Error && e.message === 'UNAUTHENTICATED')
+          return error(
+            reply,
+            request,
+            401,
+            'UNAUTHENTICATED',
+            'Authentication required',
+          );
+        if (e instanceof Error && e.message === 'FORBIDDEN')
+          return error(
+            reply,
+            request,
+            403,
+            'FORBIDDEN',
+            'Evaluation stream is forbidden',
+          );
+        throw e;
+      }
+    },
+  );
   app.get(
     '/api/submissions/:id/evaluations/:generation',
     async (request, reply) => {
