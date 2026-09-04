@@ -1,5 +1,15 @@
 # OJPlatform Project Status
 
+Product/Judge/UI Remediation Runtime Resume V1: PARTIAL. Canonical main
+`511830d` merged into remediation at `4b0ea17`. A minimal Runtime Manager
+listener lookup fallback fixed a machine-specific `Get-NetTCPConnection` blind
+spot; official stop released application ports while preserving infrastructure.
+Clean start remains blocked by a persisted Worker that restarted Host Agent
+fail-closes as unreconciled; another Worker has unknown ownership and was not
+touched. Issue 1, Issue 4, and Issue 8 runtime/browser qualification is not
+claimed. See
+`reports/OJPLATFORM_PRODUCT_JUDGE_UI_REMEDIATION_RUNTIME_RESUME_V1_REPORT.md`.
+
 Product + Judge + UI Remediation V1: PARTIAL. Judge Data immutable-version
 draft cloning, evaluation/list testcase presentation, China-mainland login
 classification, and Product Judge Admin runtime-config consumption are
