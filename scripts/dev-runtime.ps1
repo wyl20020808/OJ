@@ -194,7 +194,7 @@ function Invoke-ProcessCommand([string]$FilePath, [string[]]$Arguments, [hashtab
 }
 function Start-ProcessDetached([string]$FilePath, [string[]]$Arguments, [hashtable]$Environment, [string]$Stdout, [string]$Stderr) { $json = $Environment | ConvertTo-Json -Compress; $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json)); return (Invoke-ProcessCommand 'node' (@('scripts/runtime-spawn.mjs','--cwd',$ProjectRoot,'--stdout',$Stdout,'--stderr',$Stderr,'--env-b64',$b64,'--',$FilePath) + $Arguments) @{} 15000 | ConvertFrom-Json) }
 function Test-TcpPort([int]$Port) { try { $client = [Net.Sockets.TcpClient]::new(); $task = $client.ConnectAsync('127.0.0.1', $Port); $ok = $task.Wait(500); $client.Dispose(); return $ok -and $task.IsCompleted -and -not $task.IsFaulted } catch { return $false } }
-function Get-HttpJson([string]$Url, [hashtable]$Headers = @{}) { try { $response = Invoke-WebRequest -Uri $Url -Headers $Headers -UseBasicParsing -TimeoutSec 3; return @{ status = [int]$response.StatusCode; body = ($response.Content | ConvertFrom-Json) } } catch { return $null } }
+function Get-HttpJson([string]$Url, [hashtable]$Headers = @{}, [int]$TimeoutSec = 3) { try { $response = Invoke-WebRequest -Uri $Url -Headers $Headers -UseBasicParsing -TimeoutSec $TimeoutSec; return @{ status = [int]$response.StatusCode; body = ($response.Content | ConvertFrom-Json) } } catch { return $null } }
 function Wait-Http([string]$Url, [int]$TimeoutSec = 60, [hashtable]$Headers = @{}) { $deadline = (Get-Date).AddSeconds($TimeoutSec); do { $result = Get-HttpJson $Url $Headers; if ($result -and $result.status -eq 200) { return $result.body }; Start-Sleep -Milliseconds 250 } while ((Get-Date) -lt $deadline); throw "Timed out waiting for $Url" }
 function Wait-HttpStatus([string]$Url, [int]$TimeoutSec = 60) { $deadline=(Get-Date).AddSeconds($TimeoutSec); do { try { if ([int](Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3).StatusCode -eq 200) { return } } catch {}; Start-Sleep -Milliseconds 250 } while ((Get-Date) -lt $deadline); throw "Timed out waiting for $Url" }
 function Get-ProcessInfo([int]$ProcessId) { try { return Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId" } catch { return $null } }
@@ -271,8 +271,9 @@ function Test-PluginVersionCompatible($record) {
 }
 function Get-ActiveJudgeJobs([switch]$FailClosed) {
   if ($Command -eq 'stop') { $FailClosed = $true }
+  if ($Command -eq 'stop' -and (-not $state.processes['judge-service']) -and -not (Test-TcpPort $Config.JudgeServicePort)) { return 0 }
   try {
-    $headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken}; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers
+    $headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken}; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers 1
       if (-not $nodes) {
         if ($Command -eq 'stop' -and -not $state.processes['judge-service'] -and -not (Test-TcpPort $Config.JudgeServicePort)) { return 0 }
         if ($FailClosed) { throw 'ACTIVE_JOBS_UNKNOWN: Judge Service node registry unavailable.' }; return 0
@@ -371,6 +372,8 @@ function Stop-ProvenProcess($record) {
 }
 function Stop-Managed([string]$Name, $state) {
   $record = $state.processes[$Name]
+  if (-not $record -and $Name -ne 'supervisor' -and -not (Test-TcpPort ([int](Get-ServicePort $Name)))) { Write-Host "$Name STOP (already down)"; return }
+  if (-not $record -and $Name -eq 'supervisor' -and -not (Test-TcpPort $Config.SupervisorPort)) { Write-Host 'supervisor STOP (already down)'; return }
   if ($Name -ne 'supervisor') {
     $servicePort=[int](Get-ServicePort $Name)
     $ownership = Resolve-OJPlatformProcessOwnership $Name $servicePort $state
@@ -669,7 +672,7 @@ function Get-ApplicationStatus([string]$Name, $state) {
 }
 function Get-WorkerStatus {
   $headers = @{ 'x-judge-service-token' = $script:Secrets.judgeServiceToken }
-  $nodes = Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers
+  $nodes = Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers 1
   if (-not $nodes) { return [pscustomobject]@{ service='worker'; status='DOWN'; ownerCheckout=''; pid='-'; port='-'; source='Judge Service node registry + heartbeat'; binaryPath=$Config.WorkerBinary; binaryHash=(Get-FileSha256 $Config.WorkerBinary); commit=$ProductIdentity.commit; canonical=$false } }
   $node = @($nodes.body.items | Where-Object { $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' } | Sort-Object heartbeatAgeMs | Select-Object -First 1)[0]
   if (-not $node) { return [pscustomobject]@{ service='worker'; status='DOWN'; ownerCheckout=''; pid='-'; port='-'; source='Judge Service node registry + heartbeat'; binaryPath=$Config.WorkerBinary; binaryHash=(Get-FileSha256 $Config.WorkerBinary); commit=$ProductIdentity.commit; canonical=$false } }
@@ -694,10 +697,10 @@ function Show-Status($state) {
   $infra = @(
     [pscustomobject]@{ service='postgres'; status=if(Test-TcpPort 55432){'REACHABLE'}else{'DOWN'}; port=55432; source='authoritative localhost TCP probe' }
     [pscustomobject]@{ service='redis'; status=if(Test-TcpPort 56379){'REACHABLE'}else{'DOWN'}; port=56379; source='authoritative localhost TCP probe' }
-    [pscustomobject]@{ service='minio'; status=if(Test-HttpOk "$($Config.MinioEndpoint)/minio/health/ready"){'RUNNING_OWNED'}elseif(Test-TcpPort 59000){'REACHABLE'}else{'DOWN'}; port=59000; source='authoritative HTTP/TCP probe' }
+    [pscustomobject]@{ service='minio'; status=if(Test-TcpPort 59000){if(Test-HttpOk "$($Config.MinioEndpoint)/minio/health/ready"){'RUNNING_OWNED'}else{'REACHABLE'}}else{'DOWN'}; port=59000; source='authoritative HTTP/TCP probe' }
   )
   Write-Host "Shared runtime: $RuntimeRoot  instance=$($state.runtimeInstanceId) owner=$($state.ownerCheckout)"; $infra | Format-Table -AutoSize
-  $items = @(); foreach ($name in @('api','web','judge-service','host-agent','supervisor')) { $record=$state.processes[$name]; $port=Get-ServicePort $name; $healthy=$false; try { $url=if($name -eq 'web'){$Config.WebOrigin}elseif($name -eq 'supervisor'){$Config.SupervisorOrigin+'/v1/health'}else{"http://127.0.0.1:$port/health"}; $healthy=([System.Net.WebRequest]::Create($url)).GetResponse().StatusCode -eq 200 } catch {}; $item=[pscustomobject]@{service=$name;status=if($healthy){'RUNNING'}else{'DOWN'};pid=if($record){$record.pid}else{'-'};port=$port;source='authoritative HTTP health probe';sourceRoot=if($record){$record.sourceRoot}else{'-'};commit=if($record){$record.gitCommit}else{'-'};canonical=if($record){Test-VersionCompatible $record}else{$false}}; $items += $item }; $items += Get-WorkerStatus; $items | Format-Table -AutoSize
+  $items = @(); foreach ($name in @('api','web','judge-service','host-agent','supervisor')) { $record=$state.processes[$name]; $port=Get-ServicePort $name; $url=if($name -eq 'web'){$Config.WebOrigin}elseif($name -eq 'supervisor'){$Config.SupervisorOrigin+'/v1/health'}else{"http://127.0.0.1:$port/health"}; $healthy=$false; if (Test-TcpPort $port) { $healthy=[bool](Get-HttpJson $url @{} 1) }; $item=[pscustomobject]@{service=$name;status=if($healthy){'RUNNING'}else{'DOWN'};pid=if($record){$record.pid}else{'-'};port=$port;source='authoritative HTTP health probe';sourceRoot=if($record){$record.sourceRoot}else{'-'};commit=if($record){$record.gitCommit}else{'-'};canonical=if($record){Test-VersionCompatible $record}else{$false}}; $items += $item }; $items += Get-WorkerStatus; $items | Format-Table -AutoSize
   $activeItems = @($items | Where-Object { $_.status -notin @('DOWN','STALE') })
   $mixed = $activeItems.Count -gt 0 -and (-not ($productCanonical -and $pluginCanonical -and @($activeItems | Where-Object { $_.canonical -eq $false }).Count -eq 0))
   Write-Host "MIXED SOURCE = $mixed"
