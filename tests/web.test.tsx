@@ -428,6 +428,7 @@ describe('Web platform shell', () => {
       submitter: { id: submission.ownerUserId, displayName: 'User' },
       languageProfileId: submission.languageId,
       status: submission.status,
+      publicNumber: 0,
       createdAt: submission.createdAt,
     };
     vi.stubGlobal(
@@ -451,7 +452,14 @@ describe('Web platform shell', () => {
             json: async () => ({ status: 'ok', dependencies: {} }),
           };
         if (url.endsWith('/api/submissions/sub-x'))
-          return { status: 200, json: async () => submission };
+          return {
+            status: 200,
+            json: async () => ({ ...submission, evaluation: { ...evaluation, publicNumber: 0, evaluationGeneration: 1, attemptGeneration: 1 } }),
+          };
+        if (url.includes('/api/submissions/sub-x/evaluations/1'))
+          return { status: 200, json: async () => ({ evaluation: { ...evaluation, publicNumber: 0, evaluationGeneration: 1, attemptGeneration: 1 } }) };
+        if (url.endsWith('/api/submissions/sub-x/evaluations'))
+          return { status: 200, json: async () => ({ items: [{ ...evaluation, publicNumber: 0, evaluationGeneration: 1, attemptGeneration: 1 }] }) };
         return {
           status: 200,
           json: async () => ({ items: [evaluation], nextCursor: null }),
@@ -463,9 +471,9 @@ describe('Web platform shell', () => {
     expect(
       await screen.findByRole('heading', { name: '评测列表' }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('link', { name: '查看评测 sub-x' }));
+    fireEvent.click(screen.getByRole('link', { name: '查看评测 #0' }));
     expect(
-      await screen.findByRole('heading', { name: 'Submission #sub-x' }),
+      await screen.findByRole('heading', { name: '评测 #0' }),
     ).toBeInTheDocument();
     expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
