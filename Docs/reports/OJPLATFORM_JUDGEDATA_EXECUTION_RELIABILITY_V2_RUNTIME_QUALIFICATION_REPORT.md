@@ -2,10 +2,19 @@
 
 JUDGEDATA + EXECUTION REAL QUALIFICATION = PARTIAL
 BRANCH = `codex/judgedata-execution-reliability-v2`
-HEAD = `ffab393`
+HEAD = `443be90ce6bc56f8ec9af955666ce27ea4228e6c`
 RUNTIME SOURCE MATCH = NO / BLOCKED_BY_EXTERNAL_OWNER
 
-Runtime Manager status identified shared instance owner as `D:\OJPlatform-worktrees\product-judge-ui-remediation`. API and Host Agent were `BLOCKED_BY_EXTERNAL_OWNER`; Web/Judge/Supervisor were stale; PostgreSQL, Redis, and MinIO were down. No Stop/Start/Restart or browser qualification was attempted because v2 source ownership could not be proven.
+Aggressive reset was authorized. Runtime Manager stop completed for application services; infrastructure volumes were preserved and containers were later reused as healthy. Explicit `start -SourceRoot` built/reused the v2 Worker but stopped at the Judge Service port ownership gate (`EXTERNAL`). No browser qualification or formal submission was attempted because v2 source ownership could not be proven.
+
+AGGRESSIVE OJPLATFORM RESET = PARTIAL
+OLD RUNTIME OWNER = `D:\OJPlatform-worktrees\product-judge-ui-remediation` / later stale `final-feature-integration` registry
+OJPLATFORM PIDS FOUND = recorded in Runtime Manager state; WSL Supervisor PID 2148
+OJPLATFORM PIDS TERMINATED = Runtime Manager-managed application processes (stop PASS)
+FORCED PID TERMINATION USED = NO
+NON-OJPLATFORM PROCESS TOUCHED = NO
+APP PORTS CLEAN = PARTIAL; 19092 WSL Supervisor remained
+VOLUMES PRESERVED = YES
 
 ## UPLOAD
 
@@ -68,7 +77,8 @@ SUPERVISOR TESTS = PASS (`cmd/supervisor` 11 tests; `internal/supervisorclient` 
 BROWSER SMOKE = BLOCKED_BY_EXTERNAL_OWNER
 DIFF CHECK = PASS
 
-FINAL COMMIT = `ffab393`
+FINAL COMMIT = `443be90ce6bc56f8ec9af955666ce27ea4228e6c`
 TRACKED CLEAN = YES
 
 Runtime qualification must resume only after the shared Runtime Manager reports no external owner and can prove explicit v2 source identity.
+
