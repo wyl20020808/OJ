@@ -73,6 +73,11 @@ import {
   registerCodeRunRoutes,
   codeRunResultFromJob,
 } from './modules/code-run/routes.js';
+import {
+  InMemoryEditorDraftRepository,
+  PostgresEditorDraftRepository,
+  registerEditorDraftModule,
+} from './modules/editor-draft/index.js';
 
 const operatorUserIds = () =>
   new Set(
@@ -409,6 +414,12 @@ export async function buildApp(options: AppOptions = {}) {
             creator?.displayName ?? (problem.authorId ? 'Unknown user' : null),
         };
       },
+    });
+    await registerEditorDraftModule(app, {
+      repository: new PostgresEditorDraftRepository(database.pool),
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      resolveProblemId: async (key) => (await problemRepository.get(key))?.id,
     });
     const judgeDataRepository = new PostgresJudgeDataRepository(database.pool);
     const judgeDataStorage = new S3ByteStorage(storage.client, storage.bucket);
@@ -895,6 +906,12 @@ export async function buildApp(options: AppOptions = {}) {
             creator?.displayName ?? (problem.authorId ? 'Unknown user' : null),
         };
       },
+    });
+    await registerEditorDraftModule(app, {
+      repository: new InMemoryEditorDraftRepository(),
+      getAuthContext: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+      resolveProblemId: async (key) => (await problemRepository.get(key))?.id,
     });
     const judgeDataRepository = new InMemoryJudgeDataRepository();
     const judgeDataStorage = new MemoryByteStorage();
