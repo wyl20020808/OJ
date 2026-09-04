@@ -228,7 +228,7 @@ describe('Product Judge Data submission bridge', () => {
     expect(dispatchedManifest).toHaveLength(64);
 
     const oversizedInput = await storage.put(
-      Buffer.alloc(65_537),
+      Buffer.alloc(100 * 1024 * 1024 + 1),
       'private/oversized-input',
       'oversized.in',
       'problem-1',
