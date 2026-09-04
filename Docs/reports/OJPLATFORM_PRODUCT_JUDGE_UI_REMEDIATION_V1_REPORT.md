@@ -47,6 +47,14 @@ assignment claims. This is a cross-worktree runtime ownership and credential
 mix, not evidence from this branch. The Goal forbids modifying Runtime Manager
 control-plane files, so no workaround was applied.
 
+Read-only Judge database comparison also rules out a size-only conclusion. The
+same shared Judge Service recorded three-attempt `INFRA_FAILED` outcomes for
+both a one-testcase request with 3 input bytes and requests containing 10 or
+13 testcases with about 195 KiB total input. The persisted projections do not
+retain a lower-level Worker/Supervisor error. Therefore no `100 MiB`, JSON body
+limit, or large-JudgeData root cause is claimed; execution-set handoff evidence
+from an owned Runtime is still required.
+
 Consequently the following are **not runtime verified**:
 
 - Issue 1: no fresh small/large formal submission comparison, no lower-level
