@@ -192,6 +192,13 @@ started.
 
 Last Updated: 2026-09-03
 
+Canonical Runtime Source V1 implementation: PARTIAL pending runtime
+qualification. See `Docs/reports/OJPLATFORM_CANONICAL_RUNTIME_SOURCE_V1_REPORT.md`.
+Normal runtime resolves canonical product/plugin `main` worktrees through the
+shared registry, records source/version identity, rejects dirty or unregistered
+explicit sources, and performs version-aware reuse. Runtime/browser proof is
+not verified in this implementation pass.
+
 Dual Repository Consolidation V1 (2026-09-04): PASS. Canonical OJPlatform
 `main` starts from the Final Feature Integration history, includes the WSL
 runtime-qualification evidence, and has no required unmerged branch. Canonical
