@@ -155,7 +155,7 @@ describe('Web UI polish', () => {
       await screen.findByRole('heading', { name: '评测列表' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('table', { name: '评测列表' })).toHaveTextContent(
-      '#s1A+B ProblemsumOwnercpp20',
+      '#s1sum A+B ProblemOwnercpp20',
     );
     expect(screen.getByRole('link', { name: '查看评测 s1' })).toHaveAttribute(
       'href',

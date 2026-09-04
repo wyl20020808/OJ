@@ -958,6 +958,31 @@ pre {
   color: var(--muted);
   font-size: 0.86rem;
 }
+.testcase-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 3.2rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.testcase-state-pass {
+  color: var(--success);
+}
+.testcase-state-fail {
+  color: var(--danger);
+}
+.testcase-state-running {
+  color: var(--accent-dark);
+}
+.testcase-state-waiting {
+  color: var(--muted);
+}
+.testcase-state-infra {
+  color: var(--danger);
+}
 .tone-progress {
   border-color: #a8d5df;
   background: #effafd;
@@ -1910,7 +1935,6 @@ footer {
 }
 .evaluation-row {
   color: inherit;
-  text-decoration: none;
 }
 .evaluation-row + .evaluation-row {
   border-top: 1px solid var(--line);
@@ -1925,6 +1949,48 @@ footer {
 }
 .evaluation-row .judge-note {
   display: none;
+}
+.evaluation-row > a {
+  color: inherit;
+  min-width: 0;
+  text-decoration: none;
+}
+.evaluation-row > a:hover,
+.evaluation-row > a:focus-visible {
+  color: var(--accent-dark);
+  text-decoration: underline;
+}
+.evaluation-problem {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.evaluation-problem strong {
+  font-weight: 800;
+}
+.evaluation-verdict {
+  font-weight: 800;
+}
+.evaluation-verdict.tone-accepted {
+  color: var(--success);
+}
+.evaluation-verdict.tone-failed {
+  color: var(--danger);
+}
+.evaluation-verdict.tone-time-limit {
+  color: var(--warning);
+}
+.evaluation-verdict.tone-compile-limit {
+  color: #7252a3;
+}
+.evaluation-verdict.tone-running {
+  color: var(--accent-dark);
+}
+.evaluation-verdict.tone-infra {
+  color: var(--danger);
+}
+.evaluation-verdict.tone-pending {
+  color: var(--muted);
 }
 .evaluation-row time {
   color: var(--muted);

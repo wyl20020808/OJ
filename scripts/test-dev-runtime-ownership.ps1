@@ -7,6 +7,14 @@ function Assert-Equal($actual, $expected, [string]$label) {
   if ($actual -ne $expected) { throw "$label expected=$expected actual=$actual" }
 }
 
+$tcpListener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+$tcpListener.Start()
+try {
+  Assert-Equal (Get-PortOwner $tcpListener.LocalEndpoint.Port).OwningProcess $PID 'listener owner lookup'
+} finally {
+  $tcpListener.Stop()
+}
+
 $script:testListener = @{ OwningProcess = 42 }
 $script:testStart = '2026-09-04T00:00:00.0000000Z'
 $script:testCommand = 'node --import tsx D:\OJPlatform-worktrees\old\apps\judge-host-agent\src\server.ts'

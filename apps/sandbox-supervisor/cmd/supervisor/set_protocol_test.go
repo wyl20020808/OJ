@@ -64,6 +64,15 @@ func TestExecutionSetHandlerAcceptsMaximumWorkerPayload(t *testing.T) {
 	}
 }
 
+func TestExecutionSetHandlerReportsContractRejection(t *testing.T) {
+	server := &protocolServer{realExecutionEnabled: true, executionSets: make(map[string]*executionSetRecord)}
+	recorder := httptest.NewRecorder()
+	server.startExecutionSet(recorder, httptest.NewRequest(http.MethodPost, "/v1/execution-sets/start", strings.NewReader(`{"protocol_version":"bad"}`)))
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "invalid execution-set identity") {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func setProtocolManifest() model.TestcaseSetManifest {
 	input := []byte("one\n")
 	digest := sha256.Sum256(input)

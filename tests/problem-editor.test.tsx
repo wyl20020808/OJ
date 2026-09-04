@@ -271,7 +271,9 @@ describe('ProblemEditor judge-data contract UI', () => {
   });
 
   it('requires destructive confirmation before deleting a testcase', async () => {
-    const api = makeApi();
+    const api = makeApi({
+      judgeDraft: vi.fn().mockResolvedValueOnce(draft()).mockResolvedValueOnce(draft([])),
+    });
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<ProblemEditor api={api} problemId="p1" />);
     fireEvent.click(await screen.findByRole('button', { name: '评测数据' }));

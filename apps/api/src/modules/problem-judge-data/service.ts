@@ -128,6 +128,59 @@ export class ProblemJudgeDataService {
     if (!v) throw new JudgeDataError('NOT_FOUND', 'Version not found', 404);
     return publicVersion(v);
   }
+  async createDraftFromLatestVersion(problemId: string, user: unknown) {
+    await this.auth('manage', user, problemId);
+    if (await this.repo.getDraft(problemId))
+      throw new JudgeDataError(
+        'DRAFT_EXISTS',
+        'Judge Data draft already exists',
+        409,
+      );
+    const latest = (await this.repo.listVersions(problemId))[0];
+    if (!latest)
+      throw new JudgeDataError(
+        'NOT_FOUND',
+        'No published Judge Data version',
+        404,
+      );
+    const defaults = {
+      timeLimitMs: latest.testcases[0]?.effectiveTimeLimitMs ?? 1000,
+      memoryLimitBytes:
+        latest.testcases[0]?.effectiveMemoryLimitBytes ?? 64 * 1024 * 1024,
+      outputLimitBytes:
+        latest.testcases[0]?.effectiveOutputLimitBytes ?? 64 * 1024,
+      checker: latest.checker,
+      allowedLanguageProfiles: [...latest.allowedLanguageProfiles],
+    };
+    const draft: JudgeDraft = {
+      problemId,
+      problemRevisionId: latest.problemRevisionId,
+      testdataVersionId: latest.testdataVersionId,
+      testcaseSetId: latest.testcaseSetId,
+      executionProfileId: latest.executionProfileId,
+      status: 'DRAFT',
+      revision: 0,
+      defaults,
+      testcases: latest.testcases.map((testcase) => ({
+        ...testcase,
+        timeLimitMsOverride:
+          testcase.effectiveTimeLimitMs === defaults.timeLimitMs
+            ? null
+            : testcase.effectiveTimeLimitMs,
+        memoryLimitBytesOverride:
+          testcase.effectiveMemoryLimitBytes === defaults.memoryLimitBytes
+            ? null
+            : testcase.effectiveMemoryLimitBytes,
+        outputLimitBytesOverride:
+          testcase.effectiveOutputLimitBytes === defaults.outputLimitBytes
+            ? null
+            : testcase.effectiveOutputLimitBytes,
+      })),
+      updatedAt: now(),
+      updatedBy: (user as { userId: string }).userId,
+    };
+    return publicDraft(await this.repo.saveDraft(draft));
+  }
   async testcase(problemId: string, testcaseId: string, user: unknown) {
     await this.auth('view', user, problemId);
     const draft = await this.repo.getDraft(problemId);
@@ -404,7 +457,7 @@ export class ProblemJudgeDataService {
     await this.auth('manage', user, problemId);
     const pairs = parseZip(bytes);
     const old = await this.repo.getDraft(problemId);
-    if ((old?.testcases.length ?? 0) + pairs.length > TESTCASE_SET_MAX_SIZE)
+    if (pairs.length > TESTCASE_SET_MAX_SIZE)
       throw new JudgeDataError('VALIDATION_FAILED', 'Too many testcases');
     const defaults =
       old?.defaults ??
@@ -433,7 +486,7 @@ export class ProblemJudgeDataService {
         uploaded.push({
           refs,
           name: p.name,
-          ordinal: (old?.testcases.length ?? 0) + index,
+          ordinal: index,
         });
       }
       const timestamp = now();
@@ -467,7 +520,9 @@ export class ProblemJudgeDataService {
         status: 'DRAFT',
         revision: old?.revision ?? 0,
         defaults,
-        testcases: [...(old?.testcases ?? []), ...testcases],
+        // A complete ZIP is a replacement for the editable draft testcase set.
+        // The previous draft remains untouched until this save succeeds.
+        testcases,
         updatedAt: timestamp,
         updatedBy: (user as { userId: string }).userId,
       };
