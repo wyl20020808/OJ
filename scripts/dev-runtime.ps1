@@ -661,7 +661,7 @@ function Get-WorkerStatus {
   $node = @($nodes.body.items | Where-Object { $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' } | Sort-Object heartbeatAgeMs | Select-Object -First 1)[0]
   if (-not $node) { return [pscustomobject]@{ service='worker'; status='DOWN'; ownerCheckout=''; pid='-'; port='-'; source='Judge Service node registry + heartbeat'; binaryPath=$Config.WorkerBinary; binaryHash=(Get-FileSha256 $Config.WorkerBinary); commit=$ProductIdentity.commit; canonical=$false } }
   $online = $node.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $node.observedState -and $node.heartbeatAgeMs -lt 15000 -and $node.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION'
-  return [pscustomobject]@{ service='worker'; status=if($online){'RUNNING_OWNED'}else{'STALE'}; ownerCheckout='Judge Service -> Host Agent'; pid=$node.nodeId; port='-'; source='Judge Service node registry + heartbeat'; binaryPath=$Config.WorkerBinary; binaryHash=(Get-FileSha256 $Config.WorkerBinary); commit=$ProductIdentity.commit; canonical=($online -and (Get-FileSha256 $Config.WorkerBinary)) }
+  return [pscustomobject]@{ service='worker'; status=if($online){'RUNNING_OWNED'}else{'STALE'}; ownerCheckout='Judge Service -> Host Agent'; pid=$node.nodeId; port='-'; source='Judge Service node registry + heartbeat'; binaryPath=$Config.WorkerBinary; binaryHash=(Get-FileSha256 $Config.WorkerBinary); commit=$ProductIdentity.commit; canonical=([bool]($online -and (Get-FileSha256 $Config.WorkerBinary))) }
 }
 function Show-Status($state) {
   $productCanonical = $ProductIdentity.root -ieq $CanonicalProductIdentity.root -and $ProductIdentity.commit -ieq $CanonicalProductIdentity.commit
