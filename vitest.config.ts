@@ -10,8 +10,8 @@ export default defineConfig({
       { find: '@ojplatform/judge-runtime', replacement: resolve(
         'packages/judge-runtime/src/index.ts',
       ) },
-      { find: /^@ojplatform\/online-code-editor\/(.+)$/, replacement: resolve('D:/OJPlatformPlugins/OnlineCodeEditor/src') + '/$1' },
-      { find: '@ojplatform/online-code-editor', replacement: resolve('D:/OJPlatformPlugins/OnlineCodeEditor/src/plugin.ts') },
+      { find: /^@ojplatform\/online-code-editor\/(.+)$/, replacement: resolve('D:/OJPlatformPlugins/OnlineCodeEditor-remediation/src') + '/$1' },
+      { find: '@ojplatform/online-code-editor', replacement: resolve('D:/OJPlatformPlugins/OnlineCodeEditor-remediation/src/plugin.ts') },
     ],
   },
   test: {

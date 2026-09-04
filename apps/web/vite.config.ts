@@ -11,12 +11,12 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
-      { find: /^@ojplatform\/online-code-editor\/(.+)$/, replacement: `${resolve('D:/OJPlatformPlugins/OnlineCodeEditor/src')}/$1` },
-      { find: '@ojplatform/online-code-editor', replacement: resolve('D:/OJPlatformPlugins/OnlineCodeEditor/src/plugin.ts') },
+      { find: /^@ojplatform\/online-code-editor\/(.+)$/, replacement: `${resolve('D:/OJPlatformPlugins/OnlineCodeEditor-remediation/src')}/$1` },
+      { find: '@ojplatform/online-code-editor', replacement: resolve('D:/OJPlatformPlugins/OnlineCodeEditor-remediation/src/plugin.ts') },
     ],
   },
   server: {
-    fs: { allow: [resolve('D:/OJPlatformPlugins/OnlineCodeEditor')] },
+    fs: { allow: [resolve('D:/OJPlatformPlugins/OnlineCodeEditor-remediation')] },
     proxy: { '/api': apiProxy, '/ready': apiProxy },
   },
   preview: { proxy: { '/api': apiProxy, '/ready': apiProxy } },
