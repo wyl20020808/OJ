@@ -4,6 +4,7 @@ export type ApiErrorBody = {
   requestId: string;
   details?: unknown;
 };
+export type EditorCodeDraft = { userId?: string; problemId: string; language: string; source: string; version: number; createdAt?: string; updatedAt?: string };
 export type AuthenticatedUser = {
   id: string;
   username: string;
@@ -1097,6 +1098,8 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
+    editorDraft: (problemId: string, language: string) => request<EditorCodeDraft | null>(baseUrl, `/api/editor/drafts/${encodeURIComponent(problemId)}/${encodeURIComponent(language)}`, undefined, fetcher),
+    saveEditorDraft: (problemId: string, language: string, source: string, version?: number | null) => request<EditorCodeDraft>(baseUrl, `/api/editor/drafts/${encodeURIComponent(problemId)}/${encodeURIComponent(language)}`, { method: 'PUT', body: JSON.stringify({ source, version: version ?? null }) }, fetcher),
     createProblem: (input: ProblemInput) =>
       request<Problem>(
         baseUrl,

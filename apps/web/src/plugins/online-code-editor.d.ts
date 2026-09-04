@@ -6,7 +6,11 @@ declare module '@ojplatform/online-code-editor' {
   export default plugin;
 }
 declare module '@ojplatform/online-code-editor/host/EditorHostContext' {
-  export interface EditorHostContext { problemId: string; problemRevisionId: string; codeRunAdapter: unknown; submissionAdapter?: unknown; sampleProvider: unknown; checker?: 'EXACT_BYTES' | 'TOKEN_WHITESPACE'; onViewSubmission?: (submissionId: string) => void; }
+  export interface EditorHostContext { problemId: string; problemRevisionId: string; codeRunAdapter: unknown; submissionAdapter?: unknown; sampleProvider: unknown; checker?: 'EXACT_BYTES' | 'TOKEN_WHITESPACE'; onViewSubmission?: (submissionId: string) => void; language?: string; draftAdapter?: import('@ojplatform/online-code-editor/draft/DraftAdapter').DraftAdapter; }
+}
+declare module '@ojplatform/online-code-editor/draft/DraftAdapter' {
+  export interface DraftAdapter { load(identity: { problemId: string; language: string }): Promise<any>; save(request: { problemId: string; language: string; source: string; version?: number | null }): Promise<any>; }
+  export class HttpDraftAdapter implements DraftAdapter { constructor(baseUrl?: string); load(identity: { problemId: string; language: string }): Promise<any>; save(request: { problemId: string; language: string; source: string; version?: number | null }): Promise<any>; }
 }
 declare module '@ojplatform/online-code-editor/run/HttpCodeRunAdapter' {
   export class HttpCodeRunAdapter { constructor(baseUrl?: string); }
