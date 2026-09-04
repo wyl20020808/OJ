@@ -34,7 +34,9 @@ Not rerun: few-MB ZIP browser qualification, DELETE 400 reproduction, Validate/P
 
 ## Merge / Root
 
-OJ integration tip: `f2496b8`; OJ main merge pending. Plugin integration includes `8b2412c` and `373b9bc`; plugin main merge pending. Root checkout alignment pending. User artifacts and feature worktrees retained.
+OJ integration tip: `7d0f3c8`; OJ main merge commits: `266a2ee`, `28c64ce`, followed by latest launcher latency fix `0447d2a`. Plugin main merge commit: `1a0db92` (includes `8b2412c` and `373b9bc`). Root checkouts are on `main`. User artifacts and feature worktrees retained.
+
+Root `OJPlatform-Status.bat` smoke produced visible output with all services DOWN. Shared registry currently reports an older product worktree, so canonical runtime identity is NOT RUNTIME VERIFIED until the user starts the latest main.
 
 ## Not Yet Runtime Verified
 
