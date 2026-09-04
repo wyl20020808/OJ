@@ -1,6 +1,12 @@
 import { timingSafeEqual } from 'node:crypto';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
-import type { JudgeJobRepository } from '@ojplatform/judge-runtime';
+import {
+  JudgeProgressEventBus,
+  testcaseTerminalEvents,
+  type JudgeJobRepository,
+  type JudgeProgressEvent,
+  type JudgeProgressSink,
+} from '@ojplatform/judge-runtime';
 import { requestDigest, projectJudgeServiceResult } from './projection.js';
 import type {
   JudgeServiceCapabilities,
@@ -27,6 +33,8 @@ export type JudgeServiceAppOptions = {
   nodes?: JudgeNodeRepository;
   ready?: () => Promise<boolean>;
   logger?: boolean;
+  /** Judge-side safe lifecycle events; transport ownership stays outside queue. */
+  progressEvents?: JudgeProgressSink;
   /** Enables the in-process autoscaler loop when greater than zero. */
   autoscalerIntervalMs?: number;
   /** Optional queue metrics supplied by the concrete queue adapter. */
@@ -139,6 +147,48 @@ export async function buildJudgeService(
   options: JudgeServiceAppOptions,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: options.logger ?? true });
+  const progressBus = new JudgeProgressEventBus();
+  if (options.progressEvents) progressBus.on(options.progressEvents);
+  const emitProgress = (
+    job: Awaited<ReturnType<JudgeJobRepository['getById']>>,
+    phase: Parameters<JudgeProgressEventBus['emit']>[0]['phase'],
+    extra: Partial<Parameters<JudgeProgressEventBus['emit']>[0]> = {},
+  ) => {
+    if (!job) return;
+    progressBus.emit({
+      phase,
+      judgeJobId: job.id,
+      submissionId: job.submissionId,
+      evaluationGeneration: job.evaluationGeneration ?? 1,
+      attemptGeneration: job.resultGeneration ?? job.attempt,
+      updatedAt: job.updatedAt,
+      ...extra,
+    });
+  };
+  const emitTerminal = (
+    job: Awaited<ReturnType<JudgeJobRepository['getById']>>,
+  ) => {
+    if (
+      !job ||
+      !['COMPLETED', 'SUCCEEDED_FAKE', 'CANCELLED', 'FAILED_TERMINAL'].includes(
+        job.status,
+      )
+    )
+      return;
+    const verdict =
+      job.rawExecutionResult?.verdict_record?.overall_user_verdict;
+    emitProgress(job, 'EVALUATION_TERMINAL', {
+      state: job.status,
+      ...(typeof verdict === 'string'
+        ? {
+            verdict: verdict as NonNullable<JudgeProgressEvent['verdict']>,
+          }
+        : {}),
+    });
+  };
+  const emitQueued = (
+    job: Awaited<ReturnType<JudgeJobRepository['getById']>>,
+  ) => emitProgress(job, 'EVALUATION_QUEUED', { state: 'QUEUED' });
   const nodes = options.nodes;
   const deny = async (
     request: FastifyRequest,
@@ -1008,6 +1058,15 @@ export async function buildJudgeService(
         30_000,
       );
       if (!claim) continue;
+      emitProgress(claim.job, 'EVALUATION_STARTED', { state: 'RUNNING' });
+      const first = claim.job.testcaseSet?.entries[0];
+      if (first || claim.job.testcaseId)
+        emitProgress(claim.job, 'TESTCASE_STARTED', {
+          state: 'RUNNING',
+          ...(first
+            ? { testcaseOrdinal: first.index + 1, testcaseId: first.testcaseId }
+            : { testcaseOrdinal: 1, testcaseId: claim.job.testcaseId! }),
+        });
       let assignment;
       try {
         assignment = await nodes.assign(
@@ -1074,6 +1133,12 @@ export async function buildJudgeService(
           body.leaseToken,
           body.result as never,
         );
+        const completed = await options.queue.getById(assignment.judgeJobId);
+        if (completed) {
+          for (const event of testcaseTerminalEvents(completed))
+            progressBus.emit(event);
+          emitTerminal(completed);
+        }
         await nodes.completeAssignment(assignmentId);
         return { status: 'COMPLETED' };
       } catch {
@@ -1150,6 +1215,8 @@ export async function buildJudgeService(
             );
             break;
         }
+        const resolved = await options.queue.getById(assignment.judgeJobId);
+        emitTerminal(resolved);
         await nodes.completeAssignment(assignmentId);
         return { status: 'RESOLVED' };
       } catch {
@@ -1229,6 +1296,7 @@ export async function buildJudgeService(
       request: input,
       result: projectJudgeServiceResult(job),
     });
+    if (created) emitQueued(job);
     return reply.code(created ? 201 : 200).send(stored.result);
   });
   app.get('/v1/jobs/:id', async (request, reply) => {
@@ -1271,6 +1339,7 @@ export async function buildJudgeService(
         .code(501)
         .send({ code: 'NOT_IMPLEMENTED', message: 'Cancellation unavailable' });
     const job = await options.queue.cancel(id);
+    emitTerminal(job);
     return (
       await options.state.save({
         ...stored,
@@ -1305,6 +1374,7 @@ export async function buildJudgeService(
       evaluationGeneration: stored.result.evaluationGeneration + 1,
       idempotencyKey: clientRequestId,
     });
+    emitQueued(job);
     const next = await options.state.save({
       clientRequestId,
       request: { ...stored.request, clientRequestId },

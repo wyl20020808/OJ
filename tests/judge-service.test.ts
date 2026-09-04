@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { buildJudgeService } from '../apps/judge-service/src/app.js';
 import { InMemoryJudgeServiceStateRepository } from '../apps/judge-service/src/repository.js';
 import { InMemoryJudgeJobRepository } from '@ojplatform/judge-runtime';
@@ -24,6 +25,9 @@ const request = {
 const nodeRegistration = (
   nodeId: string,
   incarnation: string,
+  executionModes: [
+    'SAFE_FIXTURE_QUALIFICATION' | 'REAL_SANDBOXED_EXECUTION',
+  ] = ['SAFE_FIXTURE_QUALIFICATION'],
 ): JudgeNodeRegistration => ({
   nodeId,
   incarnation,
@@ -32,7 +36,7 @@ const nodeRegistration = (
   capabilities: {
     languageProfiles: ['cpp20-gcc-13-v1'],
     checkers: ['EXACT_BYTES'],
-    executionModes: ['SAFE_FIXTURE_QUALIFICATION'],
+    executionModes,
     sandboxContractVersion: '2C.3',
     architecture: 'amd64',
     resourceClass: 'standard-v1',
@@ -50,6 +54,73 @@ async function service() {
 }
 
 describe('standalone Judge Service V1', () => {
+  it('publishes queued, started, testcase-started, and terminal lifecycle events', async () => {
+    const events: Array<{ phase: string; state?: string | undefined }> = [];
+    const nodes = new InMemoryJudgeNodeRepository();
+    await nodes.register(
+      nodeRegistration('node-events', 'inc-1', ['REAL_SANDBOXED_EXECUTION']),
+    );
+    const app = await buildJudgeService({
+      queue: new InMemoryJudgeJobRepository(),
+      state: new InMemoryJudgeServiceStateRepository(),
+      nodes,
+      serviceToken: token,
+      nodeToken: 'node-token',
+      progressEvents: (event) => {
+        events.push({ phase: event.phase, state: event.state });
+      },
+      logger: false,
+    });
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/jobs',
+      headers,
+      payload: {
+        ...request,
+        executionMode: 'REAL_SANDBOXED_EXECUTION',
+        languageProfileId: 'cpp20-gcc-13-v1',
+        executionProfileId: 'cpp20-gcc-13-v1',
+        sourceSnapshotRef: 'snapshot-1',
+        sourceSha256: createHash('sha256')
+          .update(request.sourceBytes)
+          .digest('hex'),
+        controlledInputId: 'stdin-echo-v1',
+        testcaseId: 'case-1',
+        testcaseInput: '',
+        testcaseInputSha256: createHash('sha256').update('').digest('hex'),
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const claimed = await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/node-events/assignments/claim',
+      headers: { 'x-judge-node-token': 'node-token' },
+      payload: { incarnation: 'inc-1' },
+    });
+    expect(claimed.statusCode).toBe(200);
+    const assignmentId = claimed.json().assignment.assignmentId as string;
+    const resolved = await app.inject({
+      method: 'POST',
+      url: `/v1/nodes/node-events/assignments/${assignmentId}/resolve`,
+      headers: { 'x-judge-node-token': 'node-token' },
+      payload: {
+        incarnation: 'inc-1',
+        leaseToken: claimed.json().leaseToken,
+        action: 'FAILED_TERMINAL',
+        reason: 'TEST_FAILURE',
+      },
+    });
+    expect(resolved.statusCode).toBe(200);
+    expect(events.map((event) => event.phase)).toEqual([
+      'EVALUATION_QUEUED',
+      'EVALUATION_STARTED',
+      'TESTCASE_STARTED',
+      'EVALUATION_TERMINAL',
+    ]);
+    expect(events.at(-1)).toMatchObject({ phase: 'EVALUATION_TERMINAL' });
+    await app.close();
+  });
+
   it('exposes authenticated host-backed lifecycle and autoscaler controls', async () => {
     const host = new LocalJudgeHostAgent(
       [
