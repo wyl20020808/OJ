@@ -29,6 +29,11 @@ Canonical source resolution ran before `status` and `stop`. This made read-only 
 
 No user artifacts deleted or moved. No Product/JudgeData/UI changes.
 
+Stop fallback treats a fully closed Judge Service port as zero active jobs,
+allowing cleanup of stale local records after runtime shutdown. When the Judge
+Service port is reachable but its registry cannot be queried, Stop remains
+fail-closed with `ACTIVE_JOBS_UNKNOWN`.
+
 Launcher fix merged to canonical `main` with merge commit
 `2b51c63984fb4fdf2e01b346a3d52123e6153089`. `D:\OJPlatform` normalized to
 branch `main` at the same merge commit. Root Status BAT produced visible

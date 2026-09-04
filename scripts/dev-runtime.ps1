@@ -284,7 +284,7 @@ function Test-PluginVersionCompatible($record) {
 }
 function Get-ActiveJudgeJobs([switch]$FailClosed) {
   if ($Command -eq 'stop') { $FailClosed = $true }
-  if ($Command -eq 'stop' -and (-not $state.processes['judge-service']) -and -not (Test-TcpPort $Config.JudgeServicePort)) { return 0 }
+  if ($Command -eq 'stop' -and -not (Test-TcpPort $Config.JudgeServicePort)) { return 0 }
   try {
     $headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken}; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers 1
       if (-not $nodes) {
@@ -292,7 +292,7 @@ function Get-ActiveJudgeJobs([switch]$FailClosed) {
         if ($FailClosed) { throw 'ACTIVE_JOBS_UNKNOWN: Judge Service node registry unavailable.' }; return 0
       }
       return [int](@($nodes.body.items | Measure-Object -Property activeJobs -Sum).Sum)
-    } catch { if ($FailClosed) { throw "ACTIVE_JOBS_UNKNOWN: $($_.Exception.Message)" }; return 0 }
+    } catch { if ($FailClosed) { $message=$_.Exception.Message; if ($message -match '^ACTIVE_JOBS_UNKNOWN:') { throw $message }; throw "ACTIVE_JOBS_UNKNOWN: $message" }; return 0 }
 }
 function Test-RecordServiceAtPort($record) {
   if (-not $record -or -not $record.port) { return $false }
