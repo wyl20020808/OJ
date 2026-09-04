@@ -6,6 +6,7 @@ import {
   type AuthContext,
   type AuthorizationPolicy,
   type AuditHook,
+  type Problem,
 } from './model.js';
 import {
   InMemoryProblemRepository,
@@ -24,6 +25,9 @@ export type ProblemModuleContext = {
   getAuthContext?: (
     request: FastifyRequest,
   ) => AuthContext | undefined | Promise<AuthContext | undefined>;
+  projectMetadata?: (
+    problem: Problem,
+  ) => Promise<Partial<Problem>> | Partial<Problem>;
 };
 const error = (
   reply: FastifyReply,
@@ -62,6 +66,7 @@ export async function registerProblemModule(
     context.authorizationPolicy,
     context.auditHook,
     context.guardGuestMutation,
+    context.projectMetadata,
   );
   const auth = async (request: FastifyRequest) =>
     context.getAuthContext ? await context.getAuthContext(request) : undefined;

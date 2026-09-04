@@ -143,6 +143,7 @@ export function ProblemEditor({
     notes: '',
     samples: [] as Array<{ ordinal: number; input: string; output: string }>,
     difficulty: null as ProblemDifficulty | null,
+    tags: [] as string[],
     visibility: 'private' as Problem['visibility'],
   });
   const [statementMode, setStatementMode] = useState<'edit' | 'preview'>(
@@ -183,6 +184,7 @@ export function ProblemEditor({
               output: sample.output,
             })),
           difficulty: p.difficulty ?? null,
+          tags: p.tags ?? [],
           visibility: p.visibility,
         });
         const normalized =
@@ -217,7 +219,7 @@ export function ProblemEditor({
     return () => window.removeEventListener('beforeunload', fn);
   }, [dirty]);
 
-  const updateStatement = (key: keyof typeof statement, value: string) => {
+  const updateStatement = (key: keyof typeof statement, value: unknown) => {
     setDirty(true);
     setStatement((s) => ({ ...s, [key]: value }));
   };
@@ -427,7 +429,8 @@ export function ProblemEditor({
       <header className="problem-editor-header">
         <div>
           <p className="eyebrow">
-            出题工作台 / Problem {problem.slug || problem.id}
+            出题工作台 / Problem{' '}
+            {problem.publicId || problem.slug || problem.id}
           </p>
           <h1>编辑题目：{statement.title || '未命名题目'}</h1>
           <a
@@ -524,6 +527,22 @@ export function ProblemEditor({
                     <option value="困难">困难</option>
                     <option value="专家">专家</option>
                   </select>
+                </label>
+                <label>
+                  标签（逗号分隔）
+                  <input
+                    value={statement.tags.join(', ')}
+                    onChange={(e) =>
+                      updateStatement(
+                        'tags',
+                        e.target.value
+                          .split(',')
+                          .map((tag) => tag.trim())
+                          .filter(Boolean),
+                      )
+                    }
+                    disabled={!canEdit}
+                  />
                 </label>
                 <label>
                   可见性
@@ -695,7 +714,9 @@ export function ProblemEditor({
               <h2>Judge Data</h2>
               <p>
                 <strong>当前草稿评测数据</strong>
-                （DRAFT）与最新已发布版本分离。当前 {draft.testcases.length}{' '}
+                （DRAFT）与最新已发布版本分离。当前 {
+                  draft.testcases.length
+                }{' '}
                 个测试点，{overrides} 个测试点含覆盖值。
                 {versions[0]
                   ? ` 最新已发布 v${versions[0].versionNumber}。`

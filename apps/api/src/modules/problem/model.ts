@@ -19,6 +19,8 @@ export type ProblemSample = {
 
 export type Problem = {
   id: string;
+  publicNumber: number;
+  publicId: string;
   slug: string;
   title: string;
   background: string;
@@ -36,6 +38,9 @@ export type Problem = {
   status: ProblemStatus;
   testdataVersion: string | null;
   authorId: string | null;
+  source?: string | null;
+  sourceType?: string;
+  tags: string[];
   createdAt: string;
   updatedAt: string;
   currentRevisionId?: string;
@@ -55,10 +60,26 @@ export type ProblemRevision = Omit<Problem, 'currentRevisionId'> & {
 
 export type ProblemCreateInput = Omit<
   Problem,
-  'id' | 'createdAt' | 'updatedAt'
+  | 'id'
+  | 'publicNumber'
+  | 'publicId'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'source'
+  | 'sourceType'
 > & { id?: string };
 export type ProblemUpdateInput = Partial<
-  Omit<Problem, 'id' | 'createdAt' | 'updatedAt' | 'authorId'>
+  Omit<
+    Problem,
+    | 'id'
+    | 'publicNumber'
+    | 'publicId'
+    | 'createdAt'
+    | 'updatedAt'
+    | 'authorId'
+    | 'source'
+    | 'sourceType'
+  >
 >;
 
 export type AuthContext = {

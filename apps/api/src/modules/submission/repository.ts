@@ -72,6 +72,7 @@ export type PublishEvaluationInput = {
 export class InMemorySubmissionRepository implements SubmissionRepository {
   private readonly rows = new Map<string, Submission>();
   private readonly evaluations = new Map<string, SubmissionEvaluation[]>();
+  private nextEvaluationPublicNumber = 0;
   async create(
     input: SubmissionCreateInput &
       Partial<SubmissionJudgeBinding> & { ownerUserId: string },
@@ -173,6 +174,7 @@ export class InMemorySubmissionRepository implements SubmissionRepository {
     const timestamp = now();
     const record: SubmissionEvaluation = {
       ...input,
+      publicNumber: this.nextEvaluationPublicNumber++,
       createdAt: timestamp,
       updatedAt: timestamp,
       current: true,
@@ -196,6 +198,7 @@ export class InMemorySubmissionRepository implements SubmissionRepository {
     const timestamp = now();
     const record: SubmissionEvaluation = {
       submissionId,
+      publicNumber: this.nextEvaluationPublicNumber++,
       evaluationGeneration: 1,
       attemptGeneration: 0,
       judgeJobId,
@@ -223,6 +226,7 @@ export class InMemorySubmissionRepository implements SubmissionRepository {
     for (const item of history) item.current = false;
     const record: SubmissionEvaluation = {
       submissionId,
+      publicNumber: this.nextEvaluationPublicNumber++,
       evaluationGeneration: generation,
       attemptGeneration: 0,
       judgeJobId,
@@ -667,6 +671,9 @@ function mapRow(row: Record<string, unknown>): Submission {
 function mapEvaluation(row: Record<string, unknown>): SubmissionEvaluation {
   return {
     submissionId: String(row.submission_id),
+    ...(row.public_number !== undefined && row.public_number !== null
+      ? { publicNumber: Number(row.public_number) }
+      : {}),
     evaluationGeneration: Number(row.evaluation_generation),
     attemptGeneration: Number(row.attempt_generation),
     judgeJobId: String(row.judge_job_id),

@@ -49,6 +49,7 @@ const now = () => new Date().toISOString();
 export class InMemoryProblemRepository implements ProblemRepository {
   private readonly rows = new Map<string, Problem>();
   private readonly history = new Map<string, ProblemRevision[]>();
+  private nextPublicNumber = 1;
   async create(input: ProblemCreateInput): Promise<Problem> {
     const id = input.id ?? randomUUID();
     if (
@@ -59,9 +60,13 @@ export class InMemoryProblemRepository implements ProblemRepository {
     const row = {
       ...input,
       id,
+      publicNumber: this.nextPublicNumber++,
+      publicId: '',
+      tags: input.tags ?? [],
       createdAt: timestamp,
       updatedAt: timestamp,
     } as Problem;
+    row.publicId = formatPublicId(row.publicNumber);
     this.rows.set(id, row);
     const revision = this.toRevision(row, input.authorId ?? 'system', 1);
     this.history.set(id, [revision]);
@@ -69,7 +74,9 @@ export class InMemoryProblemRepository implements ProblemRepository {
     return row;
   }
   async get(key: string) {
-    return [...this.rows.values()].find((p) => p.id === key || p.slug === key);
+    return [...this.rows.values()].find(
+      (p) => p.id === key || p.slug === key || p.publicId === key,
+    );
   }
   async list(query: ProblemListQuery) {
     const rows = [...this.rows.values()]
@@ -104,7 +111,12 @@ export class InMemoryProblemRepository implements ProblemRepository {
       )
     )
       throw new ProblemConflictError();
-    const updated = { ...row, ...input, updatedAt: now() };
+    const updated = {
+      ...row,
+      ...input,
+      tags: input.tags ?? row.tags,
+      updatedAt: now(),
+    };
     this.rows.set(row.id, updated);
     if (
       updated.currentRevisionId &&
@@ -210,12 +222,15 @@ export class PostgresProblemRepository implements ProblemRepository {
         ],
       );
       const problem = mapRow(result.rows[0]!);
+      await this.persistTags(executor, problem.id, input.tags ?? []);
+      problem.tags = input.tags ?? [];
       const revisionId = randomUUID();
       await executor.query(
-        'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)',
+        'INSERT INTO problem_revisions (id,problem_id,public_number,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)',
         [
           revisionId,
           problem.id,
+          problem.publicNumber,
           problem.slug,
           problem.title,
           problem.background,
@@ -245,7 +260,12 @@ export class PostgresProblemRepository implements ProblemRepository {
   }
   async get(key: string) {
     const result = await this.pool.query(
-      'SELECT * FROM problems WHERE id = $1 OR slug = $1 LIMIT 1',
+      `SELECT p.*, COALESCE((SELECT array_agg(t.display_name ORDER BY t.display_name)
+        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), ARRAY[]::text[]) AS tags
+       FROM problems p
+       WHERE p.id = $1 OR p.slug = $1
+          OR p.public_number = CASE WHEN $1 ~ '^P[0-9]+$' THEN substring($1 FROM 2)::bigint END
+       LIMIT 1`,
       [key],
     );
     return result.rows[0] ? mapRow(result.rows[0]) : undefined;
@@ -286,7 +306,9 @@ export class PostgresProblemRepository implements ProblemRepository {
     );
     params.push(query.limit, query.offset ?? 0);
     const result = await this.pool.query(
-      `SELECT * FROM problems ${where} ORDER BY created_at ASC, id ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      `SELECT p.*, COALESCE((SELECT array_agg(t.display_name ORDER BY t.display_name)
+        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), ARRAY[]::text[]) AS tags
+       FROM problems p ${where} ORDER BY public_number ASC, id ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
     return {
@@ -298,9 +320,9 @@ export class PostgresProblemRepository implements ProblemRepository {
     const row = await this.get(key);
     if (!row) throw new Error('NOT_FOUND');
     const fields = (Object.keys(input) as (keyof ProblemUpdateInput)[]).filter(
-      (field) => field !== 'samples',
+      (field) => field !== 'samples' && field !== 'tags',
     );
-    if (!fields.length) return row;
+    if (!fields.length && !('tags' in input)) return row;
     const columns: string[] = [];
     const params: unknown[] = [];
     for (const field of fields) {
@@ -317,11 +339,20 @@ export class PostgresProblemRepository implements ProblemRepository {
       columns.push(`${column} = $${params.length}`);
     }
     params.push(row.id);
-    const result = await this.pool.query(
-      `UPDATE problems SET ${columns.join(', ')}, updated_at=now() WHERE id=$${params.length} RETURNING *`,
-      params,
-    );
-    const updated = mapRow(result.rows[0]!);
+    const updated = fields.length
+      ? mapRow(
+          (
+            await this.pool.query(
+              `UPDATE problems SET ${columns.join(', ')}, updated_at=now() WHERE id=$${params.length} RETURNING *`,
+              params,
+            )
+          ).rows[0]!,
+        )
+      : { ...row, updatedAt: now() };
+    if ('tags' in input) {
+      await this.persistTags(this.pool, row.id, input.tags ?? []);
+      updated.tags = input.tags ?? [];
+    }
     if (
       updated.currentRevisionId &&
       (input.status !== undefined || input.visibility !== undefined)
@@ -356,10 +387,11 @@ export class PostgresProblemRepository implements ProblemRepository {
     const revs = await this.revisions(key);
     const revisionId = randomUUID();
     await this.pool.query(
-      'INSERT INTO problem_revisions (id,problem_id,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)',
+      'INSERT INTO problem_revisions (id,problem_id,public_number,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)',
       [
         revisionId,
         row.id,
+        row.publicNumber,
         revs.length + 1,
         next.slug,
         next.title,
@@ -388,6 +420,28 @@ export class PostgresProblemRepository implements ProblemRepository {
       updatedAt: new Date().toISOString(),
     } as Problem;
   }
+  private async persistTags(
+    executor: QueryExecutor,
+    problemId: string,
+    values: string[],
+  ) {
+    await executor.query('DELETE FROM problem_tags WHERE problem_id=$1', [
+      problemId,
+    ]);
+    for (const value of values) {
+      const displayName = value.trim().replace(/\s+/g, ' ');
+      const normalizedKey = displayName.toLocaleLowerCase();
+      await executor.query(
+        `INSERT INTO tags (normalized_key, display_name) VALUES ($1,$2)
+         ON CONFLICT (normalized_key) DO UPDATE SET display_name=EXCLUDED.display_name`,
+        [normalizedKey, displayName],
+      );
+      await executor.query(
+        'INSERT INTO problem_tags (problem_id, tag_id) SELECT $1,id FROM tags WHERE normalized_key=$2 ON CONFLICT DO NOTHING',
+        [problemId, normalizedKey],
+      );
+    }
+  }
 }
 function mapRow(row: Record<string, unknown>): Problem {
   const rawSamples = (
@@ -405,6 +459,10 @@ function mapRow(row: Record<string, unknown>): Problem {
   }));
   return {
     id: String(row.id),
+    publicNumber: Number(row.public_number ?? row.publicNumber ?? 0),
+    publicId: formatPublicId(
+      Number(row.public_number ?? row.publicNumber ?? 0),
+    ),
     slug: String(row.slug),
     title: String(row.title),
     background: String(row.background ?? ''),
@@ -426,6 +484,13 @@ function mapRow(row: Record<string, unknown>): Problem {
     status: row.status as Problem['status'],
     testdataVersion: row.testdata_version as string | null,
     authorId: row.author_id as string | null,
+    source: row.source
+      ? String(row.source)
+      : row.author_id
+        ? String(row.author_id)
+        : null,
+    sourceType: String(row.source_type ?? 'CREATOR'),
+    tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at ?? row.created_at)).toISOString(),
     ...(row.current_revision_id
@@ -433,6 +498,10 @@ function mapRow(row: Record<string, unknown>): Problem {
       : {}),
   };
 }
+
+export const formatPublicId = (number: number) =>
+  `P${String(number).padStart(4, '0')}`;
+export const formatPublicProblemNumber = formatPublicId;
 function mapRevision(row: Record<string, unknown>): ProblemRevision {
   const p = mapRow(row);
   return {

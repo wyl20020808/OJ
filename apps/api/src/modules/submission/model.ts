@@ -49,6 +49,7 @@ export type SubmissionEvaluationDetail = {
 
 export type SubmissionEvaluation = {
   submissionId: string;
+  publicNumber?: number;
   evaluationGeneration: number;
   attemptGeneration: number;
   judgeJobId: string;
@@ -67,7 +68,12 @@ export type SubmissionEvaluation = {
 
 export type SubmissionOutcome = Pick<
   SubmissionEvaluation,
-  'submissionId' | 'evaluationGeneration' | 'status' | 'verdict' | 'completedAt'
+  | 'submissionId'
+  | 'publicNumber'
+  | 'evaluationGeneration'
+  | 'status'
+  | 'verdict'
+  | 'completedAt'
 > & {
   problemId: string;
   problemRevisionId: string;
@@ -134,7 +140,8 @@ export type GlobalSubmissionListQuery = {
 };
 export type GlobalEvaluationListItem = {
   submissionId: string;
-  problem: { id: string; slug: string; title: string };
+  publicNumber?: number;
+  problem: { id: string; slug: string; title: string; publicId?: string };
   submitter: { id: string; displayName: string };
   languageProfileId: string;
   status: SubmissionEvaluationStatus | IntakeStatus;

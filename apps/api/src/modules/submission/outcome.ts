@@ -4,6 +4,8 @@ import type {
   SubmissionOutcome,
 } from './model.js';
 
+export const formatPublicEvaluationNumber = (number: number) => `#${number}`;
+
 /** The only input Contract available to a future Contest module. */
 export function authoritativeSubmissionOutcome(
   submission: Submission,
@@ -12,6 +14,9 @@ export function authoritativeSubmissionOutcome(
   if (!evaluation || !evaluation.current) return undefined;
   return {
     submissionId: submission.id,
+    ...(evaluation.publicNumber !== undefined
+      ? { publicNumber: evaluation.publicNumber }
+      : {}),
     evaluationGeneration: evaluation.evaluationGeneration,
     problemId: submission.problemId,
     problemRevisionId: submission.problemRevisionId,
@@ -29,6 +34,9 @@ export function publicSubmissionEvaluation(
 ) {
   if (!evaluation) return undefined;
   return {
+    ...(evaluation.publicNumber !== undefined
+      ? { publicNumber: evaluation.publicNumber }
+      : {}),
     evaluationGeneration: evaluation.evaluationGeneration,
     attemptGeneration: evaluation.attemptGeneration,
     status: evaluation.status,

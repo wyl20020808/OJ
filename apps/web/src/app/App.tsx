@@ -33,6 +33,7 @@ import { ProblemEditor } from '../components/ProblemEditor.js';
 import { ProblemSolveEditorSlot } from '../plugins/ProblemSolveEditorSlot.js';
 import { HttpCodeRunAdapter } from '@ojplatform/online-code-editor/run/HttpCodeRunAdapter';
 import { HttpSubmissionAdapter } from '@ojplatform/online-code-editor/submission/SubmissionAdapter';
+import type { ProblemSolveEditorContext } from '@ojplatform/plugin-sdk';
 import {
   ContestExperience,
   HomeworkPage,
@@ -642,7 +643,7 @@ function Home({
             {dailyProblem ? (
               <div className="daily-problem">
                 <span className="problem-id">
-                  {dailyProblem.slug || dailyProblem.id}
+                  {dailyProblem.publicId || dailyProblem.slug || dailyProblem.id}
                 </span>
                 <strong>{dailyProblem.title}</strong>
                 <div className="tag-row">
@@ -1134,9 +1135,9 @@ function ProblemList({
               <article className="problem-row" role="listitem">
                 <span
                   className="problem-id"
-                  aria-label={`题目编号 ${p.slug || p.id}`}
+                  aria-label={`题目编号 ${p.publicId || p.slug || p.id}`}
                 >
-                  {p.slug || p.id}
+                  {p.publicId || p.slug || p.id}
                 </span>
                 <div className="problem-title-cell">
                   <h2>{p.title}</h2>
@@ -1194,6 +1195,7 @@ type Draft = {
   testdataVersion?: string | null;
   visibility: Problem['visibility'];
   difficulty: NonNullable<Problem['difficulty']> | null;
+  tags: string[];
   status: Problem['status'];
   updatedAt?: string;
 };
@@ -1212,6 +1214,7 @@ const emptyDraft: Draft = {
   testdataVersion: null,
   visibility: 'private' as const,
   difficulty: null,
+  tags: [],
   status: 'draft' as const,
 };
 
@@ -1239,6 +1242,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
               output: sample.output,
             })),
           difficulty: p.difficulty ?? null,
+          tags: p.tags ?? [],
         }),
       )
       .catch((e) => setError(e instanceof ApiError ? e : null))
@@ -1282,6 +1286,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
         testdataVersion: form.testdataVersion ?? null,
         difficulty: form.difficulty,
         visibility: form.visibility,
+        tags: form.tags,
       };
       const result = id
         ? await api.updateProblem(id, editable)
@@ -1643,7 +1648,7 @@ export function ProblemDetail({ api, id, user }: { api: ApiClient; id: string; u
     <article className="problem-detail-v4">
       <div className="problem-main">
         <header className="problem-heading">
-          <span className="problem-id">{problem.slug || problem.id}</span>
+          <span className="problem-id">{problem.publicId || problem.slug || problem.id}</span>
           <h1>{problem.title}</h1>
           <div className="problem-header-actions" aria-label="题目操作">
             <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
@@ -1760,7 +1765,7 @@ export function ProblemDetail({ api, id, user }: { api: ApiClient; id: string; u
         codeRunAdapter,
         ...(user ? { submissionAdapter } : {}),
         onViewSubmission: (submissionId: string) => navigate(`/submissions/${encodeURIComponent(submissionId)}`),
-      } as import('@ojplatform/plugin-sdk').ProblemSolveEditorContext} />
+      } as ProblemSolveEditorContext} />
     </section>
     </>
   );
@@ -2038,12 +2043,12 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
               key={s.submissionId}
               to={`/submissions/${encodeURIComponent(s.submissionId)}`}
               className="evaluation-row"
-              ariaLabel={`查看评测 ${s.submissionId}`}
+              ariaLabel={`查看评测 #${s.publicNumber ?? '?'}`}
             >
-              <span>#{s.submissionId}</span>
+              <span>#{s.publicNumber ?? '?'}</span>
               <span>
                 <strong>{s.problem.title}</strong>
-                <small>{s.problem.slug}</small>
+                <small>{s.problem.publicId || s.problem.slug}</small>
               </span>
               <span>{s.submitter.displayName}</span>
               <span>{s.languageProfileId}</span>
@@ -2079,6 +2084,7 @@ export function SubmissionDetail({
   user: AuthenticatedUser | null;
 }) {
   const [submission, setSubmission] = useState<Submission | null>(null);
+  const [submissionProblem, setSubmissionProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [transportError, setTransportError] = useState('');
   const [history, setHistory] = useState<SubmissionEvaluation[]>([]);
@@ -2097,6 +2103,7 @@ export function SubmissionDetail({
       .then((value) => {
         if (version !== requestVersion.current) return;
         setSubmission(value);
+        void api.problem(value.problemId).then(setSubmissionProblem).catch(() => setSubmissionProblem(null));
         void api
           .submissionEvaluations(id)
           .then((response) => {
@@ -2201,8 +2208,8 @@ export function SubmissionDetail({
       <p className="eyebrow">提交详情</p>
       <div className="submission-heading">
         <div>
-          <h1>Submission #{submission.id}</h1>
-          <p>{submission.problemId}</p>
+          <h1>评测 #{evaluation?.publicNumber ?? '?'}</h1>
+          <p>{submissionProblem?.publicId || submissionProblem?.slug || '题目'}</p>
         </div>
         {evaluation?.verdict ? (
           <strong className="submission-verdict">{evaluation.verdict}</strong>
@@ -2273,7 +2280,7 @@ export function SubmissionDetail({
                   }
                 >
                   <span>
-                    Generation {item.evaluationGeneration}
+                    #{item.publicNumber ?? '?'} · Generation {item.evaluationGeneration}
                     {item.current ? ' - Current' : ''}
                   </span>
                   <strong>{item.verdict ?? item.status}</strong>
