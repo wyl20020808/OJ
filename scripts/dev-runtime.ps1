@@ -133,7 +133,20 @@ function Wait-HttpStatus([string]$Url, [int]$TimeoutSec = 60) { $deadline=(Get-D
 function Get-ProcessInfo([int]$ProcessId) { try { return Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId" } catch { return $null } }
 function Get-ProcessStartTime([int]$ProcessId) { try { return (Get-Process -Id $ProcessId -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o') } catch { return $null } }
 function Get-PortOwner([int]$Port) {
-  try { return @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1) } catch { return @() }
+  try {
+    $owner = @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1)
+    if ($owner) { return $owner }
+  } catch {}
+  # Some Windows environments omit Node listeners from Get-NetTCPConnection;
+  # netstat still exposes the authoritative PID for the listening socket.
+  try {
+    $pattern = ':\s*' + [regex]::Escape([string]$Port) + '\s+.*LISTENING\s+(\d+)\s*$'
+    foreach ($line in @(netstat.exe -ano -p tcp 2>$null)) {
+      $match = [regex]::Match([string]$line, $pattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+      if ($match.Success) { return @([pscustomobject]@{ OwningProcess = [int]$match.Groups[1].Value }) }
+    }
+  } catch {}
+  return @()
 }
 function Get-ServiceCommandPattern([string]$Name) {
   switch ($Name) {
