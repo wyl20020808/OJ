@@ -642,11 +642,12 @@ function Get-ApplicationStatus([string]$Name, $state) {
   $owner = if ($record -and $record.ownerCheckout) { [string]$record.ownerCheckout } elseif ($record -and $record.cwd) { [string]$record.cwd } else { '' }
   $status = 'DOWN'
   $ownership = if ($Name -ne 'supervisor') { Resolve-OJPlatformProcessOwnership $Name $port $state } else { $null }
-  if ($Name -eq 'supervisor' -and $health -and $record) { $status = if ($owner -and $owner -ne $ProjectRoot) { 'RUNNING_OJPLATFORM_OTHER_CHECKOUT' } else { 'RUNNING_OWNED' } }
+  $versionMatch = $record -and (Test-VersionCompatible $record) -and ($Name -ne 'web' -or (Test-PluginVersionCompatible $record))
+  if ($Name -eq 'supervisor' -and $health -and $record) { $status = if (-not $versionMatch) { 'RUNNING_VERSION_MISMATCH' } elseif ($owner -and $owner -ne $ProjectRoot) { 'RUNNING_OJPLATFORM_OTHER_CHECKOUT' } else { 'RUNNING_OWNED' } }
   elseif ($listener -and $ownership.classification -eq 'PROVEN_OWNED') {
     $sharedMatch=$record -and [int]$record.pid -eq [int]$listener.OwningProcess -and [int]$record.port -eq $port -and $record.processStartTime -and (Get-ProcessStartTime ([int]$listener.OwningProcess)) -eq [string]$record.processStartTime
     $owner=$ownership.ownerCheckout
-    if ($sharedMatch) { $status=if(-not $health){'STALE'}elseif($owner -and $owner -ne $ProjectRoot){'RUNNING_OJPLATFORM_OTHER_CHECKOUT'}else{'RUNNING_OWNED'} }
+    if ($sharedMatch) { $status=if(-not $health){'STALE'}elseif(-not $versionMatch){'RUNNING_VERSION_MISMATCH'}elseif($owner -and $owner -ne $ProjectRoot){'RUNNING_OJPLATFORM_OTHER_CHECKOUT'}else{'RUNNING_OWNED'} }
     else { $status='RUNNING_LEGACY_OJPLATFORM' }
   } elseif ($listener) { $status = 'BLOCKED_BY_EXTERNAL_OWNER' }
   elseif ($record) { $status = 'STALE' }
