@@ -144,6 +144,14 @@ function Test-RecordServiceAtPort($record) {
   $owner = if ($record.ownerCheckout) { [string]$record.ownerCheckout } else { [string]$record.cwd }
   return $owner -and $process.CommandLine -match [regex]::Escape($owner)
 }
+function Find-ProcessByPortIdentity([string]$Signature, [int]$Port, [string]$OwnerCheckout = $ProjectRoot) {
+  $listener = Get-PortOwner $Port | Select-Object -First 1
+  if (-not $listener) { return $null }
+  $process = Get-ProcessInfo ([int]$listener.OwningProcess)
+  if (-not $process -or -not $process.CommandLine) { return $null }
+  if ($process.CommandLine -match [regex]::Escape($Signature) -or $process.CommandLine -match [regex]::Escape($OwnerCheckout)) { return $process }
+  return $null
+}
 function Test-OwnedProcess($record) {
   if (-not $record -or -not $record.pid) { return $false }
   $p = Get-ProcessInfo ([int]$record.pid)
@@ -170,11 +178,12 @@ function Start-Managed([string]$Name, [string]$FilePath, [string[]]$Arguments, [
     throw "$Name is healthy but Runtime Manager cannot prove process ownership; refusing to start a duplicate."
   }
   if (-not $old -and $healthy) {
-    $adopted = Find-ProcessBySignature $Signature $Port
+    $adopted = Find-ProcessByPortIdentity $Signature $Port
     if ($adopted) {
       $state.processes[$Name] = New-ProcessRecord $adopted $Name $Port $HealthUrl $Signature 'OJPlatform-Local-Runtime-Manager-V1-adopted'
       Save-State $state; Write-Host "$Name REUSE (adopted healthy process)"; return
     }
+    throw "$Name is healthy but Runtime Manager cannot prove process ownership; refusing to start a duplicate."
   }
   if ($old -and (Test-OwnedProcess $old)) { Stop-Managed $Name $state }
   if ((Test-TcpPort $Port) -and -not $healthy) { throw "$Name port $Port is occupied by an unknown process." }
@@ -188,11 +197,20 @@ function Find-ProcessBySignature([string]$Signature, [int]$Port) {
   if ($candidates.Count -gt 0) { return $candidates[0] }
   return $null
 }
+function Stop-ProvenProcess($record) {
+  $targets = @([int]$record.pid)
+  $listener = Get-PortOwner ([int]$record.port) | Select-Object -First 1
+  if ($listener) { $targets += [int]$listener.OwningProcess }
+  foreach ($target in @($targets | Select-Object -Unique)) { try { Stop-Process -Id $target -Force -ErrorAction Stop } catch {} }
+  if (-not $record.port) { return $true }
+  $deadline=(Get-Date).AddSeconds(5); do { if (-not (Get-PortOwner ([int]$record.port) | Select-Object -First 1)) { return $true }; Start-Sleep -Milliseconds 100 } while ((Get-Date)-lt $deadline)
+  return $false
+}
 function Stop-Managed([string]$Name, $state) {
   $record = $state.processes[$Name]
   if ($record -and -not (Test-OwnedProcess $record) -and (Test-RecordServiceAtPort $record)) { $record=New-PortProcessRecord $Name ([int]$record.port) $record.health $record.signature $record.ownerCheckout; $state.processes[$Name]=$record; Save-State $state }
   $stopped = $false
-  if ($record -and (Test-OwnedProcess $record)) { try { Stop-Process -Id ([int]$record.pid) -Force -ErrorAction Stop; $stopped = $true } catch { Write-Warning "$Name process could not be stopped: $($_.Exception.Message)" } }
+  if ($record -and (Test-OwnedProcess $record)) { $stopped = Stop-ProvenProcess $record }
   elseif ($record -and $record.pid -and $Name -ne 'supervisor') { Write-Warning "$Name STOP REFUSED: ownership cannot be proven for PID $($record.pid), port $($record.port)."; return }
   if ($Name -eq 'supervisor') {
     if (-not $record) { Write-Warning 'supervisor STOP REFUSED: no shared ownership record.'; return }
