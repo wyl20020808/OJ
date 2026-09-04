@@ -263,9 +263,9 @@ function Test-PluginVersionCompatible($record) {
 function Get-ActiveJudgeJobs {
   try {
     $headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken}; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers
-    if (-not $nodes) { return 0 }
-    return [int](@($nodes.body.items | Measure-Object -Property activeJobs -Sum).Sum)
-  } catch { return 0 }
+      if (-not $nodes) { throw 'ACTIVE_JOBS_UNKNOWN: Judge Service node registry unavailable.' }
+      return [int](@($nodes.body.items | Measure-Object -Property activeJobs -Sum).Sum)
+    } catch { throw "ACTIVE_JOBS_UNKNOWN: $($_.Exception.Message)" }
 }
 function Test-RecordServiceAtPort($record) {
   if (-not $record -or -not $record.port) { return $false }
