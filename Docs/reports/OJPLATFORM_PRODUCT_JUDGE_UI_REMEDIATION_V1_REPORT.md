@@ -29,7 +29,12 @@ Start plugin main: `560a5ae2eeff704e4b00f99704bf868bd409ac5c`.
   and a distinct infrastructure mark.
 - Issue 5: the separate OnlineCodeEditor branch applies the 320px minimum to
   the CodeMirror host, editor, and scroller, instead of relying on an unresolved
-  `height: 100%` ancestor.
+  `height: 100%` ancestor. The Product Vite and test aliases now load that
+  committed plugin worktree, rather than the unrelated unmodified plugin
+  checkout.
+- Issue 3: the title action now links to the same problem's `#solve` anchor,
+  where the hosted OnlineCodeEditor is mounted. It does not invoke submission
+  creation; the legacy authenticated `/submit` form route remains intact.
 
 ## Runtime Evidence and Blocker
 
@@ -59,16 +64,27 @@ Consequently the following are **not runtime verified**:
 
 - Issue 1: no fresh small/large formal submission comparison, no lower-level
   `REAL_EXECUTION_SET_INFRA_FAILURE` cause, and no root-cause fix are claimed.
-- Issue 3: implementation route exists but browser navigation to the hosted
-  editor was not checked.
 - Issue 4: no real SSE, terminal testcase event, or browser DOM transition was
   observed.
-- Issue 5: plugin tests/build pass; real-browser rendered CodeMirror height was
-  not measured.
-- Issue 7: focused DOM regression verifies stable raw input; real browser was
-  not run.
 - Issue 8: adapter configuration is tested by build/type coverage only; Product
   to Judge Admin browser/runtime call was not observed.
+
+## Browser Evidence
+
+- Issue 3: on P0005, the title `提交代码` action navigated to
+  `/problems/phase2c1-success-1788098037058#solve`; the same P0005 problem
+  context and the real `OnlineCodeEditor` element were visible. The former
+  `/submit` route did not create a submission either, but it exposed only the
+  legacy textarea form and was therefore not the requested editor destination.
+- Issue 5: with empty source on the hosted editor, Chromium measured the
+  rendered `.cm-editor` and `.cm-scroller` at 320px (surface 322px) in both
+  1440px desktop and 390px mobile viewports.
+- Issue 7: Chromium typed `abc@example.com` character by character; every
+  observed value was unchanged, `input.type` stayed `text`, and selection
+  advanced from 1 through 15. `+8613800138000` displayed the identifier
+  validation error; `13800138000` reached the password-login request and
+  received normal invalid-credentials 401, proving China-mainland phone
+  classification occurs at submit time.
 
 ## Validation
 

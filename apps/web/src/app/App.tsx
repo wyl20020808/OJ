@@ -1667,7 +1667,7 @@ export function ProblemDetail({
             </span>
             <h1>{problem.title}</h1>
             <div className="problem-header-actions" aria-label="题目操作">
-              <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
+              <Link to={`/problems/${encodeURIComponent(id)}#solve`}>
                 <button type="button">提交代码</button>
               </Link>
               {canEdit && (
@@ -1773,7 +1773,7 @@ export function ProblemDetail({
           </p>
         </aside>
       </article>
-      <section className="problem-editor-slot" aria-label="OnlineCodeEditor">
+      <section id="solve" className="problem-editor-slot" aria-label="OnlineCodeEditor">
         <ProblemSolveEditorSlot
           context={
             {
