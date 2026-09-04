@@ -210,6 +210,24 @@ export function ProblemEditor({
       })
       .finally(() => setLoading(false));
   };
+  const refreshJudgeDraft = async () => {
+    const next = await api.judgeDraft(problemId).catch((error: unknown) => {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    });
+    setHasDraft(Boolean(next && Array.isArray(next.testcases) && next.defaults));
+    setDraft(
+      next && Array.isArray(next.testcases) && next.defaults
+        ? next
+        : {
+            problemId,
+            defaults: fallbackDefaults,
+            testcases: [],
+            validation: emptyValidation,
+            updatedAt: new Date().toISOString(),
+          },
+    );
+  };
   useEffect(load, [api, problemId]);
   useEffect(() => {
     if (!dirty) return;
@@ -367,8 +385,8 @@ export function ProblemEditor({
     setUploading(true);
     setNotice('');
     try {
-      const next = await api.uploadJudgeData(problemId, file, zip);
-      setDraft(next);
+      await api.uploadJudgeData(problemId, file, zip);
+      await refreshJudgeDraft();
       setDirty(false);
       setSelectedFiles([]);
       setNotice(zip ? 'ZIP 已解析，草稿已刷新。' : '测试点已导入草稿。');
@@ -386,13 +404,7 @@ export function ProblemEditor({
     if (!window.confirm(`确定删除测试点 #${displayOrdinal} 吗？`)) return;
     try {
       await api.deleteJudgeTestcase(problemId, t.testcaseId);
-      setDraft(
-        (d) =>
-          d && {
-            ...d,
-            testcases: d.testcases.filter((x) => x.testcaseId !== t.testcaseId),
-          },
-      );
+      await refreshJudgeDraft();
       setNotice('测试点已删除。');
     } catch (e) {
       setNotice(errorText(e));

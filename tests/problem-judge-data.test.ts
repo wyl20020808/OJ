@@ -397,6 +397,22 @@ describe('problem judge data backend', () => {
     expect(() => parseZip(Uint8Array.of(1, 2, 3))).toThrow('Invalid archive');
   });
 
+  it('replaces the editable testcase set on complete ZIP upload', async () => {
+    const { svc } = service();
+    const first = makeZip([
+      { name: '01.in', data: Uint8Array.of(1) },
+      { name: '01.out', data: Uint8Array.of(2) },
+    ]);
+    const second = makeZip([
+      { name: '09.in', data: Uint8Array.of(9) },
+      { name: '09.out', data: Uint8Array.of(8) },
+    ]);
+    await svc.addZip('p-1', first, user);
+    const result = await svc.addZip('p-1', second, user);
+    expect(result.draft.testcases).toHaveLength(1);
+    expect(result.draft.testcases[0]?.label).toBe('9');
+  });
+
   it('accepts matching answer suffixes for a single testcase pair', async () => {
     const { svc } = service();
     const draft = await svc.addPair(
