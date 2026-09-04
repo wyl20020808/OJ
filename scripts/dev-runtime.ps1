@@ -42,6 +42,7 @@ if (Test-Path $LocalConfig) { . $LocalConfig; if ($OJPlatformRuntimeConfig) { fo
 $Config.WebOrigin = "http://127.0.0.1:$($Config.WebPort)"; $Config.ApiOrigin = "http://127.0.0.1:$($Config.ApiPort)"; $Config.JudgeOrigin = "http://127.0.0.1:$($Config.JudgeServicePort)"; $Config.HostOrigin = "http://127.0.0.1:$($Config.HostAgentPort)"; $Config.SupervisorOrigin = "http://127.0.0.1:$($Config.SupervisorPort)"
 $Config.WorkerBinary = if ($Config.WorkerBinary) { $Config.WorkerBinary } else { Join-Path $RuntimeRoot 'bin/judge-worker.exe' }
 $Config.WorkerBuildMetadata = if ($Config.WorkerBuildMetadata) { $Config.WorkerBuildMetadata } else { Join-Path $RuntimeRoot 'bin/judge-worker.build.json' }
+$PortReconcileScript = Join-Path $ProjectRoot 'scripts/runtime-port-reconcile.ps1'
 
 function Ensure-RuntimeFolders { New-Item -ItemType Directory -Force -Path $RuntimeRoot, $LogRoot, (Join-Path $RuntimeRoot 'bin') | Out-Null }
 function Convert-ToHashtable($value) { if ($null -eq $value) { return $null }; if ($value -is [System.Collections.IDictionary]) { $result=@{}; foreach($key in $value.Keys){$result[$key]=Convert-ToHashtable $value[$key]}; return $result }; if ($value -is [System.Collections.IEnumerable] -and -not ($value -is [string])) { return @($value | ForEach-Object { Convert-ToHashtable $_ }) }; if ($value -is [psobject]) { $result=@{}; foreach($property in $value.PSObject.Properties){$result[$property.Name]=Convert-ToHashtable $property.Value}; return $result }; return $value }
@@ -197,7 +198,7 @@ function Test-ContainerNetwork($Inspection, [string]$NetworkName) {
 }
 function Get-InfrastructureStatus([string]$Service, [string]$ContainerPort, [int]$HostPort) {
   $inspection = Get-ComposeInspection $Service
-  $result = [ordered]@{ service=$Service; container="$($Config.ComposeProjectName)-$Service-1"; exists=[bool]$inspection; running=$false; healthy=$false; mapping=$false; network=$false; hostReachable=$false; code='CONTAINER_DOWN'; detail='' ; inspection=$inspection }
+  $result = [ordered]@{ service=$Service; hostPort=$HostPort; container="$($Config.ComposeProjectName)-$Service-1"; exists=[bool]$inspection; running=$false; healthy=$false; mapping=$false; network=$false; hostReachable=$false; code='CONTAINER_DOWN'; detail='' ; inspection=$inspection }
   if (-not $inspection) { $result.detail = 'expected container is missing'; return [pscustomobject]$result }
   $result.running = [string]$inspection.State.Status -eq 'running'
   $result.healthy = $result.running -and $inspection.State.Health -and ([string]$inspection.State.Health.Status -eq 'healthy')
@@ -309,13 +310,15 @@ function Ensure-Infrastructure($state) {
   foreach ($status in $statuses | Where-Object { $_.code -ne 'READY' }) {
     $recreate = $status.exists -and ((-not $status.mapping) -or (-not $status.network) -or ((Get-ContainerLabel $status.inspection 'com.docker.compose.project') -ne [string]$Config.ComposeProjectName) -or ((Get-ContainerLabel $status.inspection 'com.docker.compose.service') -ne $status.service))
     try {
+      Invoke-ProcessCommand 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',$PortReconcileScript,'-Distro',$Config.WslDistro,'-Project',$Config.ComposeProjectName,'-Service',$status.service,'-Port',[string]$status.hostPort) @{} 30000 | ForEach-Object { if ($_){ Write-Host $_ } }
       if ($recreate) { Write-Host "Infrastructure $($status.service) RECREATE (stale configuration)"; Invoke-Compose @('up','-d','--force-recreate',$status.service) 120000 | Out-Null }
       else { Write-Host "Infrastructure $($status.service) START/REUSE"; Invoke-Compose @('up','-d',$status.service) 120000 | Out-Null }
     } catch {
       $message = $_.Exception.Message
-      if ($message -match 'address already in use' -and $status.exists -and -not $status.running) {
-        try { Write-Host "Infrastructure $($status.service) REMOVE stopped container (port state recovery)"; Invoke-Compose @('rm','-sf',$status.service) 30000 | Out-Null; Invoke-Compose @('up','-d',$status.service) 120000 | Out-Null }
-        catch { throw "COMPOSE_FAILURE: $($status.service): $($_.Exception.Message)" }
+      if ($message -match 'PORT_OWNED_BY_|PORT_OWNER_UNKNOWN|WSL_DOCKER_INSPECTION_FAILED') { throw $message }
+      if ($message -match 'address already in use') {
+        try { Write-Host "Infrastructure $($status.service) port state recovery"; if ($status.exists -and -not $status.running) { Invoke-Compose @('rm','-sf',$status.service) 30000 | Out-Null }; Invoke-ProcessCommand 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',$PortReconcileScript,'-Distro',$Config.WslDistro,'-Project',$Config.ComposeProjectName,'-Service',$status.service,'-Port',[string]$status.hostPort) @{} 30000 | Out-Null; Invoke-Compose @('up','-d',$status.service) 120000 | Out-Null }
+        catch { $recoveryMessage=$_.Exception.Message; if ($recoveryMessage -match 'PORT_OWNED_BY_|PORT_OWNER_UNKNOWN|WSL_DOCKER_INSPECTION_FAILED') { throw $recoveryMessage }; throw "PORT_BIND_FAILED: OWNER=UNKNOWN SERVICE=$($status.service) PORT=$($status.hostPort) detail=$recoveryMessage" }
       } else { throw "COMPOSE_FAILURE: $($status.service): $message" }
     }
   }

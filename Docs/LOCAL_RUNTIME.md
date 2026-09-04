@@ -17,6 +17,23 @@ ports. Failures retain container state and emit a specific code such as
 No infrastructure cleanup runs when an application service later fails. Named
 PostgreSQL, Redis, and MinIO volumes are never removed by the Runtime Manager.
 
+Before recreating an infrastructure service, Runtime Manager reconciles its
+expected host port (`55432`, `56379`, or `59000`). It records Docker container
+identity and project/service labels, checks WSL and Windows listeners, removes
+only stale/duplicate `ojplatform-local` containers, and waits for release
+before Compose retry. Other Docker resources fail with
+`PORT_OWNED_BY_OTHER_DOCKER_RESOURCE`; external processes fail with
+`PORT_OWNED_BY_EXTERNAL_PROCESS`; missing owner evidence fails closed with
+`PORT_OWNER_UNKNOWN`. Bind retries are limited and report
+`PORT_BIND_FAILED` with service and port. Docker proxy cleanup is targeted to
+the identified listener only.
+
+Normal `stop` stops application services and preserves infrastructure.
+`stop -All` additionally stops PostgreSQL, Redis, and MinIO without removing
+volumes. Worker reservation/capacity failures remain separate from
+infrastructure port conflicts (`HOST_WORKER_CAPACITY_CONFLICT` versus
+`INFRA_PORT_CONFLICT`).
+
 启动：
 双击 `OJPlatform-Start.bat`
 
