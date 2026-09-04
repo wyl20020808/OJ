@@ -39,3 +39,6 @@ Stop waits despite successful exit. Status now avoids HTTP probes when TCP port
 is closed and uses one-second health timeout. Stop short-circuits already-down
 services. Root Status/Stop remain visible and return success without full runtime
 startup.
+
+Additional root-entry fix: BATs now print immediate progress before PowerShell
+starts and hold successful output for two seconds before exiting.

@@ -9,3 +9,4 @@ if errorlevel 1 (
 if not errorlevel 1 (
   timeout /t 2 /nobreak >nul
 )
+exit /b 0
