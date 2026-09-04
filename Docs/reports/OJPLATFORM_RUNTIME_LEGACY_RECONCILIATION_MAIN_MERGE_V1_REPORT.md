@@ -5,10 +5,11 @@
 `PARTIAL`
 
 Runtime Legacy Reconciliation was merged into canonical `main` with merge
-commit `214fb0c`. Static validation, focused ownership tests, and root status
-evidence pass. Root Stop/Start/Restart smoke was not run because an unrelated
-Judge job remained active throughout this session; stopping Runtime would have
-interrupted it.
+commit `214fb0c`. Static validation and focused ownership tests pass.
+Root Stop/Start/Restart smoke was not run because an unrelated Judge job
+remained active throughout this session; stopping Runtime would have
+interrupted it. Final root status also found an existing Web-down and stale
+Worker runtime state owned by a separate checkout.
 
 ## Merge
 
@@ -28,17 +29,19 @@ interrupted it.
 - `git diff --check`: PASS
 - Root BAT wiring: PASS; Start, Stop, Restart, and Status invoke
   `scripts/dev-runtime.ps1`
-- Canonical root Status: PASS for PostgreSQL, Redis, MinIO, Product API, Judge
-  Service, Host Agent, Supervisor, Worker, and Web ownership/health probes.
-- Web HTTP: `200` at `http://127.0.0.1:5173`
-- API health: `ok` at `http://127.0.0.1:3010/health`
+- Root Status: PARTIAL. PostgreSQL, Redis, MinIO, Product API, Judge Service,
+  Host Agent, and Supervisor reported running. Web reported `DOWN`; Worker
+  reported `STALE`.
 
 ## Runtime Smoke
 
 Root Stop, Status-after-stop, Root Start, and Root Restart were intentionally
 not executed. Judge Service reported one active job on
 `cpp20-gcc-13-v1-1788409555979-1` (`BUSY`) during repeated checks. The existing
-Runtime was left running and no job was interrupted.
+Runtime was left unchanged and no job was interrupted. The observed Web-down
+and stale-Worker state belongs to
+`D:\OJPlatform-worktrees\product-judge-ui-remediation`; it is outside this
+merge task.
 
 ## Safety
 
@@ -47,4 +50,3 @@ Runtime was left running and no job was interrupted.
 - Unrelated processes: untouched
 - Docker volumes: untouched
 - Services left running: yes
-
