@@ -47,11 +47,18 @@ $PortReconcileScript = Join-Path $ProjectRoot 'scripts/runtime-port-reconcile.ps
 
 function Ensure-RuntimeFolders { New-Item -ItemType Directory -Force -Path $RuntimeRoot, $LogRoot, (Join-Path $CheckoutRuntimeRoot 'bin') | Out-Null }
 function Convert-ToHashtable($value) { if ($null -eq $value) { return $null }; if ($value -is [System.Collections.IDictionary]) { $result=@{}; foreach($key in $value.Keys){$result[$key]=Convert-ToHashtable $value[$key]}; return $result }; if ($value -is [System.Collections.IEnumerable] -and -not ($value -is [string])) { return @($value | ForEach-Object { Convert-ToHashtable $_ }) }; if ($value -is [psobject]) { $result=@{}; foreach($property in $value.PSObject.Properties){$result[$property.Name]=Convert-ToHashtable $property.Value}; return $result }; return $value }
-function Get-LegacyRuntimeRoots {
+function Get-KnownOJPlatformRoots {
   $roots = @($ProjectRoot, 'D:\OJPlatform')
-  $worktrees = 'D:\OJPlatform-worktrees'
-  if (Test-Path $worktrees) { $roots += @(Get-ChildItem -LiteralPath $worktrees -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) }
-  return @($roots | Select-Object -Unique | Where-Object { $_ -ne $ProjectRoot -and (Test-Path (Join-Path $_ '.runtime\state.json')) })
+  try { $roots += @(& git -C $ProjectRoot worktree list --porcelain 2>$null | Where-Object { $_ -like 'worktree *' } | ForEach-Object { $_.Substring(9) }) } catch {}
+  return @($roots | Where-Object { $_ -and (Test-Path $_) } | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd('\') } | Select-Object -Unique)
+}
+function Get-LegacyRuntimeRoots {
+  return @(Get-KnownOJPlatformRoots | Where-Object { Test-Path (Join-Path $_ '.runtime\state.json') })
+}
+function Get-LegacyProcessRecords([string]$Name) {
+  $records=@()
+  foreach($root in Get-LegacyRuntimeRoots){try{$legacy=Convert-ToHashtable (Get-Content -Raw (Join-Path $root '.runtime\state.json')|ConvertFrom-Json);$record=$legacy.processes[$Name];if($record){$records+=@{root=$root;record=$record}}}catch{}}
+  return $records
 }
 function Import-LegacyRuntimeState {
   if (Test-Path $StateFile) { return }
@@ -128,6 +135,47 @@ function Get-ProcessStartTime([int]$ProcessId) { try { return (Get-Process -Id $
 function Get-PortOwner([int]$Port) {
   try { return @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1) } catch { return @() }
 }
+function Get-ServiceCommandPattern([string]$Name) {
+  switch ($Name) {
+    'api' { 'apps[\\/]api[\\/]src[\\/]server\.ts' }
+    'web' { 'apps[\\/]web[\\/].*vite|vite.*apps[\\/]web' }
+    'judge-service' { 'apps[\\/]judge-service[\\/]src[\\/]server\.ts' }
+    'host-agent' { 'apps[\\/]judge-host-agent[\\/]src[\\/]server\.ts' }
+    default { '(?!)' }
+  }
+}
+function Test-ServiceProcessIdentity($Process, [string]$Name, [string]$Root = '') {
+  if (-not $Process -or -not $Process.CommandLine -or $Process.Name -notin @('node','node.exe')) { return $false }
+  if ($Process.CommandLine -notmatch (Get-ServiceCommandPattern $Name)) { return $false }
+  return -not $Root -or $Process.CommandLine -match [regex]::Escape([IO.Path]::GetFullPath($Root).TrimEnd('\'))
+}
+function Get-ServicePort([string]$Name) { switch($Name){'web'{$Config.WebPort};'api'{$Config.ApiPort};'judge-service'{$Config.JudgeServicePort};'host-agent'{$Config.HostAgentPort};'supervisor'{$Config.SupervisorPort}} }
+function Get-ServiceSignature([string]$Name) { switch($Name){'web'{'@ojplatform/web'};'api'{'apps/api/src/server.ts'};'judge-service'{'apps/judge-service/src/server.ts'};'host-agent'{'apps/judge-host-agent/src/server.ts'};'supervisor'{$Config.SupervisorLinuxBinary}} }
+function Get-ServiceHealthUrl([string]$Name) { switch($Name){'web'{"$($Config.WebOrigin)/"};'api'{"$($Config.ApiOrigin)/health"};'judge-service'{"$($Config.JudgeOrigin)/health"};'host-agent'{"$($Config.HostOrigin)/health"};'supervisor'{"$($Config.SupervisorOrigin)/v1/health"}} }
+function Resolve-OJPlatformProcessOwnership([string]$Name, [int]$Port, $state) {
+  $listener = Get-PortOwner $Port | Select-Object -First 1
+  $shared = if ($state -and $state.processes) { $state.processes[$Name] } else { $null }
+  if (-not $listener) { return @{ classification=if($shared){'STALE_RECORD'}else{'NOT_RUNNING'}; pid=$null; ownerCheckout=''; evidence='no listener'; record=$shared } }
+  $pidValue = [int]$listener.OwningProcess
+  $processStartTime = Get-ProcessStartTime $pidValue
+  if ($shared -and [int]$shared.pid -eq $pidValue -and [int]$shared.port -eq $Port -and $shared.processStartTime -and $processStartTime -eq [string]$shared.processStartTime) {
+    return @{ classification='PROVEN_OWNED'; pid=$pidValue; ownerCheckout=if($shared.ownerCheckout){$shared.ownerCheckout}else{$shared.cwd}; evidence='shared PID + port + process start time'; record=$shared }
+  }
+  $process = Get-ProcessInfo $pidValue
+  foreach ($legacyEntry in Get-LegacyProcessRecords $Name) {
+    $root=$legacyEntry.root;$record=$legacyEntry.record
+    if ($record -and [int]$record.pid -eq $pidValue -and [int]$record.port -eq $Port -and $record.processStartTime -and $processStartTime -eq [string]$record.processStartTime -and (Test-ServiceProcessIdentity $process $Name)) {
+      return @{ classification='PROVEN_OWNED'; pid=$pidValue; ownerCheckout=$root; evidence='legacy PID + port + process start time'; record=$record }
+    }
+  }
+  if (-not $process -or -not $process.CommandLine) { return @{ classification='UNKNOWN'; pid=$pidValue; ownerCheckout=''; evidence='process identity unavailable'; record=$null } }
+  foreach ($root in Get-KnownOJPlatformRoots) {
+    if (Test-ServiceProcessIdentity $process $Name $root) {
+      return @{ classification='PROVEN_OWNED'; pid=$pidValue; ownerCheckout=$root; evidence='registered worktree + service command identity'; record=$null }
+    }
+  }
+  return @{ classification='EXTERNAL'; pid=$pidValue; ownerCheckout=''; evidence='listener command is not a known OJPlatform service'; record=$null }
+}
 function Test-RecordedPortOwnership($record) {
   if (-not $record -or -not $record.pid -or -not $record.port -or -not $record.processStartTime) { return $false }
   $listener = Get-PortOwner ([int]$record.port) | Select-Object -First 1
@@ -171,6 +219,10 @@ function New-Token { return ([Guid]::NewGuid().ToString('N') + [Guid]::NewGuid()
 function Get-Secrets([switch]$Create) { $file = Join-Path $RuntimeRoot 'secrets.json'; if (Test-Path $file) { return Convert-ToHashtable (Get-Content -Raw $file | ConvertFrom-Json) }; if (-not $Create) { return $null }; Ensure-RuntimeFolders; $secrets = @{ judgeServiceToken = New-Token; judgeNodeToken = New-Token; hostAgentToken = New-Token; judgeDatabasePassword = New-Token }; $secrets | ConvertTo-Json | Set-Content -Encoding UTF8 $file; return $secrets }
 function Start-Managed([string]$Name, [string]$FilePath, [string[]]$Arguments, [hashtable]$Environment, [int]$Port, [string]$HealthUrl, [string]$Signature, $state, [hashtable]$HealthHeaders = @{}) {
   $old = $state.processes[$Name]; $healthy = if ($HealthUrl.EndsWith('/')) { Test-HttpOk $HealthUrl } else { [bool](Get-HttpJson $HealthUrl $HealthHeaders) }
+  $ownership = Resolve-OJPlatformProcessOwnership $Name $Port $state
+  if ($ownership.classification -eq 'PROVEN_OWNED' -and $healthy) { $state.processes[$Name]=New-PortProcessRecord $Name $Port $HealthUrl $Signature $ownership.ownerCheckout;Save-State $state;Write-Host "$Name REUSE ($($ownership.evidence))";return }
+  if ($ownership.classification -eq 'PROVEN_OWNED') { $state.processes[$Name]=New-PortProcessRecord $Name $Port $HealthUrl $Signature $ownership.ownerCheckout;Save-State $state;Stop-Managed $Name $state;$old=$null }
+  elseif (@('EXTERNAL','UNKNOWN') -contains $ownership.classification) { throw "$Name port $Port owner is $($ownership.classification); refusing reconciliation." }
   if ($old -and $healthy) {
     if ((Test-OwnedProcess $old) -or (Test-RecordServiceAtPort $old)) { if (-not (Test-RecordedPortOwnership $old)) { $state.processes[$Name] = New-PortProcessRecord $Name $Port $HealthUrl $Signature $old.ownerCheckout; Save-State $state }; Write-Host "$Name REUSE (healthy)"; return }
     $adopted = Find-ProcessBySignature $Signature $Port
@@ -211,6 +263,13 @@ function Stop-ProvenProcess($record) {
 }
 function Stop-Managed([string]$Name, $state) {
   $record = $state.processes[$Name]
+  if ($Name -ne 'supervisor') {
+    $servicePort=[int](Get-ServicePort $Name)
+    $ownership = Resolve-OJPlatformProcessOwnership $Name $servicePort $state
+    if ($ownership.classification -eq 'PROVEN_OWNED') { $record=New-PortProcessRecord $Name $servicePort (Get-ServiceHealthUrl $Name) (Get-ServiceSignature $Name) $ownership.ownerCheckout;$state.processes[$Name]=$record;Save-State $state }
+    elseif (@('EXTERNAL','UNKNOWN') -contains $ownership.classification) { Write-Warning "$Name STOP REFUSED: port owner is $($ownership.classification), PID $($ownership.pid).";return }
+    elseif ($record) { $state.processes.Remove($Name);Save-State $state;return }
+  }
   if ($record -and -not (Test-OwnedProcess $record) -and (Test-RecordServiceAtPort $record)) { $record=New-PortProcessRecord $Name ([int]$record.port) $record.health $record.signature $record.ownerCheckout; $state.processes[$Name]=$record; Save-State $state }
   $stopped = $false
   if ($record -and (Test-OwnedProcess $record)) { $stopped = Stop-ProvenProcess $record }
@@ -461,6 +520,7 @@ function Start-Api($state) { $env=@{PORT=[string]$Config.ApiPort;HOST='127.0.0.1
 function Start-Web($state) { Start-Managed 'web' 'pnpm.cmd' @('--filter','@ojplatform/web','dev','--host','127.0.0.1','--port',[string]$Config.WebPort) @{OJPLATFORM_API_PORT=[string]$Config.ApiPort} $Config.WebPort "$($Config.WebOrigin)/" '@ojplatform/web' $state }
 function Stop-WorkerThroughControlPlane($state) { if(-not(Get-HttpJson "$($Config.JudgeOrigin)/health")){return};$headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken};$nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers;foreach($node in @($nodes.body.items|Where-Object{$_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.desiredState -ne 'OFFLINE'})){try{Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes/$([uri]::EscapeDataString($node.nodeId))/stop" -Method Post -Headers $headers -ContentType 'application/json' -Body '{}' -UseBasicParsing -TimeoutSec 10|Out-Null}catch{Write-Warning "Worker $($node.nodeId) drain/stop was rejected: $($_.Exception.Message)"}} }
 function Stop-Infrastructure($state) { if($state.infrastructure.managed -and $state.infrastructure.compose){$activePorts=@($Config.WebPort,$Config.ApiPort,$Config.JudgeServicePort,$Config.HostAgentPort,$Config.SupervisorPort|Where-Object{Test-TcpPort $_});if($activePorts.Count -gt 0){throw "Infrastructure STOP REFUSED: application ports still listening: $($activePorts -join ', ')."};Invoke-Compose @('stop') 60000|Out-Null;$keepalive=$state.processes['wsl-keepalive'];if($keepalive -and (Test-OwnedProcess $keepalive)){try{Stop-Process -Id ([int]$keepalive.pid) -Force -ErrorAction SilentlyContinue}catch{}};$state.processes.Remove('wsl-keepalive');$state.infrastructure.managed=$false;Save-State $state;Write-Host 'Infrastructure STOP'} }
+function Assert-ApplicationPortsReleased { $activePorts=@($Config.WebPort,$Config.ApiPort,$Config.JudgeServicePort,$Config.HostAgentPort,$Config.SupervisorPort|Where-Object{Test-TcpPort $_});if($activePorts.Count -gt 0){throw "APPLICATION_PORT_REMAINS_OCCUPIED: $($activePorts -join ', ')."} }
 function Test-HttpOk([string]$Url) { try { return ([int](Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3).StatusCode) -eq 200 } catch { return $false } }
 function Test-DatabaseConnection([string]$Url) { if (-not $Url) { return $false }; try { $probe = "import pg from 'pg'; const c=new pg.Client({connectionString:process.env.RUNTIME_DATABASE_URL,connectionTimeoutMillis:3000}); await c.connect(); await c.query('select 1'); await c.end();"; Invoke-ProcessCommand 'node' @('--input-type=module','-e',$probe) @{ RUNTIME_DATABASE_URL = $Url } 10000 | Out-Null; return $true } catch { return $false } }
 function Test-SupervisorUnit { try { return (Invoke-Wsl @('-d',$Config.WslDistro,'--user','oj-sandbox','--','env','XDG_RUNTIME_DIR=/run/user/1000','DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus','systemctl','--user','is-active',$Config.SupervisorSystemdUnit) 10000).Trim() -eq 'active' } catch { return $false } }
@@ -477,15 +537,17 @@ function Get-ApplicationStatus([string]$Name, $state) {
   $source = switch ($Name) { 'web' {'HTTP 200 + Windows listener'}; 'api' {'HTTP /health + Windows listener'}; 'judge-service' {'HTTP /health + Windows listener'}; 'host-agent' {'authenticated HTTP /health + Windows listener'}; 'supervisor' {'Supervisor HTTP health + WSL systemd user unit'} }
   $owner = if ($record -and $record.ownerCheckout) { [string]$record.ownerCheckout } elseif ($record -and $record.cwd) { [string]$record.cwd } else { '' }
   $status = 'DOWN'
-  if ($health) {
-    if ($Name -eq 'supervisor' -and $record) { $status = if ($owner -and $owner -ne $ProjectRoot) { 'RUNNING_OJPLATFORM_OTHER_CHECKOUT' } else { 'RUNNING_OWNED' } }
-    elseif ($record -and ((Test-OwnedProcess $record) -or (Test-RecordServiceAtPort $record))) { $status = if ($owner -and $owner -ne $ProjectRoot) { 'RUNNING_OJPLATFORM_OTHER_CHECKOUT' } else { 'RUNNING_OWNED' } }
-    elseif ($listener) { $status = 'BLOCKED_BY_EXTERNAL_OWNER' }
-    else { $status = 'UNKNOWN' }
-  } elseif ($listener) {
-    if ($record -and (Test-RecordedPortOwnership $record)) { $status = 'STALE' } else { $status = 'BLOCKED_BY_EXTERNAL_OWNER' }
-  } elseif ($record) { $status = 'STALE' }
-  return [pscustomobject]@{ service=$Name; status=$status; ownerCheckout=$owner; pid=if($listener){$listener.OwningProcess}elseif($record){$record.pid}else{'-'}; port=$port; source=$source }
+  $ownership = if ($Name -ne 'supervisor') { Resolve-OJPlatformProcessOwnership $Name $port $state } else { $null }
+  if ($Name -eq 'supervisor' -and $health -and $record) { $status = if ($owner -and $owner -ne $ProjectRoot) { 'RUNNING_OJPLATFORM_OTHER_CHECKOUT' } else { 'RUNNING_OWNED' } }
+  elseif ($listener -and $ownership.classification -eq 'PROVEN_OWNED') {
+    $sharedMatch=$record -and [int]$record.pid -eq [int]$listener.OwningProcess -and [int]$record.port -eq $port -and $record.processStartTime -and (Get-ProcessStartTime ([int]$listener.OwningProcess)) -eq [string]$record.processStartTime
+    $owner=$ownership.ownerCheckout
+    if ($sharedMatch) { $status=if(-not $health){'STALE'}elseif($owner -and $owner -ne $ProjectRoot){'RUNNING_OJPLATFORM_OTHER_CHECKOUT'}else{'RUNNING_OWNED'} }
+    else { $status='RUNNING_LEGACY_OJPLATFORM' }
+  } elseif ($listener) { $status = 'BLOCKED_BY_EXTERNAL_OWNER' }
+  elseif ($record) { $status = 'STALE' }
+  elseif ($health) { $status = 'UNKNOWN' }
+  return [pscustomobject]@{ service=$Name; status=$status; ownerCheckout=$owner; pid=if($listener){$listener.OwningProcess}elseif($record){$record.pid}else{'-'}; port=$port; source=$source; ownership=if($ownership){$ownership.classification}else{'PROVEN_OWNED'} }
 }
 function Get-WorkerStatus {
   $headers = @{ 'x-judge-service-token' = $script:Secrets.judgeServiceToken }
@@ -519,7 +581,8 @@ function Invoke-Doctor {
   $checks|Format-Table -AutoSize|Out-Host;$blocked=@($checks|Where-Object result -eq 'BLOCKED').Count;if($blocked -gt 0){Write-Host "DOCTOR BLOCKED ($blocked checks)";return 2};Write-Host 'DOCTOR READY';return 0
 }
 
+if ($env:OJPLATFORM_RUNTIME_TEST_MODE -eq '1') { return }
 $state=Read-State
 $script:Secrets=Get-Secrets
 if ($Command -ne 'status' -and $Command -ne 'logs') { Write-Host "Runtime Manager: $Command" }
-try { if($Command -eq 'status'){Show-Status $state;exit 0};if($Command -eq 'logs'){Show-Logs;exit 0};Acquire-RuntimeLock;if($Command -eq 'doctor'){$code=Invoke-Doctor;exit $code};if($Command -eq 'start' -or $Command -eq 'restart'){$script:Secrets=Get-Secrets -Create;if($Command -eq 'restart'){Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};if($All){Stop-Infrastructure $state}};$total=Get-Date;Ensure-Infrastructure $state;Ensure-JudgeDatabase;Invoke-Migrations $state;Ensure-SupervisorBinaries;Ensure-WorkerBinary;Start-Supervisor $state;Start-JudgeService $state;Start-Api $state;Wait-Http "$($Config.JudgeOrigin)/ready" 60|Out-Null;Start-HostAgent $state;Wait-Http "$($Config.HostOrigin)/health" 60 -Headers @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken}|Out-Null;Wait-Http "$($Config.ApiOrigin)/ready" 60|Out-Null;Ensure-Worker $state;Start-Web $state;Wait-HttpStatus $Config.WebOrigin 60;$state.timings.total=[int]((Get-Date)-$total).TotalMilliseconds;Save-State $state;Write-Host "OJPlatform $Command PASS: $($Config.WebOrigin)";if($Config.AutoOpenBrowser){Start-Process $Config.WebOrigin};if($Verify){Invoke-Doctor|Out-Null}}elseif($Command -eq 'stop'){$script:Secrets=Get-Secrets;Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};if($All){Stop-Infrastructure $state};Write-Host 'OJPlatform STOP PASS'}} finally {Release-RuntimeLock}
+try { if($Command -eq 'status'){Show-Status $state;exit 0};if($Command -eq 'logs'){Show-Logs;exit 0};Acquire-RuntimeLock;if($Command -eq 'doctor'){$code=Invoke-Doctor;exit $code};if($Command -eq 'start' -or $Command -eq 'restart'){$script:Secrets=Get-Secrets -Create;if($Command -eq 'restart'){Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased;if($All){Stop-Infrastructure $state}};$total=Get-Date;Ensure-Infrastructure $state;Ensure-JudgeDatabase;Invoke-Migrations $state;Ensure-SupervisorBinaries;Ensure-WorkerBinary;Start-Supervisor $state;Start-JudgeService $state;Start-Api $state;Wait-Http "$($Config.JudgeOrigin)/ready" 60|Out-Null;Start-HostAgent $state;Wait-Http "$($Config.HostOrigin)/health" 60 -Headers @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken}|Out-Null;Wait-Http "$($Config.ApiOrigin)/ready" 60|Out-Null;Ensure-Worker $state;Start-Web $state;Wait-HttpStatus $Config.WebOrigin 60;$state.timings.total=[int]((Get-Date)-$total).TotalMilliseconds;Save-State $state;Write-Host "OJPlatform $Command PASS: $($Config.WebOrigin)";if($Config.AutoOpenBrowser){Start-Process $Config.WebOrigin};if($Verify){Invoke-Doctor|Out-Null}}elseif($Command -eq 'stop'){$script:Secrets=Get-Secrets;Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased;if($All){Stop-Infrastructure $state};Write-Host 'OJPlatform STOP PASS'}} finally {Release-RuntimeLock}

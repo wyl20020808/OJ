@@ -10,6 +10,10 @@ rejected for an old Worker with active work. Issue 1 root cause and all required
 browser/SSE/runtime assertions remain unverified. See
 `OJPLATFORM_PRODUCT_JUDGE_UI_REMEDIATION_V1_REPORT.md`.
 
+- Runtime Legacy Reconciliation Main Merge V1: PARTIAL. Runtime legacy ownership reconciliation is merged into canonical `main` at `214fb0c`; PowerShell 5.1/7 parsing, focused ownership tests, and root BAT wiring pass. Root Stop/Start/Restart smoke remains blocked by an active Judge job and was not interrupted; final status found existing Web-down and stale-Worker state owned by a separate worktree. See `Docs/reports/OJPLATFORM_RUNTIME_LEGACY_RECONCILIATION_MAIN_MERGE_V1_REPORT.md`.
+
+- Runtime Legacy Orphan Reconciliation + True Stop V1: PASS. The Runtime Manager now resolves proven OJPlatform listeners missing from shared state through validated legacy records or registered worktree command identity, reports legacy ownership explicitly, stops only proven PIDs, and fails closed for external listeners or unreleased application ports. Focused PowerShell 5.1/7 tests, real legacy/external listener scenarios, normal stop with infrastructure preservation, and idempotent start pass. See `Docs/reports/OJPLATFORM_RUNTIME_LEGACY_RECONCILIATION_V1_REPORT.md`.
+
 - Goal B JudgeData 100 MiB Streaming V1: implementation complete; focused Product/ZIP and Worker validation pass. Supervisor runtime qualification blocked by existing Linux-only/runtime environment failures. See `Docs/reports/OJPLATFORM_JUDGEDATA_100MB_STREAMING_V1_REPORT.md`.
 
 Project: OJPlatform
