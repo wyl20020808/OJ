@@ -1,5 +1,25 @@
 # OJPlatform Local Runtime
 
+## Shared runtime control
+
+All checkouts control one machine-local runtime named `ojplatform-local`.
+Registry, lock, generated secrets, and logs live at
+`%LOCALAPPDATA%\OJPlatform\runtime\ojplatform-local`, never in Git.
+The registry records checkout owner, process PID, process start time, command
+identity, and port. It is written through a temporary file replacement.
+
+`status` treats registry data only as an ownership hint. Web, API, Judge, and
+Host Agent also require their live HTTP health and listener identity;
+Supervisor requires its live health and WSL user systemd unit; Worker requires
+Judge Service registry/heartbeat; infrastructure requires canonical Docker
+Compose container, health, published port, network, and host reachability.
+Healthy resources owned by another checkout are shown as
+`RUNNING_OJPLATFORM_OTHER_CHECKOUT`. An unproven listener is
+`BLOCKED_BY_EXTERNAL_OWNER` and is never stopped.
+
+`stop` and `stop -All` use shared ownership, so either checkout can stop the
+single runtime. `stop -All` stops named containers only and preserves volumes.
+
 ## Infrastructure recovery contract
 
 `scripts/dev-runtime.ps1 start` uses WSL-native Docker in `Ubuntu-24.04`.
