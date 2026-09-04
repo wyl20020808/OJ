@@ -168,6 +168,12 @@ started.
 
 Last Updated: 2026-09-03
 
+Dual Repository Consolidation V1 (2026-09-04): PASS. Canonical OJPlatform
+`main` starts from the Final Feature Integration history, includes the WSL
+runtime-qualification evidence, and has no required unmerged branch. Canonical
+OnlineCodeEditor `main` is `560a5ae`; all plugin branches are ancestors. See
+`Docs/reports/OJPLATFORM_DUAL_REPO_CONSOLIDATION_V1_REPORT.md`.
+
 WSL Docker + Runtime Final Qualification (2026-09-04): PASS. Ubuntu-24.04
 ordinary-user Docker access was repaired through the `docker` group and
 verified without sudo. Runtime port reconciliation branch `fa82b98` passed
