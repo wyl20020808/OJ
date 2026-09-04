@@ -61,12 +61,21 @@ function Resolve-CanonicalPluginRepo {
   }
   throw 'CANONICAL_PLUGIN_MAIN_NOT_FOUND'
 }
-$PluginRepoRoot = Resolve-CanonicalPluginRepo
-$CanonicalProductIdentity = Resolve-MainWorktree $InvocationRoot
-$CanonicalPluginIdentity = Resolve-MainWorktree $PluginRepoRoot
-$ProductIdentity = if ($UseCurrentCheckout) { Resolve-RegisteredSource $InvocationRoot $InvocationRoot -RequireClean } elseif ($SourceRoot) { Resolve-RegisteredSource $SourceRoot $InvocationRoot -RequireClean } else { $CanonicalProductIdentity }
-$PluginIdentity = if ($PluginSourceRoot) { Resolve-RegisteredSource $PluginSourceRoot $PluginRepoRoot -RequireClean } else { $CanonicalPluginIdentity }
-$ProjectRoot = $ProductIdentity.root
+$SourceSelectionRequired = $Command -in @('start','restart') -or $SourceRoot -or $PluginSourceRoot -or $UseCurrentCheckout
+if ($SourceSelectionRequired) {
+  $PluginRepoRoot = Resolve-CanonicalPluginRepo
+  $CanonicalProductIdentity = Resolve-MainWorktree $InvocationRoot
+  $CanonicalPluginIdentity = Resolve-MainWorktree $PluginRepoRoot
+  $ProductIdentity = if ($UseCurrentCheckout) { Resolve-RegisteredSource $InvocationRoot $InvocationRoot -RequireClean } elseif ($SourceRoot) { Resolve-RegisteredSource $SourceRoot $InvocationRoot -RequireClean } else { $CanonicalProductIdentity }
+  $PluginIdentity = if ($PluginSourceRoot) { Resolve-RegisteredSource $PluginSourceRoot $PluginRepoRoot -RequireClean } else { $CanonicalPluginIdentity }
+} else {
+  $PluginRepoRoot = $null
+  $CanonicalProductIdentity = [pscustomobject]@{ root = $InvocationRoot; branch = 'UNRESOLVED'; commit = 'UNRESOLVED' }
+  $CanonicalPluginIdentity = [pscustomobject]@{ root = ''; branch = 'UNRESOLVED'; commit = 'UNRESOLVED' }
+  $ProductIdentity = $CanonicalProductIdentity
+  $PluginIdentity = $CanonicalPluginIdentity
+}
+$ProjectRoot = $InvocationRoot
 Set-Location $ProjectRoot
 # Explorer-launched BAT files may not inherit the npm user-bin directory.
 # Add it only to this manager process so detached Web processes can resolve pnpm.
@@ -260,12 +269,16 @@ function Test-PluginVersionCompatible($record) {
   if (-not $record.pluginRoot) { return -not (Test-Path ([string]$record.ownerCheckout)) }
   return $record -and $record.pluginRoot -ieq $PluginIdentity.root -and $record.pluginCommit -ieq $PluginIdentity.commit
 }
-function Get-ActiveJudgeJobs {
+function Get-ActiveJudgeJobs([switch]$FailClosed) {
+  if ($Command -eq 'stop') { $FailClosed = $true }
   try {
     $headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken}; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers
-      if (-not $nodes) { throw 'ACTIVE_JOBS_UNKNOWN: Judge Service node registry unavailable.' }
+      if (-not $nodes) {
+        if ($Command -eq 'stop' -and -not $state.processes['judge-service'] -and -not (Test-TcpPort $Config.JudgeServicePort)) { return 0 }
+        if ($FailClosed) { throw 'ACTIVE_JOBS_UNKNOWN: Judge Service node registry unavailable.' }; return 0
+      }
       return [int](@($nodes.body.items | Measure-Object -Property activeJobs -Sum).Sum)
-    } catch { throw "ACTIVE_JOBS_UNKNOWN: $($_.Exception.Message)" }
+    } catch { if ($FailClosed) { throw "ACTIVE_JOBS_UNKNOWN: $($_.Exception.Message)" }; return 0 }
 }
 function Test-RecordServiceAtPort($record) {
   if (-not $record -or -not $record.port) { return $false }
@@ -309,7 +322,7 @@ function Start-Managed([string]$Name, [string]$FilePath, [string[]]$Arguments, [
     $record = if ($ownership.record) { $ownership.record } else { New-PortProcessRecord $Name $Port $HealthUrl $Signature $ownership.ownerCheckout }
     $versionMatch = (Test-VersionCompatible $record) -and ($Name -ne 'web' -or (Test-PluginVersionCompatible $record))
     if (-not $versionMatch) {
-      $active = Get-ActiveJudgeJobs
+      $active = Get-ActiveJudgeJobs -FailClosed
       if ($active -gt 0) { throw "RUNNING_VERSION_MISMATCH_ACTIVE_JOBS: $Name activeJobs=$active current=$([string](Get-RecordSourceIdentity $record).commit) requested=$($ProductIdentity.commit) owner=$($ownership.ownerCheckout)" }
       $currentIdentity = Get-RecordSourceIdentity $record
       Write-Host "$Name RUNNING_VERSION_MISMATCH (current $([string]$currentIdentity.commit), requested $($ProductIdentity.commit)); stopping old owned runtime"
@@ -508,7 +521,7 @@ function Ensure-SupervisorBinaries {
     if (-not (Test-WslFile $item.path -Executable)) { throw "$($item.label) build did not produce an executable at $($item.path)." }
   }
 }
-function Get-FileSha256([string]$Path) { if (-not (Test-Path $Path)) { return $null }; return ((Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash).ToLowerInvariant() }
+function Get-FileSha256([string]$Path) { if (-not (Test-Path $Path)) { return $null }; $sha=[Security.Cryptography.SHA256]::Create(); try { return (([BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($Path))) -replace '-','').ToLowerInvariant()) } finally { $sha.Dispose() } }
 function Ensure-WorkerBinary {
   $sourceRoot = Join-Path $ProjectRoot 'apps/judge-worker'
   $identity = Get-SourceIdentity $sourceRoot @('*.go','go.mod')
@@ -618,7 +631,7 @@ function Stop-WorkerThroughControlPlane($state) { if(-not(Get-HttpJson "$($Confi
 function Reconcile-RequestedRuntime($state) {
   $previous = if ($state.requestedSource) { [string]$state.requestedSource.commit } else { '' }
   if ($previous -and $previous -ne $ProductIdentity.commit) {
-    $active = Get-ActiveJudgeJobs
+  $active = Get-ActiveJudgeJobs -FailClosed
     if ($active -gt 0) { throw "RUNNING_VERSION_MISMATCH_ACTIVE_JOBS: current=$previous requested=$($ProductIdentity.commit) activeJobs=$active owner=$($state.ownerCheckout)" }
     Stop-WorkerThroughControlPlane $state
   }
@@ -664,24 +677,31 @@ function Get-WorkerStatus {
   return [pscustomobject]@{ service='worker'; status=if($online){'RUNNING_OWNED'}else{'STALE'}; ownerCheckout='Judge Service -> Host Agent'; pid=$node.nodeId; port='-'; source='Judge Service node registry + heartbeat'; binaryPath=$Config.WorkerBinary; binaryHash=(Get-FileSha256 $Config.WorkerBinary); commit=$ProductIdentity.commit; canonical=([bool]($online -and (Get-FileSha256 $Config.WorkerBinary))) }
 }
 function Show-Status($state) {
-  $productCanonical = $ProductIdentity.root -ieq $CanonicalProductIdentity.root -and $ProductIdentity.commit -ieq $CanonicalProductIdentity.commit
-  $pluginCanonical = $PluginIdentity.root -ieq $CanonicalPluginIdentity.root -and $PluginIdentity.commit -ieq $CanonicalPluginIdentity.commit
+  $displayProduct = if ($state.requestedSource) { [pscustomobject]$state.requestedSource } else { $ProductIdentity }
+  $displayPlugin = if ($state.requestedPlugin) { [pscustomobject]$state.requestedPlugin } else { $PluginIdentity }
+  $productCanonical = if ($null -ne $displayProduct.canonical) { [bool]$displayProduct.canonical } else { $false }
+  $pluginCanonical = if ($null -ne $displayPlugin.canonical) { [bool]$displayPlugin.canonical } else { $false }
   Write-Host 'RUNTIME SOURCE'
-  Write-Host "PRODUCT ROOT = $($ProductIdentity.root)"
-  Write-Host "PRODUCT BRANCH = $($ProductIdentity.branch)"
-  Write-Host "PRODUCT COMMIT = $($ProductIdentity.commit)"
+  Write-Host "PRODUCT ROOT = $($displayProduct.root)"
+  Write-Host "PRODUCT BRANCH = $($displayProduct.branch)"
+  Write-Host "PRODUCT COMMIT = $($displayProduct.commit)"
   Write-Host "PRODUCT CANONICAL = $productCanonical"
-  Write-Host "PLUGIN ROOT = $($PluginIdentity.root)"
-  Write-Host "PLUGIN BRANCH = $($PluginIdentity.branch)"
-  Write-Host "PLUGIN COMMIT = $($PluginIdentity.commit)"
+  Write-Host "PLUGIN ROOT = $($displayPlugin.root)"
+  Write-Host "PLUGIN BRANCH = $($displayPlugin.branch)"
+  Write-Host "PLUGIN COMMIT = $($displayPlugin.commit)"
   Write-Host "PLUGIN CANONICAL = $pluginCanonical"
   Write-Host "EXPLICIT DEVELOPMENT SOURCE = $([bool]($SourceRoot -or $UseCurrentCheckout -or $PluginSourceRoot))"
-  $infra = @((Get-InfrastructureStatus 'postgres' '5432/tcp' 55432),(Get-InfrastructureStatus 'redis' '6379/tcp' 56379),(Get-InfrastructureStatus 'minio' '9000/tcp' 59000) | ForEach-Object { [pscustomobject]@{ service=$_.service; status=if($_.code -eq 'READY'){'RUNNING_OWNED'}else{$_.code}; port=$_.hostPort; source='Docker Compose project, container health, mapping, network, host reachability' } })
+  $infra = @(
+    [pscustomobject]@{ service='postgres'; status=if(Test-TcpPort 55432){'REACHABLE'}else{'DOWN'}; port=55432; source='authoritative localhost TCP probe' }
+    [pscustomobject]@{ service='redis'; status=if(Test-TcpPort 56379){'REACHABLE'}else{'DOWN'}; port=56379; source='authoritative localhost TCP probe' }
+    [pscustomobject]@{ service='minio'; status=if(Test-HttpOk "$($Config.MinioEndpoint)/minio/health/ready"){'RUNNING_OWNED'}elseif(Test-TcpPort 59000){'REACHABLE'}else{'DOWN'}; port=59000; source='authoritative HTTP/TCP probe' }
+  )
   Write-Host "Shared runtime: $RuntimeRoot  instance=$($state.runtimeInstanceId) owner=$($state.ownerCheckout)"; $infra | Format-Table -AutoSize
-  $items = @('api','web','judge-service','host-agent','supervisor' | ForEach-Object { $item=Get-ApplicationStatus $_ $state; $record=$state.processes[$_]; $item | Add-Member -NotePropertyName sourceRoot -NotePropertyValue $(if($record){$record.sourceRoot}else{'-'}) -Force; $item | Add-Member -NotePropertyName commit -NotePropertyValue $(if($record){$record.gitCommit}else{'-'}) -Force; $item | Add-Member -NotePropertyName canonical -NotePropertyValue $(if($record){(Test-VersionCompatible $record)}else{$false}) -Force; $item }); $items += Get-WorkerStatus; $items | Format-Table -AutoSize
-  $mixed = -not ($productCanonical -and $pluginCanonical -and @($items | Where-Object { $_.canonical -eq $false }).Count -eq 0)
+  $items = @(); foreach ($name in @('api','web','judge-service','host-agent','supervisor')) { $record=$state.processes[$name]; $port=Get-ServicePort $name; $healthy=$false; try { $url=if($name -eq 'web'){$Config.WebOrigin}elseif($name -eq 'supervisor'){$Config.SupervisorOrigin+'/v1/health'}else{"http://127.0.0.1:$port/health"}; $healthy=([System.Net.WebRequest]::Create($url)).GetResponse().StatusCode -eq 200 } catch {}; $item=[pscustomobject]@{service=$name;status=if($healthy){'RUNNING'}else{'DOWN'};pid=if($record){$record.pid}else{'-'};port=$port;source='authoritative HTTP health probe';sourceRoot=if($record){$record.sourceRoot}else{'-'};commit=if($record){$record.gitCommit}else{'-'};canonical=if($record){Test-VersionCompatible $record}else{$false}}; $items += $item }; $items += Get-WorkerStatus; $items | Format-Table -AutoSize
+  $activeItems = @($items | Where-Object { $_.status -notin @('DOWN','STALE') })
+  $mixed = $activeItems.Count -gt 0 -and (-not ($productCanonical -and $pluginCanonical -and @($activeItems | Where-Object { $_.canonical -eq $false }).Count -eq 0))
   Write-Host "MIXED SOURCE = $mixed"
-  Write-Host "WORKER BINARY = $Config.WorkerBinary"
+  Write-Host "WORKER BINARY = $($Config.WorkerBinary)"
   Write-Host "WORKER BINARY HASH = $(Get-FileSha256 $Config.WorkerBinary)"
   Write-Host "Web: $($Config.WebOrigin)  API: $($Config.ApiOrigin)  Judge Admin: $($Config.JudgeOrigin)/v1/admin"
 }
@@ -704,6 +724,12 @@ function Invoke-Doctor {
 
 if ($env:OJPLATFORM_RUNTIME_TEST_MODE -eq '1') { return }
 $state=Read-State
+if (-not $SourceSelectionRequired) {
+  if ($state.requestedSource) { $ProductIdentity = [pscustomobject]@{ root=[string]$state.requestedSource.root; branch=[string]$state.requestedSource.branch; commit=[string]$state.requestedSource.commit } }
+  if ($state.requestedPlugin) { $PluginIdentity = [pscustomobject]@{ root=[string]$state.requestedPlugin.root; branch=[string]$state.requestedPlugin.branch; commit=[string]$state.requestedPlugin.commit } }
+  if ($state.canonical_product_root) { $CanonicalProductIdentity = [pscustomobject]@{ root=[string]$state.canonical_product_root; branch='main'; commit=[string]$state.requestedSource.commit } }
+  if ($state.canonical_plugin_root) { $CanonicalPluginIdentity = [pscustomobject]@{ root=[string]$state.canonical_plugin_root; branch='main'; commit=[string]$state.requestedPlugin.commit } }
+}
 $script:Secrets=Get-Secrets
 if ($Command -ne 'status' -and $Command -ne 'logs') { Write-Host "Runtime Manager: $Command" }
-try { if($Command -eq 'status'){Show-Status $state;exit 0};if($Command -eq 'logs'){Show-Logs;exit 0};Acquire-RuntimeLock;if($Command -eq 'doctor'){$code=Invoke-Doctor;exit $code};if($Command -eq 'start' -or $Command -eq 'restart'){$script:Secrets=Get-Secrets -Create;Reconcile-RequestedRuntime $state;if($Command -eq 'restart'){Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased;if($All){Stop-Infrastructure $state}};$total=Get-Date;Ensure-Infrastructure $state;Ensure-JudgeDatabase;Invoke-Migrations $state;Ensure-SupervisorBinaries;Ensure-WorkerBinary;Start-Supervisor $state;Start-JudgeService $state;Start-Api $state;Wait-Http "$($Config.JudgeOrigin)/ready" 60|Out-Null;Start-HostAgent $state;Wait-Http "$($Config.HostOrigin)/health" 60 -Headers @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken}|Out-Null;Wait-Http "$($Config.ApiOrigin)/ready" 60|Out-Null;Ensure-Worker $state;Start-Web $state;Wait-HttpStatus $Config.WebOrigin 60;$state.timings.total=[int]((Get-Date)-$total).TotalMilliseconds;Save-State $state;Write-Host "OJPlatform $Command PASS: $($Config.WebOrigin)";if($Config.AutoOpenBrowser){Start-Process $Config.WebOrigin};if($Verify){Invoke-Doctor|Out-Null}}elseif($Command -eq 'stop'){$script:Secrets=Get-Secrets;Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased;if($All){Stop-Infrastructure $state};Write-Host 'OJPlatform STOP PASS'}} finally {Release-RuntimeLock}
+try { if($Command -eq 'status'){Show-Status $state;exit 0};if($Command -eq 'logs'){Show-Logs;exit 0};Acquire-RuntimeLock;if($Command -eq 'doctor'){$code=Invoke-Doctor;exit $code};if($Command -eq 'start' -or $Command -eq 'restart'){$script:Secrets=Get-Secrets -Create;Reconcile-RequestedRuntime $state;if($Command -eq 'restart'){Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased;if($All){Stop-Infrastructure $state}};$total=Get-Date;Ensure-Infrastructure $state;Ensure-JudgeDatabase;Invoke-Migrations $state;Ensure-SupervisorBinaries;Ensure-WorkerBinary;Start-Supervisor $state;Start-JudgeService $state;Start-Api $state;Wait-Http "$($Config.JudgeOrigin)/ready" 60|Out-Null;Start-HostAgent $state;Wait-Http "$($Config.HostOrigin)/health" 60 -Headers @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken}|Out-Null;Wait-Http "$($Config.ApiOrigin)/ready" 60|Out-Null;Ensure-Worker $state;Start-Web $state;Wait-HttpStatus $Config.WebOrigin 60;$state.timings.total=[int]((Get-Date)-$total).TotalMilliseconds;Save-State $state;Write-Host "OJPlatform $Command PASS: $($Config.WebOrigin)";if($Config.AutoOpenBrowser){Start-Process $Config.WebOrigin};if($Verify){Invoke-Doctor|Out-Null}}elseif($Command -eq 'stop'){$script:Secrets=Get-Secrets;$active=Get-ActiveJudgeJobs;if($active -gt 0){throw "STOP BLOCKED: ACTIVE JUDGE JOBS = $active"};Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased;if($All){Stop-Infrastructure $state};Write-Host 'OJPlatform STOP PASS'}} finally {Release-RuntimeLock}
