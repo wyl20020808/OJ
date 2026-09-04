@@ -190,7 +190,15 @@ scope for the next approved Goal. Product E2E multi-language support, Contest,
 production HA, and production deployment are not qualified; Phase 2D is not
 started.
 
-Last Updated: 2026-09-03
+Last Updated: 2026-09-05
+
+Recent Remediation Final Integration V2: PARTIAL pending final main merges and
+root checkout alignment. Integration contains launcher status/stop, JudgeData
+execution reliability V2, submission/live-evaluation UX V2, and plugin hosted
+editor fixes including 320px minimum height. Fresh-worktree dependency linking
+hit `ERR_PNPM_EEXIST/EBUSY`; focused validation is NOT VERIFIED. Runtime/browser
+qualification remains NOT YET VERIFIED. See
+`Docs/reports/OJPLATFORM_RECENT_REMEDIATION_FINAL_INTEGRATION_V2_REPORT.md`.
 
 Canonical Runtime Source V1 implementation: PARTIAL pending runtime
 qualification. See `Docs/reports/OJPLATFORM_CANONICAL_RUNTIME_SOURCE_V1_REPORT.md`.
