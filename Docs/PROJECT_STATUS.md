@@ -1,5 +1,25 @@
 # OJPlatform Project Status
 
+Product/Judge/UI Remediation Runtime Resume V1: PARTIAL. Canonical main
+`511830d` merged into remediation at `4b0ea17`. A minimal Runtime Manager
+listener lookup fallback fixed a machine-specific `Get-NetTCPConnection` blind
+spot; official stop released application ports while preserving infrastructure.
+Clean start remains blocked by a persisted Worker that restarted Host Agent
+fail-closes as unreconciled; another Worker has unknown ownership and was not
+touched. Issue 1, Issue 4, and Issue 8 runtime/browser qualification is not
+claimed. See
+`reports/OJPLATFORM_PRODUCT_JUDGE_UI_REMEDIATION_RUNTIME_RESUME_V1_REPORT.md`.
+
+Product + Judge + UI Remediation V1: PARTIAL. Judge Data immutable-version
+draft cloning, evaluation/list testcase presentation, China-mainland login
+classification, and Product Judge Admin runtime-config consumption are
+implemented and focused-tested. Worker/Supervisor execution-set rejections now
+retain bounded contract diagnostics. Managed runtime qualification is blocked:
+official start reaches Judge Service `EADDRINUSE`, while official drain is
+rejected for an old Worker with active work. Issue 1 root cause and all required
+browser/SSE/runtime assertions remain unverified. See
+`OJPLATFORM_PRODUCT_JUDGE_UI_REMEDIATION_V1_REPORT.md`.
+
 - Runtime Legacy Reconciliation Main Merge V1: PARTIAL. Runtime legacy ownership reconciliation is merged into canonical `main` at `214fb0c`; PowerShell 5.1/7 parsing, focused ownership tests, and root BAT wiring pass. Root Stop/Start/Restart smoke remains blocked by an active Judge job and was not interrupted; final status found existing Web-down and stale-Worker state owned by a separate worktree. See `Docs/reports/OJPLATFORM_RUNTIME_LEGACY_RECONCILIATION_MAIN_MERGE_V1_REPORT.md`.
 
 - Runtime Legacy Orphan Reconciliation + True Stop V1: PASS. The Runtime Manager now resolves proven OJPlatform listeners missing from shared state through validated legacy records or registered worktree command identity, reports legacy ownership explicitly, stops only proven PIDs, and fails closed for external listeners or unreleased application ports. Focused PowerShell 5.1/7 tests, real legacy/external listener scenarios, normal stop with infrastructure preservation, and idempotent start pass. See `Docs/reports/OJPLATFORM_RUNTIME_LEGACY_RECONCILIATION_V1_REPORT.md`.

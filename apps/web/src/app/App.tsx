@@ -7,6 +7,7 @@ import {
   type ErrorInfo,
   type FormEvent,
   type ReactNode,
+  type MouseEvent,
 } from 'react';
 import {
   ApiError,
@@ -167,11 +168,13 @@ function Link({
   children,
   className,
   ariaLabel,
+  onClick,
 }: {
   to: string;
   children: ReactNode;
   className?: string;
   ariaLabel?: string;
+  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
     <a
@@ -179,6 +182,8 @@ function Link({
       className={className}
       aria-label={ariaLabel}
       onClick={(e) => {
+        onClick?.(e);
+        if (e.defaultPrevented) return;
         e.preventDefault();
         navigate(to);
       }}
@@ -1667,9 +1672,7 @@ export function ProblemDetail({
             </span>
             <h1>{problem.title}</h1>
             <div className="problem-header-actions" aria-label="题目操作">
-              <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
-                <button type="button">提交代码</button>
-              </Link>
+              <Link className="button" to={`/problems/${encodeURIComponent(id)}#solve`}>提交代码</Link>
               {canEdit && (
                 <Link
                   to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
@@ -1773,7 +1776,7 @@ export function ProblemDetail({
           </p>
         </aside>
       </article>
-      <section className="problem-editor-slot" aria-label="OnlineCodeEditor">
+      <section id="solve" className="problem-editor-slot" aria-label="OnlineCodeEditor">
         <ProblemSolveEditorSlot
           context={
             {
@@ -2066,29 +2069,35 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
             <span role="columnheader">时间</span>
           </div>
           {items.map((s) => (
-            <Link
-              key={s.submissionId}
-              to={`/submissions/${encodeURIComponent(s.submissionId)}`}
-              className="evaluation-row"
-              ariaLabel={`查看评测 ${s.publicNumber !== undefined ? `#${s.publicNumber}` : s.submissionId}`}
-            >
-              <span>
+            <div key={s.submissionId} className="evaluation-row" role="row" tabIndex={0} onClick={() => navigate(`/submissions/${encodeURIComponent(s.submissionId)}`)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/submissions/${encodeURIComponent(s.submissionId)}`); } }}>
+              <Link
+                to={`/submissions/${encodeURIComponent(s.submissionId)}`}
+                ariaLabel={`查看评测 ${s.publicNumber !== undefined ? `#${s.publicNumber}` : s.submissionId}`}
+              >
                 #
                 {s.publicNumber !== undefined ? s.publicNumber : s.submissionId}
-              </span>
-              <span>
-                <strong>{s.problem.title}</strong>
-                <small>{s.problem.publicId || s.problem.slug}</small>
-              </span>
+              </Link>
+              <Link
+                to={`/problems/${encodeURIComponent(s.problem.id)}`}
+                className="evaluation-problem"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <strong>{s.problem.publicId || s.problem.slug}</strong>{' '}
+                <span>{s.problem.title}</span>
+              </Link>
               <span>{s.submitter.displayName}</span>
               <span>{s.languageProfileId}</span>
-              <strong className="judge-status">{s.verdict ?? s.status}</strong>
+              <strong
+                className={`evaluation-verdict tone-${evaluationVerdictTone(s.verdict ?? s.status)}`}
+              >
+                {s.verdict ?? s.status}
+              </strong>
               <span>
                 {formatMilliseconds(s.totalTimeMs)} /{' '}
                 {formatBytes(s.peakMemoryBytes)}
               </span>
               <time>{formatDate(s.createdAt)}</time>
-            </Link>
+            </div>
           ))}
         </div>
       )}
@@ -2427,6 +2436,14 @@ export function SubmissionDetail({
               <strong>{evaluation.verdict ?? evaluation.status}</strong>
             </div>
           </section>
+          {activeTab === 'testcases' && evaluation.detail?.testcases.length ? (
+            <section className="testcase-progress" aria-label="测试点进度" aria-live="polite">
+              <div className="section-heading-inline"><div><p className="eyebrow">Live Progress</p><h2>测试点进度</h2></div><span>{evaluation.detail.testcases.filter((item) => item.verdict || (item.status && !['WAITING', 'RUNNING', 'STARTED'].includes(item.status))).length}/{evaluation.detail.testcases.length}</span></div>
+              <div className="testcase-progress-grid" role="list">
+                {evaluation.detail.testcases.map((item) => { const state = testcaseMark(item); return <span key={item.ordinal} role="listitem" className={`testcase-progress-cell testcase-state-${state.tone}`} aria-label={`测试点 ${item.ordinal} ${item.verdict ?? item.status ?? 'WAITING'}`} title={item.verdict ?? item.status ?? 'WAITING'}><strong>{item.ordinal}</strong><span aria-hidden="true">{state.mark}</span></span>; })}
+              </div>
+            </section>
+          ) : null}
           {activeTab === 'testcases' &&
             (isTerminal || hasLiveTestcases) &&
             evaluation.detail?.compile?.diagnostics && (
@@ -2455,7 +2472,18 @@ export function SubmissionDetail({
                       role="listitem"
                       className="testcase-row"
                     >
-                      <strong>#{item.ordinal}</strong>
+                      {(() => {
+                        const state = testcaseMark(item);
+                        return (
+                          <span
+                            className={`testcase-state testcase-state-${state.tone}`}
+                            aria-label={`测试点 ${item.ordinal} ${item.verdict ?? item.status ?? 'WAITING'}`}
+                          >
+                            <span>{item.ordinal}</span>
+                            <strong aria-hidden="true">{state.mark}</strong>
+                          </span>
+                        );
+                      })()}
                       <span className="testcase-verdict">
                         {item.verdict ?? item.status ?? 'WAITING'}
                       </span>
@@ -2512,6 +2540,26 @@ function formatBytes(value: number | undefined) {
   return value >= 1024 * 1024
     ? `${(value / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.ceil(value / 1024))} KB`;
+}
+
+function testcaseMark(item: SubmissionEvaluationDetail['testcases'][number]) {
+  if (item.verdict === 'AC') return { mark: '✓', tone: 'pass' };
+  if (item.verdict) return { mark: '×', tone: 'fail' };
+  if ((item.status as string | undefined) === 'INFRA_FAILED')
+    return { mark: '!', tone: 'infra' };
+  if (['RUNNING', 'STARTED'].includes(item.status ?? ''))
+    return { mark: '…', tone: 'running' };
+  return { mark: '·', tone: 'waiting' };
+}
+
+function evaluationVerdictTone(value: string) {
+  if (value === 'AC') return 'accepted';
+  if (['WA', 'RE'].includes(value)) return 'failed';
+  if (value === 'TLE') return 'time-limit';
+  if (value === 'MLE' || value === 'CE') return 'compile-limit';
+  if (value === 'RUNNING' || value === 'QUEUED') return 'running';
+  if (value === 'INFRA_FAILED') return 'infra';
+  return 'pending';
 }
 
 function Profile({

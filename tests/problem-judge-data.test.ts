@@ -172,6 +172,65 @@ describe('problem judge data backend', () => {
     ).toEqual([2, 1]);
   });
 
+  it('clones the latest published version into an editable draft without changing history', async () => {
+    const { svc, storage } = service();
+    const [input, output] = await Promise.all([
+      storage.put(
+        new Uint8Array([1]),
+        'judge-data/problems/p-1/draft/in',
+        '01.in',
+        'p-1',
+      ),
+      storage.put(
+        new Uint8Array([2]),
+        'judge-data/problems/p-1/draft/out',
+        '01.out',
+        'p-1',
+      ),
+    ]);
+    await svc.saveConfig(
+      'p-1',
+      {
+        timeLimitMs: 1000,
+        memoryLimitBytes: 1024,
+        outputLimitBytes: 128,
+        checker: 'EXACT_BYTES',
+        allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
+      },
+      user,
+    );
+    await svc.addTestcase(
+      'p-1',
+      {
+        input,
+        expectedOutput: output,
+        timeLimitMsOverride: 2000,
+        memoryLimitBytesOverride: 2048,
+      },
+      user,
+    );
+    await svc.validate('p-1', user);
+    const published = await svc.publish('p-1', user);
+    const draft = await svc.createDraftFromLatestVersion('p-1', user);
+    expect(draft.status).toBe('DRAFT');
+    expect(draft.testcases[0]).toMatchObject({
+      input: { objectId: input.objectId },
+      expectedOutput: { objectId: output.objectId },
+      effectiveTimeLimitMs: 2000,
+      effectiveMemoryLimitBytes: 2048,
+    });
+    await svc.updateTestcase(
+      'p-1',
+      draft.testcases[0]!.testcaseId,
+      { timeLimitMsOverride: 3000 },
+      user,
+    );
+    expect(
+      (await svc.version('p-1', published.versionId, user)).testcases[0]
+        ?.effectiveTimeLimitMs,
+    ).toBe(2000);
+  });
+
   it('rejects testcase data that the Judge manifest cannot execute', async () => {
     const { svc } = service();
     await expect(
@@ -336,6 +395,22 @@ describe('problem judge data backend', () => {
       ),
     ).toThrow('Unsafe archive path');
     expect(() => parseZip(Uint8Array.of(1, 2, 3))).toThrow('Invalid archive');
+  });
+
+  it('replaces the editable testcase set on complete ZIP upload', async () => {
+    const { svc } = service();
+    const first = makeZip([
+      { name: '01.in', data: Uint8Array.of(1) },
+      { name: '01.out', data: Uint8Array.of(2) },
+    ]);
+    const second = makeZip([
+      { name: '09.in', data: Uint8Array.of(9) },
+      { name: '09.out', data: Uint8Array.of(8) },
+    ]);
+    await svc.addZip('p-1', first, user);
+    const result = await svc.addZip('p-1', second, user);
+    expect(result.draft.testcases).toHaveLength(1);
+    expect(result.draft.testcases[0]?.label).toBe('9');
   });
 
   it('accepts matching answer suffixes for a single testcase pair', async () => {

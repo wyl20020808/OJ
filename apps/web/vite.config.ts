@@ -6,7 +6,7 @@ const apiProxy = {
   target: `http://127.0.0.1:${process.env.OJPLATFORM_API_PORT ?? '3010'}`,
   changeOrigin: true,
 };
-const pluginRoot = resolve(process.env.OJPLATFORM_ONLINE_CODE_EDITOR_ROOT ?? 'D:/OJPlatformPlugins/OnlineCodeEditor-remediation');
+const pluginRoot = resolve(process.env.OJPLATFORM_ONLINE_CODE_EDITOR_ROOT ?? 'D:/OJPlatformPlugins/OnlineCodeEditor');
 
 export default defineConfig({
   plugins: [react()],

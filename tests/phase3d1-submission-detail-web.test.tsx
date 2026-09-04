@@ -123,7 +123,7 @@ describe('Phase 3D.1 submission detail Web projection', () => {
     expect(
       await screen.findByRole('heading', { name: 'Submission #s-7' }),
     ).toBeInTheDocument();
-    expect(await screen.findByText('#2')).toBeInTheDocument();
+    expect(await screen.findByLabelText('测试点 2 AC')).toHaveTextContent('✓');
     expect(screen.getByText('28 ms')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /Generation 2 - Current/ }),

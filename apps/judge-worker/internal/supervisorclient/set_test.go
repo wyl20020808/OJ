@@ -7,9 +7,25 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestExecuteSetIncludesSupervisorRejectionDetail(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "invalid execution-set request: testcase-set manifest hash mismatch"+strings.Repeat("x", maxErrorDetailSize), http.StatusBadRequest)
+	}))
+	defer server.Close()
+	client, err := New(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.ExecuteSet(context.Background(), validSetRequest())
+	if err == nil || !strings.Contains(err.Error(), "testcase-set manifest hash mismatch") || !strings.HasSuffix(err.Error(), "...") || len(err.Error()) > len("Supervisor HTTP status 400: ")+maxErrorDetailSize+3 {
+		t.Fatalf("error=%v", err)
+	}
+}
 
 func setDigest(value []byte) string {
 	digest := sha256.Sum256(value)

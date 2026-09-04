@@ -121,6 +121,7 @@ export function ProblemEditor({
   const [tab, setTab] = useState<Tab>('statement');
   const [problem, setProblem] = useState<Problem | null>(null);
   const [draft, setDraft] = useState<JudgeDraft | null>(null);
+  const [hasDraft, setHasDraft] = useState(false);
   const [versions, setVersions] = useState<JudgeDataVersionSummary[]>([]);
   const [versionError, setVersionError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -187,6 +188,7 @@ export function ProblemEditor({
           tags: p.tags ?? [],
           visibility: p.visibility,
         });
+        setHasDraft(Boolean(d && Array.isArray(d.testcases) && d.defaults));
         const normalized =
           d && Array.isArray(d.testcases) && d.defaults
             ? d
@@ -207,6 +209,24 @@ export function ProblemEditor({
         setLoadError(errorText(e));
       })
       .finally(() => setLoading(false));
+  };
+  const refreshJudgeDraft = async () => {
+    const next = await api.judgeDraft(problemId).catch((error: unknown) => {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    });
+    setHasDraft(Boolean(next && Array.isArray(next.testcases) && next.defaults));
+    setDraft(
+      next && Array.isArray(next.testcases) && next.defaults
+        ? next
+        : {
+            problemId,
+            defaults: fallbackDefaults,
+            testcases: [],
+            validation: emptyValidation,
+            updatedAt: new Date().toISOString(),
+          },
+    );
   };
   useEffect(load, [api, problemId]);
   useEffect(() => {
@@ -338,6 +358,23 @@ export function ProblemEditor({
         `数据版本 v${version.versionNumber} 已发布，旧版本保持不可变。`,
       );
       setDraft((d) => d && { ...d, validation: emptyValidation });
+      setHasDraft(false);
+    } catch (e) {
+      setNotice(errorText(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const createDraftFromLatest = async () => {
+    if (!canManage || !versions[0]) return;
+    setSaving(true);
+    try {
+      const next = await api.createJudgeDraftFromLatest(problemId);
+      setDraft(next);
+      setHasDraft(true);
+      setNotice(
+        `已从 v${versions[0].versionNumber} 创建可编辑草稿，已发布版本保持不可变。`,
+      );
     } catch (e) {
       setNotice(errorText(e));
     } finally {
@@ -348,8 +385,8 @@ export function ProblemEditor({
     setUploading(true);
     setNotice('');
     try {
-      const next = await api.uploadJudgeData(problemId, file, zip);
-      setDraft(next);
+      await api.uploadJudgeData(problemId, file, zip);
+      await refreshJudgeDraft();
       setDirty(false);
       setSelectedFiles([]);
       setNotice(zip ? 'ZIP 已解析，草稿已刷新。' : '测试点已导入草稿。');
@@ -367,13 +404,7 @@ export function ProblemEditor({
     if (!window.confirm(`确定删除测试点 #${displayOrdinal} 吗？`)) return;
     try {
       await api.deleteJudgeTestcase(problemId, t.testcaseId);
-      setDraft(
-        (d) =>
-          d && {
-            ...d,
-            testcases: d.testcases.filter((x) => x.testcaseId !== t.testcaseId),
-          },
-      );
+      await refreshJudgeDraft();
       setNotice('测试点已删除。');
     } catch (e) {
       setNotice(errorText(e));
@@ -724,10 +755,19 @@ export function ProblemEditor({
               </p>
             </div>
             <div className="panel-actions">
+              {!hasDraft && versions[0] && (
+                <button
+                  type="button"
+                  onClick={createDraftFromLatest}
+                  disabled={!canManage || saving}
+                >
+                  编辑最新版本
+                </button>
+              )}
               <button
                 type="button"
                 onClick={validate}
-                disabled={!canManage || saving}
+                disabled={!canManage || saving || !hasDraft}
               >
                 校验草稿
               </button>
@@ -735,7 +775,10 @@ export function ProblemEditor({
                 type="button"
                 onClick={() => setPublishPending(true)}
                 disabled={
-                  !canPublish || saving || draft.validation.state !== 'VALID'
+                  !canPublish ||
+                  saving ||
+                  !hasDraft ||
+                  draft.validation.state !== 'VALID'
                 }
               >
                 发布新数据版本

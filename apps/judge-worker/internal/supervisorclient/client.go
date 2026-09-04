@@ -21,6 +21,7 @@ const (
 	LegacyProtocolVersion = "2C.1"
 	CPP20ProfileID        = "cpp20-gcc-13-v1"
 	maxResponseSize       = 8 << 20
+	maxErrorDetailSize    = 4 << 10
 )
 
 type Request struct {
@@ -253,7 +254,11 @@ func (c *Client) do(ctx context.Context, method, path string, input any, output 
 		return errors.New("Supervisor response exceeded limit")
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("Supervisor HTTP status %d", response.StatusCode)
+		detail := strings.TrimSpace(string(data))
+		if len(detail) > maxErrorDetailSize {
+			detail = detail[:maxErrorDetailSize] + "..."
+		}
+		return fmt.Errorf("Supervisor HTTP status %d: %s", response.StatusCode, detail)
 	}
 	if output == nil {
 		return nil
