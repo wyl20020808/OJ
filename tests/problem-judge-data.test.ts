@@ -4,6 +4,7 @@ import {
   builtinCheckerConfigSha256,
   BUILTIN_CHECKER_VERSION,
   TESTCASE_SET_MAX_INPUT_BYTES,
+  TESTCASE_SET_MAX_EXPECTED_OUTPUT_BYTES,
   testcaseSetManifestHash,
 } from '@ojplatform/judge-runtime';
 import {
@@ -173,16 +174,35 @@ describe('problem judge data backend', () => {
 
   it('rejects testcase data that the Judge manifest cannot execute', async () => {
     const { svc } = service();
-    await svc.addPair(
+    await expect(
+      svc.addPair(
+        'p-1',
+        Buffer.alloc(TESTCASE_SET_MAX_INPUT_BYTES + 1),
+        Uint8Array.of(3),
+        { input: '01.in', output: '01.out' },
+        user,
+      ),
+    ).rejects.toMatchObject({ code: 'UPLOAD_TOO_LARGE', status: 413 });
+  });
+
+  it('accepts exact 100 MiB testcase payload boundary', async () => {
+    const { svc, storage } = service();
+    const input = new Uint8Array(TESTCASE_SET_MAX_INPUT_BYTES);
+    const output = new Uint8Array(TESTCASE_SET_MAX_EXPECTED_OUTPUT_BYTES);
+    const draft = await svc.addPair(
       'p-1',
-      Buffer.alloc(TESTCASE_SET_MAX_INPUT_BYTES + 1),
-      Uint8Array.of(3),
-      { input: '01.in', output: '01.out' },
+      input,
+      output,
+      { input: 'boundary.in', output: 'boundary.out' },
       user,
     );
-    await expect(svc.validate('p-1', user)).rejects.toMatchObject({
-      code: 'TESTCASE_SIZE_EXCEEDED',
-    });
+    expect(draft.testcases[0]?.input.sizeBytes).toBe(
+      TESTCASE_SET_MAX_INPUT_BYTES,
+    );
+    expect(draft.testcases[0]?.expectedOutput.sizeBytes).toBe(
+      TESTCASE_SET_MAX_EXPECTED_OUTPUT_BYTES,
+    );
+    expect(storage.objects.size).toBe(2);
   });
 
   it('uses the canonical 2C.4 manifest hash and rejects stale revisions', async () => {

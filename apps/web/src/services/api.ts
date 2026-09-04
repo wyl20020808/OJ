@@ -473,6 +473,8 @@ import type {
   Message,
   NotificationSummary,
 } from './portal-contracts.js';
+const MAX_JUDGE_DATA_PAYLOAD_BYTES = 100 * 1024 * 1024;
+const MAX_JUDGE_DATA_ARCHIVE_BYTES = 256 * 1024 * 1024;
 export class ApiError extends Error {
   readonly code: string;
   readonly requestId: string;
@@ -1202,6 +1204,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
     ) => {
       const files = Array.isArray(file) ? file : [file];
       const encode = async (item: File) => {
+        const limit = zip
+          ? MAX_JUDGE_DATA_ARCHIVE_BYTES
+          : MAX_JUDGE_DATA_PAYLOAD_BYTES;
+        if (item.size > limit)
+          throw new Error(
+            `Judge Data file exceeds ${Math.floor(limit / (1024 * 1024))} MiB limit`,
+          );
         const bytes = new Uint8Array(await item.arrayBuffer());
         let binary = '';
         for (let offset = 0; offset < bytes.length; offset += 0x8000)

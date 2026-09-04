@@ -295,7 +295,7 @@ func (s *protocolServer) startExecution(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var request model.RealExecutionRequest
-	if err := decodeStrict(w, r, &request, 300<<10); err != nil {
+	if err := decodeStrict(w, r, &request, 140<<20); err != nil {
 		http.Error(w, "invalid real execution request", http.StatusBadRequest)
 		return
 	}

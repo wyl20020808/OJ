@@ -24,7 +24,7 @@ func pathWithin(root, candidate string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && !filepath.IsAbs(rel)
 }
 
-const maxTestcaseInputBytes = 64 << 10
+const maxTestcaseInputBytes = 100 << 20
 
 // StageTestcaseInput writes Supervisor-owned bytes with exclusive creation and
 // immediately verifies the same inode and digest that execution will consume.

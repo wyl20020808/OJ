@@ -160,9 +160,11 @@ func validateSetRequest(request SetRequest) error {
 		return errors.New("invalid testcase-set manifest")
 	}
 	seen := make(map[string]struct{}, len(request.Manifest.Entries))
+	var totalInputBytes int64
 	for index, entry := range request.Manifest.Entries {
+		totalInputBytes += int64(len(entry.Input))
 		verdictBinding := entry.CheckerType != "" || entry.CheckerVersion != "" || entry.CheckerConfigSHA256 != ""
-		if entry.Index != index || entry.TestcaseID == "" || entry.TestcaseID == "." || entry.TestcaseID == ".." || strings.ContainsAny(entry.TestcaseID, "/\\\x00") || entry.TestdataVersionID != request.Manifest.TestdataVersionID || entry.ExecutionProfileID != request.Manifest.ExecutionProfileID || len(entry.Input) > 64<<10 || entry.InputSHA256 != digestBytes(entry.Input) || !sha256Hex(entry.InputSHA256) || verdictBinding && (!sha256Hex(entry.ExpectedOutputSHA256) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digestString(entry.CheckerType+"\x00"+entry.CheckerVersion)) {
+		if totalInputBytes > 256<<20 || entry.Index != index || entry.TestcaseID == "" || entry.TestcaseID == "." || entry.TestcaseID == ".." || strings.ContainsAny(entry.TestcaseID, "/\\\x00") || entry.TestdataVersionID != request.Manifest.TestdataVersionID || entry.ExecutionProfileID != request.Manifest.ExecutionProfileID || len(entry.Input) > 100<<20 || entry.InputSHA256 != digestBytes(entry.Input) || !sha256Hex(entry.InputSHA256) || verdictBinding && (!sha256Hex(entry.ExpectedOutputSHA256) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digestString(entry.CheckerType+"\x00"+entry.CheckerVersion)) {
 			return errors.New("invalid testcase-set entry")
 		}
 		if _, exists := seen[entry.TestcaseID]; exists {
