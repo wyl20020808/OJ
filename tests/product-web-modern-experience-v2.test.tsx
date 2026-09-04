@@ -180,7 +180,7 @@ describe('Product Web Modern Experience V2', () => {
     const api = apiMock();
     login({ loginPassword: api.loginPassword });
     fireEvent.change(await screen.findByLabelText('邮箱/手机号'), {
-      target: { value: '+8613800138000' },
+      target: { value: '13800138000' },
     });
     fireEvent.change(screen.getByLabelText('密码'), {
       target: { value: 'password123456' },
@@ -217,7 +217,7 @@ describe('Product Web Modern Experience V2', () => {
     );
     fireEvent.click(screen.getByRole('tab', { name: '验证码登录' }));
     fireEvent.change(screen.getByLabelText('邮箱/手机号'), {
-      target: { value: '+8613800138000' },
+      target: { value: '13800138000' },
     });
     await waitFor(() =>
       expect(
@@ -458,11 +458,15 @@ describe('Product Web Modern Experience V2', () => {
       ).closest('.auth-experience'),
     ).toBeInTheDocument();
   });
-  it('WEB-V2-46 supports narrow phone input type', async () => {
-    register();
+  it('WEB-V2-46 keeps login identifier input raw while typing', async () => {
+    login();
     const identifier = await screen.findByLabelText('邮箱/手机号');
-    fireEvent.change(identifier, { target: { value: '13800138000' } });
-    expect(identifier).toHaveAttribute('type', 'tel');
+    identifier.focus();
+    for (const value of ['a', 'ab', 'abc', 'abc@', 'abc@example.com'])
+      fireEvent.change(identifier, { target: { value } });
+    expect(identifier).toHaveValue('abc@example.com');
+    expect(identifier).toHaveAttribute('type', 'text');
+    expect(document.activeElement).toBe(identifier);
   });
   it('WEB-V2-47 does not log provider errors by default', async () => {
     const errorSpy = vi

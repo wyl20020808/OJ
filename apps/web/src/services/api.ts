@@ -1185,6 +1185,15 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       );
       return draft ? normalizeJudgeDraft(draft) : null;
     },
+    createJudgeDraftFromLatest: async (problemId: string) =>
+      normalizeJudgeDraft(
+        await request<BackendJudgeDraft>(
+          baseUrl,
+          `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/from-latest`,
+          { method: 'POST', body: '{}' },
+          fetcher,
+        ),
+      ),
     judgeVersions: (problemId: string) =>
       request<JudgeDataVersionSummary[]>(
         baseUrl,

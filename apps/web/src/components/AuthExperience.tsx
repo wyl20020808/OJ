@@ -45,6 +45,14 @@ function messageFor(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
 
+function classifyLoginIdentifier(value: string): 'EMAIL' | 'PHONE' | null {
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return 'EMAIL';
+  if (/^1[3-9]\d{9}$/.test(normalized)) return 'PHONE';
+  return null;
+}
+
 function detectIdentifierType(value: string): 'EMAIL' | 'PHONE' | null {
   const normalized = value.trim();
   if (!normalized) return null;
@@ -499,8 +507,6 @@ function LoginExperience({
   const [cooldown, setCooldown] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const identifierType = detectIdentifierType(identifier) ?? 'EMAIL';
-  const recognizedIdentifier = detectIdentifierType(identifier) !== null;
   useEffect(() => {
     if (!cooldown) return;
     const timer = window.setInterval(
@@ -509,16 +515,12 @@ function LoginExperience({
     );
     return () => window.clearInterval(timer);
   }, [cooldown]);
-  const codeEnabled =
-    identifierType === 'EMAIL'
-      ? methods.login.emailCode
-      : methods.login.phoneCode;
+  const codeEnabled = methods.login.emailCode || methods.login.phoneCode;
   const passwordEnabled =
-    identifierType === 'EMAIL'
-      ? methods.login.emailPassword
-      : methods.login.phonePassword;
+    methods.login.emailPassword || methods.login.phonePassword;
   const sendCode = async () => {
-    if (!recognizedIdentifier) return setError('请输入有效的邮箱或手机号。');
+    const identifierType = classifyLoginIdentifier(identifier);
+    if (!identifierType) return setError('请输入有效的邮箱或手机号。');
     setBusy(true);
     setError('');
     try {
@@ -561,7 +563,8 @@ function LoginExperience({
       }
       return;
     }
-    if (!recognizedIdentifier) return setError('请输入有效的邮箱或手机号。');
+    const identifierType = classifyLoginIdentifier(identifier);
+    if (!identifierType) return setError('请输入有效的邮箱或手机号。');
     if (!passwordEnabled) return setError('该身份类型暂不支持密码登录。');
     setBusy(true);
     try {
@@ -667,13 +670,7 @@ function LoginExperience({
             <label>
               邮箱/手机号
               <input
-                type={
-                  !identifier.trim()
-                    ? 'text'
-                    : identifierType === 'EMAIL'
-                      ? 'email'
-                      : 'tel'
-                }
+                type="text"
                 value={identifier}
                 onChange={(event) => {
                   setIdentifier(event.target.value);
@@ -682,20 +679,9 @@ function LoginExperience({
                 }}
                 autoComplete="username"
                 placeholder="请输入邮箱或手机号"
-                aria-describedby="login-identifier-help"
                 required
               />
             </label>
-            {recognizedIdentifier && (
-              <span
-                id="login-identifier-help"
-                className="field-help"
-                role="status"
-              >
-                已识别为{identifierType === 'EMAIL' ? '邮箱' : '手机号'}
-                ，将使用对应验证通道。
-              </span>
-            )}
             {authMode === 'password' ? (
               <label>
                 密码

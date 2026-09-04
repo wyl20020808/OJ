@@ -289,14 +289,14 @@ export async function buildApp(options: AppOptions = {}) {
       guestStore: createPostgresGuestAuthStore(database.pool),
       guestRateLimiter: new RedisGuestRateLimiter(cache),
     });
+    const judgeAdminUrl =
+      process.env.JUDGE_SERVICE_ADMIN_URL ?? process.env.JUDGE_SERVICE_URL;
+    const judgeAdminToken =
+      process.env.JUDGE_SERVICE_ADMIN_TOKEN ?? process.env.JUDGE_SERVICE_TOKEN;
     const adminAdapter =
       options.judgeAdminAdapter ??
-      (process.env.JUDGE_SERVICE_ADMIN_URL &&
-      process.env.JUDGE_SERVICE_ADMIN_TOKEN
-        ? new JudgeAdminAdapterClient(
-            process.env.JUDGE_SERVICE_ADMIN_URL,
-            process.env.JUDGE_SERVICE_ADMIN_TOKEN,
-          )
+      (judgeAdminUrl && judgeAdminToken
+        ? new JudgeAdminAdapterClient(judgeAdminUrl, judgeAdminToken)
         : new JudgeAdminAdapterClient('http://127.0.0.1:0', 'unconfigured'));
     await registerJudgeAdminRoutes(app, {
       adapter: adminAdapter,

@@ -2066,29 +2066,34 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
             <span role="columnheader">时间</span>
           </div>
           {items.map((s) => (
-            <Link
-              key={s.submissionId}
-              to={`/submissions/${encodeURIComponent(s.submissionId)}`}
-              className="evaluation-row"
-              ariaLabel={`查看评测 ${s.publicNumber !== undefined ? `#${s.publicNumber}` : s.submissionId}`}
-            >
-              <span>
+            <div key={s.submissionId} className="evaluation-row" role="row">
+              <Link
+                to={`/submissions/${encodeURIComponent(s.submissionId)}`}
+                ariaLabel={`查看评测 ${s.publicNumber !== undefined ? `#${s.publicNumber}` : s.submissionId}`}
+              >
                 #
                 {s.publicNumber !== undefined ? s.publicNumber : s.submissionId}
-              </span>
-              <span>
-                <strong>{s.problem.title}</strong>
-                <small>{s.problem.publicId || s.problem.slug}</small>
-              </span>
+              </Link>
+              <Link
+                to={`/problems/${encodeURIComponent(s.problem.id)}`}
+                className="evaluation-problem"
+              >
+                <strong>{s.problem.publicId || s.problem.slug}</strong>{' '}
+                <span>{s.problem.title}</span>
+              </Link>
               <span>{s.submitter.displayName}</span>
               <span>{s.languageProfileId}</span>
-              <strong className="judge-status">{s.verdict ?? s.status}</strong>
+              <strong
+                className={`evaluation-verdict tone-${evaluationVerdictTone(s.verdict ?? s.status)}`}
+              >
+                {s.verdict ?? s.status}
+              </strong>
               <span>
                 {formatMilliseconds(s.totalTimeMs)} /{' '}
                 {formatBytes(s.peakMemoryBytes)}
               </span>
               <time>{formatDate(s.createdAt)}</time>
-            </Link>
+            </div>
           ))}
         </div>
       )}
@@ -2455,7 +2460,18 @@ export function SubmissionDetail({
                       role="listitem"
                       className="testcase-row"
                     >
-                      <strong>#{item.ordinal}</strong>
+                      {(() => {
+                        const state = testcaseMark(item);
+                        return (
+                          <span
+                            className={`testcase-state testcase-state-${state.tone}`}
+                            aria-label={`测试点 ${item.ordinal} ${item.verdict ?? item.status ?? 'WAITING'}`}
+                          >
+                            <span>{item.ordinal}</span>
+                            <strong aria-hidden="true">{state.mark}</strong>
+                          </span>
+                        );
+                      })()}
                       <span className="testcase-verdict">
                         {item.verdict ?? item.status ?? 'WAITING'}
                       </span>
@@ -2512,6 +2528,26 @@ function formatBytes(value: number | undefined) {
   return value >= 1024 * 1024
     ? `${(value / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.ceil(value / 1024))} KB`;
+}
+
+function testcaseMark(item: SubmissionEvaluationDetail['testcases'][number]) {
+  if (item.verdict === 'AC') return { mark: '✓', tone: 'pass' };
+  if (item.verdict) return { mark: '×', tone: 'fail' };
+  if ((item.status as string | undefined) === 'INFRA_FAILED')
+    return { mark: '!', tone: 'infra' };
+  if (['RUNNING', 'STARTED'].includes(item.status ?? ''))
+    return { mark: '…', tone: 'running' };
+  return { mark: '·', tone: 'waiting' };
+}
+
+function evaluationVerdictTone(value: string) {
+  if (value === 'AC') return 'accepted';
+  if (['WA', 'RE'].includes(value)) return 'failed';
+  if (value === 'TLE') return 'time-limit';
+  if (value === 'MLE' || value === 'CE') return 'compile-limit';
+  if (value === 'RUNNING' || value === 'QUEUED') return 'running';
+  if (value === 'INFRA_FAILED') return 'infra';
+  return 'pending';
 }
 
 function Profile({

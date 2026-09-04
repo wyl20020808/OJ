@@ -121,6 +121,7 @@ export function ProblemEditor({
   const [tab, setTab] = useState<Tab>('statement');
   const [problem, setProblem] = useState<Problem | null>(null);
   const [draft, setDraft] = useState<JudgeDraft | null>(null);
+  const [hasDraft, setHasDraft] = useState(false);
   const [versions, setVersions] = useState<JudgeDataVersionSummary[]>([]);
   const [versionError, setVersionError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -187,6 +188,7 @@ export function ProblemEditor({
           tags: p.tags ?? [],
           visibility: p.visibility,
         });
+        setHasDraft(Boolean(d && Array.isArray(d.testcases) && d.defaults));
         const normalized =
           d && Array.isArray(d.testcases) && d.defaults
             ? d
@@ -338,6 +340,23 @@ export function ProblemEditor({
         `数据版本 v${version.versionNumber} 已发布，旧版本保持不可变。`,
       );
       setDraft((d) => d && { ...d, validation: emptyValidation });
+      setHasDraft(false);
+    } catch (e) {
+      setNotice(errorText(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const createDraftFromLatest = async () => {
+    if (!canManage || !versions[0]) return;
+    setSaving(true);
+    try {
+      const next = await api.createJudgeDraftFromLatest(problemId);
+      setDraft(next);
+      setHasDraft(true);
+      setNotice(
+        `已从 v${versions[0].versionNumber} 创建可编辑草稿，已发布版本保持不可变。`,
+      );
     } catch (e) {
       setNotice(errorText(e));
     } finally {
@@ -724,10 +743,19 @@ export function ProblemEditor({
               </p>
             </div>
             <div className="panel-actions">
+              {!hasDraft && versions[0] && (
+                <button
+                  type="button"
+                  onClick={createDraftFromLatest}
+                  disabled={!canManage || saving}
+                >
+                  编辑最新版本
+                </button>
+              )}
               <button
                 type="button"
                 onClick={validate}
-                disabled={!canManage || saving}
+                disabled={!canManage || saving || !hasDraft}
               >
                 校验草稿
               </button>
@@ -735,7 +763,10 @@ export function ProblemEditor({
                 type="button"
                 onClick={() => setPublishPending(true)}
                 disabled={
-                  !canPublish || saving || draft.validation.state !== 'VALID'
+                  !canPublish ||
+                  saving ||
+                  !hasDraft ||
+                  draft.validation.state !== 'VALID'
                 }
               >
                 发布新数据版本

@@ -17,7 +17,9 @@ const decodeBase64 = (value: unknown, limit: number, message: string) => {
   if (
     typeof value !== 'string' ||
     value.length % 4 !== 0 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value) ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      value,
+    ) ||
     decodedBase64Length(value) > limit
   )
     throw new JudgeDataError('UPLOAD_TOO_LARGE', message, 413);
@@ -125,6 +127,16 @@ export async function registerProblemJudgeDataRoutes(
         },
         reply,
         r,
+      ),
+  );
+  app.post(
+    '/api/problems/:problemId/judge-data/draft/from-latest',
+    async (r, reply) =>
+      mutate(r, reply, async () =>
+        options.service.createDraftFromLatestVersion(
+          await problemId(r),
+          await auth(r),
+        ),
       ),
   );
   app.get(
