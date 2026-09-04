@@ -9,6 +9,8 @@ Current Status: PRODUCT/JUDGE DEFECT REMEDIATION COMPLETE; TOKEN_WHITESPACE IS T
 
 Goal D Evaluation Detail + SSE Live Progress V1: PARTIAL. Evaluation Detail tabs, authoritative queued/running snapshots, authenticated bounded SSE, cursor replay, duplicate-safe browser merge, and focused tests are implemented on `d646a2b`. Real Judge testcase event emission and runtime SSE qualification remain blocked by JudgeData/runtime availability. See `reports/OJPLATFORM_EVALUATION_DETAIL_SSE_LIVE_PROGRESS_V1_REPORT.md`.
 
+Goal D.1 Judge Incremental Events + Redis SSE Qualification V1: PARTIAL. Judge-side queued/started/testcase-started/testcase-terminal/evaluation-terminal events, safe hidden-data filtering, Product durable projection bridge, and bounded Redis Pub/Sub fanout are implemented and focused-tested. Real formal SSE/browser qualification remains `BLOCKED_BY_JUDGE_DATA` because the active runtime is owned by a different source worktree. See `reports/OJPLATFORM_EVALUATION_DETAIL_SSE_D1_REAL_PROGRESS_V1_REPORT.md`.
+
 Auth real-runtime remediation: PASS for password verifier/diagnostics and
 durable Guest identity/session recovery. The active Product runtime database
 does not contain the reported root email, so `ROOT PASSWORD CREDENTIAL STATUS`

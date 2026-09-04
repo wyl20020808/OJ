@@ -18,7 +18,11 @@ import {
 import { SubmissionService } from './service.js';
 import { LANGUAGE_CATALOG } from './languages.js';
 import { publicSubmissionEvaluation } from './outcome.js';
-import { EvaluationEventHub, type EvaluationEvent } from './events.js';
+import {
+  EvaluationEventHub,
+  type EvaluationEvent,
+  type EvaluationEventBus,
+} from './events.js';
 
 export type SubmissionModuleContext = {
   repository?: SubmissionRepository;
@@ -42,7 +46,7 @@ export type SubmissionModuleContext = {
   projectGlobalListItem?: (
     submission: Submission,
   ) => Promise<Pick<GlobalEvaluationListItem, 'problem' | 'submitter'>>;
-  eventHub?: EvaluationEventHub;
+  eventHub?: EvaluationEventBus;
 };
 const error = (
   reply: FastifyReply,

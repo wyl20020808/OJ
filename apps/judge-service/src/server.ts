@@ -1,6 +1,9 @@
 import { createCache, checkCache } from '@ojplatform/cache';
 import { createDatabase, checkDatabase } from '@ojplatform/database';
-import { RedisJudgeJobRepository } from '@ojplatform/judge-runtime';
+import {
+  JUDGE_PROGRESS_EVENTS_CHANNEL,
+  RedisJudgeJobRepository,
+} from '@ojplatform/judge-runtime';
 import { buildJudgeService } from './app.js';
 import { loadJudgeServiceConfig } from './config.js';
 import { PostgresJudgeServiceStateRepository } from './repository.js';
@@ -16,6 +19,13 @@ const app = await buildJudgeService({
   state: new PostgresJudgeServiceStateRepository(database.pool),
   serviceToken: config.serviceToken,
   nodeToken: config.nodeToken,
+  progressEvents: async (event) => {
+    try {
+      await redis.publish(JUDGE_PROGRESS_EVENTS_CHANNEL, JSON.stringify(event));
+    } catch {
+      // Redis is best-effort transport; queue durability remains authoritative.
+    }
+  },
   nodes: new PostgresJudgeNodeRepository(
     database.pool,
     config.nodeUnhealthyTimeoutMs,

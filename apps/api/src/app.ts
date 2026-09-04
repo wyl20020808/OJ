@@ -66,9 +66,12 @@ import {
   JudgeServiceClient,
   judgeServiceInput,
   productPublication,
+  RedisEvaluationEventHub,
+  RedisJudgeProgressBridge,
   type ProblemRevisionResolver,
   type Submission,
 } from './modules/submission/index.js';
+import type { JudgeProgressEvent } from '@ojplatform/judge-runtime';
 import {
   registerCodeRunRoutes,
   codeRunResultFromJob,
@@ -247,6 +250,15 @@ export async function buildApp(options: AppOptions = {}) {
       process.env.OJPLATFORM_PHASE1E_QUALIFICATION === 'true';
     const database = createDatabase({ url: config.databaseUrl });
     const cache = createCache({ url: config.redisUrl });
+    const evaluationEventSubscriber = cache.duplicate();
+    await evaluationEventSubscriber.connect();
+    const evaluationEventHub = new RedisEvaluationEventHub(
+      cache,
+      evaluationEventSubscriber,
+    );
+    await evaluationEventHub.connect();
+    const judgeProgressSubscriber = cache.duplicate();
+    await judgeProgressSubscriber.connect();
     const storage = createStorage({
       endpoint: config.s3Endpoint,
       region: config.s3Region,
@@ -324,6 +336,7 @@ export async function buildApp(options: AppOptions = {}) {
             process.env.JUDGE_SERVICE_TOKEN,
           )
         : undefined;
+    let judgeProgressBridge: RedisJudgeProgressBridge | undefined;
     await registerCodeRunRoutes(app, {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
@@ -513,6 +526,7 @@ export async function buildApp(options: AppOptions = {}) {
       },
     };
     await registerSubmissionModule(app, {
+      eventHub: evaluationEventHub,
       repository: submissionRepository,
       authorizationPolicy: {
         canSubmit: async (context, reference) => {
@@ -778,6 +792,108 @@ export async function buildApp(options: AppOptions = {}) {
         };
       },
     });
+    if (judgeService) {
+      judgeProgressBridge = new RedisJudgeProgressBridge(
+        judgeProgressSubscriber,
+        async (event: JudgeProgressEvent) => {
+          const current = await submissionRepository.getEvaluation?.(
+            event.submissionId,
+          );
+          if (
+            !current ||
+            current.judgeJobId !== event.judgeJobId ||
+            current.evaluationGeneration !== event.evaluationGeneration
+          )
+            return;
+          if (
+            [
+              'COMPLETED_WITH_VERDICT',
+              'CANCELLED',
+              'INFRA_FAILED',
+              'NO_VERDICT',
+              'INCOMPLETE',
+            ].includes(current.status) &&
+            event.phase !== 'EVALUATION_TERMINAL'
+          )
+            return;
+          let status = current.status;
+          let detail = current.detail;
+          if (
+            event.phase === 'EVALUATION_STARTED' ||
+            event.phase === 'TESTCASE_STARTED' ||
+            event.phase === 'TESTCASE_TERMINAL'
+          ) {
+            status = 'RUNNING';
+            if (detail && event.testcaseOrdinal) {
+              const testcases = detail.testcases.map((testcase) => ({
+                ...testcase,
+              }));
+              const index = event.testcaseOrdinal - 1;
+              const testcase = testcases[index];
+              if (testcase) {
+                if (event.phase === 'TESTCASE_STARTED')
+                  testcase.status = 'RUNNING';
+                if (event.phase === 'TESTCASE_TERMINAL') {
+                  testcase.status = event.verdict ?? 'SKIPPED';
+                  if (event.verdict) testcase.verdict = event.verdict;
+                  if (event.timeMs !== undefined)
+                    testcase.timeMs = event.timeMs;
+                  if (event.memoryBytes !== undefined)
+                    testcase.memoryBytes = event.memoryBytes;
+                }
+                const completed = testcases.filter((item) =>
+                  [
+                    'AC',
+                    'WA',
+                    'CE',
+                    'RE',
+                    'TLE',
+                    'MLE',
+                    'CANCELLED',
+                    'SKIPPED',
+                  ].includes(item.status ?? ''),
+                ).length;
+                detail = {
+                  ...detail,
+                  completedTestcaseCount: completed,
+                  testcases,
+                };
+              }
+            }
+          }
+          if (event.phase === 'EVALUATION_TERMINAL') {
+            const job = await judgeService.get(event.judgeJobId);
+            const publication = productPublication(job);
+            if (publication) {
+              const published =
+                await submissionRepository.publishEvaluation?.(publication);
+              if (published) evaluationEventHub.publish(published);
+              return;
+            }
+            status =
+              event.state === 'CANCELLED'
+                ? 'CANCELLED'
+                : event.state === 'FAILED_TERMINAL'
+                  ? 'INFRA_FAILED'
+                  : 'NO_VERDICT';
+          }
+          const published = await submissionRepository.publishEvaluation?.({
+            submissionId: current.submissionId,
+            judgeJobId: current.judgeJobId,
+            evaluationGeneration: current.evaluationGeneration,
+            attemptGeneration: event.attemptGeneration,
+            status,
+            ...(detail ? { detail } : {}),
+            ...(status === 'COMPLETED_WITH_VERDICT'
+              ? { verdict: current.verdict }
+              : {}),
+            evaluationRecordDigest: `${event.judgeJobId}:progress:${event.id}`,
+          });
+          if (published) evaluationEventHub.publish(published);
+        },
+      );
+      await judgeProgressBridge.connect();
+    }
     await registerContestModule(app, {
       pool: database.pool,
       getAuth: async (request) =>
@@ -832,6 +948,8 @@ export async function buildApp(options: AppOptions = {}) {
         await sandboxRuntime.close();
         await database.pool.end();
         cache.disconnect();
+        evaluationEventSubscriber.disconnect();
+        judgeProgressSubscriber.disconnect();
         storage.client.destroy();
       },
     };
