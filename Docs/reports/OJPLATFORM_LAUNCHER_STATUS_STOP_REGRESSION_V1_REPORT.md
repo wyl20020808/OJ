@@ -33,3 +33,9 @@ Launcher fix merged to canonical `main` with merge commit
 `2b51c63984fb4fdf2e01b346a3d52123e6153089`. `D:\OJPlatform` normalized to
 branch `main` at the same merge commit. Root Status BAT produced visible
 all-down/runtime output. Real Stop smoke remained deferred.
+
+Follow-up regression fix (2026-09-05): root BAT reproduced 16s Status and 12s
+Stop waits despite successful exit. Status now avoids HTTP probes when TCP port
+is closed and uses one-second health timeout. Stop short-circuits already-down
+services. Root Status/Stop remain visible and return success without full runtime
+startup.
