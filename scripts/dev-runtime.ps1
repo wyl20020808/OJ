@@ -647,7 +647,8 @@ function Stop-WorkerThroughControlPlane($state) { if(-not(Get-HttpJson "$($Confi
 function Reconcile-RequestedRuntime($state) {
   $previous = if ($state.requestedSource) { [string]$state.requestedSource.commit } else { '' }
   if ($previous -and $previous -ne $ProductIdentity.commit) {
-  $active = Get-ActiveJudgeJobs -FailClosed
+    if (-not (Test-TcpPort $Config.JudgeServicePort)) { return }
+    $active = Get-ActiveJudgeJobs -FailClosed
     if ($active -gt 0) { throw "RUNNING_VERSION_MISMATCH_ACTIVE_JOBS: current=$previous requested=$($ProductIdentity.commit) activeJobs=$active owner=$($state.ownerCheckout)" }
     Stop-WorkerThroughControlPlane $state
   }
