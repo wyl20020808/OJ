@@ -40,5 +40,9 @@ is closed and uses one-second health timeout. Stop short-circuits already-down
 services. Root Status/Stop remain visible and return success without full runtime
 startup.
 
+User follow-up fix: stale records for already-closed ports are now removed
+before ownership probing, preventing Stop from stalling after the first service.
+Status BAT pauses on successful output so double-click users can read it.
+
 Additional root-entry fix: BATs now print immediate progress before PowerShell
 starts and hold successful output for two seconds before exiting.

@@ -385,8 +385,8 @@ function Stop-ProvenProcess($record) {
 }
 function Stop-Managed([string]$Name, $state) {
   $record = $state.processes[$Name]
-  if (-not $record -and $Name -ne 'supervisor' -and -not (Test-TcpPort ([int](Get-ServicePort $Name)))) { Write-Host "$Name STOP (already down)"; return }
-  if (-not $record -and $Name -eq 'supervisor' -and -not (Test-TcpPort $Config.SupervisorPort)) { Write-Host 'supervisor STOP (already down)'; return }
+  $servicePort = if ($Name -eq 'supervisor') { [int]$Config.SupervisorPort } else { [int](Get-ServicePort $Name) }
+  if (-not (Test-TcpPort $servicePort)) { if ($record) { $state.processes.Remove($Name); Save-State $state }; Write-Host "$Name STOP (already down)"; return }
   if ($Name -ne 'supervisor') {
     $servicePort=[int](Get-ServicePort $Name)
     $ownership = Resolve-OJPlatformProcessOwnership $Name $servicePort $state

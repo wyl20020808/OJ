@@ -6,7 +6,5 @@ if errorlevel 1 (
   echo OJPlatform Status failed:
   pause
 )
-if not errorlevel 1 (
-  timeout /t 2 /nobreak >nul
-)
+if not errorlevel 1 pause
 exit /b 0
