@@ -1944,6 +1944,12 @@ footer {
   background: var(--state-hover);
   text-decoration: none;
 }
+.evaluation-row { cursor: pointer; }
+.evaluation-row:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: -2px; }
+.problem-header-actions a.button { display: inline-flex; align-items: center; justify-content: center; }
+.testcase-progress { margin: 1.25rem 0; padding: 1rem; border: 1px solid var(--border, #d6d9df); background: var(--surface, #fff); }
+.testcase-progress-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(3.25rem, 1fr)); gap: .5rem; }
+.testcase-progress-cell { min-height: 3rem; display: flex; align-items: center; justify-content: center; gap: .25rem; border: 1px solid currentColor; border-radius: 4px; font-variant-numeric: tabular-nums; }
 .evaluation-row .judge-status {
   min-width: 0;
 }

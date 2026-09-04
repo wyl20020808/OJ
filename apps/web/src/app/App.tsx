@@ -7,6 +7,7 @@ import {
   type ErrorInfo,
   type FormEvent,
   type ReactNode,
+  type MouseEvent,
 } from 'react';
 import {
   ApiError,
@@ -167,11 +168,13 @@ function Link({
   children,
   className,
   ariaLabel,
+  onClick,
 }: {
   to: string;
   children: ReactNode;
   className?: string;
   ariaLabel?: string;
+  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
     <a
@@ -179,6 +182,8 @@ function Link({
       className={className}
       aria-label={ariaLabel}
       onClick={(e) => {
+        onClick?.(e);
+        if (e.defaultPrevented) return;
         e.preventDefault();
         navigate(to);
       }}
@@ -1667,9 +1672,7 @@ export function ProblemDetail({
             </span>
             <h1>{problem.title}</h1>
             <div className="problem-header-actions" aria-label="题目操作">
-              <Link to={`/problems/${encodeURIComponent(id)}#solve`}>
-                <button type="button">提交代码</button>
-              </Link>
+              <Link className="button" to={`/problems/${encodeURIComponent(id)}#solve`}>提交代码</Link>
               {canEdit && (
                 <Link
                   to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
@@ -2066,7 +2069,7 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
             <span role="columnheader">时间</span>
           </div>
           {items.map((s) => (
-            <div key={s.submissionId} className="evaluation-row" role="row">
+            <div key={s.submissionId} className="evaluation-row" role="row" tabIndex={0} onClick={() => navigate(`/submissions/${encodeURIComponent(s.submissionId)}`)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/submissions/${encodeURIComponent(s.submissionId)}`); } }}>
               <Link
                 to={`/submissions/${encodeURIComponent(s.submissionId)}`}
                 ariaLabel={`查看评测 ${s.publicNumber !== undefined ? `#${s.publicNumber}` : s.submissionId}`}
@@ -2077,6 +2080,7 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
               <Link
                 to={`/problems/${encodeURIComponent(s.problem.id)}`}
                 className="evaluation-problem"
+                onClick={(event) => event.stopPropagation()}
               >
                 <strong>{s.problem.publicId || s.problem.slug}</strong>{' '}
                 <span>{s.problem.title}</span>
@@ -2432,6 +2436,14 @@ export function SubmissionDetail({
               <strong>{evaluation.verdict ?? evaluation.status}</strong>
             </div>
           </section>
+          {activeTab === 'testcases' && evaluation.detail?.testcases.length ? (
+            <section className="testcase-progress" aria-label="测试点进度" aria-live="polite">
+              <div className="section-heading-inline"><div><p className="eyebrow">Live Progress</p><h2>测试点进度</h2></div><span>{evaluation.detail.testcases.filter((item) => item.verdict || (item.status && !['WAITING', 'RUNNING', 'STARTED'].includes(item.status))).length}/{evaluation.detail.testcases.length}</span></div>
+              <div className="testcase-progress-grid" role="list">
+                {evaluation.detail.testcases.map((item) => { const state = testcaseMark(item); return <span key={item.ordinal} role="listitem" className={`testcase-progress-cell testcase-state-${state.tone}`} aria-label={`测试点 ${item.ordinal} ${item.verdict ?? item.status ?? 'WAITING'}`} title={item.verdict ?? item.status ?? 'WAITING'}><strong>{item.ordinal}</strong><span aria-hidden="true">{state.mark}</span></span>; })}
+              </div>
+            </section>
+          ) : null}
           {activeTab === 'testcases' &&
             (isTerminal || hasLiveTestcases) &&
             evaluation.detail?.compile?.diagnostics && (
