@@ -1,5 +1,14 @@
 # OJPlatform Project Status
 
+## Root Submission Source Access V1
+
+PASS on branch `codex/root-submission-source-access-v1`. Submission detail
+authorization now uses the canonical `submission:view:any` permission resolver
+for highest-admin cross-owner source access, while owner-only and anonymous /
+ordinary-user denial remain enforced. Global evaluation list and SSE paths do
+not expose source. Focused authorization tests, typecheck, build, and diff check
+pass; browser runtime was not run.
+
 JudgeData Artifact Pipeline V1: PASS / INTEGRATED. Streaming upload, immutable
 artifacts, reference dispatch, bounded Worker fetch, Supervisor opaque-handle
 transport, and dispatch recovery are implemented. Real authenticated 100 MiB

@@ -61,6 +61,10 @@ export type SubmissionAuthorizationOptions = {
   auditHook?: SubmissionAuditHook;
   abuseHook?: SubmissionAbuseHook;
   roles?: ReadonlyMap<string, ReadonlySet<string>>;
+  hasPermissions?: (
+    userId: string,
+    permissions: readonly string[],
+  ) => Promise<boolean> | boolean;
 };
 
 const hasPermission = (
@@ -73,6 +77,7 @@ export function createSubmissionAuthorizationPolicy(
   options: SubmissionAuthorizationOptions = {},
 ): SubmissionAuthorizationPolicy {
   const roles = options.roles ?? new Map<string, ReadonlySet<string>>();
+  const hasPermissions = options.hasPermissions;
   const active = (user: SubmissionAuthorizationUser | undefined) =>
     Boolean(user?.id && user.status === 'active');
   return {
@@ -90,7 +95,10 @@ export function createSubmissionAuthorizationPolicy(
       if (!active(user) || !submission?.id || !submission.ownerUserId)
         return false;
       if (submission.ownerUserId === user!.id) return true;
-      return hasPermission(user!, 'submission:view:any', roles);
+      if (hasPermission(user!, 'submission:view:any', roles)) return true;
+      return hasPermissions
+        ? hasPermissions(user!.id, ['submission:view:any'])
+        : false;
     },
     async canListOwnSubmissions(user) {
       return active(user);
