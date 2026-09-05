@@ -91,6 +91,8 @@ start, but no new Runtime or real-SSE PASS is claimed.
 ## Final Git State
 
 The integration branch contains all source commits and the integration contract
-update. The normal main merge and final hashes are recorded after merge in this
-report's finalization note. Canonical root untracked user artifacts remain
+update at `91cf9a47936a817dc91e72b2cce3b406c3c47c96`. Canonical `main` merged it
+normally at `c73846e91b290ae86b70a5c9229c88e60f497993` with message
+`merge: integrate v3 problem evaluation and admin ux`. This finalization note is
+the only post-merge change. Canonical root untracked user artifacts remain
 outside all commits.
