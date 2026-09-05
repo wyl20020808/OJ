@@ -5,6 +5,7 @@ $bat = Get-Content -Raw (Join-Path $root 'OJPlatform-Stop.bat')
 function Assert-Contains([string]$text,[string]$value,[string]$label) { if($text -notlike "*$value*"){throw "$label missing: $value"} }
 Assert-Contains $runtime "STOP = BLOCKED" 'blocked result'
 Assert-Contains $runtime 'Judge active-job state could not be determined' 'unknown jobs reason'
+Assert-Contains $runtime 'ACTIVE JUDGE JOBS = $active' 'active job count'
 Assert-Contains $runtime 'Show-StopRecovery $state' 'blocked diagnostics continue'
 Assert-Contains $runtime 'SERVICE=$($item.service) PORT=$($item.port) PID=$pidValue' 'listener fields'
 Assert-Contains $runtime 'OWNER=$classification' 'ownership field'
