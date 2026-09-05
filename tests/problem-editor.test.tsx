@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../apps/web/src/app/App.js';
@@ -272,7 +273,10 @@ describe('ProblemEditor judge-data contract UI', () => {
 
   it('requires destructive confirmation before deleting a testcase', async () => {
     const api = makeApi({
-      judgeDraft: vi.fn().mockResolvedValueOnce(draft()).mockResolvedValueOnce(draft([])),
+      judgeDraft: vi
+        .fn()
+        .mockResolvedValueOnce(draft())
+        .mockResolvedValueOnce(draft([])),
     });
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<ProblemEditor api={api} problemId="p1" />);
@@ -474,12 +478,91 @@ describe('ProblemEditor judge-data contract UI', () => {
       await screen.findByRole('heading', { name: /编辑题目：Hello World/ }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
-    expect(screen.getByRole('complementary', { name: '题面实时预览' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('complementary', { name: '题面实时预览' }),
+    ).toBeInTheDocument();
     const preview = screen.getByRole('complementary', { name: '题面实时预览' });
     expect(preview.querySelector('h3')?.textContent).not.toBe('样例');
     expect(preview).not.toHaveTextContent('1 2');
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
     expect(screen.getByLabelText('输入样例 1')).toHaveValue('1 2');
+  });
+
+  it('renders each Markdown field with an independent live preview', async () => {
+    const api = makeApi({
+      problem: vi.fn().mockResolvedValue({
+        ...problem,
+        background: 'Background source',
+        statement: 'Statement source',
+        inputDescription: 'Input source',
+        outputDescription: 'Output source',
+        constraints: 'Constraints source',
+        notes: 'Notes source',
+      }),
+    });
+    render(<ProblemEditor api={api} problemId="p1" />);
+    await screen.findByRole('heading', { name: /编辑题目：Hello World/ });
+
+    for (const [field, own, other] of [
+      ['background', 'Background source', 'Statement source'],
+      ['statement', 'Statement source', 'Input source'],
+      ['inputDescription', 'Input source', 'Output source'],
+      ['outputDescription', 'Output source', 'Constraints source'],
+      ['constraints', 'Constraints source', 'Notes source'],
+      ['notes', 'Notes source', 'Background source'],
+    ] as const) {
+      const section = document.querySelector(`[data-field="${field}"]`);
+      expect(section).toBeInTheDocument();
+      const preview = within(section as HTMLElement).getByRole('complementary');
+      expect(preview).toHaveTextContent(own);
+      expect(preview).not.toHaveTextContent(other);
+    }
+
+    const statementSection = document.querySelector(
+      '[data-field="statement"]',
+    ) as HTMLElement;
+    const statementEditor = within(statementSection).getByLabelText('题目描述');
+    fireEvent.change(statementEditor, { target: { value: '**Live**' } });
+    expect(
+      within(statementSection).getByRole('complementary'),
+    ).toHaveTextContent('Live');
+    expect(
+      within(
+        document.querySelector(
+          '[data-field="inputDescription"]',
+        ) as HTMLElement,
+      ).getByRole('complementary'),
+    ).not.toHaveTextContent('Live');
+  });
+
+  it('inserts standard Markdown syntax from the field toolbar', async () => {
+    render(<ProblemEditor api={makeApi()} problemId="p1" />);
+    await screen.findByRole('heading', { name: /编辑题目：Hello World/ });
+    const section = document.querySelector(
+      '[data-field="statement"]',
+    ) as HTMLElement;
+    const textarea = within(section).getByLabelText(
+      '题目描述',
+    ) as HTMLTextAreaElement;
+
+    const apply = (toolbarName: string, selected: string, expected: string) => {
+      fireEvent.change(textarea, { target: { value: selected } });
+      textarea.focus();
+      textarea.setSelectionRange(0, selected.length);
+      fireEvent.click(
+        within(section).getByRole('button', { name: toolbarName }),
+      );
+      expect(textarea).toHaveValue(expected);
+    };
+
+    apply('Bold', 'text', '**text**');
+    apply('Italic', 'text', '*text*');
+    apply('Link', 'text', '[text](url)');
+    apply('Image URL', 'alt', '![alt](url)');
+    apply('Inline Code', 'code', '`code`');
+    apply('Code Block', 'code', '```\ncode\n```');
+    apply('Inline Math', 'x', '$x$');
+    apply('Block Math', 'x', '$$\nx\n$$');
   });
 
   it('adds, removes, and saves ordered public samples through the problem API', async () => {
