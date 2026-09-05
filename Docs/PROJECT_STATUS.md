@@ -1,5 +1,15 @@
 # OJPlatform Project Status
 
+Full Product State Diagnosis & Recovery V1: PARTIAL. Recovered merge-lost
+evaluation navigation, capability-driven problem editing, sample presentation,
+breadcrumb/admin navigation, and authenticated evaluation-list protection.
+Focused Web/Product/Auth checks pass (383 tests), and Runtime Manager start with
+doctor now proves canonical product/plugin `main` sources with
+`MIXED SOURCE = False`. Browser guest evaluation-list smoke passes; persisted
+root credential and root/admin browser workflows remain NOT VERIFIED because no
+credential was changed. See
+`reports/OJPLATFORM_FULL_PRODUCT_STATE_DIAGNOSIS_RECOVERY_V1_REPORT.md`.
+
 Post-Merge UI Regression Recovery V1: PARTIAL. Restored pre-wave global
 Evaluation List filters/layout and breadcrumb de-duplication while preserving
 Evaluation UX V4 and Admin permission-gated navigation. Build, focused tests,

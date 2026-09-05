@@ -161,6 +161,41 @@ describe('Product Access & Evaluation V1', () => {
     }
   });
 
+  it('maps configured administrator capability to problem management without a username bypass', async () => {
+    const app = await buildApp({
+      logger: false,
+      operatorUsernames: new Set(['root-operator']),
+    });
+    try {
+      const owner = await registerAndLogin(app, 'problem-owner-v1');
+      const created = await app.inject({
+        method: 'POST',
+        url: '/api/problems',
+        headers: owner.headers,
+        payload: problem('operator-managed'),
+      });
+      expect(created.statusCode).toBe(201);
+      const problemId = created.json().id as string;
+      const root = await registerAndLogin(app, 'root-operator');
+      const capability = await app.inject({
+        method: 'GET',
+        url: '/api/admin/judge/capabilities',
+        headers: root.headers,
+      });
+      expect(capability.json()).toEqual({ canView: true });
+      const update = await app.inject({
+        method: 'PATCH',
+        url: `/api/problems/${problemId}`,
+        headers: root.headers,
+        payload: { title: 'Operator update' },
+      });
+      expect(update.statusCode).toBe(200);
+      expect(update.json()).toMatchObject({ title: 'Operator update' });
+    } finally {
+      await app.close();
+    }
+  });
+
   it('serves a source-free global evaluation list with stable cursor filtering', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));

@@ -260,6 +260,61 @@ describe('Web UI polish', () => {
     expect(screen.queryByText('int main() {}')).not.toBeInTheDocument();
   });
 
+  it('navigates from the evaluation row body and keeps filter controls local', async () => {
+    renderApp('/submissions', {
+      id: 'u1',
+      username: 'owner',
+      email: 'owner@example.test',
+      displayName: 'Owner',
+      status: 'active',
+    });
+    await screen.findByRole('heading', { name: '评测列表' });
+    fireEvent.click(screen.getAllByRole('row')[1]!);
+    expect(window.location.pathname).toBe('/submissions/s1');
+
+    cleanup();
+    window.history.pushState({}, '', '/submissions');
+    renderApp('/submissions', {
+      id: 'u1',
+      username: 'owner',
+      email: 'owner@example.test',
+      displayName: 'Owner',
+      status: 'active',
+    });
+    await screen.findByRole('heading', { name: '评测列表' });
+    fireEvent.change(screen.getByRole('combobox', { name: '结果' }), {
+      target: { value: 'AC' },
+    });
+    expect(window.location.pathname).toBe('/submissions');
+  });
+
+  it('shows the admin entry only when the backend capability allows it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/api/auth/me'))
+          return response({
+            id: 'root',
+            username: 'root',
+            email: 'root@example.test',
+            displayName: 'Root',
+            status: 'active',
+          });
+        if (url.endsWith('/api/admin/judge/capabilities'))
+          return response({ canView: true });
+        if (url.endsWith('/ready')) return response({ status: 'ok' });
+        return response({ items: [], nextCursor: null });
+      }),
+    );
+    window.history.pushState({}, '', '/');
+    render(<App />);
+    expect(await screen.findByRole('link', { name: '管理' })).toHaveAttribute(
+      'href',
+      '/admin/judge/nodes',
+    );
+  });
+
   it('saves the statement without editor refresh or problem publication controls', async () => {
     const api = {
       problem: vi.fn().mockResolvedValue(problem),
