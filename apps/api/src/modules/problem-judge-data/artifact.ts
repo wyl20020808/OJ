@@ -19,10 +19,14 @@ import type { ByteStorage } from './storage.js';
 export function publishedArtifact(
   version: JudgeDataVersion,
 ): JudgeArtifactReference {
+  // PostgreSQL timestamp storage is second-precision in the local schema.
+  // Canonicalize before hashing so publish and later dispatch produce one ID.
+  const createdAt = new Date(version.publishedAt);
+  createdAt.setUTCMilliseconds(0);
   return createJudgeArtifact({
     formatVersion: JUDGE_ARTIFACT_FORMAT,
     judgeDataVersionId: version.versionId,
-    createdAt: version.publishedAt,
+    createdAt: createdAt.toISOString(),
     problemId: version.problemId,
     problemRevisionId: version.problemRevisionId,
     testdataVersionId: version.testdataVersionId,
