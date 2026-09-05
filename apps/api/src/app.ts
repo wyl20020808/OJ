@@ -383,6 +383,13 @@ export async function buildApp(options: AppOptions = {}) {
       userId: string,
       required: readonly string[],
     ) => {
+      if (configuredOperatorUserIds.has(userId)) return true;
+      const operator = await auth.getUser(userId);
+      if (
+        operator?.username &&
+        configuredOperatorUsernames.has(operator.username.toLowerCase())
+      )
+        return true;
       if (
         required.every((permission) =>
           options.judgeAdminPermissions?.get(userId)?.has(permission),
@@ -1052,10 +1059,21 @@ export async function buildApp(options: AppOptions = {}) {
     });
     const problemRepository = new InMemoryProblemRepository();
     const guestAuthoringLimiter = createMemoryGuestAuthoringLimiter();
-    const hasPermissions = (userId: string, required: readonly string[]) =>
-      required.every((permission) =>
+    const hasPermissions = async (
+      userId: string,
+      required: readonly string[],
+    ) => {
+      if (configuredOperatorUserIds.has(userId)) return true;
+      const operator = await auth.getUser(userId);
+      if (
+        operator?.username &&
+        configuredOperatorUsernames.has(operator.username.toLowerCase())
+      )
+        return true;
+      return required.every((permission) =>
         options.judgeAdminPermissions?.get(userId)?.has(permission),
       );
+    };
     await registerProblemModule(app, {
       repository: problemRepository,
       getAuthContext: async (request) =>
@@ -1076,7 +1094,7 @@ export async function buildApp(options: AppOptions = {}) {
           if (problem.authorId === context.userId) return true;
           return (
             context.strength === 'password' &&
-            hasPermissions(context.userId, ['problem.edit'])
+            (await hasPermissions(context.userId, ['problem.edit']))
           );
         },
       },

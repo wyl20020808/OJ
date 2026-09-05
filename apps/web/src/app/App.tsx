@@ -258,7 +258,7 @@ function Breadcrumbs({ current }: { current: Route }) {
     'author-new': '创建题目',
     'author-edit': '编辑题目',
     sandbox: 'Sandbox 运维',
-    'judge-nodes': 'Judge Machines',
+    'judge-nodes': 'Judge 节点管理',
     'judge-node-detail': current.id ?? '节点详情',
     forbidden: '无权访问',
     error: '页面加载失败',
@@ -1564,7 +1564,7 @@ function ProblemDetail({
       <State title="题目暂不可用" text={error.message} />
     );
   if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
-  const canEdit = problem.authorId === user?.id;
+  const canEdit = problem.capabilities?.canEdit === true;
   return (
     <article className="problem-detail-v4">
       <div className="problem-main">
@@ -1604,27 +1604,47 @@ function ProblemDetail({
           <Section title="样例">
             {problem.examples.map((example, index) => (
               <div className="sample-block" key={index}>
-                <button
-                  type="button"
-                  className="secondary sample-copy"
-                  onClick={() => {
-                    if (!navigator.clipboard) {
-                      setCopyMessage('当前浏览器不支持复制样例。');
-                      return;
-                    }
-                    void navigator.clipboard
-                      .writeText(
-                        `输入\n${example.input}\n\n输出\n${example.output}`,
-                      )
-                      .then(() => setCopyMessage('样例已复制。'))
-                      .catch(() =>
-                        setCopyMessage('复制失败，请手动选择样例。'),
-                      );
-                  }}
-                >
-                  复制样例
-                </button>
-                <pre>{`输入\n${example.input}\n\n输出\n${example.output}`}</pre>
+                <div className="sample-heading section-heading-inline">
+                  <h3>样例 {index + 1}</h3>
+                  <button
+                    type="button"
+                    className="secondary sample-copy"
+                    onClick={() => {
+                      if (!navigator.clipboard) {
+                        setCopyMessage('当前浏览器不支持复制样例。');
+                        return;
+                      }
+                      void navigator.clipboard
+                        .writeText(example.input)
+                        .then(() => setCopyMessage('样例输入已复制。'))
+                        .catch(() =>
+                          setCopyMessage('复制失败，请手动选择样例输入。'),
+                        );
+                    }}
+                  >
+                    复制样例
+                  </button>
+                </div>
+                <div className="sample-grid">
+                  <div>
+                    <h4>输入</h4>
+                    <pre
+                      className="sample-code sample-input"
+                      aria-label={`样例 ${index + 1} 输入`}
+                    >
+                      {example.input}
+                    </pre>
+                  </div>
+                  <div>
+                    <h4>输出</h4>
+                    <pre
+                      className="sample-code sample-output"
+                      aria-label={`样例 ${index + 1} 输出`}
+                    >
+                      {example.output}
+                    </pre>
+                  </div>
+                </div>
               </div>
             ))}
             {copyMessage && <p role="status">{copyMessage}</p>}
@@ -1803,7 +1823,13 @@ function SubmissionForm({
   );
 }
 
-function SubmissionHistory({ api }: { api: ApiClient }) {
+function SubmissionHistory({
+  api,
+  user,
+}: {
+  api: ApiClient;
+  user: AuthenticatedUser | null;
+}) {
   const [items, setItems] = useState<EvaluationListItem[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -1839,6 +1865,14 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
     },
     [],
   );
+  if (!user)
+    return (
+      <State
+        title="请先登录"
+        text="登录后才能查看评测列表。"
+        action={<Link to="/login">登录</Link>}
+      />
+    );
   if (error)
     return (
       <State
@@ -1867,7 +1901,53 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
             <span role="columnheader">题目</span>
             <span role="columnheader">提交者</span><span role="columnheader">语言</span><span role="columnheader">状态</span><span role="columnheader">资源</span><span role="columnheader">时间</span>
           </div>
-          {items.map((s) => <div key={s.submissionId} className="evaluation-row" role="row"><Link to={`/submissions/${encodeURIComponent(s.submissionId)}`}>#{s.publicNumber ?? s.submissionId}</Link><Link to={`/problems/${encodeURIComponent(s.problem.id)}`} className="evaluation-problem"><strong>{s.problem.publicId || s.problem.slug}</strong> <span>{s.problem.title}</span></Link><span>{s.submitter.displayName}</span><span>{s.languageProfileId}</span><strong className={`evaluation-verdict tone-${evaluationVerdictTone(s.verdict ?? s.status)}`}>{s.verdict ?? s.status}</strong><span>{formatMilliseconds(s.totalTimeMs)} / {formatBytes(s.peakMemoryBytes)}</span><time>{formatDate(s.createdAt)}</time></div>)}
+          {items.map((s) => (
+            <div
+              key={s.submissionId}
+              className="evaluation-row"
+              role="row"
+              tabIndex={0}
+              onClick={() =>
+                navigate(`/submissions/${encodeURIComponent(s.submissionId)}`)
+              }
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  navigate(
+                    `/submissions/${encodeURIComponent(s.submissionId)}`,
+                  );
+                }
+              }}
+            >
+              <Link
+                to={`/submissions/${encodeURIComponent(s.submissionId)}`}
+                ariaLabel={`查看评测 ${s.publicNumber !== undefined ? `#${s.publicNumber}` : s.submissionId}`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                #{s.publicNumber ?? s.submissionId}
+              </Link>
+              <Link
+                to={`/problems/${encodeURIComponent(s.problem.id)}`}
+                className="evaluation-problem"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <strong>{s.problem.publicId || s.problem.slug}</strong>{' '}
+                <span>{s.problem.title}</span>
+              </Link>
+              <span>{s.submitter.displayName}</span>
+              <span>{s.languageProfileId}</span>
+              <strong
+                className={`evaluation-verdict tone-${evaluationVerdictTone(s.verdict ?? s.status)}`}
+              >
+                {s.verdict ?? s.status}
+              </strong>
+              <span>
+                {formatMilliseconds(s.totalTimeMs)} /{' '}
+                {formatBytes(s.peakMemoryBytes)}
+              </span>
+              <time>{formatDate(s.createdAt)}</time>
+            </div>
+          ))}
         </div>
       )}
       <div className="pagination">
@@ -2587,6 +2667,7 @@ export function App() {
   const [authState, setAuthState] = useState<
     'loading' | 'authenticated' | 'unauthenticated' | 'unavailable'
   >('loading');
+  const [canViewJudgeAdmin, setCanViewJudgeAdmin] = useState(false);
   useEffect(() => {
     const h = () => setCurrent(route());
     window.addEventListener('popstate', h);
@@ -2595,9 +2676,14 @@ export function App() {
       .then((value) => {
         setUser(value);
         setAuthState('authenticated');
+        void api
+          .judgeAdminCapabilities()
+          .then((capability) => setCanViewJudgeAdmin(capability.canView))
+          .catch(() => setCanViewJudgeAdmin(false));
       })
       .catch((error) => {
         setUser(null);
+        setCanViewJudgeAdmin(false);
         setAuthState(
           error instanceof ApiError && error.status === 401
             ? 'unauthenticated'
@@ -2618,6 +2704,10 @@ export function App() {
         onUser={(value) => {
           setUser(value);
           setAuthState('authenticated');
+          void api
+            .judgeAdminCapabilities()
+            .then((capability) => setCanViewJudgeAdmin(capability.canView))
+            .catch(() => setCanViewJudgeAdmin(false));
         }}
         onNavigate={navigate}
       />
@@ -2679,7 +2769,7 @@ export function App() {
     ) : current.name === 'submit' ? (
       <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
     ) : current.name === 'submissions' ? (
-      <SubmissionHistory api={api} />
+      <SubmissionHistory api={api} user={user} />
     ) : current.name === 'submission' ? (
       user && current.id ? (
         <SubmissionDetail api={api} id={current.id} user={user} />
@@ -2819,6 +2909,14 @@ export function App() {
           >
             评测列表
           </Link>
+          {canViewJudgeAdmin && (
+            <Link
+              to="/admin/judge/nodes"
+              className={current.name.startsWith('judge-') ? 'active' : ''}
+            >
+              管理
+            </Link>
+          )}
           <NotificationBell navigate={navigate} api={api} />
           {user ? (
             <>
