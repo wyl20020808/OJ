@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../apps/web/src/app/App.js';
 import {
@@ -11,6 +17,7 @@ import { AuthExperience } from '../apps/web/src/components/AuthExperience.js';
 import type { ApiClient, AuthMethods } from '../apps/web/src/services/api.js';
 const problem = {
   id: 'p1',
+  publicId: 'P0001',
   slug: 'two-sum',
   title: '两数之和',
   statement: '给定数组，寻找目标和。',
@@ -26,6 +33,8 @@ const problem = {
   authorId: null,
   createdAt: '2026-08-31T00:00:00Z',
   updatedAt: '2026-08-31T00:00:00Z',
+  tags: ['数组', '哈希'],
+  source: 'internal-uuid-must-not-render',
 };
 const methods: AuthMethods = {
   registration: { email: true, phone: true },
@@ -273,6 +282,20 @@ describe('Product Web Chinese Rich Experience V3', () => {
   it('WEB-V3-28 list mobile usable', async () => {
     renderApp('/problems');
     expect(await screen.findByText('两数之和')).toBeInTheDocument();
+  });
+  it('WEB-V3-28A compact rows expose public IDs and omit source', async () => {
+    renderApp('/problems');
+    expect(await screen.findByText('P0001')).toBeInTheDocument();
+    const row = within(screen.getByRole('listitem'));
+    expect(row.getByText('数组')).toBeInTheDocument();
+    expect(row.getByText('哈希')).toBeInTheDocument();
+    expect(
+      row.queryByText('internal-uuid-must-not-render'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /两数之和/ })).toHaveAttribute(
+      'href',
+      '/problems/two-sum',
+    );
   });
   it('WEB-V3-29 search', async () => {
     renderApp('/problems');

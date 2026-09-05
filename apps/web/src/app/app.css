@@ -1855,12 +1855,12 @@ footer {
 }
 .tag-row > span {
   display: inline-flex;
-  padding: 0.15rem 0.4rem;
+  padding: 0.1rem 0.3rem;
   border-radius: 4px;
   background: #eaf0f2;
   color: #43545e;
   font-size: 0.7rem;
-  line-height: 1.4;
+  line-height: 1.15;
 }
 .problem-filters {
   display: grid;
@@ -1898,9 +1898,9 @@ footer {
   font-size: 0.78rem;
 }
 .problem-list-v4 .problem-table article {
-  grid-template-columns: 10rem minmax(0, 1fr) 8rem auto;
-  min-height: 5rem;
-  padding-block: var(--space-5);
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto auto;
+  min-height: 2.15rem;
+  padding-block: 0.2rem;
 }
 .evaluation-list {
   display: grid;
@@ -2192,7 +2192,7 @@ footer {
     position: static;
   }
   .problem-list-v4 .problem-table article {
-    grid-template-columns: 8rem minmax(0, 1fr) auto;
+    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
   }
   .evaluation-list-header,
   .evaluation-row {
@@ -2334,7 +2334,7 @@ footer {
 }
 .problem-list-modern {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.3rem;
   overflow: visible;
   border: 0;
   background: transparent;
@@ -2359,34 +2359,34 @@ footer {
   text-decoration: none;
 }
 .problem-list-modern article {
-  grid-template-columns: minmax(6rem, 0.16fr) minmax(0, 1fr) auto auto;
-  min-height: 3.35rem;
-  padding: 0.65rem 1rem;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto auto;
+  min-height: 2.15rem;
+  padding: 0.2rem 0.7rem;
   align-items: center;
 }
 .problem-list-modern .problem-id {
   color: var(--accent-dark);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 1.05rem;
+  font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: 0;
 }
 .problem-list-modern h2 {
   margin: 0;
-  font-size: 0.98rem;
-  line-height: 1.25;
+  font-size: 0.92rem;
+  line-height: 1.15;
 }
 .problem-main-line {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.45rem;
   min-width: 0;
   flex-wrap: wrap;
 }
 .problem-list-modern .tag-row {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.2rem;
   margin-top: 0;
   flex-wrap: wrap;
 }
@@ -2395,13 +2395,16 @@ footer {
   border-radius: 999px;
   background: #f5f9fa;
   color: #536871;
-  font-size: 0.68rem;
+  padding: 0.08rem 0.28rem;
+  font-size: 0.64rem;
+  line-height: 1.1;
 }
 .problem-list-modern .problem-difficulty-chip {
   border-color: #d6e3d9;
   background: #f1f7f2;
   color: #44634c;
-  font-size: 0.74rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.68rem;
 }
 @media (max-width: 560px) {
   .breadcrumbs {
@@ -2410,7 +2413,7 @@ footer {
   }
   .problem-list-modern article {
     grid-template-columns: 1fr auto;
-    padding: 0.7rem 0.8rem;
+    padding: 0.35rem 0.6rem;
   }
   .problem-list-modern .problem-id {
     grid-column: 1 / -1;

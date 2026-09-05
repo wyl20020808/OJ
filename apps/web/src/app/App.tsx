@@ -1147,9 +1147,9 @@ function ProblemList({
               <article className="problem-row" role="listitem">
                 <span
                   className="problem-id"
-                  aria-label={`题目编号 ${p.slug || p.id}`}
+                  aria-label={`题目编号 ${p.publicId ?? '编号不可用'}`}
                 >
-                  {p.slug || p.id}
+                  {p.publicId ?? '编号不可用'}
                 </span>
                 <div className="problem-title-cell">
                   <div className="problem-main-line">
@@ -1569,7 +1569,7 @@ function ProblemDetail({
     <article className="problem-detail-v4">
       <div className="problem-main">
         <header className="problem-heading">
-          <span className="problem-id">{problem.slug || problem.id}</span>
+          <span className="problem-id">{problem.publicId ?? '编号不可用'}</span>
           <h1>{problem.title}</h1>
           <div className="problem-header-actions" aria-label="题目操作">
             <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
