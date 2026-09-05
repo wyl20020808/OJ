@@ -1951,23 +1951,47 @@ export function SubmissionDetail({
   useEffect(() => {
     if (
       !user ||
-      !selectedGeneration ||
       !evaluation ||
-      isTerminalStatus(evaluation.status)
+      selectedGeneration !== evaluation.evaluationGeneration ||
+      isTerminalStatus(evaluation.status) ||
+      typeof api.submissionEvaluationStreamUrl !== 'function' ||
+      typeof EventSource === 'undefined'
     )
       return;
-    const timer = window.setInterval(() => {
-      void api
-        .submissionEvaluation(id, selectedGeneration)
-        .then((response) => {
-          setEvaluation((current) =>
-            mergeEvaluation(current, response.evaluation),
-          );
-        })
-        .catch(() => undefined);
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [api, id, selectedGeneration, user, evaluation?.status]);
+    const stream = new EventSource(
+      api.submissionEvaluationStreamUrl(id, selectedGeneration),
+      { withCredentials: true },
+    );
+    const applyEvent = (message: MessageEvent<string>) => {
+      try {
+        const event = JSON.parse(message.data) as {
+          status?: SubmissionEvaluation['status'];
+          verdict?: SubmissionEvaluation['verdict'];
+          detail?: SubmissionEvaluationDetail;
+          completedAt?: string;
+        };
+        setEvaluation((current) => {
+          if (!current) return current;
+          const incoming = {
+            ...current,
+            ...(event.status ? { status: event.status } : {}),
+            ...(event.verdict ? { verdict: event.verdict } : {}),
+            ...(event.detail ? { detail: event.detail } : {}),
+            ...(event.completedAt ? { completedAt: event.completedAt } : {}),
+          };
+          return mergeEvaluation(current, incoming);
+        });
+        if (event.status && isTerminalStatus(event.status)) stream.close();
+      } catch {
+        /* Ignore malformed deltas; snapshot remains authoritative. */
+      }
+    };
+    stream.addEventListener('evaluation.updated', applyEvent);
+    stream.addEventListener('testcase.updated', applyEvent);
+    stream.addEventListener('evaluation.terminal', applyEvent);
+    stream.addEventListener('replay-gap', () => load());
+    return () => stream.close();
+  }, [api, evaluation?.evaluationGeneration, id, selectedGeneration, user]);
   if (!user)
     return (
       <State
