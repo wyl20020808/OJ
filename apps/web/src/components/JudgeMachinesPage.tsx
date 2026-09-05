@@ -31,6 +31,34 @@ const sample = (nodeId: string): JudgeNode => ({
   controlVersion: 1,
 });
 const stateTone = (s: string) => s.toLowerCase();
+const stateLabels: Record<string, string> = {
+  ONLINE: '在线',
+  BUSY: '忙碌',
+  DRAINING: '排空中',
+  OFFLINE: '离线',
+  UNHEALTHY: '异常',
+};
+const actionLabels: Record<JudgeAction, string> = {
+  drain: '排空任务',
+  offline: '下线',
+  enable: '启用',
+  start: '启动',
+  stop: '停止',
+  restart: '重启',
+};
+const historyLabels = {
+  assignments: '任务分配',
+  jobs: '评测任务',
+  failures: '失败记录',
+} as const;
+export const displayJudgeNodeState = (state: string) =>
+  stateLabels[state] ?? '未知';
+const displayPoolMode = (mode: JudgePoolPolicy['mode'] | undefined) =>
+  mode === 'MANUAL' ? '手动' : mode === 'AUTOMATIC' ? '自动' : '不可用';
+const actionError = (error: unknown, fallback: string) =>
+  error instanceof ApiError
+    ? `${fallback}：${error.code}（HTTP ${error.status}，请求 ID ${error.requestId}）`
+    : fallback;
 function ErrorState({
   error,
   onRetry,
@@ -38,25 +66,33 @@ function ErrorState({
   error: unknown;
   onRetry: () => void;
 }) {
-  const e = error as ApiError;
-  const unavailable = e?.status === 502 || e?.status === 504;
+  const e = error instanceof ApiError ? error : null;
+  const unavailable =
+    e?.status === 502 || e?.status === 503 || e?.status === 504;
   const forbidden = e?.status === 401 || e?.status === 403;
   return (
     <div className="judge-state" role="alert">
       <strong>
         {forbidden
-          ? '无权访问 Judge Machines'
+          ? '无权访问 Judge 节点管理'
           : unavailable
             ? 'Judge Service 暂不可用'
-            : 'Judge Machines 加载失败'}
+            : 'Judge 节点管理加载失败'}
       </strong>
       <p>
         {forbidden
           ? '需要 judge.view 权限。'
           : unavailable
-            ? 'Product Backend 当前无法取得 Judge 状态，请稍后重试。'
-            : (e?.message ?? '网络错误或请求超时。')}
+            ? 'Product 后端当前无法取得 Judge 状态，请稍后重试。'
+            : '请求未完成，请稍后重试。'}
       </p>
+      {e ? (
+        <small>
+          {e.code} · HTTP {e.status} · 请求 ID {e.requestId}
+        </small>
+      ) : error instanceof Error ? (
+        <small>技术详情：{error.message}</small>
+      ) : null}
       <button type="button" onClick={onRetry}>
         重试
       </button>
@@ -87,11 +123,12 @@ function NodeCard({
       <button className="node-main" type="button" onClick={onOpen}>
         <span className="node-id">{node.nodeId}</span>
         <span className={`state state-${stateTone(node.observedState)}`}>
-          {node.observedState}
+          {displayJudgeNodeState(node.observedState)}
         </span>
         <span className="node-meta">
-          期望 {node.desiredState} · {node.activeJobs}/{node.maxConcurrentJobs}{' '}
-          jobs · 心跳 {Math.round(node.heartbeatAgeMs / 1000)}s
+          期望 {displayJudgeNodeState(node.desiredState)} · {node.activeJobs}/
+          {node.maxConcurrentJobs} 个任务 · 心跳{' '}
+          {Math.round(node.heartbeatAgeMs / 1000)} 秒
         </span>
       </button>
       <div className="node-actions">
@@ -105,7 +142,7 @@ function NodeCard({
               className="secondary"
               onClick={() => onAction('drain')}
             >
-              Drain
+              排空任务
             </button>
             <button
               type="button"
@@ -116,7 +153,7 @@ function NodeCard({
                 )
               }
             >
-              {node.observedState === 'OFFLINE' ? 'Enable' : 'Offline'}
+              {node.observedState === 'OFFLINE' ? '启用' : '下线'}
             </button>
           </>
         )}
@@ -169,24 +206,24 @@ function Detail({
       </button>
       <div className="detail-heading">
         <div>
-          <p className="eyebrow">Judge node</p>
+          <p className="eyebrow">Judge 节点</p>
           <h1>{node.nodeId}</h1>
           <p className="muted">
-            incarnation <code>{node.incarnation}</code> · controlVersion{' '}
-            {node.controlVersion}
+            实例 incarnation <code>{node.incarnation}</code> · 控制版本{' '}
+            controlVersion {node.controlVersion}
           </p>
         </div>
         <div className="node-actions">
           {canManage ? (
             <>
               <button type="button" onClick={() => onAction('drain')}>
-                Drain
+                排空任务
               </button>
               <button type="button" onClick={() => onAction('offline')}>
-                Offline
+                下线
               </button>
               <button type="button" onClick={() => onAction('enable')}>
-                Enable
+                启用
               </button>
             </>
           ) : (
@@ -194,20 +231,27 @@ function Detail({
           )}
           <div
             className="unavailable-actions"
-            aria-label="Host Agent lifecycle"
+            role="group"
+            aria-label="Host Agent 生命周期"
           >
             {(['start', 'stop', 'restart'] as const).map((action) => (
               <button
                 key={action}
                 type="button"
                 disabled={!canManage || !hostAvailable}
-                title={!hostAvailable ? 'HOST_AGENT_NOT_AVAILABLE' : undefined}
+                title={
+                  !hostAvailable
+                    ? 'Host Agent 不可用（HOST_AGENT_NOT_AVAILABLE）'
+                    : undefined
+                }
                 onClick={() => onAction(action)}
               >
-                {action[0]!.toUpperCase() + action.slice(1)}
+                {actionLabels[action]}
               </button>
             ))}
-            {!hostAvailable && <small>HOST_AGENT_NOT_AVAILABLE</small>}
+            {!hostAvailable && (
+              <small>Host Agent 不可用（HOST_AGENT_NOT_AVAILABLE）</small>
+            )}
           </div>
         </div>
       </div>
@@ -217,52 +261,52 @@ function Detail({
           <dl className="judge-dl">
             <div>
               <dt>期望状态</dt>
-              <dd>{node.desiredState}</dd>
+              <dd>{displayJudgeNodeState(node.desiredState)}</dd>
             </div>
             <div>
               <dt>观测状态</dt>
-              <dd>{node.observedState}</dd>
+              <dd>{displayJudgeNodeState(node.observedState)}</dd>
             </div>
             <div>
               <dt>容量</dt>
               <dd>
-                {node.activeJobs}/{node.maxConcurrentJobs} active ·{' '}
-                {node.availableCapacity} available
+                {node.activeJobs}/{node.maxConcurrentJobs} 活跃 ·{' '}
+                {node.availableCapacity} 可用
               </dd>
             </div>
             <div>
               <dt>最后心跳</dt>
               <dd>
                 {new Date(node.lastHeartbeatAt).toLocaleString()} (
-                {Math.round(node.heartbeatAgeMs / 1000)}s ago)
+                {Math.round(node.heartbeatAgeMs / 1000)} 秒前)
               </dd>
             </div>
             <div>
-              <dt>runtime</dt>
+              <dt>运行版本</dt>
               <dd>{node.runtimeVersion}</dd>
             </div>
           </dl>
         </div>
         <div>
-          <h2>Capabilities</h2>
+          <h2>能力</h2>
           <p>
-            <b>Languages</b> {node.capabilities.languageProfiles.join(', ')}
+            <b>语言</b> {node.capabilities.languageProfiles.join(', ')}
           </p>
           <p>
-            <b>Checkers</b> {node.capabilities.checkers.join(', ')}
+            <b>检查器</b> {node.capabilities.checkers.join(', ')}
           </p>
           <p>
-            <b>Modes</b> {node.capabilities.executionModes.join(', ')}
+            <b>执行模式</b> {node.capabilities.executionModes.join(', ')}
           </p>
           <p>
-            <b>Sandbox</b> {node.capabilities.sandboxContractVersion}
+            <b>Sandbox 合约</b> {node.capabilities.sandboxContractVersion}
           </p>
         </div>
       </div>
       <div className="history-grid">
         {(['assignments', 'jobs', 'failures'] as const).map((key) => (
           <div key={key}>
-            <h2>{key}</h2>
+            <h2>{historyLabels[key]}</h2>
             {historyError && !history[key] ? (
               <p className="muted">该历史暂不可用</p>
             ) : history[key]?.length ? (
@@ -271,7 +315,7 @@ function Detail({
                   <li key={i}>
                     <code>
                       {String(
-                        item.id ?? item.assignmentId ?? item.jobId ?? 'record',
+                        item.id ?? item.assignmentId ?? item.jobId ?? '记录',
                       )}
                     </code>
                   </li>
@@ -382,13 +426,13 @@ export function JudgeMachinesPage({
   ) => {
     if (!target) return;
     const reason = window.prompt(
-      `确认 ${a} ${target.nodeId}，请输入原因`,
-      'maintenance',
+      `确认${actionLabels[a]} ${target.nodeId}，请输入原因`,
+      '例行维护',
     );
     if (!reason) return;
     try {
       if (fixture) {
-        setNotice(`已提交 ${a}（fixture contract only）`);
+        setNotice(`已提交${actionLabels[a]}（仅测试合约）`);
         return;
       }
       if (['start', 'stop', 'restart'].includes(a)) {
@@ -403,7 +447,7 @@ export function JudgeMachinesPage({
             idempotencyKey: crypto.randomUUID(),
           },
         );
-        setNotice(`操作已提交：${a}`);
+        setNotice(`操作已提交：${actionLabels[a]}`);
         return;
       }
       const result = await client.mutate(
@@ -422,12 +466,15 @@ export function JudgeMachinesPage({
       if (e instanceof ApiError && e.status === 409) {
         setStale(true);
         setNotice('节点状态已变化，已阻止自动重试。请刷新并重新确认。');
-      } else setNotice(e instanceof Error ? e.message : '操作失败');
+      } else setNotice(actionError(e, '操作失败，请稍后重试'));
     }
   };
   if (loading)
     return (
       <section className="judge-page">
+        <span className="sr-only" role="status">
+          正在加载 Judge 节点…
+        </span>
         <div className="judge-skeleton" />
         <div className="judge-skeleton" />
       </section>
@@ -464,10 +511,10 @@ export function JudgeMachinesPage({
     <section className="judge-page">
       <header className="judge-page-heading">
         <div>
-          <p className="eyebrow">Administration / Judge</p>
-          <h1>Judge Machines</h1>
+          <p className="eyebrow">管理 / Judge</p>
+          <h1>Judge 节点管理</h1>
           <p className="muted">
-            Product Backend snapshot ·{' '}
+            Product 后端快照 ·{' '}
             {summary ? new Date(summary.generatedAt).toLocaleString() : '—'}
           </p>
         </div>
@@ -483,23 +530,26 @@ export function JudgeMachinesPage({
       <div className="judge-metrics">
         {summary && (
           <>
-            <Metric label="Total" value={summary.totalNodes} />
-            <Metric label="Online" value={summary.onlineCount} />
-            <Metric label="Busy" value={summary.busyCount} />
-            <Metric label="Draining" value={summary.drainingCount} />
-            <Metric label="Offline" value={summary.offlineCount} />
+            <Metric label="节点总数" value={summary.totalNodes} />
+            <Metric label="在线" value={summary.onlineCount} />
+            <Metric label="忙碌" value={summary.busyCount} />
+            <Metric label="排空中" value={summary.drainingCount} />
+            <Metric label="离线" value={summary.offlineCount} />
+            <Metric label="异常" value={summary.unhealthyCount} />
+            <Metric label="已过期" value={summary.staleNodeCount} />
             <Metric
-              label="Active / Capacity"
+              label="活跃任务 / 总容量"
               value={`${summary.activeJobs} / ${summary.totalCapacity}`}
             />
-            <Metric label="Schedulable" value={summary.schedulableCapacity} />
+            <Metric label="可调度容量" value={summary.schedulableCapacity} />
           </>
         )}
       </div>
       <div className="judge-toolbar pool-controls">
-        <strong>Pool mode: {policy?.mode ?? 'UNAVAILABLE'}</strong>
+        <strong>节点池模式：{displayPoolMode(policy?.mode)}</strong>
         <span className="muted">
-          Host Agent: {hostAvailable ? 'available' : 'HOST_AGENT_NOT_AVAILABLE'}
+          Host Agent：
+          {hostAvailable ? '可用' : '不可用（HOST_AGENT_NOT_AVAILABLE）'}
         </span>
         {canManage && policy && (
           <button
@@ -515,14 +565,13 @@ export function JudgeMachinesPage({
                 })
                 .then((next) => {
                   setPolicy(next);
-                  setNotice(`模式已切换为 ${next.mode}`);
+                  setNotice(`模式已切换为${displayPoolMode(next.mode)}`);
                 })
-                .catch((e) =>
-                  setNotice(e instanceof Error ? e.message : '模式切换失败'),
-                );
+                .catch((e) => setNotice(actionError(e, '模式切换失败')));
             }}
           >
-            切换到 {policy.mode === 'MANUAL' ? 'AUTOMATIC' : 'MANUAL'}
+            切换到
+            {displayPoolMode(policy.mode === 'MANUAL' ? 'AUTOMATIC' : 'MANUAL')}
           </button>
         )}
         {canManage && hostAvailable && (
@@ -541,12 +590,10 @@ export function JudgeMachinesPage({
                   setNotice('节点添加已提交');
                   void load();
                 })
-                .catch((e) =>
-                  setNotice(e instanceof Error ? e.message : '添加节点失败'),
-                );
+                .catch((e) => setNotice(actionError(e, '添加节点失败')));
             }}
           >
-            Add Node
+            添加节点
           </button>
         )}
       </div>
@@ -556,14 +603,14 @@ export function JudgeMachinesPage({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="nodeId / state / runtime"
+            placeholder="节点 ID / 状态 / 运行版本"
           />
         </label>
       </div>
       {filtered.length === 0 ? (
         <div className="judge-state">
-          <strong>{nodes.length ? '没有匹配节点' : 'Registry 为空'}</strong>
-          <p>Product Backend 未返回可显示节点。</p>
+          <strong>{nodes.length ? '没有匹配节点' : '节点注册表为空'}</strong>
+          <p>Product 后端未返回可显示节点。</p>
         </div>
       ) : (
         <div className="judge-node-list">

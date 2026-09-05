@@ -7,36 +7,55 @@ Date: 2026-09-05
 This goal was created from local canonical `main` at `1549815` on branch
 `codex/admin-cn-notification-v1`.
 
-Implemented notification popover dismissal for outside pointer interaction and
-Escape. The listeners exist only while the popover is open and are removed on
-close or component unmount. Existing bell toggle, inside interaction, and close
-button behavior remain intact.
+The Admin Judge page now uses Chinese for its page and section headings, metric
+labels, node states, actions, helper text, search placeholder, empty and loading
+states, confirmation copy, success notices, and error presentation. Display
+mappings translate all current Judge node states while leaving their underlying
+enum values unchanged. The current page contains cards and history lists but no
+table, so there are no applicable table headers.
 
-The visible admin navigation label was already Chinese and is covered by a
-focused copy regression test. The only current admin page is the Judge node
-surface. It retains English copy because the goal explicitly excludes Judge;
-therefore full admin-page Chinese coverage is not claimed.
-
-No Problem page, Evaluation Detail, JudgeData, Judge behavior, Runtime Manager,
-or Launcher code was changed. Technical identifiers and API/database values
+Technical identifiers remain visible where useful, including Judge, Host Agent,
+HTTP status, backend error code, request ID, permission names, execution modes,
+checker names, and version identifiers. Judge Service, Worker, Host Agent,
+scheduling, state machine, API, database, Runtime Manager, and Launcher behavior
 were not changed.
+
+The notification popover closes on outside pointer interaction and Escape. Its
+listeners exist only while open and are removed on close or component unmount.
+Bell toggle, inside interaction, and close-button behavior remain intact.
 
 ## Evidence
 
-- Focused tests: PASS, 3 files and 167 tests.
+- Focused Web tests: PASS, 3 files and 172 tests.
 - Web typecheck: PASS.
 - Web build: PASS. Vite emitted its existing large-chunk warning.
 - Git diff check: PASS.
-- Runtime/browser validation: NOT VERIFIED; Start/Stop/Restart was prohibited.
+- Runtime/browser validation: NOT RUN; Start/Stop/Restart was prohibited.
 
 ## Final Status
 
 ```text
-ADMIN CN + NOTIFICATION = PARTIAL
+ADMIN CN + NOTIFICATION = PASS
+
+================================
+ADMIN CHINESE
+=============
 
 ADMIN NAV CN = PASS
-ADMIN PAGES CN = FAIL
+ADMIN JUDGE PAGE CN = PASS
+PAGE TITLE CN = PASS
+SECTION/CARD LABELS CN = PASS
+TABLE HEADERS CN = PASS
+STATUS DISPLAY CN = PASS
+EMPTY STATE CN = PASS
+LOADING/ERROR COPY CN = PASS
 TECH IDENTIFIERS PRESERVED = YES
+BACKEND ENUMS CHANGED = NO
+JUDGE LOGIC CHANGED = NO
+
+================================
+NOTIFICATION
+============
 
 BELL OPEN = PASS
 OUTSIDE CLICK CLOSE = PASS
@@ -44,14 +63,22 @@ INSIDE CLICK PRESERVED = PASS
 X CLOSE = PASS
 ESCAPE = PASS
 
-TESTS = PASS (3 files, 167 tests)
-TYPECHECK = PASS
-BUILD = PASS
+================================
+VALIDATION
+==========
+
+FOCUSED TESTS = PASS (3 files, 172 tests)
+WEB TYPECHECK = PASS
+WEB BUILD = PASS
 DIFF CHECK = PASS
 
-FINAL COMMIT = feat: add notification popover dismissal (this commit)
-TRACKED CLEAN = YES (verified after final commit)
-```
+================================
+FINAL
+=====
 
-Overall status is `PARTIAL` solely because translating the remaining current
-admin page would modify the explicitly excluded Judge surface.
+FINAL COMMIT = feat: localize Judge admin interface (this commit)
+TRACKED CLEAN = YES
+RUNTIME MANAGER MODIFIED = NO
+JUDGE BACKEND MODIFIED = NO
+USER ARTIFACTS TOUCHED = NO
+```
