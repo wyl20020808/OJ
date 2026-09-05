@@ -5,3 +5,4 @@ export * from './service.js';
 export * from './routes.js';
 export * from './zip.js';
 export * from './limits.js';
+export * from './artifact.js';

@@ -1,5 +1,10 @@
 # OJPlatform Project Status
 
+JudgeData Artifact Pipeline V1: IN PROGRESS. ADR 0006 is PROPOSED for streaming
+upload, immutable object references, bounded Worker/Supervisor data transport,
+and durable dispatch recovery. No 100 MiB runtime PASS is claimed. See
+`reports/OJPLATFORM_JUDGEDATA_ARTIFACT_PIPELINE_V1_REPORT.md`.
+
 V3 UI Final Integration V1: PASS. Problem Page UX V3, Evaluation Detail UX V3,
 and Admin Chinese + Notification V1 are integrated with their required
 traditional submission, normal-flow Problem information card, live Evaluation

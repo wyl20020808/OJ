@@ -94,6 +94,7 @@ $Config = @{
   WebPort = 5173; ApiPort = 3010; JudgeServicePort = 3100; HostAgentPort = 3180; SupervisorPort = 19092
   ComposeProjectName = 'ojplatform-local'
   WslDistro = 'Ubuntu-24.04'; SupervisorLinuxBinary = '/tmp/ojplatform-sandbox/ojplatform-supervisor'; SupervisorExecutionSetContractVersion = '2C.4'
+  SupervisorArtifactContractVersion = 'artifact-execution-v1'
   SupervisorSystemdUnit = 'ojplatform-local-supervisor.service'
   SupervisorProbeLinuxPath = '/opt/ojplatform/bin/trusted-probe'; SupervisorSandboxRoot = '/tmp/ojplatform-sandbox'
   SupervisorRuncBinary = 'runc'; CompilerRootfsLinuxPath = '/opt/ojplatform/compiler-rootfs/cpp20-gcc-13-v1'
@@ -328,8 +329,28 @@ function Test-OwnedProcess($record) {
   return Test-RecordedPortOwnership $record
 }
 function New-Token { return ([Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')) }
-function Get-Secrets([switch]$Create) { $file = Join-Path $RuntimeRoot 'secrets.json'; if (Test-Path $file) { return Convert-ToHashtable (Get-Content -Raw $file | ConvertFrom-Json) }; if (-not $Create) { return $null }; Ensure-RuntimeFolders; $secrets = @{ judgeServiceToken = New-Token; judgeNodeToken = New-Token; hostAgentToken = New-Token; judgeDatabasePassword = New-Token }; $secrets | ConvertTo-Json | Set-Content -Encoding UTF8 $file; return $secrets }
+function Get-Secrets([switch]$Create) {
+  $file = Join-Path $RuntimeRoot 'secrets.json'
+  $secrets = if (Test-Path $file) { Convert-ToHashtable (Get-Content -Raw $file | ConvertFrom-Json) } else { @{} }
+  if (-not $Create) { return $secrets }
+  Ensure-RuntimeFolders
+  foreach ($name in @('judgeServiceToken','judgeNodeToken','hostAgentToken','judgeDatabasePassword','judgeArtifactReadToken','supervisorArtifactToken')) {
+    if (-not $secrets[$name]) { $secrets[$name] = New-Token }
+  }
+  $secrets | ConvertTo-Json | Set-Content -Encoding UTF8 $file
+  return $secrets
+}
 function Start-Managed([string]$Name, [string]$FilePath, [string[]]$Arguments, [hashtable]$Environment, [int]$Port, [string]$HealthUrl, [string]$Signature, $state, [hashtable]$HealthHeaders = @{}) {
+  if ($Name -eq 'api') { $Environment.JUDGE_ARTIFACT_READ_TOKEN = $script:Secrets.judgeArtifactReadToken }
+  if ($Name -eq 'host-agent') {
+    $templates = @(ConvertFrom-Json -InputObject $Environment.JUDGE_HOST_AGENT_TEMPLATES_JSON)
+    foreach ($template in $templates) {
+      $template.env | Add-Member -NotePropertyName JUDGE_ARTIFACT_DATA_URL -NotePropertyValue $Config.ApiOrigin -Force
+      $template.env | Add-Member -NotePropertyName JUDGE_ARTIFACT_READ_TOKEN -NotePropertyValue $script:Secrets.judgeArtifactReadToken -Force
+      $template.env | Add-Member -NotePropertyName OJPLATFORM_SUPERVISOR_ARTIFACT_TOKEN -NotePropertyValue $script:Secrets.supervisorArtifactToken -Force
+    }
+    $Environment.JUDGE_HOST_AGENT_TEMPLATES_JSON = ConvertTo-Json -InputObject @($templates) -Depth 10 -Compress
+  }
   $old = $state.processes[$Name]; $healthy = if ($HealthUrl.EndsWith('/')) { Test-HttpOk $HealthUrl } else { [bool](Get-HttpJson $HealthUrl $HealthHeaders) }
   $ownership = Resolve-OJPlatformProcessOwnership $Name $Port $state
   if ($ownership.classification -eq 'PROVEN_OWNED' -and $healthy) {
@@ -528,12 +549,18 @@ function Resolve-CompilerRootfsIdentity {
 function Ensure-SupervisorBinaries {
   $sourceRoot = Join-Path $ProjectRoot 'apps/sandbox-supervisor'
   $sourceWsl = Convert-WindowsPathToWsl $sourceRoot
+  $sourceIdentity = Get-SourceIdentity $sourceRoot @('*.go','go.mod')
+  $metadataPath = Join-Path $RuntimeRoot 'supervisor-build.json'
+  $metadata = $null
+  if (Test-Path $metadataPath) { try { $metadata = Get-Content -Raw $metadataPath | ConvertFrom-Json } catch {} }
   foreach ($item in @(@{path=$Config.SupervisorLinuxBinary; package='./cmd/supervisor'; label='supervisor'}, @{path=$Config.SupervisorProbeLinuxPath; package='./cmd/trusted-probe'; label='trusted-probe'})) {
     if (Test-WslFile $item.path -Executable) {
       if ($item.label -eq 'supervisor') {
         $health = Get-HttpJson "$($Config.SupervisorOrigin)/v1/health"
         $protocol = if ($health -and $health.body) { [string]$health.body.execution_set_contract_version } else { '' }
-        if ($protocol -eq [string]$Config.SupervisorExecutionSetContractVersion) {
+        $artifactProtocol = if ($health -and $health.body) { [string]$health.body.artifact_execution_contract_version } else { '' }
+        $binaryHash = ((Invoke-Wsl @('-d',$Config.WslDistro,'--','sha256sum',$item.path) 10000).Trim() -split '\s+')[0]
+        if ($protocol -eq [string]$Config.SupervisorExecutionSetContractVersion -and $artifactProtocol -eq $Config.SupervisorArtifactContractVersion -and $metadata -and $metadata.sourceIdentity -eq $sourceIdentity -and $metadata.gitCommit -eq $ProductIdentity.commit -and $metadata.binaryHash -eq $binaryHash) {
           Write-Host "$($item.label) REUSE ($($item.path))"; continue
         }
         $observed = if ($protocol) { $protocol } else { 'unknown' }
@@ -550,6 +577,11 @@ function Ensure-SupervisorBinaries {
     Write-Host "$($item.label) BUILD (canonical source)"
     Invoke-Wsl @('-d',$Config.WslDistro,'--','bash','-lc',$command) 120000 | Out-Null
     if (-not (Test-WslFile $item.path -Executable)) { throw "$($item.label) build did not produce an executable at $($item.path)." }
+    if ($item.label -eq 'supervisor') {
+      $script:SupervisorRebuilt = $true
+      $binaryHash = ((Invoke-Wsl @('-d',$Config.WslDistro,'--','sha256sum',$item.path) 10000).Trim() -split '\s+')[0]
+      @{ sourceIdentity=$sourceIdentity; gitCommit=$ProductIdentity.commit; binaryHash=$binaryHash; artifactContract=$Config.SupervisorArtifactContractVersion } | ConvertTo-Json | Set-Content -Encoding UTF8 $metadataPath
+    }
   }
 }
 function Get-FileSha256([string]$Path) { if (-not (Test-Path $Path)) { return $null }; $sha=[Security.Cryptography.SHA256]::Create(); try { return (([BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($Path))) -replace '-','').ToLowerInvariant()) } finally { $sha.Dispose() } }
@@ -656,7 +688,7 @@ function Start-Supervisor($state) {
   Resolve-CompilerRootfsIdentity | Out-Null
   Repair-SupervisorUserManager
   $health = Get-HttpJson "$($Config.SupervisorOrigin)/v1/health"
-  if ($health -and [string]$health.body.execution_set_contract_version -eq [string]$Config.SupervisorExecutionSetContractVersion) { Write-Host 'supervisor REUSE (healthy)'; return }
+  if (-not $script:SupervisorRebuilt -and $health -and [string]$health.body.execution_set_contract_version -eq [string]$Config.SupervisorExecutionSetContractVersion -and [string]$health.body.artifact_execution_contract_version -eq $Config.SupervisorArtifactContractVersion) { Write-Host 'supervisor REUSE (healthy)'; return }
   if ($health) {
     Write-Host "supervisor RESTART (execution-set protocol $([string]$health.body.execution_set_contract_version), expected $($Config.SupervisorExecutionSetContractVersion))"
     Invoke-Wsl @('-d',$Config.WslDistro,'--user','oj-sandbox','--','env','XDG_RUNTIME_DIR=/run/user/1000','DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus','systemctl','--user','stop',$Config.SupervisorSystemdUnit) 30000 | Out-Null
@@ -665,7 +697,14 @@ function Start-Supervisor($state) {
   if (Test-TcpPort $Config.SupervisorPort) { throw "supervisor port $($Config.SupervisorPort) is occupied by an unknown process." }
   $env=@{XDG_RUNTIME_DIR='/run/user/1000';DBUS_SESSION_BUS_ADDRESS='unix:path=/run/user/1000/bus';OJPLATFORM_SANDBOX_ROOT=$Config.SupervisorSandboxRoot;OJPLATFORM_RUNC_BIN=$Config.SupervisorRuncBinary;OJPLATFORM_SANDBOX_PROBE_PATH=$Config.SupervisorProbeLinuxPath;OJPLATFORM_REAL_EXECUTION_ENABLED='true';OJPLATFORM_CPP20_ROOTFS=$Config.CompilerRootfsLinuxPath;OJPLATFORM_CPP20_ROOTFS_IDENTITY=$Config.CompilerRootfsIdentity}
   $envArgs=($env.Keys|ForEach-Object { "$_=$($env[$_] -replace '"','\\"')" }) -join ' '
-  $linux="exec systemd-run --user --unit=$($Config.SupervisorSystemdUnit) --collect --property=Delegate=yes --no-block -- /usr/bin/env $envArgs $($Config.SupervisorLinuxBinary) --listen 127.0.0.1:$($Config.SupervisorPort)"
+  $artifactEnvironment = Join-Path $RuntimeRoot 'supervisor-artifact.env'
+  if ($script:Secrets.supervisorArtifactToken -notmatch '^[a-fA-F0-9]+$') { throw 'Supervisor artifact token has an invalid local format.' }
+  [IO.File]::WriteAllText($artifactEnvironment, "OJPLATFORM_SUPERVISOR_ARTIFACT_TOKEN=$($script:Secrets.supervisorArtifactToken)`n", [Text.UTF8Encoding]::new($false))
+  $artifactEnvironmentWsl = Convert-WindowsPathToWsl $artifactEnvironment
+  $linuxEnvironment = '/home/oj-sandbox/.config/ojplatform/supervisor-artifact.env'
+  Invoke-Wsl @('-d',$Config.WslDistro,'--user','oj-sandbox','--','mkdir','-p','/home/oj-sandbox/.config/ojplatform') 10000 | Out-Null
+  Invoke-Wsl @('-d',$Config.WslDistro,'--user','oj-sandbox','--','install','-m','600',$artifactEnvironmentWsl,$linuxEnvironment) 10000 | Out-Null
+  $linux="exec systemd-run --user --unit=$($Config.SupervisorSystemdUnit) --collect --property=Delegate=yes --property=EnvironmentFile=$linuxEnvironment --no-block -- /usr/bin/env $envArgs $($Config.SupervisorLinuxBinary) --listen 127.0.0.1:$($Config.SupervisorPort)"
   $started=Get-Date
   Invoke-Wsl @('-d',$Config.WslDistro,'--user','oj-sandbox','--','bash','-lc',$linux) 15000 | Out-Null
   $state.processes['supervisor'] = @{ pid = 0; port = $Config.SupervisorPort; health = "$($Config.SupervisorOrigin)/v1/health"; startedAt = (Get-Date).ToUniversalTime().ToString('o'); command = $linux; cwd = $ProjectRoot; sourceRoot=$ProductIdentity.root; branch=$ProductIdentity.branch; gitCommit=$ProductIdentity.commit; pluginRoot=$PluginIdentity.root; pluginBranch=$PluginIdentity.branch; pluginCommit=$PluginIdentity.commit; signature = $Config.SupervisorLinuxBinary; log = (Join-Path $LogRoot 'supervisor.log'); errorLog = (Join-Path $LogRoot 'supervisor.error.log'); sourceAuthority = 'OJPlatform-Local-Runtime-Manager-V1-systemd-user' }
@@ -675,7 +714,7 @@ function Start-Supervisor($state) {
 }
 function Start-HostAgent($state) { $template=@{templateId='cpp20-gcc-13-v1';displayName='Local C++20 GCC 13 (trusted)';executable=$Config.WorkerBinary;args=@();env=@{REDIS_URL=$Config.RedisUrl;QUEUE_PREFIX=$Config.JudgeRedisPrefix;REAL_SUBMISSION_EXECUTION='true';JUDGE_SERVICE_URL=$Config.JudgeOrigin;JUDGE_NODE_TOKEN=$script:Secrets.judgeNodeToken;OJPLATFORM_SANDBOX_SUPERVISOR_URL=$Config.SupervisorOrigin;OJPLATFORM_SOURCE_ROOT=$ProductIdentity.root;OJPLATFORM_SOURCE_BRANCH=$ProductIdentity.branch;OJPLATFORM_SOURCE_COMMIT=$ProductIdentity.commit;OJPLATFORM_WORKER_BINARY_HASH=(Get-FileSha256 $Config.WorkerBinary);MAX_CONCURRENCY=[string]$Config.WorkerMaxConcurrency;HEALTH_ADDR="127.0.0.1:$($Config.WorkerHealthPort)"};maxConcurrentJobs=[int]$Config.WorkerMaxConcurrency;cpuUnits=[double]$Config.HostCpuUnits;memoryMb=[double]$Config.HostMemoryMb;enabled=$true}; $templatesJson = ConvertTo-Json -InputObject @($template) -Compress; $env=@{JUDGE_HOST_AGENT_TOKEN=$script:Secrets.hostAgentToken;JUDGE_HOST_AGENT_PORT=[string]$Config.HostAgentPort;JUDGE_HOST_AGENT_STATE_PATH=(Join-Path $RuntimeRoot 'host-agent-state.json');JUDGE_HOST_AGENT_TEMPLATES_JSON=$templatesJson;JUDGE_HOST_CPU_UNITS=[string]$Config.HostCpuUnits;JUDGE_HOST_MEMORY_MB=[string]$Config.HostMemoryMb}; Start-Managed 'host-agent' 'node' @('--import','tsx','apps/judge-host-agent/src/server.ts') $env $Config.HostAgentPort "$($Config.HostOrigin)/health" 'apps/judge-host-agent/src/server.ts' $state @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken} }
 function Start-JudgeService($state) { $env=@{JUDGE_SERVICE_HOST='127.0.0.1';JUDGE_SERVICE_PORT=[string]$Config.JudgeServicePort;JUDGE_DATABASE_URL=(Get-JudgeDatabaseUrl);JUDGE_REDIS_URL=$Config.RedisUrl;JUDGE_REDIS_PREFIX=$Config.JudgeRedisPrefix;JUDGE_SERVICE_TOKEN=$script:Secrets.judgeServiceToken;JUDGE_NODE_TOKEN=$script:Secrets.judgeNodeToken;JUDGE_HOST_AGENT_URL=$Config.HostOrigin;JUDGE_HOST_AGENT_TOKEN=$script:Secrets.hostAgentToken;JUDGE_AUTOSCALER_INTERVAL_MS='5000'}; Start-Managed 'judge-service' 'node' @('--import','tsx','apps/judge-service/src/server.ts') $env $Config.JudgeServicePort "$($Config.JudgeOrigin)/health" 'apps/judge-service/src/server.ts' $state }
-function Ensure-Worker($state) { $started=Get-Date; $headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken}; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers; if(-not $nodes){throw 'Judge Service node registry is unavailable.'}; $compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.heartbeatAgeMs -lt 15000}); if($compatible.Count -gt 0){Write-Host "worker REUSE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;return}; $candidate=@($nodes.body.items|Where-Object{$_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.desiredState -ne 'ONLINE'}|Sort-Object heartbeatAgeMs|Select-Object -First 1); if($candidate){ try { $body=@{templateId='cpp20-gcc-13-v1'}|ConvertTo-Json; Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes/$([uri]::EscapeDataString($candidate.nodeId))/start" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -UseBasicParsing -TimeoutSec 15|Out-Null; Write-Host "worker START ($($candidate.nodeId))"; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers } catch { Write-Warning "Worker recovery start was rejected: $($_.Exception.Message)" } }; $compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.heartbeatAgeMs -lt 15000}); if($compatible.Count -gt 0){Write-Host "worker REUSE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;return}; $body=@{templateId='cpp20-gcc-13-v1';count=1}|ConvertTo-Json; Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -UseBasicParsing -TimeoutSec 10|Out-Null; $deadline=(Get-Date).AddSeconds(60); do{Start-Sleep -Milliseconds 500;$nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers;$compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.heartbeatAgeMs -lt 15000});if($compatible.Count -gt 0){Write-Host "worker ONLINE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;Save-State $state;return}}while((Get-Date)-lt $deadline);throw 'No healthy REAL_SANDBOXED_EXECUTION worker became ONLINE within 60 seconds.' }
+function Ensure-Worker($state) { $started=Get-Date; $headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken}; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers; if(-not $nodes){throw 'Judge Service node registry is unavailable.'}; $compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.capabilities.artifactContractVersion -eq $Config.SupervisorArtifactContractVersion -and $_.heartbeatAgeMs -lt 15000}); if($compatible.Count -gt 0){Write-Host "worker REUSE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;return}; $candidate=@($nodes.body.items|Where-Object{$_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.capabilities.artifactContractVersion -eq $Config.SupervisorArtifactContractVersion -and $_.desiredState -ne 'ONLINE'}|Sort-Object heartbeatAgeMs|Select-Object -First 1); if($candidate){ try { $body=@{templateId='cpp20-gcc-13-v1'}|ConvertTo-Json; Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes/$([uri]::EscapeDataString($candidate.nodeId))/start" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -UseBasicParsing -TimeoutSec 15|Out-Null; Write-Host "worker START ($($candidate.nodeId))"; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers } catch { Write-Warning "Worker recovery start was rejected: $($_.Exception.Message)" } }; $compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.capabilities.artifactContractVersion -eq $Config.SupervisorArtifactContractVersion -and $_.heartbeatAgeMs -lt 15000}); if($compatible.Count -gt 0){Write-Host "worker REUSE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;return}; $body=@{templateId='cpp20-gcc-13-v1';count=1}|ConvertTo-Json; Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -UseBasicParsing -TimeoutSec 10|Out-Null; $deadline=(Get-Date).AddSeconds(60); do{Start-Sleep -Milliseconds 500;$nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers;$compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.capabilities.artifactContractVersion -eq $Config.SupervisorArtifactContractVersion -and $_.heartbeatAgeMs -lt 15000});if($compatible.Count -gt 0){Write-Host "worker ONLINE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;Save-State $state;return}}while((Get-Date)-lt $deadline);throw 'No healthy REAL_SANDBOXED_EXECUTION worker became ONLINE within 60 seconds.' }
 function Start-Api($state) { $env=@{PORT=[string]$Config.ApiPort;HOST='127.0.0.1';OJPLATFORM_INFRA='true';REAL_SUBMISSION_EXECUTION='true';OJPLATFORM_CORS_ORIGINS=$Config.WebOrigin;DATABASE_URL=$Config.ProductDatabaseUrl;REDIS_URL=$Config.RedisUrl;S3_ENDPOINT=$Config.MinioEndpoint;S3_REGION='us-east-1';S3_ACCESS_KEY='ojplatform';S3_SECRET_KEY='ojplatform_dev_secret';S3_BUCKET='ojplatform-dev';JUDGE_SERVICE_URL=$Config.JudgeOrigin;JUDGE_SERVICE_TOKEN=$script:Secrets.judgeServiceToken;OJPLATFORM_SANDBOX_SUPERVISOR_URL=$Config.SupervisorOrigin};Start-Managed 'api' 'node' @('--import','tsx','apps/api/src/server.ts') $env $Config.ApiPort "$($Config.ApiOrigin)/health" 'apps/api/src/server.ts' $state }
 function Start-Web($state) { Start-Managed 'web' 'pnpm.cmd' @('--filter','@ojplatform/web','dev','--host','127.0.0.1','--port',[string]$Config.WebPort) @{OJPLATFORM_API_PORT=[string]$Config.ApiPort;OJPLATFORM_ONLINE_CODE_EDITOR_ROOT=$PluginIdentity.root;OJPLATFORM_PLUGIN_COMMIT=$PluginIdentity.commit} $Config.WebPort "$($Config.WebOrigin)/" '@ojplatform/web' $state }
 function Stop-WorkerThroughControlPlane($state) { if(-not(Get-HttpJson "$($Config.JudgeOrigin)/health")){return};$headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken};$nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers;foreach($node in @($nodes.body.items|Where-Object{$_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.desiredState -ne 'OFFLINE'})){try{Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes/$([uri]::EscapeDataString($node.nodeId))/stop" -Method Post -Headers $headers -ContentType 'application/json' -Body '{}' -UseBasicParsing -TimeoutSec 10|Out-Null}catch{Write-Warning "Worker $($node.nodeId) drain/stop was rejected: $($_.Exception.Message)"}} }

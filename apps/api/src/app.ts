@@ -56,6 +56,7 @@ import {
   MemoryByteStorage,
   S3ByteStorage,
   registerProblemJudgeDataRoutes,
+  registerJudgeArtifactDataRoutes,
 } from './modules/problem-judge-data/index.js';
 import {
   PostgresSubmissionRepository,
@@ -64,7 +65,7 @@ import {
   publicationFromJudgeJob,
   publicSubmissionEvaluation,
   JudgeServiceClient,
-  judgeServiceInput,
+  artifactJudgeServiceInput,
   productPublication,
   RedisEvaluationEventHub,
   RedisJudgeProgressBridge,
@@ -72,6 +73,10 @@ import {
   type Submission,
 } from './modules/submission/index.js';
 import type { JudgeProgressEvent } from '@ojplatform/judge-runtime';
+import {
+  SubmissionDispatcher,
+  SubmissionDispatchStore,
+} from './modules/submission/dispatch.js';
 import {
   registerCodeRunRoutes,
   codeRunResultFromJob,
@@ -436,6 +441,12 @@ export async function buildApp(options: AppOptions = {}) {
     });
     const judgeDataRepository = new PostgresJudgeDataRepository(database.pool);
     const judgeDataStorage = new S3ByteStorage(storage.client, storage.bucket);
+    await registerJudgeArtifactDataRoutes(
+      app,
+      judgeDataRepository,
+      judgeDataStorage,
+      process.env.JUDGE_ARTIFACT_READ_TOKEN,
+    );
     const judgeData = new ProblemJudgeDataService(
       judgeDataRepository,
       judgeDataStorage,
@@ -510,6 +521,35 @@ export async function buildApp(options: AppOptions = {}) {
       judgeDataRepository,
       judgeDataStorage,
     );
+    const submissionDispatcher = new SubmissionDispatcher(
+      new SubmissionDispatchStore(database.pool),
+      submissionRepository,
+      (submission) => submissionJudgeData.artifact(submission),
+      async (submission, artifact, requestId) => {
+        const input = realSubmissionExecution
+          ? artifactJudgeServiceInput(submission, artifact, requestId)
+          : judgeInputForSubmission(submission, false);
+        app.log.info(
+          {
+            requestId,
+            submissionId: submission.id,
+            artifactId: artifact.id,
+            evaluationGeneration: 1,
+            controlBytes: Buffer.byteLength(JSON.stringify(input)),
+          },
+          'judge dispatch request',
+        );
+        if (judgeService) return judgeService.submit(input);
+        const { job } = await judgeRepository.enqueue({
+          ...input,
+          submissionId: submission.id,
+          ownerUserId: submission.ownerUserId,
+        });
+        return { judgeJobId: job.id };
+      },
+      app.log,
+    );
+    app.addHook('onReady', async () => submissionDispatcher.start());
     const submissionPolicy = createSubmissionAuthorizationPolicy();
     const problemResolver: ProblemRevisionResolver = {
       getRevision: async (problemId, revisionId) => {
@@ -571,47 +611,8 @@ export async function buildApp(options: AppOptions = {}) {
         guardGuestAuthoring(guestAuthoringLimiter, context, 'submission'),
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
-      onCreated: async (submission) => {
-        const testcaseSet = await submissionJudgeData.manifest(submission);
-        if (judgeService) {
-          const job = await judgeService.submit(
-            judgeServiceInput(
-              submission,
-              `submission:${submission.id}:evaluation:1`,
-              realSubmissionExecution,
-              testcaseSet,
-            ),
-          );
-          await submissionRepository.beginEvaluation?.(
-            submission.id,
-            job.judgeJobId,
-            {
-              testcaseCount: testcaseSet.entries.length,
-              completedTestcaseCount: 0,
-              testcases: testcaseSet.entries.map((entry) => ({
-                ordinal: entry.index + 1,
-                status: 'WAITING' as const,
-              })),
-            },
-          );
-          return;
-        }
-        const { job } = await judgeRepository.enqueue(
-          judgeInputForSubmission(
-            submission,
-            realSubmissionExecution,
-            testcaseSet,
-          ),
-        );
-        await submissionRepository.beginEvaluation?.(submission.id, job.id, {
-          testcaseCount: testcaseSet.entries.length,
-          completedTestcaseCount: 0,
-          testcases: testcaseSet.entries.map((entry) => ({
-            ordinal: entry.index + 1,
-            status: 'WAITING' as const,
-          })),
-        });
-      },
+      onCreated: (submission) => submissionDispatcher.dispatch(submission),
+      retryDispatch: (submission) => submissionDispatcher.retry(submission),
       onRejudge: async (submission) => {
         const current = await submissionRepository.getEvaluation?.(
           submission.id,
@@ -622,10 +623,19 @@ export async function buildApp(options: AppOptions = {}) {
         )
           return;
         if (judgeService && current) {
-          const job = await judgeService.rejudge(
-            current.judgeJobId,
-            `submission:${submission.id}:evaluation:${current.evaluationGeneration + 1}`,
-          );
+          const generation = current.evaluationGeneration + 1;
+          const artifact = await submissionJudgeData.artifact(submission);
+          const job = await judgeService.submit({
+            ...(realSubmissionExecution
+              ? artifactJudgeServiceInput(
+                  submission,
+                  artifact,
+                  `rejudge:${submission.id}`,
+                )
+              : judgeInputForSubmission(submission, false)),
+            evaluationGeneration: generation,
+            idempotencyKey: `submission:${submission.id}:evaluation:${generation}`,
+          });
           await submissionRepository.startRejudge?.(
             submission.id,
             job.judgeJobId,
@@ -633,13 +643,17 @@ export async function buildApp(options: AppOptions = {}) {
           return;
         }
         const evaluationGeneration = (current?.evaluationGeneration ?? 0) + 1;
-        const testcaseSet = await submissionJudgeData.manifest(submission);
+        const artifact = await submissionJudgeData.artifact(submission);
         const { job } = await judgeRepository.enqueue({
-          ...judgeInputForSubmission(
-            submission,
-            realSubmissionExecution,
-            testcaseSet,
-          ),
+          ...(realSubmissionExecution
+            ? artifactJudgeServiceInput(
+                submission,
+                artifact,
+                `rejudge:${submission.id}`,
+              )
+            : judgeInputForSubmission(submission, false)),
+          submissionId: submission.id,
+          ownerUserId: submission.ownerUserId,
           evaluationGeneration,
           idempotencyKey: `submission:${submission.id}:evaluation:${evaluationGeneration}`,
         });
@@ -945,6 +959,7 @@ export async function buildApp(options: AppOptions = {}) {
         storage: () => checkStorage(storage),
       },
       close: async () => {
+        await submissionDispatcher.close();
         await sandboxRuntime.close();
         await database.pool.end();
         cache.disconnect();
@@ -1204,14 +1219,18 @@ export async function buildApp(options: AppOptions = {}) {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       onCreated: async (submission) => {
-        const testcaseSet = await submissionJudgeData.manifest(submission);
-        const { job } = await judgeRepository.enqueue(
-          judgeInputForSubmission(
-            submission,
-            realSubmissionExecution,
-            testcaseSet,
-          ),
-        );
+        const artifact = await submissionJudgeData.artifact(submission);
+        const { job } = await judgeRepository.enqueue({
+          ...(realSubmissionExecution
+            ? artifactJudgeServiceInput(
+                submission,
+                artifact,
+                `submission:${submission.id}`,
+              )
+            : judgeInputForSubmission(submission, false)),
+          submissionId: submission.id,
+          ownerUserId: submission.ownerUserId,
+        });
         await submissionRepository.beginEvaluation?.(submission.id, job.id);
       },
       onRejudge: async (submission) => {
@@ -1224,13 +1243,17 @@ export async function buildApp(options: AppOptions = {}) {
         )
           return;
         const evaluationGeneration = (current?.evaluationGeneration ?? 0) + 1;
-        const testcaseSet = await submissionJudgeData.manifest(submission);
+        const artifact = await submissionJudgeData.artifact(submission);
         const { job } = await judgeRepository.enqueue({
-          ...judgeInputForSubmission(
-            submission,
-            realSubmissionExecution,
-            testcaseSet,
-          ),
+          ...(realSubmissionExecution
+            ? artifactJudgeServiceInput(
+                submission,
+                artifact,
+                `rejudge:${submission.id}`,
+              )
+            : judgeInputForSubmission(submission, false)),
+          submissionId: submission.id,
+          ownerUserId: submission.ownerUserId,
           evaluationGeneration,
           idempotencyKey: `submission:${submission.id}:evaluation:${evaluationGeneration}`,
         });

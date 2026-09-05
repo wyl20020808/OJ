@@ -19,7 +19,7 @@ export class SubmissionService {
     private readonly judgeData?: SubmissionJudgeDataResolver,
     private readonly guardCreate?: (context: AuthContext) => Promise<void>,
   ) {}
-  async create(raw: unknown, context?: AuthContext) {
+  async create(raw: unknown, context?: AuthContext, requestId?: string) {
     if (!context) throw new Error('UNAUTHENTICATED');
     await this.guardCreate?.(context);
     const input = validateCreate(raw);
@@ -56,6 +56,7 @@ export class SubmissionService {
       testdataVersionRef,
       ...binding,
       ownerUserId: context.userId,
+      ...(requestId ? { requestId } : {}),
     });
   }
   async list(
@@ -80,7 +81,8 @@ export class SubmissionService {
   async listGlobal(query: GlobalSubmissionListQuery, context?: AuthContext) {
     if (query.cursor && !/^[A-Za-z0-9_-]+$/.test(query.cursor))
       throw new Error('VALIDATION_ERROR');
-    if (context &&
+    if (
+      context &&
       !(await (this.policy.canListGlobalSubmissions?.(context) ??
         this.policy.listOwnSubmissions(context)))
     )

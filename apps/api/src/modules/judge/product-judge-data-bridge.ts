@@ -8,6 +8,7 @@ import {
 import {
   JudgeDataError,
   sha256,
+  ensurePublishedArtifact,
   type ByteStorage,
   type JudgeDataRepository,
   type JudgeDataVersion,
@@ -51,6 +52,36 @@ export class ProductJudgeDataSubmissionBridge {
     private readonly versions: JudgeDataRepository,
     private readonly storage: ByteStorage,
   ) {}
+
+  async artifact(submission: BoundSubmission) {
+    if (!submission.judgeDataVersionId)
+      throw new JudgeDataError(
+        'JUDGE_DATA_BINDING_MISSING',
+        'Submission has no Judge Data binding',
+        409,
+      );
+    const version = await this.versions.getVersion(
+      submission.problemId,
+      submission.judgeDataVersionId,
+    );
+    if (!version || !same(submission, version))
+      throw new JudgeDataError(
+        'JUDGE_DATA_BINDING_MISMATCH',
+        'Submission Judge Data binding is invalid',
+        409,
+      );
+    if (
+      submission.languageId !== 'cpp20' ||
+      version.executionProfileId !== 'cpp20-gcc-13-v1' ||
+      !version.allowedLanguageProfiles.includes('cpp20-gcc-13-v1')
+    )
+      throw new JudgeDataError(
+        'UNSUPPORTED_LANGUAGE',
+        'Language unavailable for Judge Data',
+        409,
+      );
+    return ensurePublishedArtifact(this.versions, version);
+  }
 
   async bind(
     problemId: string,

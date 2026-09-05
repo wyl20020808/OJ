@@ -1,4 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
+import {
+  assertJudgeArtifact,
+  JUDGE_ARTIFACT_JOB_CONTRACT,
+  ARTIFACT_EXECUTION_CONTRACT,
+  type JudgeArtifactReference,
+} from './artifact.js';
 import type { Redis } from 'ioredis';
 import {
   JudgeJobConflictError,
@@ -17,6 +23,35 @@ import {
 const stamp = () => new Date().toISOString();
 const safeMode = 'SAFE_FIXTURE_QUALIFICATION' as const;
 const realMode = 'REAL_SANDBOXED_EXECUTION' as const;
+function validateArtifactJob(
+  job: JudgeJobCreateInput | Record<string, unknown>,
+) {
+  if (job.judgeArtifact === undefined && job.jobContract === undefined) return;
+  try {
+    assertJudgeArtifact(job.judgeArtifact);
+  } catch {
+    throw new JudgeJobPayloadError('Invalid artifact contract');
+  }
+  const artifact = job.judgeArtifact;
+  if (
+    job.jobContract !== JUDGE_ARTIFACT_JOB_CONTRACT ||
+    job.executionMode !== realMode ||
+    job.testcaseSet !== undefined ||
+    job.testcaseInput !== undefined ||
+    job.testcaseId !== undefined ||
+    job.testcaseInputSha256 !== undefined ||
+    job.executionProfileId !== undefined ||
+    artifact.manifest.problemId !== job.problemId ||
+    artifact.manifest.problemRevisionId !== job.problemRevisionId ||
+    artifact.manifest.testdataVersionId !== job.testdataVersionRef ||
+    !['RUN_ALL', 'STOP_ON_EXECUTION_BLOCKING_EVENT'].includes(
+      String(job.executionSetPolicy ?? 'RUN_ALL'),
+    ) ||
+    typeof job.requestId !== 'string' ||
+    !/^[A-Za-z0-9._:-]{1,96}$/.test(job.requestId)
+  )
+    throw new JudgeJobPayloadError('Invalid artifact job linkage');
+}
 const sha256 = (value: string) =>
   createHash('sha256').update(value, 'utf8').digest('hex');
 const sha256Bytes = (value: Uint8Array) =>
@@ -159,7 +194,7 @@ const validRawExecutionResult = (
   job: Record<string, unknown> | JudgeJob,
 ): value is RawExecutionResult => {
   if (!isRecord(value)) return false;
-  if (job.testcaseSet && isRecord(job.testcaseSet))
+  if ((job.testcaseSet && isRecord(job.testcaseSet)) || job.judgeArtifact)
     return validRawExecutionSetResult(value, job);
   const startedAt = Date.parse(String(value.started_at));
   const completedAt = Date.parse(String(value.completed_at));
@@ -239,8 +274,10 @@ const validRawExecutionSetResult = (
   value: Record<string, unknown>,
   job: Record<string, unknown> | JudgeJob,
 ): value is RawExecutionResult => {
-  if (!isRecord(job.testcaseSet)) return false;
-  const manifest = job.testcaseSet as unknown as TestcaseSetManifest;
+  const artifact = job.judgeArtifact as JudgeArtifactReference | undefined;
+  if (!artifact && !isRecord(job.testcaseSet)) return false;
+  const manifest =
+    artifact?.manifest ?? (job.testcaseSet as TestcaseSetManifest);
   const aggregate = value.aggregate_execution_set_record;
   if (!isRecord(aggregate)) return false;
   const read = (
@@ -335,7 +372,8 @@ const validRawExecutionSetResult = (
       const record = member.record;
       const identity = isRecord(record.identity) ? record.identity : undefined;
       return (
-        record.record_version === '2C.3' &&
+        record.record_version ===
+          (job.judgeArtifact ? ARTIFACT_EXECUTION_CONTRACT : '2C.3') &&
         verifyDigestRecord(record) &&
         isSha256(record.digest) &&
         identity !== undefined &&
@@ -390,7 +428,9 @@ const validRawExecutionSetResult = (
             );
           }));
   return (
-    value.protocol_version === '2C.4' &&
+    value.protocol_version ===
+      (artifact ? ARTIFACT_EXECUTION_CONTRACT : '2C.4') &&
+    (!artifact || value.judge_artifact_id === artifact.id) &&
     [
       'PIPELINE_COMPLETED',
       'PIPELINE_COMPILE_FAILED',
@@ -479,6 +519,7 @@ const validRawExecutionSetResult = (
   );
 };
 const normalize = (i: JudgeJobCreateInput): JudgeJob => {
+  validateArtifactJob(i);
   if (
     !i.submissionId ||
     !i.ownerUserId ||
@@ -520,6 +561,14 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
   const t = stamp();
   return {
     id: randomUUID(),
+    ...(i.judgeArtifact
+      ? {
+          jobContract: JUDGE_ARTIFACT_JOB_CONTRACT,
+          judgeArtifact: structuredClone(i.judgeArtifact),
+          requestId: i.requestId!,
+          executionSetPolicy: i.executionSetPolicy ?? 'RUN_ALL',
+        }
+      : {}),
     submissionId: i.submissionId,
     evaluationGeneration: i.evaluationGeneration ?? 1,
     idempotencyKey:
@@ -568,6 +617,7 @@ const normalize = (i: JudgeJobCreateInput): JudgeJob => {
 export function assertPayload(v: unknown): asserts v is JudgeJob {
   if (!v || typeof v !== 'object') throw new JudgeJobPayloadError();
   const j = v as Record<string, unknown>;
+  validateArtifactJob(j);
   if (j.executionMode === undefined) j.executionMode = safeMode;
   if (j.evaluationGeneration === undefined) j.evaluationGeneration = 1;
   const states = [
@@ -677,6 +727,36 @@ function lease(j: JudgeJob | undefined, t: string): asserts j is JudgeJob {
   )
     throw new JudgeJobConflictError();
 }
+function assertArtifactRetry(existing: JudgeJob, input: JudgeJobCreateInput) {
+  if (!existing.judgeArtifact && !input.judgeArtifact && !input.jobContract)
+    return;
+  const candidate = normalize(input);
+  const fields = [
+    'submissionId',
+    'evaluationGeneration',
+    'ownerUserId',
+    'problemId',
+    'problemRevisionId',
+    'testdataVersionRef',
+    'languageId',
+    'executionMode',
+    'languageProfileId',
+    'sourceSnapshotRef',
+    'sourceSha256',
+    'sourceBytes',
+    'controlledInputId',
+    'jobContract',
+    'judgeArtifact',
+    'executionSetPolicy',
+  ] as const;
+  if (
+    fields.some(
+      (field) => stableJson(existing[field]) !== stableJson(candidate[field]),
+    )
+  )
+    throw new JudgeJobConflictError('Conflicting artifact dispatch identity');
+}
+
 export class InMemoryJudgeJobRepository implements JudgeJobRepository {
   private jobs = new Map<string, JudgeJob>();
   private keys = new Map<string, string>();
@@ -699,18 +779,21 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
           i.idempotencyKey ??
           `submission:${i.submissionId}:evaluation:${generation}`,
         existing = this.keys.get(k);
-      if (existing)
-        return { job: { ...this.jobs.get(existing)! }, created: false };
+      if (existing) {
+        const job = this.jobs.get(existing)!;
+        assertArtifactRetry(job, i);
+        return { job: structuredClone(job), created: false };
+      }
       const j = normalize({ ...i, idempotencyKey: k });
       this.jobs.set(j.id, j);
       this.keys.set(k, j.id);
       this.keys.set(`submission:${j.submissionId}`, j.id);
-      return { job: { ...j }, created: true };
+      return { job: structuredClone(j), created: true };
     });
   }
   async getById(id: string) {
     const j = this.jobs.get(id);
-    return j ? { ...j } : undefined;
+    return j ? structuredClone(j) : undefined;
   }
   async getBySubmissionId(id: string) {
     const k = this.keys.get(`submission:${id}`);
@@ -741,7 +824,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
           updatedAt: stamp(),
         };
       this.jobs.set(j.id, leased);
-      return { job: { ...leased }, leaseToken: token };
+      return { job: structuredClone(leased), leaseToken: token };
     });
   }
   async claimById(id: string, worker: string, ms: number) {
@@ -768,13 +851,13 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
           updatedAt: stamp(),
         };
       this.jobs.set(id, leased);
-      return { job: { ...leased }, leaseToken: token };
+      return { job: structuredClone(leased), leaseToken: token };
     });
   }
   async complete(id: string, t: string, f: string) {
     return this.atomic(async () => {
       const j = this.jobs.get(id);
-      if (j?.status === 'SUCCEEDED_FAKE') return { ...j };
+      if (j?.status === 'SUCCEEDED_FAKE') return structuredClone(j);
       lease(j, t);
       if (j.executionMode !== safeMode) throw new JudgeJobConflictError();
       const done = clear({
@@ -785,7 +868,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         updatedAt: stamp(),
       });
       this.jobs.set(id, done);
-      return { ...done };
+      return structuredClone(done);
     });
   }
   async completeReal(id: string, t: string, result: RawExecutionResult) {
@@ -793,7 +876,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       const j = this.jobs.get(id);
       if (j?.status === 'COMPLETED') {
         if (j.rawResultDigest && j.rawResultDigest === rawDigest(result))
-          return { ...j };
+          return structuredClone(j);
         throw new JudgeJobConflictError('Conflicting duplicate real result');
       }
       lease(j, t);
@@ -802,14 +885,14 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       const done = clear({
         ...j,
         status: 'COMPLETED' as const,
-        rawExecutionResult: result,
+        rawExecutionResult: structuredClone(result),
         rawResultDigest: rawDigest(result),
         resultGeneration: j.resultGeneration ?? j.attempt,
         completedAt: stamp(),
         updatedAt: stamp(),
       });
       this.jobs.set(id, done);
-      return { ...done };
+      return structuredClone(done);
     });
   }
   async retry(id: string, t: string, reason: string) {
@@ -829,7 +912,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         updatedAt: stamp(),
       });
       this.jobs.set(id, x);
-      return { ...x };
+      return structuredClone(x);
     });
   }
   private async recoverUnsafe(at: Date) {
@@ -873,7 +956,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         updatedAt: stamp(),
       });
       this.jobs.set(id, x);
-      return { ...x };
+      return structuredClone(x);
     });
   }
   private cancelUnsafe(id: string, token?: string) {
@@ -884,7 +967,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         j.status,
       )
     )
-      return { ...j };
+      return structuredClone(j);
     if (token !== undefined) lease(j, token);
     const x = clear({
       ...j,
@@ -895,7 +978,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       updatedAt: stamp(),
     });
     this.jobs.set(id, x);
-    return { ...x };
+    return structuredClone(x);
   }
   async cancel(id: string) {
     return this.atomic(() => this.cancelUnsafe(id));
@@ -989,6 +1072,7 @@ export class RedisJudgeJobRepository implements JudgeJobRepository {
       if (existing) {
         const j = await this.read(existing);
         if (!j) throw new JudgeJobPayloadError('Broken idempotency index');
+        assertArtifactRetry(j, i);
         return { job: j, created: false };
       }
       const j = normalize(i);

@@ -35,6 +35,7 @@ export type SubmissionModuleContext = {
   ) => AuthContext | undefined | Promise<AuthContext | undefined>;
   projectJudge?: (submission: Submission) => Promise<Partial<Submission>>;
   onCreated?: (submission: Submission) => Promise<void> | void;
+  retryDispatch?: (submission: Submission) => Promise<void>;
   onRejudge?: (submission: Submission) => Promise<void> | void;
   evaluationHistory?: (
     submissionId: string,
@@ -99,6 +100,7 @@ export async function registerSubmissionModule(
     ),
   );
   app.post('/api/submissions', async (request, reply) => {
+    let createdSubmissionId: string | undefined;
     try {
       return reply.status(201).send(
         await project(
@@ -106,7 +108,9 @@ export async function registerSubmissionModule(
             const submission = await service.create(
               request.body,
               await auth(request),
+              request.id,
             );
+            createdSubmissionId = submission.id;
             await context.onCreated?.(submission);
             return submission;
           })(),
@@ -162,6 +166,9 @@ export async function registerSubmissionModule(
           e.status,
           e.code,
           e instanceof Error ? e.message : 'Judge Data unavailable',
+          createdSubmissionId
+            ? { submissionId: createdSubmissionId }
+            : undefined,
         );
       if (e instanceof Error && e.message === 'VALIDATION_ERROR')
         return error(
@@ -173,6 +180,44 @@ export async function registerSubmissionModule(
         );
       throw e;
     }
+  });
+  app.post('/api/submissions/:id/retry-dispatch', async (request, reply) => {
+    const contextAuth = await auth(request);
+    if (!contextAuth)
+      return error(
+        reply,
+        request,
+        401,
+        'UNAUTHENTICATED',
+        'Authentication required',
+      );
+    const submission = await repository.get(
+      (request.params as { id: string }).id,
+    );
+    if (!submission || submission.ownerUserId !== contextAuth.userId)
+      return error(reply, request, 404, 'NOT_FOUND', 'Submission not found');
+    if (!context.retryDispatch)
+      return error(
+        reply,
+        request,
+        503,
+        'JUDGE_DISPATCH_UNAVAILABLE',
+        'Dispatch unavailable',
+      );
+    await context.guardCreate?.(contextAuth);
+    try {
+      await context.retryDispatch(submission);
+    } catch (cause) {
+      const failure = cause as { code?: string; status?: number };
+      return error(
+        reply,
+        request,
+        failure.status ?? 503,
+        failure.code ?? 'JUDGE_DISPATCH_UNAVAILABLE',
+        'Dispatch retry failed',
+      );
+    }
+    return project((await repository.get(submission.id))!);
   });
   app.get('/api/submissions', async (request, reply) =>
     listRoute(service, request, reply, await auth(request), project),

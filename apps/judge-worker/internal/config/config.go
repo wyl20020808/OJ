@@ -26,6 +26,9 @@ type Config struct {
 	JudgeServiceURL         string
 	JudgeNodeToken          string
 	NodeIncarnation         string
+	ArtifactDataURL         string
+	ArtifactReadToken       string
+	SupervisorArtifactToken string
 }
 
 func loopbackHost(host string) bool {
@@ -102,7 +105,14 @@ func Load(env map[string]string) (Config, error) {
 			return Config{}, fmt.Errorf("Supervisor URL must be loopback")
 		}
 	}
-	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", "oj:judge:workers"), LivenessTimeoutMS: liveness, RealSubmissionExecution: realExecution, SupervisorURL: supervisorURL, JudgeServiceURL: judgeServiceURL, JudgeNodeToken: nodeToken, NodeIncarnation: incarnation}, nil
+	artifactURL, artifactToken, supervisorToken := get("JUDGE_ARTIFACT_DATA_URL", ""), get("JUDGE_ARTIFACT_READ_TOKEN", ""), get("OJPLATFORM_SUPERVISOR_ARTIFACT_TOKEN", "")
+	if artifactURL != "" || artifactToken != "" || supervisorToken != "" {
+		u, err := url.Parse(artifactURL)
+		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "https" && (u.Scheme != "http" || !loopbackHost(u.Hostname()))) || len(artifactToken) < 16 || len(supervisorToken) < 16 || !realExecution {
+			return Config{}, fmt.Errorf("invalid artifact data plane configuration")
+		}
+	}
+	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", "oj:judge:workers"), LivenessTimeoutMS: liveness, RealSubmissionExecution: realExecution, SupervisorURL: supervisorURL, JudgeServiceURL: judgeServiceURL, JudgeNodeToken: nodeToken, NodeIncarnation: incarnation, ArtifactDataURL: artifactURL, ArtifactReadToken: artifactToken, SupervisorArtifactToken: supervisorToken}, nil
 }
 
 func FromEnv() (Config, error) {

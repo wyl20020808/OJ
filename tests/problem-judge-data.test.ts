@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
+import { Readable } from 'node:stream';
 import {
   builtinCheckerConfigSha256,
   BUILTIN_CHECKER_VERSION,
@@ -553,8 +554,11 @@ describe('problem judge data backend', () => {
     const app = Fastify();
     await registerProblemJudgeDataRoutes(app, {
       service: {
-        addZip: async (_problemId: string, bytes: Uint8Array) => {
-          received = bytes;
+        addZipStream: async (_problemId: string, stream: Readable) => {
+          expect(stream).toBeInstanceOf(Readable);
+          const chunks: Buffer[] = [];
+          for await (const chunk of stream) chunks.push(chunk as Buffer);
+          received = Buffer.concat(chunks);
           return { imported: 1, draft: {} };
         },
       } as never,

@@ -246,10 +246,12 @@ export function projectJudgeServiceResult(
     attemptGeneration: job.resultGeneration ?? job.attempt,
     languageId: job.languageId,
     executionMode: job.executionMode,
-    ...(job.testcaseSet
+    ...(job.testcaseSet || job.judgeArtifact
       ? {
-          testcaseSetId: job.testcaseSet.testcaseSetId,
-          manifestHash: job.testcaseSet.manifestHash,
+          testcaseSetId: (job.testcaseSet ?? job.judgeArtifact!.manifest)
+            .testcaseSetId,
+          manifestHash: (job.testcaseSet ?? job.judgeArtifact!.manifest)
+            .manifestHash,
         }
       : {}),
     ...(verdict ? { verdict } : {}),

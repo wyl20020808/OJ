@@ -5,6 +5,11 @@ import {
   type S3Client,
 } from '@aws-sdk/client-s3';
 import { id, sha256, JudgeDataError, type ObjectRef } from './model.js';
+import { createReadStream } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { Readable } from 'node:stream';
+import type { FileContent } from './streaming-zip.js';
 
 const storageFailure = (error: unknown): JudgeDataError => {
   if (error instanceof JudgeDataError) return error;
@@ -20,6 +25,14 @@ export type ByteStorage = {
   verify(ref: ObjectRef): Promise<void>;
   remove?(ref: ObjectRef): Promise<void>;
   get?(ref: ObjectRef): Promise<Uint8Array>;
+  open?(ref: ObjectRef): Promise<Readable>;
+  putFile?(
+    file: FileContent,
+    key: string,
+    fileName: string,
+    problemId: string,
+    signal?: AbortSignal,
+  ): Promise<ObjectRef>;
 };
 export class S3ByteStorage implements ByteStorage {
   constructor(
@@ -80,6 +93,53 @@ export class S3ByteStorage implements ByteStorage {
         'Object integrity mismatch',
         409,
       );
+  }
+  async open(ref: ObjectRef) {
+    try {
+      const out = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: ref.key }),
+      );
+      return out.Body as Readable;
+    } catch (error) {
+      throw storageFailure(error);
+    }
+  }
+  async putFile(
+    file: FileContent,
+    key: string,
+    fileName: string,
+    problemId: string,
+    signal?: AbortSignal,
+  ) {
+    const stream = createReadStream(file.path);
+    const ref = {
+      objectId: id(),
+      key,
+      fileName,
+      sizeBytes: file.sizeBytes,
+      sha256: file.sha256,
+    };
+    try {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: stream,
+          ContentLength: file.sizeBytes,
+          ContentType: 'application/octet-stream',
+          IfNoneMatch: '*',
+          Metadata: { sha256: file.sha256, problemid: problemId },
+        }),
+        { ...(signal ? { abortSignal: signal } : {}) },
+      );
+      return ref;
+    } catch (error) {
+      // A lost PUT response may still have created the uniquely owned object.
+      await this.remove(ref);
+      throw storageFailure(error);
+    } finally {
+      stream.destroy();
+    }
   }
   async remove(ref: ObjectRef) {
     const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
@@ -147,5 +207,49 @@ export class MemoryByteStorage implements ByteStorage {
     if (!b)
       throw new JudgeDataError('INTEGRITY_MISMATCH', 'Object missing', 409);
     return b.slice();
+  }
+  async open(ref: ObjectRef) {
+    return Readable.from([await this.get(ref)]);
+  }
+  // In-memory storage is a unit-test adapter, not a production streaming backend.
+  async putFile(
+    file: FileContent,
+    key: string,
+    fileName: string,
+    problemId: string,
+  ) {
+    return this.put(await readFile(file.path), key, fileName, problemId);
+  }
+}
+
+export async function verifyContent(storage: ByteStorage, ref: ObjectRef) {
+  if (!storage.open)
+    throw new JudgeDataError(
+      'STORAGE_UNAVAILABLE',
+      'Streaming retrieval unavailable',
+      503,
+    );
+  const stream = await storage.open(ref);
+  const hash = createHash('sha256');
+  let size = 0;
+  try {
+    for await (const chunk of stream) {
+      size += (chunk as Buffer).length;
+      if (size > ref.sizeBytes)
+        throw new JudgeDataError(
+          'INTEGRITY_MISMATCH',
+          'Object exceeds declared size',
+          409,
+        );
+      hash.update(chunk as Buffer);
+    }
+    if (size !== ref.sizeBytes || hash.digest('hex') !== ref.sha256)
+      throw new JudgeDataError(
+        'INTEGRITY_MISMATCH',
+        'Object integrity mismatch',
+        409,
+      );
+  } finally {
+    stream.destroy();
   }
 }

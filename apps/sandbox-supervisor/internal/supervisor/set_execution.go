@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -30,6 +31,13 @@ func TestcaseSetManifestHash(manifest model.TestcaseSetManifest) string {
 }
 
 func ValidateRealExecutionSetRequest(request model.RealExecutionSetRequest) error {
+	return validateSetInputs(request, nil, "")
+}
+
+func validateSetInputs(request model.RealExecutionSetRequest, inputs map[int]FileInput, artifactID string) error {
+	if inputs != nil && (!sha256HexPattern(artifactID) || len(inputs) != len(request.Manifest.Entries)) {
+		return errors.New("invalid artifact execution binding")
+	}
 	if request.ProtocolVersion != model.ExecutionSetContractVersion || request.ExecutionSetRequestID == "" || request.Attempt < 1 || request.CancellationGeneration < 0 {
 		return errors.New("invalid execution-set identity")
 	}
@@ -43,9 +51,19 @@ func ValidateRealExecutionSetRequest(request model.RealExecutionSetRequest) erro
 	seen := make(map[string]bool, len(manifest.Entries))
 	totalInputBytes := 0
 	for index, entry := range manifest.Entries {
-		totalInputBytes += len(entry.Input)
+		inputValid := len(entry.Input) <= maxTestcaseInputBytes && digestBytes(entry.Input) == entry.InputSHA256
+		if inputs != nil {
+			input, ok := inputs[index]
+			if !ok || input.File == nil || input.SizeBytes < 0 || input.SizeBytes > maxTestcaseInputBytes || !validArtifactLimits(input.Limits) || len(entry.Input) != 0 {
+				return errors.New("invalid artifact input descriptor")
+			}
+			totalInputBytes += int(input.SizeBytes)
+			inputValid = true
+		} else {
+			totalInputBytes += len(entry.Input)
+		}
 		verdictBinding := entry.CheckerType != "" || entry.CheckerVersion != "" || entry.CheckerConfigSHA256 != ""
-		if totalInputBytes > 256<<20 || entry.Index != index || entry.TestcaseID == "" || entry.TestcaseID == "." || entry.TestcaseID == ".." || len(entry.TestcaseID) > 128 || strings.ContainsAny(entry.TestcaseID, "/\\\x00") || seen[entry.TestcaseID] || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || len(entry.Input) > maxTestcaseInputBytes || !sha256HexPattern(entry.InputSHA256) || digestBytes(entry.Input) != entry.InputSHA256 || entry.ExpectedOutputSHA256 != "" && !sha256HexPattern(entry.ExpectedOutputSHA256) || verdictBinding && (!sha256HexPattern(entry.ExpectedOutputSHA256) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digestBytes([]byte(entry.CheckerType+"\x00"+entry.CheckerVersion))) {
+		if totalInputBytes > 256<<20 || entry.Index != index || entry.TestcaseID == "" || entry.TestcaseID == "." || entry.TestcaseID == ".." || len(entry.TestcaseID) > 128 || strings.ContainsAny(entry.TestcaseID, "/\\\x00") || seen[entry.TestcaseID] || entry.TestdataVersionID != manifest.TestdataVersionID || entry.ExecutionProfileID != manifest.ExecutionProfileID || !inputValid || !sha256HexPattern(entry.InputSHA256) || entry.ExpectedOutputSHA256 != "" && !sha256HexPattern(entry.ExpectedOutputSHA256) || verdictBinding && (!sha256HexPattern(entry.ExpectedOutputSHA256) || (entry.CheckerType != "EXACT_BYTES" && entry.CheckerType != "TOKEN_WHITESPACE") || entry.CheckerVersion != "builtin-v1" || entry.CheckerConfigSHA256 != digestBytes([]byte(entry.CheckerType+"\x00"+entry.CheckerVersion))) {
 			return errors.New("invalid testcase-set manifest entry")
 		}
 		seen[entry.TestcaseID] = true
@@ -54,7 +72,7 @@ func ValidateRealExecutionSetRequest(request model.RealExecutionSetRequest) erro
 		return errors.New("testcase-set manifest hash mismatch")
 	}
 	first := manifest.Entries[0]
-	return ValidateRealExecutionRequest(model.RealExecutionRequest{
+	return validateRealExecutionRequest(model.RealExecutionRequest{
 		ProtocolVersion: model.ExecutionContractVersion, ExecutionRequestID: request.ExecutionSetRequestID + ":testcase:0",
 		JudgeJobID: request.JudgeJobID, SubmissionID: request.SubmissionID, Attempt: request.Attempt,
 		CorrelationID: request.CorrelationID, ProblemID: manifest.ProblemID, ProblemRevisionID: manifest.ProblemRevisionID,
@@ -64,7 +82,7 @@ func ValidateRealExecutionSetRequest(request model.RealExecutionSetRequest) erro
 		SourceBytes: request.SourceBytes, SourceSHA256: request.SourceSHA256,
 		ControlledInputID: "stdin-empty-v1", DeadlineAt: request.DeadlineAt,
 		CancellationGeneration: request.CancellationGeneration,
-	})
+	}, inputs == nil)
 }
 
 func setTestcaseRequest(request model.RealExecutionSetRequest, entry model.TestcaseSetEntry) model.RealExecutionRequest {
@@ -87,6 +105,10 @@ func setTestcaseRequest(request model.RealExecutionSetRequest, entry model.Testc
 }
 
 func (s *Supervisor) ExecuteCPP20Set(ctx context.Context, request model.RealExecutionSetRequest, rootfs CompilerRootfs) (result model.RealExecutionSetResult, runErr error) {
+	return s.executeCPP20Set(ctx, request, rootfs, nil, "")
+}
+
+func (s *Supervisor) executeCPP20Set(ctx context.Context, request model.RealExecutionSetRequest, rootfs CompilerRootfs, inputs map[int]FileInput, artifactID string) (result model.RealExecutionSetResult, runErr error) {
 	started := time.Now().UTC()
 	setAttemptID := request.ExecutionSetRequestID + ":attempt"
 	compileAttemptID := request.ExecutionSetRequestID + ":compile"
@@ -101,9 +123,13 @@ func (s *Supervisor) ExecuteCPP20Set(ctx context.Context, request model.RealExec
 		TestcaseSetManifestHash: request.Manifest.ManifestHash, ExecutionProfileID: request.Manifest.ExecutionProfileID,
 		ExecutionSetPolicy: request.ExecutionPolicy, StartedAt: started,
 	}
+	if inputs != nil {
+		result.ProtocolVersion = ArtifactExecutionContract
+		result.JudgeArtifactID = artifactID
+	}
 	members := make([]model.TestcaseSetMemberResult, 0, len(request.Manifest.Entries))
 	stopReason := "COMPLETED"
-	if err := ValidateRealExecutionSetRequest(request); err != nil {
+	if err := validateSetInputs(request, inputs, artifactID); err != nil {
 		result.Compile = model.StageResult{Outcome: CompileInfraFailure, DiagnosticCode: "REQUEST_REJECTED", Clean: true, Facts: model.RawExecutionFacts{SandboxSetupFailed: true, CleanupVerified: true}}
 		result.PipelineOutcome = PipelineInfraFailure
 		result.Clean = true
@@ -220,7 +246,13 @@ func (s *Supervisor) ExecuteCPP20Set(ctx context.Context, request model.RealExec
 			return result, err
 		}
 		testcase := testcaseForRequest(testcaseRequest)
-		inputPath, stageErr := StageTestcaseInput(testcaseRoot, testcase)
+		var inputPath string
+		var stageErr error
+		if inputs != nil {
+			inputPath, stageErr = StageFileInput(testcaseRoot, inputs[entry.Index], entry.InputSHA256)
+		} else {
+			inputPath, stageErr = StageTestcaseInput(testcaseRoot, testcase)
+		}
 		if stageErr != nil {
 			members = append(members, failedSetMember(entry, "INFRA_FAILED"))
 			stopReason, result.PipelineOutcome = "INFRASTRUCTURE_FAILURE", PipelineInfraFailure
@@ -248,11 +280,24 @@ func (s *Supervisor) ExecuteCPP20Set(ctx context.Context, request model.RealExec
 		if _, err := ValidateCompiledArtifact(programPath, artifact.SHA256); err != nil {
 			return result, err
 		}
-		stdin, err := ReadVerifiedTestcaseInput(inputPath, testcase)
-		if err != nil {
-			return result, err
+		var runtimeRun stageRun
+		if inputs != nil {
+			input := inputs[entry.Index]
+			stdin, err := OpenVerifiedInput(inputPath, input.SizeBytes, entry.InputSHA256)
+			if err != nil {
+				return result, err
+			}
+			runtimeRun = s.runExecutionStageReader(ctx, runtimeBundle, "rootfs", true, []string{"/program"}, "/workspace", []string{"PATH=/", "LANG=C", "LC_ALL=C"}, stageMounts(1<<20), input.Limits, io.LimitReader(stdin, input.SizeBytes), "", runtimeSandboxID)
+			if err := stdin.Close(); err != nil {
+				return result, err
+			}
+		} else {
+			stdin, err := ReadVerifiedTestcaseInput(inputPath, testcase)
+			if err != nil {
+				return result, err
+			}
+			runtimeRun = s.runExecutionStageWithID(ctx, runtimeBundle, "rootfs", true, []string{"/program"}, "/workspace", []string{"PATH=/", "LANG=C", "LC_ALL=C"}, stageMounts(1<<20), runtimeLimits, stdin, "", runtimeSandboxID)
 		}
-		runtimeRun := s.runExecutionStageWithID(ctx, runtimeBundle, "rootfs", true, []string{"/program"}, "/workspace", []string{"PATH=/", "LANG=C", "LC_ALL=C"}, stageMounts(1<<20), runtimeLimits, stdin, "", runtimeSandboxID)
 		runtimeResult := classifyRuntime(runtimeRun)
 		perClean := removeOwnedExecutionRoot(testcaseRoot, perAttemptID, runtimeSandboxID) == nil && !pathExists(testcaseRoot) && runtimeResult.Clean
 		runtimeResult.Clean, runtimeResult.Facts.CleanupVerified = perClean, perClean
@@ -269,6 +314,13 @@ func (s *Supervisor) ExecuteCPP20Set(ctx context.Context, request model.RealExec
 			Runtime: &runtimeResult, StartedAt: started, CompletedAt: time.Now().UTC(), Clean: perClean,
 		}
 		record := BuildSingleTestcaseExecutionRecord(testcaseRequest, singleResult)
+		if inputs != nil {
+			record.RecordVersion = ArtifactExecutionContract
+			record.Stdin.ByteCount = int(inputs[entry.Index].SizeBytes)
+			record.Profile.Limits = inputs[entry.Index].Limits
+			record.Digest = ""
+			record.Digest = canonicalRecordDigest(record)
+		}
 		status := "RAW_COMPLETED"
 		if runtimeResult.Outcome == ExecutionCancelled {
 			status, stopReason, result.PipelineOutcome = "CANCELLED", "CANCELLED", PipelineCancelled

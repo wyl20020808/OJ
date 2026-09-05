@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { JudgeArtifactReference } from '@ojplatform/judge-runtime';
 import { MAX_TESTCASE_PAYLOAD_BYTES } from './limits.js';
 import {
   BUILTIN_CHECKER_VERSION,
@@ -92,6 +93,10 @@ export type JudgeDataHandoff = {
   }[];
 };
 export type JudgeDataRepository = {
+  saveArtifact(
+    artifact: JudgeArtifactReference,
+  ): Promise<JudgeArtifactReference>;
+  getArtifact(id: string): Promise<JudgeArtifactReference | undefined>;
   getDraft(problemId: string): Promise<JudgeDraft | undefined>;
   saveDraft(draft: JudgeDraft, expectedRevision?: number): Promise<JudgeDraft>;
   getVersion(
