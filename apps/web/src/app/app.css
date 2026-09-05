@@ -742,6 +742,36 @@ pre {
 .submission-detail {
   max-width: 1180px;
 }
+.submission-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+.submission-tabs button {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.submission-tabs button.active {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+.source-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.copy-source {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
 .submission-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
@@ -936,11 +966,13 @@ pre {
 }
 .testcase-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 1fr;
   grid-template-rows: auto 1fr auto;
   aspect-ratio: 1;
   min-width: 0;
   padding: var(--space-2);
+  gap: 0.25rem;
+  overflow: hidden;
   border: 1px solid transparent;
   border-radius: 6px;
   background: var(--soft);
@@ -960,6 +992,8 @@ pre {
   align-self: end;
   font-size: 0.72rem;
   color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .testcase-row > span:nth-of-type(3) {
   text-align: right;
@@ -1629,7 +1663,7 @@ footer {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .testcase-row {
-    grid-template-columns: 3.5rem 4.5rem minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: 1fr 1fr;
   }
   .testcase-reason {
     grid-column: 3 / -1;
@@ -1911,7 +1945,9 @@ footer {
 }
 .evaluation-filters {
   display: grid;
-  grid-template-columns: minmax(9rem, 0.8fr) minmax(12rem, 1.4fr) minmax(12rem, 1.4fr) auto;
+  grid-template-columns:
+    minmax(9rem, 0.8fr) minmax(12rem, 1.4fr) minmax(12rem, 1.4fr)
+    auto;
   gap: var(--space-3);
   align-items: end;
   margin-bottom: var(--space-4);
@@ -1920,14 +1956,25 @@ footer {
   border-radius: var(--radius);
   background: var(--surface);
 }
-.evaluation-filters label { display: grid; gap: var(--space-1); color: var(--muted); font-size: 0.78rem; font-weight: 700; }
-.evaluation-filters input, .evaluation-filters select { min-width: 0; width: 100%; }
+.evaluation-filters label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.evaluation-filters input,
+.evaluation-filters select {
+  min-width: 0;
+  width: 100%;
+}
 .evaluation-list-header,
 .evaluation-row {
   display: grid;
   grid-template-columns:
     minmax(7rem, 0.7fr) minmax(8rem, 1.2fr) minmax(6rem, 0.8fr)
-    minmax(6rem, 0.8fr) minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(10rem, 1.1fr);
+    minmax(6rem, 0.8fr)
+    minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(10rem, 1.1fr);
   gap: var(--space-3);
   align-items: center;
   padding: var(--space-3) var(--space-4);
