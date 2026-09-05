@@ -395,3 +395,15 @@ suite failures reproduce on base main; Postgres integration is environment
 blocked. Runtime/browser and real Run/Submit remain NOT VERIFIED because of
 known `HOST_CAPACITY_EXHAUSTED`. Main merge intentionally stopped. See
 `Docs/reports/OJPLATFORM_CONSERVATIVE_PRODUCT_UX_FINAL_INTEGRATION_V1_REPORT.md`.
+
+Final Main Alignment & Safe Merge V1 (2026-09-06): PASS. Latest canonical
+`main` was `7b812a8`; candidate `codex/conservative-product-ux-final-integration-v1`
+was `2adba6e`, with merge-base equal to latest `main` (no main drift). A fresh
+`codex/final-main-alignment-v1` worktree merged the candidate normally with no
+conflicts. Focused regression tests passed (`409/409` across both targeted
+runs), Web typecheck/build and diff check passed. Candidate-touched lint is
+clean; the remaining nine full-lint errors reproduce on pristine `main` and
+are recorded as historical baseline failures. Runtime was DOWN/CLEAN; no
+runtime repair or browser qualification was attempted. User dirty
+`scripts/dev-runtime.ps1` and untracked artifacts were preserved. See
+`Docs/reports/OJPLATFORM_FINAL_MAIN_ALIGNMENT_SAFE_MERGE_V1_REPORT.md`.
