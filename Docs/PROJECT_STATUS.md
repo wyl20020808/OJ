@@ -1,5 +1,14 @@
 # OJPlatform Project Status
 
+## Root Submission Source Access V1
+
+PASS on branch `codex/root-submission-source-access-v1`. Submission detail
+authorization now uses canonical `submission:view:any` permission resolver
+for highest-admin cross-owner source access, while owner-only and anonymous /
+ordinary-user denial remain enforced. Global evaluation list and SSE paths do
+not expose source. Focused authorization tests, typecheck, build, and diff
+check pass; browser runtime was not run.
+
 Submission Direct Evaluation V2: PASS. Traditional submit now navigates directly
 to existing Submission/Evaluation Detail after create success; accepted
 intermediate state removed, duplicate submit guarded, and API errors remain on

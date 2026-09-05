@@ -550,7 +550,10 @@ export async function buildApp(options: AppOptions = {}) {
       app.log,
     );
     app.addHook('onReady', async () => submissionDispatcher.start());
-    const submissionPolicy = createSubmissionAuthorizationPolicy();
+    const submissionPolicy = createSubmissionAuthorizationPolicy({
+      hasPermissions: (userId, permissions) =>
+        hasPermissions(userId, permissions),
+    });
     const problemResolver: ProblemRevisionResolver = {
       getRevision: async (problemId, revisionId) => {
         const revisions = await problemRepository.revisions(problemId);
@@ -586,18 +589,18 @@ export async function buildApp(options: AppOptions = {}) {
           );
         },
         canViewSubmission: async (context, submission) =>
-          (await submissionPolicy.canViewSubmission(
-            { id: context.userId, status: 'active' },
-            {
-              id: submission.id,
-              ownerUserId: submission.ownerUserId,
-              problemId: submission.problemId,
-              problemRevisionId: '',
-              status: 'PENDING',
-            },
-          )) ||
+          submission.ownerUserId === context.userId ||
           (context.strength === 'password' &&
-            (await hasPermissions(context.userId, ['submission:view:any']))),
+            (await submissionPolicy.canViewSubmission(
+              { id: context.userId, status: 'active' },
+              {
+                id: submission.id,
+                ownerUserId: submission.ownerUserId,
+                problemId: submission.problemId,
+                problemRevisionId: '',
+                status: 'PENDING',
+              },
+            ))),
         listOwnSubmissions: (context) =>
           submissionPolicy.canListOwnSubmissions({
             id: context.userId,
@@ -1159,7 +1162,10 @@ export async function buildApp(options: AppOptions = {}) {
       judgeDataRepository,
       judgeDataStorage,
     );
-    const submissionPolicy = createSubmissionAuthorizationPolicy();
+    const submissionPolicy = createSubmissionAuthorizationPolicy({
+      hasPermissions: (userId, permissions) =>
+        hasPermissions(userId, permissions),
+    });
     await registerSubmissionModule(app, {
       repository: submissionRepository,
       authorizationPolicy: {
@@ -1180,18 +1186,18 @@ export async function buildApp(options: AppOptions = {}) {
           );
         },
         canViewSubmission: async (context, submission) =>
-          (await submissionPolicy.canViewSubmission(
-            { id: context.userId, status: 'active' },
-            {
-              id: submission.id,
-              ownerUserId: submission.ownerUserId,
-              problemId: submission.problemId,
-              problemRevisionId: '',
-              status: 'PENDING',
-            },
-          )) ||
+          submission.ownerUserId === context.userId ||
           (context.strength === 'password' &&
-            hasPermissions(context.userId, ['submission:view:any'])),
+            (await submissionPolicy.canViewSubmission(
+              { id: context.userId, status: 'active' },
+              {
+                id: submission.id,
+                ownerUserId: submission.ownerUserId,
+                problemId: submission.problemId,
+                problemRevisionId: '',
+                status: 'PENDING',
+              },
+            ))),
         listOwnSubmissions: (context) =>
           submissionPolicy.canListOwnSubmissions({
             id: context.userId,
