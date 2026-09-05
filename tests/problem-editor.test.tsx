@@ -462,7 +462,7 @@ describe('ProblemEditor judge-data contract UI', () => {
     ).toBeInTheDocument();
   });
 
-  it('supports statement edit/preview and preserves existing samples in the shared model', async () => {
+  it('keeps samples editable while excluding them from the live preview', async () => {
     const api = makeApi({
       problem: vi.fn().mockResolvedValue({
         ...problem,
@@ -474,8 +474,10 @@ describe('ProblemEditor judge-data contract UI', () => {
       await screen.findByRole('heading', { name: /编辑题目：Hello World/ }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
-    expect(screen.getByRole('heading', { name: '样例' })).toBeInTheDocument();
-    expect(screen.getByText('1 2')).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: '题面实时预览' })).toBeInTheDocument();
+    const preview = screen.getByRole('complementary', { name: '题面实时预览' });
+    expect(preview.querySelector('h3')?.textContent).not.toBe('样例');
+    expect(preview).not.toHaveTextContent('1 2');
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
     expect(screen.getByLabelText('输入样例 1')).toHaveValue('1 2');
   });
