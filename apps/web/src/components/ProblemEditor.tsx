@@ -5,6 +5,7 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type RefObject,
 } from 'react';
 import {
   ApiError,
@@ -63,53 +64,194 @@ function pairPreview(files: File[]) {
     }));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function StatementPreview({
-  statement,
+type MarkdownFieldKey =
+  | 'background'
+  | 'statement'
+  | 'inputDescription'
+  | 'outputDescription'
+  | 'constraints'
+  | 'notes';
+
+type ToolbarAction =
+  | 'bold'
+  | 'italic'
+  | 'heading'
+  | 'quote'
+  | 'inline-code'
+  | 'code-block'
+  | 'link'
+  | 'image'
+  | 'bullet-list'
+  | 'ordered-list'
+  | 'table'
+  | 'inline-math'
+  | 'block-math';
+
+const toolbarActions: Array<{
+  action: ToolbarAction;
+  label: string;
+  title: string;
+}> = [
+  { action: 'bold', label: 'B', title: 'Bold' },
+  { action: 'italic', label: 'I', title: 'Italic' },
+  { action: 'heading', label: 'H', title: 'Heading' },
+  { action: 'quote', label: '❝', title: 'Quote' },
+  { action: 'inline-code', label: '</>', title: 'Inline Code' },
+  { action: 'code-block', label: '{ }', title: 'Code Block' },
+  { action: 'link', label: 'Link', title: 'Link' },
+  { action: 'image', label: 'Image', title: 'Image URL' },
+  { action: 'bullet-list', label: '• List', title: 'Bullet List' },
+  { action: 'ordered-list', label: '1. List', title: 'Ordered List' },
+  { action: 'table', label: 'Table', title: 'Table' },
+  { action: 'inline-math', label: '$x$', title: 'Inline Math' },
+  { action: 'block-math', label: '$$', title: 'Block Math' },
+];
+
+function markdownReplacement(action: ToolbarAction, selected: string) {
+  const text = selected || 'text';
+  switch (action) {
+    case 'bold':
+      return `**${text}**`;
+    case 'italic':
+      return `*${text}*`;
+    case 'heading':
+      return `## ${text}`;
+    case 'quote':
+      return `> ${text}`;
+    case 'inline-code':
+      return `\`${selected || 'code'}\``;
+    case 'code-block':
+      return `\`\`\`\n${selected || 'code'}\n\`\`\``;
+    case 'link':
+      return `[${selected || 'text'}](url)`;
+    case 'image':
+      return `![${selected || 'alt text'}](url)`;
+    case 'bullet-list':
+      return (selected || 'item')
+        .split('\n')
+        .map((line) => `- ${line}`)
+        .join('\n');
+    case 'ordered-list':
+      return (selected || 'item')
+        .split('\n')
+        .map((line, index) => `${index + 1}. ${line}`)
+        .join('\n');
+    case 'table':
+      return '| Column | Value |\n| --- | --- |\n| text | text |';
+    case 'inline-math':
+      return `$${selected || 'x'}$`;
+    case 'block-math':
+      return `$$\n${selected || 'x'}\n$$`;
+  }
+}
+
+function MarkdownToolbar({
+  textareaRef,
+  value,
+  onChange,
+  disabled,
 }: {
-  statement: {
-    title: string;
-    background: string;
-    statement: string;
-    inputDescription: string;
-    outputDescription: string;
-    constraints: string;
-    notes: string;
-    samples: Array<{ ordinal: number; input: string; output: string }>;
-  };
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
 }) {
-  const sections = [
-    ['题目背景', statement.background],
-    ['题目描述', statement.statement],
-    ['输入格式', statement.inputDescription],
-    ['输出格式', statement.outputDescription],
-    ['数据范围', statement.constraints],
-    ['说明与提示', statement.notes],
-  ] as const;
+  const apply = (action: ToolbarAction) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = value.slice(start, end);
+    const replacement = markdownReplacement(action, selected);
+    const next = `${value.slice(0, start)}${replacement}${value.slice(end)}`;
+    onChange(next);
+    const restoreSelection = () => {
+      textarea.focus();
+      const selectionStart = start;
+      textarea.setSelectionRange(
+        selectionStart,
+        selectionStart + replacement.length,
+      );
+    };
+    if (typeof requestAnimationFrame === 'function')
+      requestAnimationFrame(restoreSelection);
+    else setTimeout(restoreSelection, 0);
+  };
   return (
-    <div className="statement-preview">
-      <h2>{statement.title || '未命名题目'}</h2>
-      {sections
-        .filter(([, value]) => value.trim())
-        .map(([title, value]) => (
-          <section key={title}>
-            <h3>{title}</h3>
-            <p>{value}</p>
-          </section>
-        ))}
-      {statement.samples.length > 0 && (
-        <section>
-          <h3>样例</h3>
-          {statement.samples.map((sample) => (
-            <div className="preview-example" key={sample.ordinal}>
-              <strong>样例 {sample.ordinal}</strong>
-              <pre>{sample.input}</pre>
-              <pre>{sample.output}</pre>
-            </div>
-          ))}
-        </section>
-      )}
+    <div className="markdown-toolbar" aria-label="Markdown formatting toolbar">
+      {toolbarActions.map(({ action, label, title }) => (
+        <button
+          key={action}
+          type="button"
+          className="markdown-tool"
+          aria-label={title}
+          title={title}
+          disabled={disabled}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => apply(action)}
+        >
+          {label}
+        </button>
+      ))}
     </div>
+  );
+}
+
+function MarkdownFieldSection({
+  fieldKey,
+  label,
+  value,
+  rows,
+  disabled,
+  onChange,
+  previewLabel,
+}: {
+  fieldKey: MarkdownFieldKey;
+  label: string;
+  value: string;
+  rows: number;
+  disabled: boolean;
+  onChange: (value: string) => void;
+  previewLabel?: string;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const content = {
+    title: '',
+    background: fieldKey === 'background' ? value : '',
+    statement: fieldKey === 'statement' ? value : '',
+    inputDescription: fieldKey === 'inputDescription' ? value : '',
+    outputDescription: fieldKey === 'outputDescription' ? value : '',
+    constraints: fieldKey === 'constraints' ? value : '',
+    notes: fieldKey === 'notes' ? value : '',
+  };
+  return (
+    <section className="markdown-field-section" data-field={fieldKey}>
+      <h3>{label}</h3>
+      <div className="markdown-field-split">
+        <div className="markdown-editor-pane">
+          <MarkdownToolbar
+            textareaRef={textareaRef}
+            value={value}
+            onChange={onChange}
+            disabled={disabled}
+          />
+          <textarea
+            ref={textareaRef}
+            rows={rows}
+            value={value}
+            aria-label={label}
+            onChange={(event) => onChange(event.target.value)}
+            disabled={disabled}
+          />
+        </div>
+        <aside
+          className="markdown-preview-pane"
+          aria-label={previewLabel ?? `${label}实时预览`}
+        >
+          <ProblemStatementRenderer content={content} showTitle={false} />
+        </aside>
+      </div>
+    </section>
   );
 }
 
@@ -214,7 +356,9 @@ export function ProblemEditor({
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
     });
-    setHasDraft(Boolean(next && Array.isArray(next.testcases) && next.defaults));
+    setHasDraft(
+      Boolean(next && Array.isArray(next.testcases) && next.defaults),
+    );
     setDraft(
       next && Array.isArray(next.testcases) && next.defaults
         ? next
@@ -505,228 +649,209 @@ export function ProblemEditor({
               <p>支持 Markdown 文本；保存前离开页面会提示未保存更改。</p>
             </div>
             <div className="panel-actions">
-              <button
-                type="button"
-              >
-                编辑
-              </button>
-              <button
-                type="button"
-              >
-                预览
-              </button>
+              <button type="button">编辑</button>
+              <button type="button">预览</button>
               <button disabled={!canEdit || saving}>
                 {saving ? '保存中…' : '保存题面'}
               </button>
             </div>
           </div>
-          <div className="statement-split"><div className="statement-form-fields">
+          <div className="statement-form-fields">
+            <label>
+              题目标题
+              <input
+                value={statement.title}
+                onChange={(e) => updateStatement('title', e.target.value)}
+                disabled={!canEdit}
+                required
+              />
+            </label>
+            <div className="statement-grid">
               <label>
-                题目标题
-                <input
-                  value={statement.title}
-                  onChange={(e) => updateStatement('title', e.target.value)}
-                  disabled={!canEdit}
-                  required
-                />
-              </label>
-              <div className="statement-grid">
-                <label>
-                  难度
-                  <select
-                    value={statement.difficulty ?? ''}
-                    onChange={(e) =>
-                      updateStatement(
-                        'difficulty',
-                        e.target.value as ProblemDifficulty,
-                      )
-                    }
-                    disabled={!canEdit}
-                  >
-                    <option value="">未设置</option>
-                    <option value="入门">入门</option>
-                    <option value="简单">简单</option>
-                    <option value="中等">中等</option>
-                    <option value="困难">困难</option>
-                    <option value="专家">专家</option>
-                  </select>
-                </label>
-                <label>
-                  标签（逗号分隔）
-                  <input
-                    value={statement.tags.join(', ')}
-                    onChange={(e) =>
-                      updateStatement(
-                        'tags',
-                        e.target.value
-                          .split(',')
-                          .map((tag) => tag.trim())
-                          .filter(Boolean),
-                      )
-                    }
-                    disabled={!canEdit}
-                  />
-                </label>
-                <label>
-                  可见性
-                  <select
-                    value={statement.visibility}
-                    onChange={(e) =>
-                      updateStatement(
-                        'visibility',
-                        e.target.value as Problem['visibility'],
-                      )
-                    }
-                    disabled={!canEdit}
-                  >
-                    <option value="private">仅自己可见</option>
-                    <option value="public">公开</option>
-                  </select>
-                </label>
-              </div>
-              <label>
-                题目背景
-                <textarea
-                  rows={6}
-                  value={statement.background}
+                难度
+                <select
+                  value={statement.difficulty ?? ''}
                   onChange={(e) =>
-                    updateStatement('background', e.target.value)
+                    updateStatement(
+                      'difficulty',
+                      e.target.value as ProblemDifficulty,
+                    )
                   }
-                  disabled={!canEdit}
-                />
-              </label>
-              <label>
-                题目描述
-                <textarea
-                  rows={8}
-                  value={statement.statement}
-                  onChange={(e) => updateStatement('statement', e.target.value)}
-                  disabled={!canEdit}
-                />
-              </label>
-              <div className="statement-grid">
-                <label>
-                  输入格式
-                  <textarea
-                    rows={5}
-                    value={statement.inputDescription}
-                    onChange={(e) =>
-                      updateStatement('inputDescription', e.target.value)
-                    }
-                    disabled={!canEdit}
-                  />
-                </label>
-                <label>
-                  输出格式
-                  <textarea
-                    rows={5}
-                    value={statement.outputDescription}
-                    onChange={(e) =>
-                      updateStatement('outputDescription', e.target.value)
-                    }
-                    disabled={!canEdit}
-                  />
-                </label>
-              </div>
-              <label>
-                数据范围
-                <textarea
-                  rows={4}
-                  value={statement.constraints}
-                  onChange={(e) =>
-                    updateStatement('constraints', e.target.value)
-                  }
-                  disabled={!canEdit}
-                />
-              </label>
-              <label>
-                说明与提示
-                <textarea
-                  rows={4}
-                  value={statement.notes}
-                  onChange={(e) => updateStatement('notes', e.target.value)}
-                  disabled={!canEdit}
-                />
-              </label>
-              <fieldset>
-                <legend>样例</legend>
-                {statement.samples.length === 0 ? (
-                  <p className="field-help">暂无样例。</p>
-                ) : (
-                  statement.samples.map((sample, index) => (
-                    <div className="sample-editor" key={sample.ordinal}>
-                      <div className="sample-heading">
-                        <strong>样例 #{index + 1}</strong>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => {
-                            setDirty(true);
-                            setStatement((current) => ({
-                              ...current,
-                              samples: current.samples
-                                .filter((_, item) => item !== index)
-                                .map((item, ordinal) => ({
-                                  ...item,
-                                  ordinal: ordinal + 1,
-                                })),
-                            }));
-                          }}
-                          disabled={!canEdit}
-                        >
-                          删除
-                        </button>
-                      </div>
-                      <div className="statement-grid">
-                        <label>
-                          输入样例 {index + 1}
-                          <textarea
-                            rows={3}
-                            value={sample.input}
-                            onChange={(e) =>
-                              updateSample(index, 'input', e.target.value)
-                            }
-                            disabled={!canEdit}
-                          />
-                        </label>
-                        <label>
-                          输出样例 {index + 1}
-                          <textarea
-                            rows={3}
-                            value={sample.output}
-                            onChange={(e) =>
-                              updateSample(index, 'output', e.target.value)
-                            }
-                            disabled={!canEdit}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  ))
-                )}
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setDirty(true);
-                    setStatement((current) => ({
-                      ...current,
-                      samples: [
-                        ...current.samples,
-                        {
-                          ordinal: current.samples.length + 1,
-                          input: '',
-                          output: '',
-                        },
-                      ],
-                    }));
-                  }}
                   disabled={!canEdit}
                 >
-                  添加样例
-                </button>
-              </fieldset>
-            </div><aside className="statement-preview" aria-label="题面实时预览"><ProblemStatementRenderer content={statement} /></aside></div>
+                  <option value="">未设置</option>
+                  <option value="入门">入门</option>
+                  <option value="简单">简单</option>
+                  <option value="中等">中等</option>
+                  <option value="困难">困难</option>
+                  <option value="专家">专家</option>
+                </select>
+              </label>
+              <label>
+                标签（逗号分隔）
+                <input
+                  value={statement.tags.join(', ')}
+                  onChange={(e) =>
+                    updateStatement(
+                      'tags',
+                      e.target.value
+                        .split(',')
+                        .map((tag) => tag.trim())
+                        .filter(Boolean),
+                    )
+                  }
+                  disabled={!canEdit}
+                />
+              </label>
+              <label>
+                可见性
+                <select
+                  value={statement.visibility}
+                  onChange={(e) =>
+                    updateStatement(
+                      'visibility',
+                      e.target.value as Problem['visibility'],
+                    )
+                  }
+                  disabled={!canEdit}
+                >
+                  <option value="private">仅自己可见</option>
+                  <option value="public">公开</option>
+                </select>
+              </label>
+            </div>
+            <div className="markdown-fields" aria-label="题面 Markdown 字段">
+              <MarkdownFieldSection
+                fieldKey="background"
+                label="题目背景"
+                value={statement.background}
+                rows={6}
+                disabled={!canEdit}
+                onChange={(value) => updateStatement('background', value)}
+                previewLabel="题面实时预览"
+              />
+              <MarkdownFieldSection
+                fieldKey="statement"
+                label="题目描述"
+                value={statement.statement}
+                rows={8}
+                disabled={!canEdit}
+                onChange={(value) => updateStatement('statement', value)}
+              />
+              <MarkdownFieldSection
+                fieldKey="inputDescription"
+                label="输入格式"
+                value={statement.inputDescription}
+                rows={5}
+                disabled={!canEdit}
+                onChange={(value) => updateStatement('inputDescription', value)}
+              />
+              <MarkdownFieldSection
+                fieldKey="outputDescription"
+                label="输出格式"
+                value={statement.outputDescription}
+                rows={5}
+                disabled={!canEdit}
+                onChange={(value) =>
+                  updateStatement('outputDescription', value)
+                }
+              />
+              <MarkdownFieldSection
+                fieldKey="constraints"
+                label="数据范围"
+                value={statement.constraints}
+                rows={4}
+                disabled={!canEdit}
+                onChange={(value) => updateStatement('constraints', value)}
+              />
+              <MarkdownFieldSection
+                fieldKey="notes"
+                label="说明与提示"
+                value={statement.notes}
+                rows={4}
+                disabled={!canEdit}
+                onChange={(value) => updateStatement('notes', value)}
+              />
+            </div>
+            <fieldset>
+              <legend>样例</legend>
+              {statement.samples.length === 0 ? (
+                <p className="field-help">暂无样例。</p>
+              ) : (
+                statement.samples.map((sample, index) => (
+                  <div className="sample-editor" key={sample.ordinal}>
+                    <div className="sample-heading">
+                      <strong>样例 #{index + 1}</strong>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          setDirty(true);
+                          setStatement((current) => ({
+                            ...current,
+                            samples: current.samples
+                              .filter((_, item) => item !== index)
+                              .map((item, ordinal) => ({
+                                ...item,
+                                ordinal: ordinal + 1,
+                              })),
+                          }));
+                        }}
+                        disabled={!canEdit}
+                      >
+                        删除
+                      </button>
+                    </div>
+                    <div className="statement-grid">
+                      <label>
+                        输入样例 {index + 1}
+                        <textarea
+                          rows={3}
+                          value={sample.input}
+                          onChange={(e) =>
+                            updateSample(index, 'input', e.target.value)
+                          }
+                          disabled={!canEdit}
+                        />
+                      </label>
+                      <label>
+                        输出样例 {index + 1}
+                        <textarea
+                          rows={3}
+                          value={sample.output}
+                          onChange={(e) =>
+                            updateSample(index, 'output', e.target.value)
+                          }
+                          disabled={!canEdit}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ))
+              )}
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setDirty(true);
+                  setStatement((current) => ({
+                    ...current,
+                    samples: [
+                      ...current.samples,
+                      {
+                        ordinal: current.samples.length + 1,
+                        input: '',
+                        output: '',
+                      },
+                    ],
+                  }));
+                }}
+                disabled={!canEdit}
+              >
+                添加样例
+              </button>
+            </fieldset>
+          </div>
         </form>
       )}
       {tab === 'data' && (
