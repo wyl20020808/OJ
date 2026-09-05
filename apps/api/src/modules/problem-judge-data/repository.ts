@@ -454,7 +454,7 @@ export class PostgresJudgeDataRepository implements JudgeDataRepository {
         allowedLanguageProfiles: [...draft.defaults.allowedLanguageProfiles],
       };
       await db.query(
-        'INSERT INTO judge_data_versions(version_id,problem_id,version_number,manifest_sha256,checker,testcase_count,published_by,published_at,manifest,problem_revision_id,testdata_version_id,testcase_set_id,execution_profile_id,allowed_language_profiles) VALUES($1,$2,$3,$4,$5,$6,$7,now(),$8,$9,$10,$11,$12,$13)',
+        'INSERT INTO judge_data_versions(version_id,problem_id,version_number,manifest_sha256,checker,testcase_count,published_by,created_at,published_at,manifest,problem_revision_id,testdata_version_id,testcase_set_id,execution_profile_id,allowed_language_profiles) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)',
         [
           v.versionId,
           v.problemId,
@@ -463,6 +463,8 @@ export class PostgresJudgeDataRepository implements JudgeDataRepository {
           v.checker,
           v.testcaseCount,
           actor,
+          v.createdAt,
+          v.publishedAt,
           JSON.stringify({
             protocolVersion: '2C.4',
             problemId: v.problemId,
