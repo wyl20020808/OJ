@@ -1,5 +1,14 @@
 # OJPlatform Project Status
 
+V3 UI Final Integration V1: PASS. Problem Page UX V3, Evaluation Detail UX V3,
+and Admin Chinese + Notification V1 are integrated with their required
+traditional submission, normal-flow Problem information card, live Evaluation
+state monotonicity, Admin Chinese presentation, and notification dismissal
+behavior preserved. Focused tests pass 20/20, 10/10, and 172/172; Web typecheck,
+build, targeted ESLint, and diff checks pass. Runtime/browser/real-SSE
+qualification was explicitly excluded and remains not verified. See
+`reports/OJPLATFORM_V3_UI_FINAL_INTEGRATION_V1_REPORT.md`.
+
 Problem Page UX Remediation V3: PASS. The Problem title action again opens the
 existing traditional submission route with its language selector, source field,
 and formal Submission API integration. Problem metadata is product-facing, the
