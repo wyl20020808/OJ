@@ -11,6 +11,15 @@ root credential and root/admin browser workflows remain NOT VERIFIED because no
 credential was changed. See
 `reports/OJPLATFORM_FULL_PRODUCT_STATE_DIAGNOSIS_RECOVERY_V1_REPORT.md`.
 
+Conservative ABC Integration V1: PARTIAL. Independent branch
+`codex/conservative-abc-integration-v1` starts from main `7b812a8` and merges
+Problem List Compact V3, Problem Authoring V3, and Evaluation Detail UX V5 in
+that order. Targeted ABC plus baseline checks pass (285 tests); six existing
+base-main failures remain reproduced, full lint has existing out-of-scope
+errors, and browser smoke is not verified. Branch is an ABC candidate for D;
+it is not merged to main. See
+`reports/OJPLATFORM_CONSERVATIVE_ABC_INTEGRATION_V1_REPORT.md`.
+
 Post-Merge UI Regression Recovery V1: PARTIAL. Restored pre-wave global
 Evaluation List filters/layout and breadcrumb de-duplication while preserving
 Evaluation UX V4 and Admin permission-gated navigation. Build, focused tests,
