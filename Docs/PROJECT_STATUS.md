@@ -282,3 +282,8 @@ root/cgroup fixture failures. Feature Runtime stop was BLOCKED by an existing
 Runtime Manager mutex; no manual termination performed. Browser ZIP persistence,
 Validate, formal resubmission, and real SSE terminal-chain evidence remain
 NOT VERIFIED and user-owned.
+
+Stop Manual Recovery V2 (2026-09-05): PASS. Branch
+`codex/stop-manual-recovery-v2` merged normally into canonical `main` with
+structured BLOCKED/PARTIAL stop outcomes, listener ownership diagnostics, and
+manual recovery guidance. See `Docs/reports/OJPLATFORM_STOP_MANUAL_RECOVERY_V2_REPORT.md`.
