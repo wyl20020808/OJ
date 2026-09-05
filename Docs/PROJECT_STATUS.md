@@ -264,6 +264,14 @@ started.
 
 Last Updated: 2026-09-05
 
+Evaluation Detail UX V5 (2026-09-06): PASS for implemented/static Web scope.
+Result/code tabs, source copy feedback, right-side evaluation metadata,
+Generation History removal, Problem link, bounded testcase cards, SSE and
+3-second terminal-aware refresh are implemented. Focused V5 tests, Web
+typecheck/build, targeted lint, formatting, and diff checks pass. Browser and
+managed-runtime qualification were not run. See
+`reports/OJPLATFORM_EVALUATION_DETAIL_UX_V5_REPORT.md`.
+
 JUDGEDATA ARTIFACT PIPELINE V1 (2026-09-05): PASS. Real authenticated 100 MiB
 raw ZIP upload, validate/publish, Product reference dispatch, Judge claim,
 MinIO checksum fetch, Supervisor opaque-handle execution, and terminal AC passed
