@@ -456,7 +456,7 @@ describe('Web platform shell', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: '提交源代码' }));
     expect(
-      await screen.findByRole('heading', { name: '评测 #1' }),
+      await screen.findByRole('heading', { name: /^评测 #1/ }),
     ).toBeInTheDocument();
     expect(window.location.pathname).toBe('/submissions/sub1');
     expect(
@@ -535,8 +535,9 @@ describe('Web platform shell', () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: '查看评测 #0' }));
     expect(
-      await screen.findByRole('heading', { name: '评测 #0' }),
+      await screen.findByRole('heading', { name: /^评测 #0/ }),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '代码' }));
     expect(screen.getByText('<script>alert(1)</script>')).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
   });
