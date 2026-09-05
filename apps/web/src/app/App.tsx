@@ -31,6 +31,10 @@ import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
 import { ProblemEditor } from '../components/ProblemEditor.js';
+import { ProblemSolveEditorSlot } from '../plugins/ProblemSolveEditorSlot.js';
+import { HttpCodeRunAdapter } from '@ojplatform/online-code-editor/run/HttpCodeRunAdapter';
+import { HttpSubmissionAdapter } from '@ojplatform/online-code-editor/submission/SubmissionAdapter';
+import type { ProblemSolveEditorContext } from '@ojplatform/plugin-sdk';
 import { ProblemStatementRenderer } from '../components/ProblemStatementRenderer.js';
 import {
   ContestExperience,
@@ -1526,10 +1530,23 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     </section>
   );
 }
-function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
+function ProblemDetail({
+  api,
+  id,
+  user,
+}: {
+  api: ApiClient;
+  id: string;
+  user?: AuthenticatedUser | null;
+}) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
+  const [checker, setChecker] = useState<'EXACT_BYTES' | 'TOKEN_WHITESPACE'>(
+    'EXACT_BYTES',
+  );
+  const codeRunAdapter = useMemo(() => new HttpCodeRunAdapter(), []);
+  const submissionAdapter = useMemo(() => new HttpSubmissionAdapter(), []);
   useEffect(() => {
     void api
       .problem(id)
@@ -1549,6 +1566,14 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
         ),
       );
   }, [api, id]);
+  useEffect(() => {
+    void api
+      .judgeData(id)
+      .then((data) => setChecker(data.defaults.checker))
+      .catch((e) =>
+        console.error('[ProblemDetail] judge checker unavailable', e),
+      );
+  }, [api, id]);
   if (error)
     return error.code === 'NOT_FOUND' ? (
       <State title="题目不存在" text="该题目不存在或当前不可用。" />
@@ -1558,135 +1583,164 @@ function ProblemDetail({ api, id }: { api: ApiClient; id: string }) {
   if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
   const canEdit = problem.capabilities?.canEdit === true;
   return (
-    <article className="problem-detail-v4">
-      <div className="problem-main">
-        <header className="problem-heading">
-          <span className="problem-id">{problem.publicId ?? '编号不可用'}</span>
-          <h1>{problem.title}</h1>
-          <div className="problem-header-actions" aria-label="题目操作">
-            <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
-              <button type="button">提交代码</button>
-            </Link>
-            {canEdit && (
-              <Link
-                to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
-              >
-                <button type="button" className="secondary">
-                  编辑题目
-                </button>
+    <>
+      <article className="problem-detail-v4">
+        <div className="problem-main">
+          <header className="problem-heading">
+            <span className="problem-id">{problem.publicId ?? '编号不可用'}</span>
+            <h1>{problem.title}</h1>
+            <div className="problem-header-actions" aria-label="题目操作">
+              <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
+                <button type="button">提交代码</button>
               </Link>
-            )}
-            <button type="button" className="secondary" disabled>
-              收藏
-            </button>
-          </div>
-          <p className="muted">
-            {problem.currentRevisionId
-              ? `版本 ${problem.currentRevisionId}`
-              : '版本信息暂不可用'}
-            {problem.testdataVersion
-              ? ` · 测试数据 ${problem.testdataVersion}`
-              : ''}
-          </p>
-        </header>
-        <section className="problem-content-surface">
-          <ProblemStatementRenderer content={problem} showTitle={false} />
-        </section>
-        {problem.examples.length > 0 && (
-          <Section title="样例">
-            {problem.examples.map((example, index) => (
-              <div className="sample-block" key={index}>
-                <div className="sample-heading section-heading-inline">
-                  <h3>样例 {index + 1}</h3>
-                  <button
-                    type="button"
-                    className="secondary sample-copy"
-                    onClick={() => {
-                      if (!navigator.clipboard) {
-                        setCopyMessage('当前浏览器不支持复制样例。');
-                        return;
-                      }
-                      void navigator.clipboard
-                        .writeText(example.input)
-                        .then(() => setCopyMessage('样例输入已复制。'))
-                        .catch(() =>
-                          setCopyMessage('复制失败，请手动选择样例输入。'),
-                        );
-                    }}
-                  >
-                    复制样例
+              {canEdit && (
+                <Link
+                  to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
+                >
+                  <button type="button" className="secondary">
+                    编辑题目
                   </button>
-                </div>
-                <div className="sample-grid">
-                  <div>
-                    <h4>输入</h4>
-                    <pre
-                      className="sample-code sample-input"
-                      aria-label={`样例 ${index + 1} 输入`}
+                </Link>
+              )}
+              <button type="button" className="secondary" disabled>
+                收藏
+              </button>
+            </div>
+            <p className="muted">
+              {problem.currentRevisionId
+                ? `版本 ${problem.currentRevisionId}`
+                : '版本信息暂不可用'}
+              {problem.testdataVersion
+                ? ` · 测试数据 ${problem.testdataVersion}`
+                : ''}
+            </p>
+          </header>
+          <section className="problem-content-surface">
+            <ProblemStatementRenderer content={problem} showTitle={false} />
+          </section>
+          {problem.examples.length > 0 && (
+            <Section title="样例">
+              {problem.examples.map((example, index) => (
+                <div className="sample-block" key={index}>
+                  <div className="sample-heading section-heading-inline">
+                    <h3>样例 {index + 1}</h3>
+                    <button
+                      type="button"
+                      className="secondary sample-copy"
+                      onClick={() => {
+                        if (!navigator.clipboard) {
+                          setCopyMessage('当前浏览器不支持复制样例。');
+                          return;
+                        }
+                        void navigator.clipboard
+                          .writeText(example.input)
+                          .then(() => setCopyMessage('样例输入已复制。'))
+                          .catch(() =>
+                            setCopyMessage('复制失败，请手动选择样例输入。'),
+                          );
+                      }}
                     >
-                      {example.input}
-                    </pre>
+                      复制样例
+                    </button>
                   </div>
-                  <div>
-                    <h4>输出</h4>
-                    <pre
-                      className="sample-code sample-output"
-                      aria-label={`样例 ${index + 1} 输出`}
-                    >
-                      {example.output}
-                    </pre>
+                  <div className="sample-grid">
+                    <div>
+                      <h4>输入</h4>
+                      <pre
+                        className="sample-code sample-input"
+                        aria-label={`样例 ${index + 1} 输入`}
+                      >
+                        {example.input}
+                      </pre>
+                    </div>
+                    <div>
+                      <h4>输出</h4>
+                      <pre
+                        className="sample-code sample-output"
+                        aria-label={`样例 ${index + 1} 输出`}
+                      >
+                        {example.output}
+                      </pre>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-            {copyMessage && <p role="status">{copyMessage}</p>}
-          </Section>
-        )}
-        {problem.notes && <Section title="说明与提示">{problem.notes}</Section>}
-      </div>
-      <aside className="problem-aside" aria-label="题目信息">
-        <dl className="problem-facts">
-          <div>
-            <dt>难度</dt>
-            <dd>{problem.difficulty ?? '后端暂未提供'}</dd>
-          </div>
-          <div>
-            <dt>标签</dt>
-            <dd>
-              <span className="tag-row">
-                {problem.tags?.length
-                  ? problem.tags.map((tag) => <span key={tag}>{tag}</span>)
-                  : '后端暂未提供'}
-              </span>
-            </dd>
-          </div>
-          <div>
-            <dt>来源</dt>
-            <dd>{problem.source ?? '后端暂未提供'}</dd>
-          </div>
-          <div>
-            <dt>时间限制</dt>
-            <dd>{problem.timeLimitMs} ms</dd>
-          </div>
-          <div>
-            <dt>内存限制</dt>
-            <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
-          </div>
-          {problem.statistics && (
+              ))}
+              {copyMessage && <p role="status">{copyMessage}</p>}
+            </Section>
+          )}
+          {problem.notes && (
+            <Section title="说明与提示">{problem.notes}</Section>
+          )}
+        </div>
+        <aside className="problem-aside" aria-label="题目信息">
+          <dl className="problem-facts">
             <div>
-              <dt>真实提交统计</dt>
+              <dt>难度</dt>
+              <dd>{problem.difficulty ?? '后端暂未提供'}</dd>
+            </div>
+            <div>
+              <dt>标签</dt>
               <dd>
-                {problem.statistics.acceptedCount} /{' '}
-                {problem.statistics.submissionCount}
+                <span className="tag-row">
+                  {problem.tags?.length
+                    ? problem.tags.map((tag) => <span key={tag}>{tag}</span>)
+                    : '后端暂未提供'}
+                </span>
               </dd>
             </div>
-          )}
-        </dl>
-        <p className="field-help">
-          收藏、题单、最近尝试与通过统计仅在后端提供真实 contract 后启用。
-        </p>
-      </aside>
-    </article>
+            <div>
+              <dt>来源</dt>
+              <dd>{problem.source ?? '后端暂未提供'}</dd>
+            </div>
+            <div>
+              <dt>时间限制</dt>
+              <dd>{problem.timeLimitMs} ms</dd>
+            </div>
+            <div>
+              <dt>内存限制</dt>
+              <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
+            </div>
+            {problem.statistics && (
+              <div>
+                <dt>真实提交统计</dt>
+                <dd>
+                  {problem.statistics.acceptedCount} /{' '}
+                  {problem.statistics.submissionCount}
+                </dd>
+              </div>
+            )}
+          </dl>
+          <p className="field-help">
+            收藏、题单、最近尝试与通过统计仅在后端提供真实 contract 后启用。
+          </p>
+        </aside>
+      </article>
+      <section
+        id="solve"
+        className="problem-editor-slot"
+        aria-label="OnlineCodeEditor"
+      >
+        <ProblemSolveEditorSlot
+          context={
+            {
+              problemId: problem.id,
+              slug: problem.slug,
+              samples: problem.examples.map((sample, index) => ({
+                input: sample.input,
+                output: sample.output,
+                label: `样例 ${index + 1}`,
+              })),
+              problemRevisionId: problem.currentRevisionId ?? problem.id,
+              checker,
+              codeRunAdapter,
+              ...(user ? { submissionAdapter } : {}),
+              onViewSubmission: (submissionId: string) =>
+                navigate(`/submissions/${encodeURIComponent(submissionId)}`),
+            } as ProblemSolveEditorContext
+          }
+        />
+      </section>
+    </>
   );
 }
 
@@ -2926,7 +2980,7 @@ export function App() {
         />
       )
     ) : current.name === 'problem' ? (
-      <ProblemDetail api={api} id={current.id ?? ''} />
+      <ProblemDetail api={api} id={current.id ?? ''} user={user} />
     ) : (
       <NotFound />
     );

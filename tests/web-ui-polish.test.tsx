@@ -128,6 +128,9 @@ describe('Web UI polish', () => {
       'href',
       expect.stringContaining('#solve'),
     );
+    expect(
+      await screen.findByRole('heading', { name: 'Online Code Editor' }),
+    ).toBeInTheDocument();
   });
 
   it('opens the traditional submission surface from the problem action', async () => {
