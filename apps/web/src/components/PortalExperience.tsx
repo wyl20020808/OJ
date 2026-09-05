@@ -1302,6 +1302,7 @@ export function ProfileExperience({
   const [favoriteError, setFavoriteError] = useState('');
   const [favoriteProblemId, setFavoriteProblemId] = useState('');
   const [favoriteAction, setFavoriteAction] = useState<string>();
+  const [profileActivityDays, setProfileActivityDays] = useState<UserActivityDay[]>();
   const isPublic = Boolean(username);
   const tabs = ['概览', '做题记录', '收藏', '我的题目', '团队'];
   const profileUsername = username ?? user?.username;
@@ -1341,6 +1342,16 @@ export function ProfileExperience({
     return () => {
       active = false;
     };
+  }, [api, profileRefresh, profileUsername]);
+
+  useEffect(() => {
+    if (!api || !profileUsername || typeof api.profileActivity !== 'function') return;
+    let active = true;
+    void api.profileActivity(profileUsername).then((result) => {
+      if (!active) return;
+      setProfileActivityDays(result.days.map((day) => ({ date: day.date, count: day.submissionCount, metric: 'SUBMISSIONS' })));
+    }).catch(() => active && setProfileActivityDays(undefined));
+    return () => { active = false; };
   }, [api, profileRefresh, profileUsername]);
 
   useEffect(() => {
@@ -1470,7 +1481,7 @@ export function ProfileExperience({
   const showLegacyActivity = !api && Boolean(activity);
 
   const renderActivity = () => {
-    if (showLegacyActivity) return <ActivityHeatmap days={activity} />;
+    if (showLegacyActivity) return <ActivityHeatmap days={profileActivityDays ?? activity} />;
     if (api && !activityCapability)
       return <p className="muted">正在加载个人资料能力…</p>;
     if (activityCapability && !activityCapability.available)
@@ -1480,7 +1491,7 @@ export function ProfileExperience({
           capability={activityCapability}
         />
       );
-    return <ActivityHeatmap days={activity} />;
+    return <ActivityHeatmap days={profileActivityDays ?? activity} />;
   };
 
   const renderFavorites = () => {

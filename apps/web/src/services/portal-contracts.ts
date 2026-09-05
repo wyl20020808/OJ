@@ -95,8 +95,10 @@ export type ContestCreateRequest = {
 
 export type UserActivityDay = {
   date: string;
-  metric: 'SOLVED_PROBLEMS' | 'SUBMISSIONS';
-  count: number;
+  metric?: 'SOLVED_PROBLEMS' | 'SUBMISSIONS';
+  count?: number;
+  submissionCount?: number;
+  acceptedCount?: number;
 };
 
 export type ConversationSummary = {
