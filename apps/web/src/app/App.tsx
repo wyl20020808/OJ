@@ -31,6 +31,7 @@ import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
 import { ProblemEditor } from '../components/ProblemEditor.js';
+import { ProblemStatementRenderer } from '../components/ProblemStatementRenderer.js';
 import { ProblemSolveEditorSlot } from '../plugins/ProblemSolveEditorSlot.js';
 import { HttpCodeRunAdapter } from '@ojplatform/online-code-editor/run/HttpCodeRunAdapter';
 import { HttpSubmissionAdapter } from '@ojplatform/online-code-editor/submission/SubmissionAdapter';
@@ -1692,10 +1693,9 @@ export function ProblemDetail({
               </button>
             </div>
           </header>
-          <Section title="题目描述">{problem.statement}</Section>
-          <Section title="输入格式">{problem.inputDescription}</Section>
-          <Section title="输出格式">{problem.outputDescription}</Section>
-          <Section title="数据范围">{problem.constraints}</Section>
+          <section className="problem-content-surface">
+            <ProblemStatementRenderer content={problem} showTitle={false} />
+          </section>
           {problem.examples.length > 0 && (
             <Section title="样例">
               {problem.examples.map((example, index) => (

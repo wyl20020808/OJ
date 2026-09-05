@@ -1,5 +1,12 @@
 # OJPlatform Project Status
 
+Problem Statement Renderer + Authoring Preview V2: PARTIAL. Shared sanitized
+Markdown/GFM/KaTeX renderer now powers Problem Detail and authoring live preview;
+desktop split view, mobile stacking, and sample exclusion are implemented. Web
+build/lint pass. One legacy editor test still expects samples in preview; full
+typecheck is blocked by existing missing `pg` declarations. Browser runtime not
+verified. See `reports/OJPLATFORM_PROBLEM_STATEMENT_PREVIEW_V2_REPORT.md`.
+
 JudgeData Artifact Pipeline V1: PASS / INTEGRATED. Streaming upload, immutable
 artifacts, reference dispatch, bounded Worker fetch, Supervisor opaque-handle
 transport, and dispatch recovery are implemented. Real authenticated 100 MiB
