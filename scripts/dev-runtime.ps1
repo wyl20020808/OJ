@@ -490,7 +490,7 @@ function Write-InfrastructureDiagnostics($Statuses) {
   foreach ($status in $Statuses) { $lines += "$($status.service): $($status.code) - $($status.detail)"; Write-Host "Infrastructure $($status.service): $($status.code) ($($status.detail))" }
   Ensure-RuntimeFolders; Add-Content -LiteralPath (Join-Path $LogRoot 'infrastructure.log') -Value $lines
 }
-function Convert-WindowsPathToWsl([string]$Path) { if ($Path -match '^([A-Za-z]):\\(.*)$') { return "/mnt/$($Matches[1].ToLower())/$($Matches[2].Replace('\\','/'))" }; return $Path.Replace('\\','/') }
+function Convert-WindowsPathToWsl([string]$Path) { if ($Path -match '^([A-Za-z]):\\(.*)$') { return "/mnt/$($Matches[1].ToLower())/$($Matches[2].Replace('\','/'))" }; return $Path.Replace('\','/') }
 function Get-SourceIdentity([string]$Root, [string[]]$Patterns) {
   $hash = [Security.Cryptography.SHA256]::Create()
   $fileHash = [Security.Cryptography.SHA256]::Create()
@@ -541,7 +541,8 @@ function Ensure-SupervisorBinaries {
       } else { Write-Host "$($item.label) REUSE ($($item.path))"; continue }
     }
     $parent = [IO.Path]::GetDirectoryName($item.path.Replace('/','\\')) -replace '\\','/'
-    $command = "mkdir -p '$parent'; cd '$sourceWsl'; go build -trimpath -o '$($item.path)' $($item.package); chmod 755 '$($item.path)'"
+    $buildPath = "/tmp/ojplatform-sandbox/ojplatform-$($item.label)"
+    $command = "mkdir -p /tmp/ojplatform-sandbox; cd '$sourceWsl'; go build -trimpath -o '$buildPath' $($item.package); sudo install -m 755 '$buildPath' '$($item.path)'; rm -f '$buildPath'"
     Write-Host "$($item.label) BUILD (canonical source)"
     Invoke-Wsl @('-d',$Config.WslDistro,'--','bash','-lc',$command) 120000 | Out-Null
     if (-not (Test-WslFile $item.path -Executable)) { throw "$($item.label) build did not produce an executable at $($item.path)." }
