@@ -18,7 +18,7 @@ Status: PASS.
 Fresh worktree `D:\OJPlatform-worktrees\final-main-alignment-v1` and branch
 `codex/final-main-alignment-v1` were created from latest `main`. Normal merge
 of the candidate completed without conflicts. Reconciliation HEAD is recorded
-in the final response and Git log.
+as `227fffb80b62cc7988a84b1c68a1699a06ccad78`.
 
 Diff audit covered the candidate range. Changes are limited to the ABCD Web
 implementation/tests plus their reports and project status documentation;
@@ -53,6 +53,9 @@ preserved: YES. No unexplained diff: YES. New regressions: NONE.
 
 Merge allowed: YES. Final normal merge into canonical `main` was performed
 only after rechecking that `main` remained at the recorded latest HEAD.
+Main merge commit: `fa4abbbbcd5e55f862a3d4f802e4dc2e4650a8b9`.
+Final main HEAD at merge: `fa4abbbbcd5e55f862a3d4f802e4dc2e4650a8b9`; this
+report closeout is the subsequent documentation commit on `main`.
 
 User artifacts: `scripts/dev-runtime.ps1` dirty modification and all untracked
 artifacts were preserved and not touched. Ready for user normal start: YES.
