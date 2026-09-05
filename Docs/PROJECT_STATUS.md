@@ -271,3 +271,14 @@ partial because Windows cannot compile trusted-probe syscall code and four
 existing root/cgroup fixture tests fail. Browser ZIP persistence/Validate and
 live SSE terminal-chain evidence were delegated to the user. See
 Docs/reports/OJPLATFORM_RUNTIME_RELIABILITY_V1_REPORT.md.
+
+Runtime Reliability V1 main integration (2026-09-05): source branch
+`codex/runtime-reliability-v1` merged normally into canonical `main` as
+`c7dc9de4edfbaf98de7d9a7398c801360a313ab0`. Root checkout is aligned to
+`main`; existing user untracked artifacts were preserved. Focused JudgeData and
+Runtime Manager tests, Web typecheck/build, Worker tests, PowerShell parse, and
+diff check pass. Supervisor remains PARTIAL for known Windows syscall and
+root/cgroup fixture failures. Feature Runtime stop was BLOCKED by an existing
+Runtime Manager mutex; no manual termination performed. Browser ZIP persistence,
+Validate, formal resubmission, and real SSE terminal-chain evidence remain
+NOT VERIFIED and user-owned.

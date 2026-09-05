@@ -1,7 +1,7 @@
 # OJPlatform Runtime Reliability + Real Qualification V1
 
 Date: 2026-09-05
-Branch: codex/runtime-reliability-v1
+Branch: main
 
 ## Scope
 
@@ -50,17 +50,30 @@ Browser live event-chain qualification was not executed in this pass per user
 request. No claim is made for terminal grid updates, browser receipt, or final
 DOM state.
 
+## Main Integration
+
+- Source branch `codex/runtime-reliability-v1` was tracked-clean at
+  `ad9e1ee286f4a68f668a0c3cc8100acd0f0b1349`.
+- Normal merge into canonical `main` completed as
+  `c7dc9de4edfbaf98de7d9a7398c801360a313ab0`.
+- Root `D:\OJPlatform` is on `main` at that merge commit. Existing untracked
+  user artifacts were preserved.
+- OnlineCodeEditor was read-only checked at `main` `b8fbfcc49643e2487e47ac0c5b55d966270d13cc`; its existing untracked lockfile was not touched.
+
 ## Validation
 
-- pnpm exec vitest run tests/problem-judge-data.test.ts tests/problem-editor.test.tsx: 30 PASS
+- `vitest run tests/problem-judge-data.test.ts`: 13 PASS
+- `vitest run tests/sandbox-control.test.ts`: 4 PASS
 - pnpm typecheck: PASS
+- pnpm build:web: PASS
 - go test ./... in apps/judge-worker: 64 PASS
-- go test ./... in apps/sandbox-supervisor: PARTIAL. 39 tests passed, 5 failed:
-  Windows trusted-probe syscall build incompatibility and four existing
+- go test ./... in apps/sandbox-supervisor: PARTIAL. 25 passed, 10 failed,
+  41 skipped: Windows trusted-probe syscall build incompatibility and known
   root/cgroup/lifecycle fixture assumptions.
-- Runtime Manager start -Verify: DOCTOR READY
-- Runtime Manager status: Web/API/Judge/Host Agent/Supervisor RUNNING,
-  Worker RUNNING_OWNED, PostgreSQL/Redis/MinIO reachable, MIXED SOURCE=False.
+- PowerShell parse: PASS. `git diff --check`: PASS.
+- Runtime Manager status before stop: old feature source running; active Worker
+  DOWN; infrastructure reachable. Formal stop was BLOCKED by an existing
+  Runtime Manager operation mutex. No manual process termination performed.
 - Browser E2E: NOT VERIFIED BY AGENT (delegated to user).
 
 ## Commits
@@ -72,7 +85,7 @@ DOM state.
 - f170888 fix: use writable supervisor runtime binary
 - 391e64a fix: expose execution set contract health
 
-Main was not merged. User files outside this worktree were not touched.
+Main merge completed. User files outside this worktree were not touched.
 
 ## Status
 
