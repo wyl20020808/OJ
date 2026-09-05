@@ -588,7 +588,22 @@ function Ensure-Infrastructure($state) {
       $message = $_.Exception.Message
       if ($message -match 'PORT_OWNED_BY_|PORT_OWNER_UNKNOWN|WSL_DOCKER_INSPECTION_FAILED') { throw $message }
       if ($message -match 'address already in use') {
-        try { Write-Host "Infrastructure $($status.service) port state recovery"; if ($status.exists -and -not $status.running) { Invoke-Compose @('rm','-sf',$status.service) 30000 | Out-Null }; Invoke-ProcessCommand 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',$PortReconcileScript,'-Distro',$Config.WslDistro,'-Project',$Config.ComposeProjectName,'-Service',$status.service,'-Port',[string]$status.hostPort) @{} 30000 | Out-Null; Invoke-Compose @('up','-d',$status.service) 120000 | Out-Null }
+        try {
+          Write-Host "Infrastructure $($status.service) port state recovery"
+          $recoveryInspection = Get-ComposeInspection $status.service
+          $ownedRecoveryContainer = $recoveryInspection -and
+            (Get-ContainerLabel $recoveryInspection 'com.docker.compose.project') -eq [string]$Config.ComposeProjectName -and
+            (Get-ContainerLabel $recoveryInspection 'com.docker.compose.service') -eq $status.service
+          if ($ownedRecoveryContainer -and [string]$recoveryInspection.State.Status -ne 'running') {
+            # Compose rm can leave a Created container's port reservation behind; remove exact stale container, never its volume.
+            $container = "$($Config.ComposeProjectName)-$($status.service)-1"
+            try { Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','rm','-f',$container) 30000 | Out-Null }
+            catch { if ($_.Exception.Message -notmatch 'No such container') { throw } }
+            Start-Sleep -Milliseconds 500
+          }
+          Invoke-ProcessCommand 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',$PortReconcileScript,'-Distro',$Config.WslDistro,'-Project',$Config.ComposeProjectName,'-Service',$status.service,'-Port',[string]$status.hostPort) @{} 30000 | Out-Null
+          Invoke-Compose @('up','-d',$status.service) 120000 | Out-Null
+        }
         catch { $recoveryMessage=$_.Exception.Message; if ($recoveryMessage -match 'PORT_OWNED_BY_|PORT_OWNER_UNKNOWN|WSL_DOCKER_INSPECTION_FAILED') { throw $recoveryMessage }; throw "PORT_BIND_FAILED: OWNER=UNKNOWN SERVICE=$($status.service) PORT=$($status.hostPort) detail=$recoveryMessage" }
       } else { throw "COMPOSE_FAILURE: $($status.service): $message" }
     }
@@ -653,7 +668,25 @@ function Reconcile-RequestedRuntime($state) {
     Stop-WorkerThroughControlPlane $state
   }
 }
-function Stop-Infrastructure($state) { if($state.infrastructure.managed -and $state.infrastructure.compose){$activePorts=@($Config.WebPort,$Config.ApiPort,$Config.JudgeServicePort,$Config.HostAgentPort,$Config.SupervisorPort|Where-Object{Test-TcpPort $_});if($activePorts.Count -gt 0){throw "Infrastructure STOP REFUSED: application ports still listening: $($activePorts -join ', ')."};Invoke-Compose @('stop') 60000|Out-Null;$keepalive=$state.processes['wsl-keepalive'];if($keepalive -and (Test-OwnedProcess $keepalive)){try{Stop-Process -Id ([int]$keepalive.pid) -Force -ErrorAction SilentlyContinue}catch{}};$state.processes.Remove('wsl-keepalive');$state.infrastructure.managed=$false;Save-State $state;Write-Host 'Infrastructure STOP'} }
+function Stop-Infrastructure($state) {
+  $activePorts=@($Config.WebPort,$Config.ApiPort,$Config.JudgeServicePort,$Config.HostAgentPort,$Config.SupervisorPort|Where-Object{Test-TcpPort $_})
+  if($activePorts.Count -gt 0){throw "Infrastructure STOP REFUSED: application ports still listening: $($activePorts -join ', ')."}
+  $compose = Get-ComposePath
+  # Canonical project only; no -v, so named data volumes survive cleanup.
+  Invoke-Compose @('down','--remove-orphans') 60000|Out-Null
+  foreach($infra in @(@{service='postgres';port=55432},@{service='redis';port=56379},@{service='minio';port=59000})) {
+    try { Invoke-ProcessCommand 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',$PortReconcileScript,'-Distro',$Config.WslDistro,'-Project',$Config.ComposeProjectName,'-Service',$infra.service,'-Port',[string]$infra.port) @{} 30000 | ForEach-Object { if($_){Write-Host $_} } }
+    catch { $message=$_.Exception.Message; if($message -match 'PORT_OWNED_BY_|PORT_OWNER_UNKNOWN|OTHER_DOCKER_RESOURCE|WSL_DOCKER_INSPECTION_FAILED'){throw $message}; throw "Infrastructure STOP PORT CLEANUP FAILED: $($infra.service): $message" }
+  }
+  $marker='ojplatform-local-runtime-keepalive'
+  foreach($process in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'wsl.exe' -and $_.CommandLine -and $_.CommandLine -match [regex]::Escape($marker) })) {
+    try { Stop-Process -Id ([int]$process.ProcessId) -Force -ErrorAction SilentlyContinue } catch {}
+  }
+  $state.processes.Remove('wsl-keepalive')
+  $state.infrastructure = @{managed=$false;project=$Config.ComposeProjectName;compose=$compose;stoppedAt=(Get-Date).ToUniversalTime().ToString('o')}
+  Save-State $state
+  Write-Host 'Infrastructure STOP/CLEANUP'
+}
 function Assert-ApplicationPortsReleased { $activePorts=@($Config.WebPort,$Config.ApiPort,$Config.JudgeServicePort,$Config.HostAgentPort,$Config.SupervisorPort|Where-Object{Test-TcpPort $_});if($activePorts.Count -gt 0){throw "APPLICATION_PORT_REMAINS_OCCUPIED: $($activePorts -join ', ')."} }
 function Test-HttpOk([string]$Url) { try { return ([int](Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3).StatusCode) -eq 200 } catch { return $false } }
 function Test-DatabaseConnection([string]$Url) { if (-not $Url) { return $false }; try { $probe = "import pg from 'pg'; const c=new pg.Client({connectionString:process.env.RUNTIME_DATABASE_URL,connectionTimeoutMillis:3000}); await c.connect(); await c.query('select 1'); await c.end();"; Invoke-ProcessCommand 'node' @('--input-type=module','-e',$probe) @{ RUNTIME_DATABASE_URL = $Url } 10000 | Out-Null; return $true } catch { return $false } }

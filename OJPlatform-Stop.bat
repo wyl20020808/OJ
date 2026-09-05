@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 echo OJPlatform Stop: checking active Judge jobs...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\dev-runtime.ps1" stop
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\dev-runtime.ps1" stop -All
 if errorlevel 1 (
   echo OJPlatform Stop failed:
   pause
