@@ -374,3 +374,15 @@ Problem Statement renderer/preview, and profile heatmap. Web typecheck/build
 and diff check pass; 47 focused tests pass, including 3-second snapshot
 reconciliation, terminal stop, unmount cleanup, SSE retention, and stale-state
 protection. See `Docs/reports/OJPLATFORM_PRODUCT_UX_WAVE_INTEGRATION_V1_REPORT.md`.
+
+Conservative Product UX Final Integration V1 (2026-09-06): PARTIAL. ABC
+candidate `6c4d14a` and Online Code Editor D `70a5679` were merged normally into
+`codex/conservative-product-ux-final-integration-v1` at `98c6126` with audited
+App/app.css conflict hunks. Problem Detail preserves renderer, samples, aside,
+permissions, and adds the `problem.solve.editor` host with Run/Submit adapters,
+checker injection, fallback, and diagnostics. Product targeted tests (`216/216`),
+plugin tests (`31/31`), Web typecheck/build, lint, and diff check pass. Full
+suite failures reproduce on base main; Postgres integration is environment
+blocked. Runtime/browser and real Run/Submit remain NOT VERIFIED because of
+known `HOST_CAPACITY_EXHAUSTED`. Main merge intentionally stopped. See
+`Docs/reports/OJPLATFORM_CONSERVATIVE_PRODUCT_UX_FINAL_INTEGRATION_V1_REPORT.md`.
