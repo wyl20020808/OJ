@@ -1171,14 +1171,14 @@ export function ActivityHeatmap({
       />
     );
   const metric = days[0]?.metric ?? 'SOLVED_PROBLEMS';
-  const max = Math.max(1, ...days.map((day) => day.count));
-  const total = days.reduce((sum, day) => sum + day.count, 0);
+  const max = Math.max(1, ...days.map((day) => day.count ?? 0));
+  const total = days.reduce((sum, day) => sum + (day.count ?? 0), 0);
   return (
     <div className="heatmap-block">
       <div className="heatmap-summary" role="status">
         最近一年共 {total}{' '}
         {metric === 'SOLVED_PROBLEMS' ? '道题目完成记录' : '次评测记录'}，共{' '}
-        {days.filter((day) => day.count > 0).length} 个活跃日。
+        {days.filter((day) => (day.count ?? 0) > 0).length} 个活跃日。
       </div>
       <div className="heatmap-scroll">
         <div className="heatmap-grid" aria-label="做题情况热力图">
@@ -1186,9 +1186,9 @@ export function ActivityHeatmap({
             <span
               key={day.date}
               className="heatmap-day"
-              style={{ '--heat': day.count / max } as CSSProperties}
-              title={`${day.date}：${day.count} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
-              aria-label={`${day.date}，${day.count} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
+              style={{ '--heat': (day.count ?? 0) / max } as CSSProperties}
+              title={`${day.date}：${day.count ?? 0} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
+              aria-label={`${day.date}，${day.count ?? 0} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
             />
           ))}
         </div>
