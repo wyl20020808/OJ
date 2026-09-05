@@ -1,5 +1,23 @@
 # OJPlatform Project Status
 
+Final Release Gate & Main Merge V1 (2026-09-06): PARTIAL. Candidate
+`codex/conservative-product-ux-final-integration-v1` is at `a80fe32`; canonical
+main started at `7b812a8` and drift was recorded. Focused candidate checks pass
+(`255/255`), typecheck/build/diff check pass. Formal Runtime Manager recovery
+restored PostgreSQL/Redis/MinIO but left API/Judge owned by another checkout,
+Web/Host Agent down, Worker stale, and `MIXED SOURCE = True`; browser and real
+Run/Submit remain NOT VERIFIED. Main merge was intentionally not performed.
+See `reports/OJPLATFORM_FINAL_RELEASE_GATE_MAIN_MERGE_V1_REPORT.md`.
+
+Online Code Editor Visibility & Integration V1: PARTIAL. Product `ProblemDetail`
+now mounts canonical Plugin `ojplatform.online-code-editor` at
+`problem.solve.editor` after statement/samples, with Run/Submit adapters and
+visible plugin failure fallback. Plugin tests/typecheck/build and Product
+focused tests/Web typecheck/build pass. Runtime browser verification is blocked
+by existing worker `HOST_CAPACITY_EXHAUSTED` recovery failure; full Product
+suite retains unrelated existing failures. See
+`reports/OJPLATFORM_ONLINE_CODE_EDITOR_VISIBILITY_INTEGRATION_V1_REPORT.md`.
+
 Full Product State Diagnosis & Recovery V1: PARTIAL. Recovered merge-lost
 evaluation navigation, capability-driven problem editing, sample presentation,
 breadcrumb/admin navigation, and authenticated evaluation-list protection.
@@ -10,6 +28,15 @@ Browser guest evaluation-list smoke passes; persisted
 root credential and root/admin browser workflows remain NOT VERIFIED because no
 credential was changed. See
 `reports/OJPLATFORM_FULL_PRODUCT_STATE_DIAGNOSIS_RECOVERY_V1_REPORT.md`.
+
+Conservative ABC Integration V1: PARTIAL. Independent branch
+`codex/conservative-abc-integration-v1` starts from main `7b812a8` and merges
+Problem List Compact V3, Problem Authoring V3, and Evaluation Detail UX V5 in
+that order. Targeted ABC plus baseline checks pass (285 tests); six existing
+base-main failures remain reproduced, full lint has existing out-of-scope
+errors, and browser smoke is not verified. Branch is an ABC candidate for D;
+it is not merged to main. See
+`reports/OJPLATFORM_CONSERVATIVE_ABC_INTEGRATION_V1_REPORT.md`.
 
 Post-Merge UI Regression Recovery V1: PARTIAL. Restored pre-wave global
 Evaluation List filters/layout and breadcrumb de-duplication while preserving
@@ -264,6 +291,14 @@ started.
 
 Last Updated: 2026-09-05
 
+Evaluation Detail UX V5 (2026-09-06): PASS for implemented/static Web scope.
+Result/code tabs, source copy feedback, right-side evaluation metadata,
+Generation History removal, Problem link, bounded testcase cards, SSE and
+3-second terminal-aware refresh are implemented. Focused V5 tests, Web
+typecheck/build, targeted lint, formatting, and diff checks pass. Browser and
+managed-runtime qualification were not run. See
+`reports/OJPLATFORM_EVALUATION_DETAIL_UX_V5_REPORT.md`.
+
 JUDGEDATA ARTIFACT PIPELINE V1 (2026-09-05): PASS. Real authenticated 100 MiB
 raw ZIP upload, validate/publish, Product reference dispatch, Judge claim,
 MinIO checksum fetch, Supervisor opaque-handle execution, and terminal AC passed
@@ -348,3 +383,15 @@ Problem Statement renderer/preview, and profile heatmap. Web typecheck/build
 and diff check pass; 47 focused tests pass, including 3-second snapshot
 reconciliation, terminal stop, unmount cleanup, SSE retention, and stale-state
 protection. See `Docs/reports/OJPLATFORM_PRODUCT_UX_WAVE_INTEGRATION_V1_REPORT.md`.
+
+Conservative Product UX Final Integration V1 (2026-09-06): PARTIAL. ABC
+candidate `6c4d14a` and Online Code Editor D `70a5679` were merged normally into
+`codex/conservative-product-ux-final-integration-v1` at `98c6126` with audited
+App/app.css conflict hunks. Problem Detail preserves renderer, samples, aside,
+permissions, and adds the `problem.solve.editor` host with Run/Submit adapters,
+checker injection, fallback, and diagnostics. Product targeted tests (`216/216`),
+plugin tests (`31/31`), Web typecheck/build, lint, and diff check pass. Full
+suite failures reproduce on base main; Postgres integration is environment
+blocked. Runtime/browser and real Run/Submit remain NOT VERIFIED because of
+known `HOST_CAPACITY_EXHAUSTED`. Main merge intentionally stopped. See
+`Docs/reports/OJPLATFORM_CONSERVATIVE_PRODUCT_UX_FINAL_INTEGRATION_V1_REPORT.md`.

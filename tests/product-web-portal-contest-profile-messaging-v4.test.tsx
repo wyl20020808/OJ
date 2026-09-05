@@ -38,6 +38,7 @@ const packageSource = source('package.json');
 
 const problem: Problem = {
   id: 'p1',
+  publicId: 'P0001',
   slug: 'two-sum',
   title: '两数之和',
   statement: '给定数组，寻找目标和。',
@@ -304,7 +305,7 @@ async function verifyProblemList(id: number) {
   renderApp(id === 47 ? '/problems?q=two' : '/problems');
   await screen.findByRole('navigation', { name: '面包屑' });
   if (id === 39) expect(screen.queryByText('题目资源')).not.toBeInTheDocument();
-  if (id === 40) expect(screen.getByText('two-sum')).toBeInTheDocument();
+  if (id === 40) expect(screen.getByText('P0001')).toBeInTheDocument();
   if (id === 41) expect(screen.getAllByText('入门').length).toBeGreaterThan(0);
   if (id === 42)
     expect(screen.getAllByText('哈希表').length).toBeGreaterThan(0);
