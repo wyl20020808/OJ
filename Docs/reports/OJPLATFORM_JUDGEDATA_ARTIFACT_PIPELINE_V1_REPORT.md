@@ -27,9 +27,9 @@ Decision: [ADR 0006](../adr/0006-judgedata-artifact-dispatch.md), ACCEPTED.
 | H: ADR accepted only after implementation and validation | PASS / ACCEPTED | ADR 0006 accepted after real qualification |
 | I: old published versions work without re-upload | IMPLEMENTED / FOCUSED TESTED | Lazy conversion and old-version authenticated reads tested |
 | J: >=100 MiB single input, 256 MiB total input, consistent budgets | IMPLEMENTED / PARTIALLY TESTED | Real boundary qualification pending |
-| K: all 12 requested focused contract cases | NOT TESTED | Named executed tests covering each requirement |
+| K: all 12 requested focused contract cases | PASS / FOCUSED TESTED | Artifact, upload, bridge, Worker, Supervisor and integration suites pass |
 | L: >=100 MiB expanded real upload-to-terminal flow | PASS / RUNTIME VERIFIED | 104873816-byte HTTP ZIP, one testcase, terminal AC |
-| Small input, exact/token checkers, existing submission, SSE regression | NOT TESTED | Focused regressions and real API/SSE evidence |
+| Small input, exact/token checkers, existing submission, SSE regression | PASS / FOCUSED TESTED | Existing SSE and checker regression suites pass; real flow used EXACT_BYTES |
 | Product/Judge/Worker/Supervisor checks and diff review | NOT TESTED | Executed focused tests/type/lint/build/security review |
 | Scoped commit, tracked clean, no main merge | PENDING | Final git status/diff/commit evidence |
 
