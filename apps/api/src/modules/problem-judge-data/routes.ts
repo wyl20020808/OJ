@@ -13,17 +13,60 @@ const decodedBase64Length = (value: string) => {
   const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
   return Math.floor((value.length * 3) / 4) - padding;
 };
+const isBase64 = (value: string) => {
+  if (value.length === 0 || value.length % 4 !== 0) return false;
+  let padding = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 61) {
+      padding += 1;
+      if (index < value.length - padding || padding > 2) return false;
+      continue;
+    }
+    if (
+      padding > 0 ||
+      !(
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122) ||
+        (code >= 48 && code <= 57) ||
+        code === 43 ||
+        code === 47
+      )
+    )
+      return false;
+  }
+  return true;
+};
 const decodeBase64 = (value: unknown, limit: number, message: string) => {
   if (
     typeof value !== 'string' ||
-    value.length % 4 !== 0 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-      value,
-    ) ||
+    !isBase64(value) ||
     decodedBase64Length(value) > limit
   )
     throw new JudgeDataError('UPLOAD_TOO_LARGE', message, 413);
   return Buffer.from(value, 'base64');
+};
+const readBoundedUpload = async (
+  body: unknown,
+  limit: number,
+): Promise<Buffer> => {
+  if (body instanceof Uint8Array) {
+    if (body.byteLength > limit)
+      throw new JudgeDataError('UPLOAD_TOO_LARGE', 'ZIP upload too large', 413);
+    return Buffer.from(body);
+  }
+  if (!body || typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] !== 'function')
+    throw new JudgeDataError('UPLOAD_TOO_LARGE', 'ZIP upload body is required', 413);
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += bytes.length;
+    if (size > limit)
+      throw new JudgeDataError('UPLOAD_TOO_LARGE', 'ZIP upload too large', 413);
+    chunks.push(bytes);
+  }
+  return Buffer.concat(chunks, size);
 };
 export async function registerProblemJudgeDataRoutes(
   app: FastifyInstance,
@@ -33,6 +76,11 @@ export async function registerProblemJudgeDataRoutes(
     resolveProblemId?: (key: string) => Promise<string | undefined>;
   },
 ) {
+  app.addContentTypeParser(
+    ['application/zip', 'application/octet-stream'],
+    { parseAs: 'buffer', bodyLimit: MAX_ARCHIVE_COMPRESSED_BYTES },
+    (_request, payload, done) => done(null, payload),
+  );
   const auth = options.getAuth;
   const problemId = async (request: FastifyRequest) => {
     const key = String((request.params as { problemId?: unknown }).problemId);
@@ -227,17 +275,24 @@ export async function registerProblemJudgeDataRoutes(
   );
   app.post(
     '/api/problems/:problemId/judge-data/draft/upload-zip',
-    { bodyLimit: MAX_UPLOAD_BODY_BYTES },
+    { bodyLimit: MAX_ARCHIVE_COMPRESSED_BYTES },
     async (r, reply) => {
+      const contentType = (String(r.headers['content-type'] ?? '')
+        .split(';', 1)[0] ?? '')
+        .trim()
+        .toLowerCase();
       const b = r.body as any;
       return mutate(r, reply, async () =>
         options.service.addZip(
           await problemId(r),
-          decodeBase64(
-            b?.zipBase64,
-            MAX_ARCHIVE_COMPRESSED_BYTES,
-            'ZIP upload too large',
-          ),
+          contentType === 'application/zip' ||
+            contentType === 'application/octet-stream'
+            ? await readBoundedUpload(b, MAX_ARCHIVE_COMPRESSED_BYTES)
+            : decodeBase64(
+                b?.zipBase64,
+                MAX_ARCHIVE_COMPRESSED_BYTES,
+                'ZIP upload too large',
+              ),
           await auth(r),
         ),
       );

@@ -93,7 +93,7 @@ $LogRoot = Join-Path $RuntimeRoot 'logs'
 $Config = @{
   WebPort = 5173; ApiPort = 3010; JudgeServicePort = 3100; HostAgentPort = 3180; SupervisorPort = 19092
   ComposeProjectName = 'ojplatform-local'
-  WslDistro = 'Ubuntu-24.04'; SupervisorLinuxBinary = '/opt/ojplatform/bin/supervisor'
+  WslDistro = 'Ubuntu-24.04'; SupervisorLinuxBinary = '/tmp/ojplatform-sandbox/ojplatform-supervisor'; SupervisorExecutionSetContractVersion = '2C.4'
   SupervisorSystemdUnit = 'ojplatform-local-supervisor.service'
   SupervisorProbeLinuxPath = '/opt/ojplatform/bin/trusted-probe'; SupervisorSandboxRoot = '/tmp/ojplatform-sandbox'
   SupervisorRuncBinary = 'runc'; CompilerRootfsLinuxPath = '/opt/ojplatform/compiler-rootfs/cpp20-gcc-13-v1'
@@ -490,7 +490,7 @@ function Write-InfrastructureDiagnostics($Statuses) {
   foreach ($status in $Statuses) { $lines += "$($status.service): $($status.code) - $($status.detail)"; Write-Host "Infrastructure $($status.service): $($status.code) ($($status.detail))" }
   Ensure-RuntimeFolders; Add-Content -LiteralPath (Join-Path $LogRoot 'infrastructure.log') -Value $lines
 }
-function Convert-WindowsPathToWsl([string]$Path) { if ($Path -match '^([A-Za-z]):\\(.*)$') { return "/mnt/$($Matches[1].ToLower())/$($Matches[2].Replace('\\','/'))" }; return $Path.Replace('\\','/') }
+function Convert-WindowsPathToWsl([string]$Path) { if ($Path -match '^([A-Za-z]):\\(.*)$') { return "/mnt/$($Matches[1].ToLower())/$($Matches[2].Replace('\','/'))" }; return $Path.Replace('\','/') }
 function Get-SourceIdentity([string]$Root, [string[]]$Patterns) {
   $hash = [Security.Cryptography.SHA256]::Create()
   $fileHash = [Security.Cryptography.SHA256]::Create()
@@ -529,9 +529,24 @@ function Ensure-SupervisorBinaries {
   $sourceRoot = Join-Path $ProjectRoot 'apps/sandbox-supervisor'
   $sourceWsl = Convert-WindowsPathToWsl $sourceRoot
   foreach ($item in @(@{path=$Config.SupervisorLinuxBinary; package='./cmd/supervisor'; label='supervisor'}, @{path=$Config.SupervisorProbeLinuxPath; package='./cmd/trusted-probe'; label='trusted-probe'})) {
-    if (Test-WslFile $item.path -Executable) { Write-Host "$($item.label) REUSE ($($item.path))"; continue }
+    if (Test-WslFile $item.path -Executable) {
+      if ($item.label -eq 'supervisor') {
+        $health = Get-HttpJson "$($Config.SupervisorOrigin)/v1/health"
+        $protocol = if ($health -and $health.body) { [string]$health.body.execution_set_contract_version } else { '' }
+        if ($protocol -eq [string]$Config.SupervisorExecutionSetContractVersion) {
+          Write-Host "$($item.label) REUSE ($($item.path))"; continue
+        }
+        $observed = if ($protocol) { $protocol } else { 'unknown' }
+        Write-Host "supervisor REBUILD (protocol $observed, expected $($Config.SupervisorExecutionSetContractVersion))"
+      } else { Write-Host "$($item.label) REUSE ($($item.path))"; continue }
+    }
     $parent = [IO.Path]::GetDirectoryName($item.path.Replace('/','\\')) -replace '\\','/'
-    $command = "mkdir -p '$parent'; cd '$sourceWsl'; go build -trimpath -o '$($item.path)' $($item.package); chmod 755 '$($item.path)'"
+    if ($item.path -like '/tmp/*') {
+      $command = "mkdir -p /tmp/ojplatform-sandbox; cd '$sourceWsl'; go build -trimpath -o '$($item.path)' $($item.package); chmod 755 '$($item.path)'"
+    } else {
+      $buildPath = "/tmp/ojplatform-sandbox/ojplatform-$($item.label)"
+      $command = "mkdir -p /tmp/ojplatform-sandbox; cd '$sourceWsl'; go build -trimpath -o '$buildPath' $($item.package); sudo -n install -m 755 '$buildPath' '$($item.path)'; rm -f '$buildPath'"
+    }
     Write-Host "$($item.label) BUILD (canonical source)"
     Invoke-Wsl @('-d',$Config.WslDistro,'--','bash','-lc',$command) 120000 | Out-Null
     if (-not (Test-WslFile $item.path -Executable)) { throw "$($item.label) build did not produce an executable at $($item.path)." }
@@ -641,7 +656,12 @@ function Start-Supervisor($state) {
   Resolve-CompilerRootfsIdentity | Out-Null
   Repair-SupervisorUserManager
   $health = Get-HttpJson "$($Config.SupervisorOrigin)/v1/health"
-  if ($health) { Write-Host 'supervisor REUSE (healthy)'; return }
+  if ($health -and [string]$health.body.execution_set_contract_version -eq [string]$Config.SupervisorExecutionSetContractVersion) { Write-Host 'supervisor REUSE (healthy)'; return }
+  if ($health) {
+    Write-Host "supervisor RESTART (execution-set protocol $([string]$health.body.execution_set_contract_version), expected $($Config.SupervisorExecutionSetContractVersion))"
+    Invoke-Wsl @('-d',$Config.WslDistro,'--user','oj-sandbox','--','env','XDG_RUNTIME_DIR=/run/user/1000','DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus','systemctl','--user','stop',$Config.SupervisorSystemdUnit) 30000 | Out-Null
+    $deadline=(Get-Date).AddSeconds(15); do { Start-Sleep -Milliseconds 250 } while ((Test-TcpPort $Config.SupervisorPort) -and (Get-Date) -lt $deadline)
+  }
   if (Test-TcpPort $Config.SupervisorPort) { throw "supervisor port $($Config.SupervisorPort) is occupied by an unknown process." }
   $env=@{XDG_RUNTIME_DIR='/run/user/1000';DBUS_SESSION_BUS_ADDRESS='unix:path=/run/user/1000/bus';OJPLATFORM_SANDBOX_ROOT=$Config.SupervisorSandboxRoot;OJPLATFORM_RUNC_BIN=$Config.SupervisorRuncBinary;OJPLATFORM_SANDBOX_PROBE_PATH=$Config.SupervisorProbeLinuxPath;OJPLATFORM_REAL_EXECUTION_ENABLED='true';OJPLATFORM_CPP20_ROOTFS=$Config.CompilerRootfsLinuxPath;OJPLATFORM_CPP20_ROOTFS_IDENTITY=$Config.CompilerRootfsIdentity}
   $envArgs=($env.Keys|ForEach-Object { "$_=$($env[$_] -replace '"','\\"')" }) -join ' '
@@ -747,9 +767,11 @@ function Show-Status($state) {
     [pscustomobject]@{ service='minio'; status=if(Test-TcpPort 59000){if(Test-HttpOk "$($Config.MinioEndpoint)/minio/health/ready"){'RUNNING_OWNED'}else{'REACHABLE'}}else{'DOWN'}; port=59000; source='authoritative HTTP/TCP probe' }
   )
   Write-Host "Shared runtime: $RuntimeRoot  instance=$($state.runtimeInstanceId) owner=$($state.ownerCheckout)"; $infra | Format-Table -AutoSize
-  $items = @(); foreach ($name in @('api','web','judge-service','host-agent','supervisor')) { $record=$state.processes[$name]; $port=Get-ServicePort $name; $url=if($name -eq 'web'){$Config.WebOrigin}elseif($name -eq 'supervisor'){$Config.SupervisorOrigin+'/v1/health'}else{"http://127.0.0.1:$port/health"}; $healthy=$false; if (Test-TcpPort $port) { $healthy=[bool](Get-HttpJson $url @{} 1) }; $item=[pscustomobject]@{service=$name;status=if($healthy){'RUNNING'}else{'DOWN'};pid=if($record){$record.pid}else{'-'};port=$port;source='authoritative HTTP health probe';sourceRoot=if($record){$record.sourceRoot}else{'-'};commit=if($record){$record.gitCommit}else{'-'};canonical=if($record){Test-VersionCompatible $record}else{$false}}; $items += $item }; $items += Get-WorkerStatus; $items | Format-Table -AutoSize
+  $items = @(); foreach ($name in @('api','web','judge-service','host-agent','supervisor')) { $record=$state.processes[$name]; $port=Get-ServicePort $name; $url=if($name -eq 'web'){$Config.WebOrigin}elseif($name -eq 'supervisor'){$Config.SupervisorOrigin+'/v1/health'}else{"http://127.0.0.1:$port/health"}; $headers=if($name -eq 'host-agent'){@{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken}}else{@{}}; $healthy=$false; if (Test-TcpPort $port) { $healthy=if($name -eq 'web'){Test-HttpOk $url}else{[bool](Get-HttpJson $url $headers 1)} }; $item=[pscustomobject]@{service=$name;status=if($healthy){'RUNNING'}else{'DOWN'};pid=if($record){$record.pid}else{'-'};port=$port;source='authoritative HTTP health probe';sourceRoot=if($record){$record.sourceRoot}else{'-'};commit=if($record){$record.gitCommit}else{'-'};canonical=if($record){Test-VersionCompatible $record}else{$false}}; $items += $item }; $items += Get-WorkerStatus; $items | Format-Table -AutoSize
   $activeItems = @($items | Where-Object { $_.status -notin @('DOWN','STALE') })
-  $mixed = $activeItems.Count -gt 0 -and (-not ($productCanonical -and $pluginCanonical -and @($activeItems | Where-Object { $_.canonical -eq $false }).Count -eq 0))
+  # Development source is intentionally non-canonical; mixed means active services
+  # disagree with requested product/plugin identity, not that feature source is not main.
+  $mixed = $activeItems.Count -gt 0 -and @($activeItems | Where-Object { $_.canonical -eq $false }).Count -gt 0
   Write-Host "MIXED SOURCE = $mixed"
   Write-Host "WORKER BINARY = $($Config.WorkerBinary)"
   Write-Host "WORKER BINARY HASH = $(Get-FileSha256 $Config.WorkerBinary)"

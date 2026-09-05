@@ -547,4 +547,35 @@ describe('problem judge data backend', () => {
       await app.close();
     }
   });
+
+  it('accepts ZIP uploads as bounded raw streams', async () => {
+    let received: Uint8Array | undefined;
+    const app = Fastify();
+    await registerProblemJudgeDataRoutes(app, {
+      service: {
+        addZip: async (_problemId: string, bytes: Uint8Array) => {
+          received = bytes;
+          return { imported: 1, draft: {} };
+        },
+      } as never,
+      getAuth: async () => user,
+    });
+    try {
+      const payload = Buffer.from('zip-payload');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/problems/p-1/judge-data/draft/upload-zip',
+        headers: {
+          'content-type': 'application/zip',
+          'x-csrf-token': 'token',
+          cookie: 'oj_csrf=token',
+        },
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(received).toEqual(payload);
+    } finally {
+      await app.close();
+    }
+  });
 });
