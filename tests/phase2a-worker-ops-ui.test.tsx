@@ -387,6 +387,7 @@ describe('PHASE 2A Worker operations UI matrix', () => {
   });
   it('W2A-26 renders source script text inertly in authorized detail', async () => {
     renderDetail(submission('QUEUED'));
+    fireEvent.click(await screen.findByRole('tab', { name: '代码' }));
     expect((await screen.findByText(/SOURCE-MARKER/)).textContent).toBe(
       sourceMarker,
     );
