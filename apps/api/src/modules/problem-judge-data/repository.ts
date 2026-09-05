@@ -7,6 +7,11 @@ import {
   type JudgeDataVersion,
   JudgeDataError,
 } from './model.js';
+import {
+  assertJudgeArtifact,
+  artifactManifestBytes,
+  type JudgeArtifactReference,
+} from '@ojplatform/judge-runtime';
 
 const json = <T>(value: unknown, fallback: T): T => {
   if (typeof value !== 'string') return (value as T) ?? fallback;
@@ -65,6 +70,24 @@ const versionTestcase = (row: Record<string, unknown>) =>
   json(row.testcase, row) as JudgeDataVersion['testcases'][number];
 
 export class InMemoryJudgeDataRepository implements JudgeDataRepository {
+  private readonly artifacts = new Map<string, JudgeArtifactReference>();
+  async saveArtifact(artifact: JudgeArtifactReference) {
+    assertJudgeArtifact(artifact);
+    const existing = [...this.artifacts.values()].find(
+      (value) => value.judgeDataVersionId === artifact.judgeDataVersionId,
+    );
+    if (existing && existing.id !== artifact.id)
+      throw new JudgeDataError(
+        'INTEGRITY_MISMATCH',
+        'Artifact identity conflict',
+        409,
+      );
+    this.artifacts.set(artifact.id, structuredClone(artifact));
+    return structuredClone(artifact);
+  }
+  async getArtifact(id: string) {
+    return structuredClone(this.artifacts.get(id));
+  }
   private drafts = new Map<string, JudgeDraft>();
   private versions = new Map<string, JudgeDataVersion[]>();
   async getDraft(problemId: string) {
@@ -132,6 +155,54 @@ export class InMemoryJudgeDataRepository implements JudgeDataRepository {
 }
 
 export class PostgresJudgeDataRepository implements JudgeDataRepository {
+  async saveArtifact(artifact: JudgeArtifactReference) {
+    assertJudgeArtifact(artifact);
+    await this.pool.query(
+      'INSERT INTO judge_artifacts(artifact_id,problem_id,judge_data_version_id,format_version,content_length,sha256,manifest_text,reference_metadata,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9) ON CONFLICT DO NOTHING',
+      [
+        artifact.id,
+        artifact.manifest.problemId,
+        artifact.judgeDataVersionId,
+        artifact.formatVersion,
+        artifact.contentLength,
+        artifact.sha256,
+        artifactManifestBytes(artifact.manifest).toString('utf8'),
+        JSON.stringify(artifact),
+        artifact.createdAt,
+      ],
+    );
+    const persisted = await this.getArtifact(artifact.id);
+    if (!persisted || persisted.sha256 !== artifact.sha256)
+      throw new JudgeDataError(
+        'INTEGRITY_MISMATCH',
+        'Published artifact conflict',
+        409,
+      );
+    return persisted;
+  }
+  async getArtifact(id: string) {
+    const result = await this.pool.query(
+      'SELECT reference_metadata,manifest_text FROM judge_artifacts WHERE artifact_id=$1',
+      [id],
+    );
+    if (!result.rows[0]) return undefined;
+    const value: unknown =
+      typeof result.rows[0].reference_metadata === 'string'
+        ? JSON.parse(result.rows[0].reference_metadata)
+        : result.rows[0].reference_metadata;
+    assertJudgeArtifact(value);
+    if (
+      value.id !== id ||
+      artifactManifestBytes(value.manifest).toString('utf8') !==
+        result.rows[0].manifest_text
+    )
+      throw new JudgeDataError(
+        'INTEGRITY_MISMATCH',
+        'Stored artifact integrity failure',
+        409,
+      );
+    return value;
+  }
   constructor(
     private readonly pool: {
       query(
@@ -383,7 +454,7 @@ export class PostgresJudgeDataRepository implements JudgeDataRepository {
         allowedLanguageProfiles: [...draft.defaults.allowedLanguageProfiles],
       };
       await db.query(
-        'INSERT INTO judge_data_versions(version_id,problem_id,version_number,manifest_sha256,checker,testcase_count,published_by,published_at,manifest,problem_revision_id,testdata_version_id,testcase_set_id,execution_profile_id,allowed_language_profiles) VALUES($1,$2,$3,$4,$5,$6,$7,now(),$8,$9,$10,$11,$12,$13)',
+        'INSERT INTO judge_data_versions(version_id,problem_id,version_number,manifest_sha256,checker,testcase_count,published_by,created_at,published_at,manifest,problem_revision_id,testdata_version_id,testcase_set_id,execution_profile_id,allowed_language_profiles) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)',
         [
           v.versionId,
           v.problemId,
@@ -392,6 +463,8 @@ export class PostgresJudgeDataRepository implements JudgeDataRepository {
           v.checker,
           v.testcaseCount,
           actor,
+          v.createdAt,
+          v.publishedAt,
           JSON.stringify({
             protocolVersion: '2C.4',
             problemId: v.problemId,

@@ -78,8 +78,9 @@ type Execution struct {
 }
 
 type Client struct {
-	base string
-	http *http.Client
+	base          string
+	http          *http.Client
+	artifactToken string
 }
 
 func New(rawURL string) (*Client, error) {
@@ -239,6 +240,9 @@ func (c *Client) do(ctx context.Context, method, path string, input any, output 
 	}
 	if input != nil {
 		request.Header.Set("content-type", "application/json")
+	}
+	if strings.HasPrefix(path, "/v1/artifact-") {
+		request.Header.Set("x-supervisor-artifact-token", c.artifactToken)
 	}
 	response, err := c.http.Do(request)
 	if err != nil {

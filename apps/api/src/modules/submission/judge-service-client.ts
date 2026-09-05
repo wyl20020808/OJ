@@ -3,6 +3,10 @@ import type {
   TestcaseSetManifest,
 } from '@ojplatform/judge-runtime';
 import { createHash } from 'node:crypto';
+import {
+  JUDGE_ARTIFACT_JOB_CONTRACT,
+  type JudgeArtifactReference,
+} from '@ojplatform/judge-runtime';
 import type { Submission } from './model.js';
 import type { SubmissionEvaluationDetail } from './model.js';
 import type { PublishEvaluationInput } from './repository.js';
@@ -168,16 +172,52 @@ export class JudgeServiceClient {
     path: string,
     init: { method?: string; body?: unknown } = {},
   ) {
-    const response = await this.send(new URL(path, this.baseUrl), {
-      method: init.method ?? 'GET',
-      headers: {
-        'x-judge-service-token': this.token,
-        ...(init.body ? { 'content-type': 'application/json' } : {}),
-      },
-      ...(init.body ? { body: JSON.stringify(init.body) } : {}),
-    });
-    if (!response.ok) throw new Error(`JUDGE_SERVICE_${response.status}`);
+    let response: Response;
+    try {
+      response = await this.send(new URL(path, this.baseUrl), {
+        method: init.method ?? 'GET',
+        headers: {
+          'x-judge-service-token': this.token,
+          ...(init.body ? { 'content-type': 'application/json' } : {}),
+        },
+        ...(init.body ? { body: JSON.stringify(init.body) } : {}),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      const timeout =
+        error instanceof Error &&
+        ['TimeoutError', 'AbortError'].includes(error.name);
+      throw new JudgeDispatchError(
+        timeout ? 'JUDGE_DISPATCH_TIMEOUT' : 'JUDGE_DISPATCH_UNAVAILABLE',
+        timeout ? 504 : 503,
+        true,
+      );
+    }
+    if (!response.ok) {
+      const code =
+        response.status === 400 || response.status === 413
+          ? 'INVALID_ARTIFACT_CONTRACT'
+          : response.status === 429
+            ? 'JUDGE_CAPACITY_UNAVAILABLE'
+            : 'JUDGE_DISPATCH_UNAVAILABLE';
+      throw new JudgeDispatchError(
+        code,
+        response.status === 400 || response.status === 413 ? 409 : 503,
+        response.status >= 500 || response.status === 429,
+      );
+    }
     return (await response.json()) as JudgeServiceJob;
+  }
+}
+
+export class JudgeDispatchError extends Error {
+  constructor(
+    readonly code: string,
+    readonly status: number,
+    readonly retryable: boolean,
+  ) {
+    super(code);
+    this.name = 'JudgeDispatchError';
   }
 }
 
@@ -211,6 +251,24 @@ export function judgeServiceInput(
     sourceBytes: submission.source,
     sourceSha256: hash,
     controlledInputId: 'stdin-empty-v1' as const,
+  };
+}
+
+export function artifactJudgeServiceInput(
+  submission: Submission,
+  artifact: JudgeArtifactReference,
+  requestId: string,
+) {
+  return {
+    ...judgeServiceInput(
+      submission,
+      `submission:${submission.id}:evaluation:1`,
+      true,
+    ),
+    jobContract: JUDGE_ARTIFACT_JOB_CONTRACT,
+    judgeArtifact: artifact,
+    executionSetPolicy: 'RUN_ALL' as const,
+    requestId,
   };
 }
 

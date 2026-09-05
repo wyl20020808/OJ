@@ -1,5 +1,12 @@
 # OJPlatform Project Status
 
+JudgeData Artifact Pipeline V1: PARTIAL / IN PROGRESS. Streaming upload, immutable
+references, Worker/Supervisor file transport and dispatch recovery are implemented.
+100 MiB offline ingestion passed; real runtime qualification is blocked by three
+unregistered service listeners awaiting ownership confirmation. ADR 0006 remains
+PROPOSED. No 100 MiB runtime PASS is claimed. See
+`reports/OJPLATFORM_JUDGEDATA_ARTIFACT_PIPELINE_V1_REPORT.md`.
+
 V3 UI Final Integration V1: PASS. Problem Page UX V3, Evaluation Detail UX V3,
 and Admin Chinese + Notification V1 are integrated with their required
 traditional submission, normal-flow Problem information card, live Evaluation
@@ -216,6 +223,12 @@ production HA, and production deployment are not qualified; Phase 2D is not
 started.
 
 Last Updated: 2026-09-05
+
+JUDGEDATA ARTIFACT PIPELINE V1 (2026-09-05): PASS. Real authenticated 100 MiB
+raw ZIP upload, validate/publish, Product reference dispatch, Judge claim,
+MinIO checksum fetch, Supervisor opaque-handle execution, and terminal AC passed
+on current worktree. ADR 0006 ACCEPTED. See
+`Docs/reports/OJPLATFORM_JUDGEDATA_ARTIFACT_PIPELINE_V1_REPORT.md`.
 
 Recent Remediation Final Integration V2: PARTIAL. OJ and plugin main merges are
 complete; root checkouts align to main. Integration contains launcher status/stop, JudgeData

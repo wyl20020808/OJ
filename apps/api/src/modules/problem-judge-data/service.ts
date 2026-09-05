@@ -3,7 +3,6 @@ import {
   now,
   canonicalManifestHash,
   effective,
-  sha256,
   validateDefaults,
   validateLimit,
   validateObjectRef,
@@ -16,6 +15,10 @@ import {
   type JudgeDataHandoff,
 } from './model.js';
 import type { ByteStorage } from './storage.js';
+import { verifyContent } from './storage.js';
+import type { Readable } from 'node:stream';
+import { withStreamingZip, type FileZipPair } from './streaming-zip.js';
+import { ensurePublishedArtifact } from './artifact.js';
 import { parseZip } from './zip.js';
 import { MAX_TESTCASE_PAYLOAD_BYTES } from './limits.js';
 import {
@@ -456,6 +459,27 @@ export class ProblemJudgeDataService {
   async addZip(problemId: string, bytes: Uint8Array, user: unknown) {
     await this.auth('manage', user, problemId);
     const pairs = parseZip(bytes);
+    return this.importZipPairs(problemId, pairs, user);
+  }
+  async addZipStream(
+    problemId: string,
+    stream: Readable,
+    user: unknown,
+    signal?: AbortSignal,
+  ) {
+    await this.auth('manage', user, problemId);
+    return withStreamingZip(
+      stream,
+      (pairs) => this.importZipPairs(problemId, pairs, user, signal),
+      signal,
+    );
+  }
+  private async importZipPairs(
+    problemId: string,
+    pairs: (FileZipPair | ReturnType<typeof parseZip>[number])[],
+    user: unknown,
+    signal?: AbortSignal,
+  ) {
     const old = await this.repo.getDraft(problemId);
     if (pairs.length > TESTCASE_SET_MAX_SIZE)
       throw new JudgeDataError('VALIDATION_FAILED', 'Too many testcases');
@@ -476,13 +500,22 @@ export class ProblemJudgeDataService {
     }[] = [];
     try {
       for (const [index, p] of pairs.entries()) {
-        const refs = await this.uploadPair(
-          problemId,
-          p.input,
-          p.output,
-          `${base}/${index}`,
-          { input: `${p.name}.in`, output: `${p.name}.out` },
-        );
+        signal?.throwIfAborted();
+        const refs =
+          p.input instanceof Uint8Array && p.output instanceof Uint8Array
+            ? await this.uploadPair(
+                problemId,
+                p.input,
+                p.output,
+                `${base}/${index}`,
+                { input: `${p.name}.in`, output: `${p.name}.out` },
+              )
+            : await this.uploadFilePair(
+                problemId,
+                p as FileZipPair,
+                `${base}/${index}`,
+                signal,
+              );
         uploaded.push({
           refs,
           name: p.name,
@@ -537,6 +570,39 @@ export class ProblemJudgeDataService {
             refs.map((ref) => this.storage.remove!(ref)),
           ),
         );
+      throw error;
+    }
+  }
+  private async uploadFilePair(
+    problemId: string,
+    pair: FileZipPair,
+    base: string,
+    signal?: AbortSignal,
+  ) {
+    if (!this.storage.putFile)
+      throw new JudgeDataError(
+        'STORAGE_UNAVAILABLE',
+        'Streaming storage unavailable',
+        503,
+      );
+    const input = await this.storage.putFile(
+      pair.input,
+      `${base}/input`,
+      `${pair.name}.in`,
+      problemId,
+      signal,
+    );
+    try {
+      const output = await this.storage.putFile(
+        pair.output,
+        `${base}/output`,
+        `${pair.name}.out`,
+        problemId,
+        signal,
+      );
+      return [input, output] as const;
+    } catch (error) {
+      await this.storage.remove?.(input);
       throw error;
     }
   }
@@ -655,27 +721,8 @@ export class ProblemJudgeDataService {
           'TESTCASE_SIZE_EXCEEDED',
           `Testcase #${c.ordinal + 1} exceeds the Judge execution byte limit`,
         );
-      if (!this.storage.get)
-        throw new JudgeDataError(
-          'STORAGE_UNAVAILABLE',
-          'Judge Data retrieval is unavailable',
-          503,
-        );
-      const [input, expectedOutput] = await Promise.all([
-        this.storage.get(c.input),
-        this.storage.get(c.expectedOutput),
-      ]);
-      if (
-        input.byteLength !== c.input.sizeBytes ||
-        expectedOutput.byteLength !== c.expectedOutput.sizeBytes ||
-        sha256(input) !== c.input.sha256 ||
-        sha256(expectedOutput) !== c.expectedOutput.sha256
-      )
-        throw new JudgeDataError(
-          'INTEGRITY_MISMATCH',
-          'Judge Data object integrity mismatch',
-          409,
-        );
+      await verifyContent(this.storage, c.input);
+      await verifyContent(this.storage, c.expectedOutput);
     }
     const hash = canonicalManifestHash(d, d.testcases);
     d.status = 'VALIDATED';
@@ -696,13 +743,13 @@ export class ProblemJudgeDataService {
       await this.storage.verify(c.input);
       await this.storage.verify(c.expectedOutput);
     }
-    return publicVersion(
-      await this.repo.publish(
-        d,
-        (user as { userId: string }).userId,
-        expectedRevision ?? d.revision,
-      ),
+    const version = await this.repo.publish(
+      d,
+      (user as { userId: string }).userId,
+      expectedRevision ?? d.revision,
     );
+    await ensurePublishedArtifact(this.repo, version);
+    return publicVersion(version);
   }
   handoff(
     v: Awaited<ReturnType<JudgeDataRepository['getVersion']>>,

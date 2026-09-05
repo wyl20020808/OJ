@@ -7,6 +7,11 @@ import {
 } from '../apps/api/src/modules/problem-judge-data/index.js';
 import { sha256 } from '../apps/api/src/modules/problem-judge-data/model.js';
 import { ProductJudgeDataSubmissionBridge } from '../apps/api/src/modules/judge/product-judge-data-bridge.js';
+import { InMemoryJudgeDataRepository } from '../apps/api/src/modules/problem-judge-data/repository.js';
+import {
+  ensurePublishedArtifact,
+  registerJudgeArtifactDataRoutes,
+} from '../apps/api/src/modules/problem-judge-data/artifact.js';
 import {
   InMemorySubmissionRepository,
   registerSubmissionModule,
@@ -65,7 +70,10 @@ const published = async () => {
     allowedLanguageProfiles: ['cpp20-gcc-13-v1'],
   };
   const versions = [version];
+  const artifacts = new InMemoryJudgeDataRepository();
   const repository: JudgeDataRepository = {
+    saveArtifact: (artifact) => artifacts.saveArtifact(artifact),
+    getArtifact: (id) => artifacts.getArtifact(id),
     getDraft: async () => undefined,
     saveDraft: async () => {
       throw new Error('unused');
@@ -113,10 +121,85 @@ const published = async () => {
     updatedAt: version.createdAt,
     ...binding,
   });
-  return { binding, bridge, input, manifest, storage, version, versions };
+  return {
+    binding,
+    bridge,
+    input,
+    manifest,
+    storage,
+    version,
+    versions,
+    repository,
+  };
 };
 
 describe('Product Judge Data submission bridge', () => {
+  it('lazily preserves old published artifacts and serves only their authenticated objects', async () => {
+    const { repository, version, versions, storage, input } = await published();
+    const artifact = await ensurePublishedArtifact(repository, version);
+    expect(await ensurePublishedArtifact(repository, version)).toEqual(
+      artifact,
+    );
+    const next = structuredClone(version);
+    next.versionId = 'judge-data-v2';
+    next.versionNumber = 2;
+    next.publishedAt = '2026-09-03T00:00:00.000Z';
+    versions.push(next);
+    const newer = await ensurePublishedArtifact(repository, next);
+    expect(newer.id).not.toBe(artifact.id);
+    const app = Fastify();
+    await registerJudgeArtifactDataRoutes(
+      app,
+      repository,
+      storage,
+      'artifact-test-only-token',
+    );
+    const base = `/internal/judge-artifacts/v1/${artifact.id}`;
+    const headers = { 'x-judge-artifact-token': 'artifact-test-only-token' };
+    try {
+      expect((await app.inject(`${base}/manifest`)).statusCode).toBe(401);
+      expect(
+        (
+          await app.inject({
+            url: `${base}/manifest`,
+            headers: {
+              cookie: 'session=browser',
+              'x-judge-service-token': 'judge-token',
+            },
+          })
+        ).statusCode,
+      ).toBe(401);
+      const manifestResponse = await app.inject({
+        url: `${base}/manifest`,
+        headers,
+      });
+      expect(manifestResponse.statusCode).toBe(200);
+      expect(manifestResponse.json().judgeDataVersionId).toBe(
+        version.versionId,
+      );
+      expect(sha256(manifestResponse.rawPayload)).toBe(artifact.sha256);
+      const data = await app.inject({
+        url: `${base}/${input.objectId}`,
+        headers,
+      });
+      expect(data.statusCode).toBe(200);
+      expect(data.body).toBe('2 3\n');
+      expect(data.headers['content-length']).toBe('4');
+      expect(data.headers['x-content-sha256']).toBe(input.sha256);
+      expect(
+        (await app.inject({ url: `${base}/unbound-object`, headers }))
+          .statusCode,
+      ).toBe(404);
+      version.testcases[0]!.input = { ...input, sizeBytes: 5 };
+      expect(
+        (await app.inject({ url: `${base}/${input.objectId}`, headers }))
+          .statusCode,
+      ).toBe(409);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('binds and materializes exactly one published version without a latest lookup', async () => {
     const { binding, bridge, manifest, version } = await published();
     expect(binding).toMatchObject({

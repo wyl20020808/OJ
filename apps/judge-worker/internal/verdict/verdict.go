@@ -1,5 +1,5 @@
 // Package verdict converts trusted, immutable raw execution facts into the
-// deliberately small Phase 2C.5 user-verdict vocabulary. It has no I/O.
+// deliberately small Phase 2C.5 user-verdict vocabulary.
 package verdict
 
 import (
@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -17,6 +18,8 @@ type Entry struct {
 	Index                                               int
 	TestcaseID, TestdataVersionID, ExpectedOutputSHA256 string
 	ExpectedOutput                                      []byte
+	ExpectedOutputBytes                                 int64
+	OpenExpectedOutput                                  func() (io.ReadCloser, error)
 	CheckerType, CheckerVersion, CheckerConfigSHA256    string
 }
 
@@ -226,20 +229,29 @@ func deriveCase(input Input, entry Entry, member rawMember) CaseRecord {
 		c.EvaluationState, c.ReasonCode = "NO_VERDICT", "NORMAL_COMPLETION_UNPROVEN"
 		return sealCase(c)
 	}
-	if entry.CheckerType == "" || entry.CheckerVersion != "builtin-v1" || sha(entry.ExpectedOutput) != entry.ExpectedOutputSHA256 || sha([]byte(entry.CheckerType+"\x00"+entry.CheckerVersion)) != entry.CheckerConfigSHA256 || sha(member.ActualStdout) != member.ActualStdoutSHA256 {
+	if entry.CheckerType == "" || entry.CheckerVersion != "builtin-v1" || (entry.OpenExpectedOutput == nil && sha(entry.ExpectedOutput) != entry.ExpectedOutputSHA256) || sha([]byte(entry.CheckerType+"\x00"+entry.CheckerVersion)) != entry.CheckerConfigSHA256 || sha(member.ActualStdout) != member.ActualStdoutSHA256 {
 		c.EvaluationState, c.ReasonCode = "INFRA_FAILED", "CHECKER_INPUT_INTEGRITY"
 		return sealCase(c)
 	}
 	matched := false
 	diagnostic := ""
-	switch entry.CheckerType {
-	case "EXACT_BYTES":
-		matched, diagnostic = exactMatch(entry.ExpectedOutput, member.ActualStdout)
-	case "TOKEN_WHITESPACE":
-		matched, diagnostic = tokenMatch(entry.ExpectedOutput, member.ActualStdout)
-	default:
-		c.EvaluationState, c.ReasonCode = "INFRA_FAILED", "CHECKER_UNSUPPORTED"
-		return sealCase(c)
+	if entry.OpenExpectedOutput != nil {
+		var err error
+		matched, diagnostic, err = matchExpectedStream(entry, member.ActualStdout)
+		if err != nil {
+			c.EvaluationState, c.ReasonCode = "INFRA_FAILED", "CHECKER_INPUT_INTEGRITY"
+			return sealCase(c)
+		}
+	} else {
+		switch entry.CheckerType {
+		case "EXACT_BYTES":
+			matched, diagnostic = exactMatch(entry.ExpectedOutput, member.ActualStdout)
+		case "TOKEN_WHITESPACE":
+			matched, diagnostic = tokenMatch(entry.ExpectedOutput, member.ActualStdout)
+		default:
+			c.EvaluationState, c.ReasonCode = "INFRA_FAILED", "CHECKER_UNSUPPORTED"
+			return sealCase(c)
+		}
 	}
 	c.EvaluationState, c.ReasonCode, c.Diagnostic = "COMPLETE", "CHECKER_MATCH", diagnostic
 	if matched {

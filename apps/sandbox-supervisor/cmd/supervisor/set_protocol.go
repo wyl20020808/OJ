@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ type executionSetRecord struct {
 	Result            model.RealExecutionSetResult `json:"result"`
 	run               context.CancelFunc           `json:"-"`
 	Active            bool                         `json:"active"`
+	PersistenceFailed bool                         `json:"-"`
 }
 
 // The worker contract permits 64 testcase inputs of up to 100 MiB each and a
@@ -172,13 +174,17 @@ func (s *protocolServer) startExecutionSet(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	identity := setRequestIdentity(request)
+	s.startPreparedExecutionSet(w, request, identity, "", nil)
+}
+
+func (s *protocolServer) startPreparedExecutionSet(w http.ResponseWriter, request model.RealExecutionSetRequest, identity, artifactID string, inputs map[int]supervisor.FileInput) bool {
 	s.mu.Lock()
 	s.pruneExecutionSetRecords(time.Now())
 	if existing := s.executionSets[request.ExecutionSetRequestID]; existing != nil {
 		if existing.RequestIdentity != identity {
 			s.mu.Unlock()
 			http.Error(w, "execution-set request identity conflict", http.StatusConflict)
-			return
+			return false
 		}
 		active := existing.Active
 		s.mu.Unlock()
@@ -189,7 +195,7 @@ func (s *protocolServer) startExecutionSet(w http.ResponseWriter, r *http.Reques
 		}
 		w.WriteHeader(status)
 		writeJSON(w, map[string]any{"status": state, "execution_set_request_id": request.ExecutionSetRequestID})
-		return
+		return false
 	}
 	active := 0
 	for _, execution := range s.executions {
@@ -205,7 +211,7 @@ func (s *protocolServer) startExecutionSet(w http.ResponseWriter, r *http.Reques
 	if active >= maxRealExecutions {
 		s.mu.Unlock()
 		http.Error(w, "execution concurrency limit", http.StatusTooManyRequests)
-		return
+		return false
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), request.DeadlineAt)
 	initial := model.RealExecutionSetResult{
@@ -218,18 +224,23 @@ func (s *protocolServer) startExecutionSet(w http.ResponseWriter, r *http.Reques
 		TestcaseSetManifestHash: request.Manifest.ManifestHash, ExecutionProfileID: request.Manifest.ExecutionProfileID,
 		ExecutionSetPolicy: request.ExecutionPolicy, StartedAt: time.Now().UTC(),
 	}
+	if inputs != nil {
+		initial.ProtocolVersion = supervisor.ArtifactExecutionContract
+		initial.JudgeArtifactID = artifactID
+	}
 	s.executionSets[request.ExecutionSetRequestID] = &executionSetRecord{RequestIdentity: identity, SourceSnapshotRef: request.SourceSnapshotRef, Manifest: request.Manifest, Result: initial, run: cancel, Active: true}
 	if err := s.persistExecutionSetRecord(request.ExecutionSetRequestID); err != nil {
 		delete(s.executionSets, request.ExecutionSetRequestID)
 		cancel()
 		s.mu.Unlock()
 		http.Error(w, "execution-set record persistence failed", http.StatusInternalServerError)
-		return
+		return false
 	}
 	s.mu.Unlock()
-	go s.executeRealSet(ctx, request)
+	go s.executePreparedSet(ctx, request, inputs, artifactID)
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]any{"status": "ACTIVE", "execution_set_request_id": request.ExecutionSetRequestID})
+	return true
 }
 
 func (s *protocolServer) pruneExecutionSetRecords(now time.Time) {
@@ -245,12 +256,33 @@ func (s *protocolServer) pruneExecutionSetRecords(now time.Time) {
 }
 
 func (s *protocolServer) executeRealSet(ctx context.Context, request model.RealExecutionSetRequest) {
+	s.executePreparedSet(ctx, request, nil, "")
+}
+
+func (s *protocolServer) executePreparedSet(ctx context.Context, request model.RealExecutionSetRequest, inputs map[int]supervisor.FileInput, artifactID string) {
 	runtime := supervisor.New(s.root, s.runc, s.probePath)
-	result, _ := runtime.ExecuteCPP20Set(ctx, request, s.compilerRootfs)
+	var result model.RealExecutionSetResult
+	if inputs == nil {
+		result, _ = runtime.ExecuteCPP20Set(ctx, request, s.compilerRootfs)
+	} else {
+		result, _ = runtime.ExecuteCPP20Artifact(ctx, request, s.compilerRootfs, inputs, artifactID)
+		for _, input := range inputs {
+			if err := input.File.Close(); err != nil {
+				supervisor.MarkArtifactCleanupFailure(&result)
+			}
+		}
+		if err := s.artifactStaging.ReleaseExecution(artifactID, request.ExecutionSetRequestID); err != nil {
+			supervisor.MarkArtifactCleanupFailure(&result)
+			log.Printf(`{"event":"artifact_cleanup_failed","execution_request_id":%q,"artifact_id":%q}`, request.ExecutionSetRequestID, artifactID)
+		}
+	}
 	s.mu.Lock()
 	if record := s.executionSets[request.ExecutionSetRequestID]; record != nil && record.Active {
 		record.Result, record.run, record.Active = result, nil, false
-		_ = s.persistExecutionSetRecord(request.ExecutionSetRequestID)
+		if err := s.persistExecutionSetRecord(request.ExecutionSetRequestID); err != nil {
+			record.PersistenceFailed = true
+			log.Printf(`{"event":"execution_result_persistence_failed","execution_request_id":%q}`, request.ExecutionSetRequestID)
+		}
 	}
 	s.mu.Unlock()
 }
@@ -267,8 +299,15 @@ func (s *protocolServer) executionSetStatus(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "execution-set not found", http.StatusNotFound)
 		return
 	}
-	active, result := record.Active, record.Result
+	active, result, persistenceFailed := record.Active, record.Result, record.PersistenceFailed
 	s.mu.Unlock()
+	if result.JudgeArtifactID != "" && !s.authorizeArtifact(w, r) {
+		return
+	}
+	if persistenceFailed {
+		http.Error(w, "EXECUTION_RESULT_PERSISTENCE_FAILED", http.StatusServiceUnavailable)
+		return
+	}
 	if active {
 		writeJSON(w, map[string]any{"status": "ACTIVE", "execution_set_request_id": id})
 		return
@@ -292,6 +331,10 @@ func (s *protocolServer) cancelExecutionSet(w http.ResponseWriter, r *http.Reque
 	if record == nil {
 		s.mu.Unlock()
 		http.Error(w, "execution-set not found", http.StatusNotFound)
+		return
+	}
+	if record.Result.JudgeArtifactID != "" && !s.authorizeArtifact(w, r) {
+		s.mu.Unlock()
 		return
 	}
 	if !record.Active || record.run == nil {

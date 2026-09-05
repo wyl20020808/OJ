@@ -17,6 +17,7 @@ export type JudgeNodeCapabilities = {
   checkers: readonly JudgeNodeChecker[];
   executionModes: readonly JudgeNodeExecutionMode[];
   sandboxContractVersion: '2C.3';
+  artifactContractVersion?: 'artifact-execution-v1';
   architecture: 'amd64';
   resourceClass: 'standard-v1';
 };
@@ -40,6 +41,7 @@ export type JudgeNode = JudgeNodeRegistration & {
 };
 
 export type RequiredNodeCapabilities = {
+  artifactContractVersion?: 'artifact-execution-v1';
   languageProfile: 'cpp20-gcc-13-v1';
   executionMode: JudgeNodeExecutionMode;
   checker?: JudgeNodeChecker;
@@ -109,6 +111,8 @@ export function assertJudgeNodeRegistration(
     ) ||
     !unique(capabilities.executionModes as string[]) ||
     capabilities.sandboxContractVersion !== '2C.3' ||
+    (capabilities.artifactContractVersion !== undefined &&
+      capabilities.artifactContractVersion !== 'artifact-execution-v1') ||
     capabilities.architecture !== 'amd64' ||
     capabilities.resourceClass !== 'standard-v1'
   )
@@ -157,6 +161,9 @@ export function transitionJudgeNode(
 }
 
 const supports = (node: JudgeNode, required: RequiredNodeCapabilities) =>
+  (!required.artifactContractVersion ||
+    node.capabilities.artifactContractVersion ===
+      required.artifactContractVersion) &&
   node.capabilities.languageProfiles[0] === required.languageProfile &&
   node.capabilities.executionModes.includes(required.executionMode) &&
   (!required.checker || node.capabilities.checkers.includes(required.checker));

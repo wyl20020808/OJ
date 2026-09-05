@@ -22,6 +22,7 @@ type Registration struct {
 	NodeID, Incarnation, RuntimeVersion string
 	MaxConcurrentJobs                   int
 	RealExecution                       bool
+	ArtifactExecution                   bool
 }
 type Assignment struct {
 	AssignmentID      string    `json:"assignmentId"`
@@ -96,9 +97,13 @@ func (c Client) Register(ctx context.Context, value Registration) error {
 		modes = append(modes, "REAL_SANDBOXED_EXECUTION")
 	}
 	var ignored map[string]any
+	capabilities := map[string]any{"languageProfiles": []string{"cpp20-gcc-13-v1"}, "checkers": []string{"EXACT_BYTES", "TOKEN_WHITESPACE"}, "executionModes": modes, "sandboxContractVersion": "2C.3", "architecture": "amd64", "resourceClass": "standard-v1"}
+	if value.ArtifactExecution {
+		capabilities["artifactContractVersion"] = "artifact-execution-v1"
+	}
 	return c.request(ctx, http.MethodPost, "/v1/nodes/register", map[string]any{
 		"nodeId": value.NodeID, "incarnation": value.Incarnation, "runtimeVersion": value.RuntimeVersion, "maxConcurrentJobs": value.MaxConcurrentJobs,
-		"capabilities": map[string]any{"languageProfiles": []string{"cpp20-gcc-13-v1"}, "checkers": []string{"EXACT_BYTES", "TOKEN_WHITESPACE"}, "executionModes": modes, "sandboxContractVersion": "2C.3", "architecture": "amd64", "resourceClass": "standard-v1"},
+		"capabilities": capabilities,
 	}, &ignored)
 }
 func (c Client) Heartbeat(ctx context.Context, nodeID, incarnation string, active int) error {
@@ -132,6 +137,11 @@ func (c Client) Claim(ctx context.Context, nodeID, incarnation string) (*Claim, 
 		value.Job.LeaseExpiresAt.IsZero() || !value.Job.LeaseExpiresAt.After(time.Now()) ||
 		value.LeaseToken == "" {
 		return nil, errors.New("invalid judge node claim response")
+	}
+	if value.Job.JudgeArtifact != nil || value.Job.JobContract != "" {
+		if err := queueadapter.ValidateArtifactJob(value.Job); err != nil {
+			return nil, err
+		}
 	}
 	return &value, nil
 }

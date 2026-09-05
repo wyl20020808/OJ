@@ -24,7 +24,10 @@ const now = () => new Date().toISOString();
 export interface SubmissionRepository {
   create(
     input: SubmissionCreateInput &
-      Partial<SubmissionJudgeBinding> & { ownerUserId: string },
+      Partial<SubmissionJudgeBinding> & {
+        ownerUserId: string;
+        requestId?: string;
+      },
   ): Promise<Submission>;
   get(id: string): Promise<Submission | undefined>;
   list(
@@ -340,11 +343,14 @@ export class PostgresSubmissionRepository implements SubmissionRepository {
   constructor(private readonly pool: PoolLike) {}
   async create(
     input: SubmissionCreateInput &
-      Partial<SubmissionJudgeBinding> & { ownerUserId: string },
+      Partial<SubmissionJudgeBinding> & {
+        ownerUserId: string;
+        requestId?: string;
+      },
   ) {
     const id = randomUUID();
     const result = await this.pool.query(
-      'INSERT INTO submissions (id,owner_user_id,problem_id,problem_revision_id,testdata_version_ref,judge_data_version_id,judge_data_version_number,judge_data_manifest_sha256,language_id,source,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
+      'WITH created AS (INSERT INTO submissions (id,owner_user_id,problem_id,problem_revision_id,testdata_version_ref,judge_data_version_id,judge_data_version_number,judge_data_manifest_sha256,language_id,source,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *), dispatch AS (INSERT INTO submission_dispatches(submission_id,request_id) SELECT id,$12 FROM created RETURNING submission_id) SELECT created.* FROM created JOIN dispatch ON dispatch.submission_id=created.id',
       [
         id,
         input.ownerUserId,
@@ -357,6 +363,7 @@ export class PostgresSubmissionRepository implements SubmissionRepository {
         input.languageId,
         input.source,
         'PENDING',
+        input.requestId ?? id,
       ],
     );
     return mapRow(result.rows[0]!);
@@ -673,6 +680,9 @@ function mapRow(row: Record<string, unknown>): Submission {
     languageId: String(row.language_id),
     source: String(row.source),
     status: row.status as Submission['status'],
+    ...(row.dispatch_failure_code
+      ? { failureCode: String(row.dispatch_failure_code) }
+      : {}),
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at)).toISOString(),
   };

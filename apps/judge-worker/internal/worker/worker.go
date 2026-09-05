@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ojplatform/judge-worker/internal/artifact"
 	"github.com/ojplatform/judge-worker/internal/config"
 	"github.com/ojplatform/judge-worker/internal/fixture"
 	"github.com/ojplatform/judge-worker/internal/nodeclient"
@@ -44,6 +45,7 @@ type Worker struct {
 	Executor                      fixture.Executor
 	Supervisor                    *supervisorclient.Client
 	NodeClient                    *nodeclient.Client
+	Artifacts                     *artifact.Client
 	state                         atomic.Value
 	active                        atomic.Int32
 	shutdownOnce                  sync.Once
@@ -112,7 +114,17 @@ func (w *Worker) Start(ctx context.Context) error {
 		w.setState(Ready)
 	}
 	if w.NodeClient != nil {
-		if err := w.NodeClient.Register(ctx, nodeclient.Registration{NodeID: w.WorkerID, Incarnation: w.InstanceID, RuntimeVersion: w.Config.BuildVersion, MaxConcurrentJobs: w.Config.MaxConcurrency, RealExecution: w.Config.RealSubmissionExecution}); err != nil {
+		if w.Config.ArtifactDataURL != "" {
+			var err error
+			w.Artifacts, err = artifact.NewClient(w.Config.ArtifactDataURL, w.Config.ArtifactReadToken)
+			if err != nil {
+				return err
+			}
+			if err := w.Supervisor.EnableArtifacts(ctx, w.Config.SupervisorArtifactToken); err != nil {
+				return err
+			}
+		}
+		if err := w.NodeClient.Register(ctx, nodeclient.Registration{NodeID: w.WorkerID, Incarnation: w.InstanceID, RuntimeVersion: w.Config.BuildVersion, MaxConcurrentJobs: w.Config.MaxConcurrency, RealExecution: w.Config.RealSubmissionExecution, ArtifactExecution: w.Artifacts != nil}); err != nil {
 			w.setState(Degraded)
 			return fmt.Errorf("judge node registration failed: %w", err)
 		}
@@ -264,6 +276,10 @@ func (w *Worker) process(parent context.Context, lease queueadapter.Lease) {
 func (w *Worker) processReal(ctx, queueCtx context.Context, lease queueadapter.Lease) {
 	if !w.Config.RealSubmissionExecution || w.Supervisor == nil || !w.Capabilities.Supports(protocol.RealSandboxedExecution) {
 		_ = w.failTerminal(queueCtx, lease, "WORKER_CAPABILITY_MISMATCH")
+		return
+	}
+	if lease.Job.JudgeArtifact != nil || lease.Job.JobContract != "" {
+		w.processRealArtifact(ctx, queueCtx, lease)
 		return
 	}
 	if lease.Job.TestcaseSet != nil {

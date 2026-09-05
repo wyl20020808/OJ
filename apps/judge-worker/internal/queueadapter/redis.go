@@ -18,10 +18,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ojplatform/judge-worker/internal/artifact"
 	"github.com/ojplatform/judge-worker/internal/verdict"
 )
 
 type Job struct {
+	JobContract            string               `json:"jobContract,omitempty"`
+	JudgeArtifact          *artifact.Reference  `json:"judgeArtifact,omitempty"`
+	RequestID              string               `json:"requestId,omitempty"`
 	ID                     string               `json:"id"`
 	SubmissionID           string               `json:"submissionId"`
 	EvaluationGeneration   int                  `json:"evaluationGeneration"`
@@ -94,6 +98,7 @@ type TestcaseSetManifest struct {
 }
 
 type rawExecutionResultIdentity struct {
+	JudgeArtifactID         string `json:"judge_artifact_id"`
 	ProtocolVersion         string `json:"protocol_version"`
 	ExecutionRequestID      string `json:"execution_request_id"`
 	ExecutionSetRequestID   string `json:"execution_set_request_id"`
@@ -139,7 +144,7 @@ func validateRawExecutionResult(result json.RawMessage, job Job) error {
 	if !json.Valid(result) || json.Unmarshal(result, &identity) != nil {
 		return errors.New("invalid raw execution result")
 	}
-	if job.TestcaseSet != nil {
+	if job.TestcaseSet != nil || job.JudgeArtifact != nil {
 		return validateRawExecutionSetResult(result, identity, job)
 	}
 	allowedOutcome := map[string]bool{
@@ -218,7 +223,7 @@ type rawSetMember struct {
 }
 
 func validateRawExecutionSetResult(result json.RawMessage, identity rawExecutionResultIdentity, job Job) error {
-	manifest := job.TestcaseSet
+	manifest := job.TestcaseMetadata()
 	if err := validateRawExecutionSetIdentity(identity, job, manifest); err != nil {
 		return err
 	}
@@ -261,7 +266,11 @@ func validateRawExecutionSetResult(result json.RawMessage, identity rawExecution
 				TestcaseIndex           int    `json:"testcase_index"`
 				TestcaseSetManifestHash string `json:"testcase_set_manifest_hash"`
 			}
-			if json.Unmarshal(member.Record, &record) != nil || !verdict.VerifyDigest(member.Record) || record.RecordVersion != "2C.3" || !isSHA256(record.Digest) || record.Identity.ProblemID != job.ProblemID || record.Identity.ProblemRevisionID != job.ProblemRevisionID || record.Identity.TestdataVersionID != entry.TestdataVersionID || record.Identity.TestcaseID != entry.TestcaseID || record.Identity.InputSHA256 != entry.InputSHA256 || record.Identity.ExecutionProfileID != entry.ExecutionProfileID || record.Identity.ExecutionAttemptID == "" || record.ExecutionSetAttemptID != job.ExecutionAttemptID || record.TestcaseIndex != entry.Index || record.TestcaseSetManifestHash != manifest.ManifestHash {
+			recordVersion := "2C.3"
+			if job.JudgeArtifact != nil {
+				recordVersion = artifact.ExecutionContract
+			}
+			if json.Unmarshal(member.Record, &record) != nil || !verdict.VerifyDigest(member.Record) || record.RecordVersion != recordVersion || !isSHA256(record.Digest) || record.Identity.ProblemID != job.ProblemID || record.Identity.ProblemRevisionID != job.ProblemRevisionID || record.Identity.TestdataVersionID != entry.TestdataVersionID || record.Identity.TestcaseID != entry.TestcaseID || record.Identity.InputSHA256 != entry.InputSHA256 || record.Identity.ExecutionProfileID != entry.ExecutionProfileID || record.Identity.ExecutionAttemptID == "" || record.ExecutionSetAttemptID != job.ExecutionAttemptID || record.TestcaseIndex != entry.Index || record.TestcaseSetManifestHash != manifest.ManifestHash {
 				return errors.New("invalid testcase record binding")
 			}
 		}
@@ -311,10 +320,19 @@ func validateRawExecutionSetIdentity(identity rawExecutionResultIdentity, job Jo
 	if manifest == nil {
 		return errors.New("raw testcase-set result identity mismatch: missing manifest")
 	}
+	protocolVersion := "2C.4"
+	if job.JudgeArtifact != nil {
+		protocolVersion = artifact.ExecutionContract
+		if identity.JudgeArtifactID != job.JudgeArtifact.ID {
+			return errors.New("artifact result identity mismatch")
+		}
+	} else if identity.JudgeArtifactID != "" {
+		return errors.New("unexpected artifact result")
+	}
 	checks := []struct {
 		name, actual, expected string
 	}{
-		{"protocol_version", identity.ProtocolVersion, "2C.4"},
+		{"protocol_version", identity.ProtocolVersion, protocolVersion},
 		{"execution_set_request_id", identity.ExecutionSetRequestID, executionRequestID(job)},
 		{"judge_job_id", identity.JudgeJobID, job.ID},
 		{"submission_id", identity.SubmissionID, job.SubmissionID},
@@ -394,6 +412,9 @@ func validRawStageOutput(raw json.RawMessage) bool {
 }
 
 func validateTestcaseJob(j Job) error {
+	if j.JudgeArtifact != nil || j.JobContract != "" {
+		return ValidateArtifactJob(j)
+	}
 	if j.TestcaseSet != nil {
 		if j.ExecutionMode != "REAL_SANDBOXED_EXECUTION" || j.TestcaseID != "" || j.TestcaseInput != "" || j.TestcaseInputSHA256 != "" || j.ExecutionProfileID != "" {
 			return errors.New("invalid testcase-set job shape")

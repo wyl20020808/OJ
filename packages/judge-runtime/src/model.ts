@@ -9,6 +9,10 @@ export type JudgeJobStatus =
   | 'COMPLETED'
   | 'RETRYABLE_FAILURE'
   | 'TERMINAL_FAILURE';
+import type {
+  JudgeArtifactReference,
+  JUDGE_ARTIFACT_JOB_CONTRACT,
+} from './artifact.js';
 export type JudgeExecutionMode =
   'SAFE_FIXTURE_QUALIFICATION' | 'REAL_SANDBOXED_EXECUTION';
 import type {
@@ -18,7 +22,8 @@ import type {
 } from './testcase-set.js';
 
 export type RawExecutionResult = {
-  protocol_version: '2C.1' | '2C.3' | '2C.4';
+  protocol_version: '2C.1' | '2C.3' | '2C.4' | 'artifact-execution-v1';
+  judge_artifact_id?: string;
   execution_request_id?: string;
   execution_set_request_id?: string;
   judge_job_id: string;
@@ -58,6 +63,9 @@ export type RawExecutionResult = {
   clean: boolean;
 };
 export type JudgeJob = {
+  jobContract?: typeof JUDGE_ARTIFACT_JOB_CONTRACT;
+  judgeArtifact?: JudgeArtifactReference;
+  requestId?: string;
   id: string;
   submissionId: string;
   evaluationGeneration?: number;
@@ -98,6 +106,9 @@ export type JudgeJob = {
   cancellationGeneration?: number | undefined;
 };
 export type JudgeJobCreateInput = {
+  jobContract?: typeof JUDGE_ARTIFACT_JOB_CONTRACT;
+  judgeArtifact?: JudgeArtifactReference;
+  requestId?: string;
   submissionId: string;
   evaluationGeneration?: number;
   ownerUserId: string;

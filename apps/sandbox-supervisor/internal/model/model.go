@@ -334,6 +334,7 @@ type AggregateExecutionSetRecord struct {
 }
 
 type RealExecutionSetResult struct {
+	JudgeArtifactID          string                       `json:"judge_artifact_id,omitempty"`
 	ProtocolVersion          string                       `json:"protocol_version"`
 	ExecutionSetRequestID    string                       `json:"execution_set_request_id"`
 	ExecutionSetAttemptID    string                       `json:"execution_set_attempt_id"`

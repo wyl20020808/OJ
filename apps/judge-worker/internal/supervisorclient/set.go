@@ -47,6 +47,8 @@ type TestcaseSetManifest struct {
 }
 
 type SetRequest struct {
+	JudgeArtifactID        string              `json:"judge_artifact_id,omitempty"`
+	Inputs                 []ArtifactInput     `json:"inputs,omitempty"`
 	ProtocolVersion        string              `json:"protocol_version"`
 	ExecutionSetRequestID  string              `json:"execution_set_request_id"`
 	JudgeJobID             string              `json:"judge_job_id"`
@@ -65,6 +67,7 @@ type SetRequest struct {
 }
 
 type SetResult struct {
+	JudgeArtifactID          string          `json:"judge_artifact_id,omitempty"`
 	ProtocolVersion          string          `json:"protocol_version"`
 	ExecutionSetRequestID    string          `json:"execution_set_request_id"`
 	ExecutionSetAttemptID    string          `json:"execution_set_attempt_id"`
@@ -179,14 +182,24 @@ func (c *Client) ExecuteSet(ctx context.Context, request SetRequest) (SetExecuti
 	if request.ExecutionSetAttemptID == "" {
 		request.ExecutionSetAttemptID = request.ExecutionSetRequestID + ":attempt"
 	}
-	if err := validateSetRequest(request); err != nil {
-		return SetExecution{}, err
+	var validationErr error
+	if request.JudgeArtifactID != "" {
+		validationErr = validateArtifactSetRequest(request)
+	} else {
+		validationErr = validateSetRequest(request)
+	}
+	if validationErr != nil {
+		return SetExecution{}, validationErr
+	}
+	endpoint := "/v1/execution-sets/"
+	if request.JudgeArtifactID != "" {
+		endpoint = "/v1/artifact-executions/"
 	}
 	var started struct {
 		Status                string `json:"status"`
 		ExecutionSetRequestID string `json:"execution_set_request_id"`
 	}
-	if err := c.do(ctx, http.MethodPost, "/v1/execution-sets/start", request, &started); err != nil {
+	if err := c.do(ctx, http.MethodPost, endpoint+"start", request, &started); err != nil {
 		return SetExecution{}, err
 	}
 	if started.ExecutionSetRequestID != request.ExecutionSetRequestID || started.Status != "ACTIVE" && started.Status != "COMPLETED" {
@@ -197,14 +210,14 @@ func (c *Client) ExecuteSet(ctx context.Context, request SetRequest) (SetExecuti
 	for {
 		if ctx.Err() != nil && !cancellationSent {
 			cancelCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			_ = c.do(cancelCtx, http.MethodPost, "/v1/execution-sets/cancel", map[string]string{"execution_set_request_id": request.ExecutionSetRequestID}, nil)
+			_ = c.do(cancelCtx, http.MethodPost, endpoint+"cancel", map[string]string{"execution_set_request_id": request.ExecutionSetRequestID}, nil)
 			cancel()
 			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cleanupCancel()
 			pollCtx, cancellationSent = cleanupCtx, true
 		}
 		var raw json.RawMessage
-		path := "/v1/execution-sets/status?execution_set_request_id=" + url.QueryEscape(request.ExecutionSetRequestID)
+		path := endpoint + "status?execution_set_request_id=" + url.QueryEscape(request.ExecutionSetRequestID)
 		if err := c.do(pollCtx, http.MethodGet, path, nil, &raw); err != nil {
 			if ctx.Err() != nil && !cancellationSent {
 				continue
@@ -234,7 +247,20 @@ func (c *Client) ExecuteSet(ctx context.Context, request SetRequest) (SetExecuti
 }
 
 func validateSetResult(request SetRequest, result SetResult) error {
-	if result.ProtocolVersion != SetProtocolVersion || result.ExecutionSetRequestID != request.ExecutionSetRequestID || result.ExecutionSetAttemptID != request.ExecutionSetAttemptID || result.JudgeJobID != request.JudgeJobID || result.SubmissionID != request.SubmissionID || result.Attempt != request.Attempt || result.ResultGeneration != int64(request.Attempt) || result.CorrelationID != request.CorrelationID || result.LanguageProfileID != request.LanguageProfileID || result.SourceSHA256 != request.SourceSHA256 || result.ProblemID != request.Manifest.ProblemID || result.ProblemRevisionID != request.Manifest.ProblemRevisionID || result.TestdataVersionID != request.Manifest.TestdataVersionID || result.TestcaseSetID != request.Manifest.TestcaseSetID || result.TestcaseSetManifestHash != request.Manifest.ManifestHash || result.ExecutionProfileID != request.Manifest.ExecutionProfileID || result.ExecutionSetPolicy != request.ExecutionPolicy || !validSetPipelineOutcome(result.PipelineOutcome) || len(result.Compile) == 0 || result.StartedAt.IsZero() || result.CompletedAt.Before(result.StartedAt) {
+	if request.JudgeArtifactID != "" {
+		if result.ProtocolVersion != "artifact-execution-v1" || result.JudgeArtifactID != request.JudgeArtifactID {
+			return errors.New("artifact execution result mismatch")
+		}
+	} else if result.JudgeArtifactID != "" {
+		return errors.New("unexpected artifact execution result")
+	}
+	// Shared identity checks retain the frozen set aggregate schema. The new
+	// outer protocol and artifact binding have already been checked above.
+	checkedProtocol := result.ProtocolVersion
+	if request.JudgeArtifactID != "" {
+		checkedProtocol = SetProtocolVersion
+	}
+	if checkedProtocol != SetProtocolVersion || result.ExecutionSetRequestID != request.ExecutionSetRequestID || result.ExecutionSetAttemptID != request.ExecutionSetAttemptID || result.JudgeJobID != request.JudgeJobID || result.SubmissionID != request.SubmissionID || result.Attempt != request.Attempt || result.ResultGeneration != int64(request.Attempt) || result.CorrelationID != request.CorrelationID || result.LanguageProfileID != request.LanguageProfileID || result.SourceSHA256 != request.SourceSHA256 || result.ProblemID != request.Manifest.ProblemID || result.ProblemRevisionID != request.Manifest.ProblemRevisionID || result.TestdataVersionID != request.Manifest.TestdataVersionID || result.TestcaseSetID != request.Manifest.TestcaseSetID || result.TestcaseSetManifestHash != request.Manifest.ManifestHash || result.ExecutionProfileID != request.Manifest.ExecutionProfileID || result.ExecutionSetPolicy != request.ExecutionPolicy || !validSetPipelineOutcome(result.PipelineOutcome) || len(result.Compile) == 0 || result.StartedAt.IsZero() || result.CompletedAt.Before(result.StartedAt) {
 		return errors.New("invalid testcase-set result identity")
 	}
 	var aggregate setAggregate
@@ -277,7 +303,11 @@ func validateSetResult(request SetRequest, result SetResult) error {
 				TestcaseIndex           int    `json:"testcase_index"`
 				TestcaseSetManifestHash string `json:"testcase_set_manifest_hash"`
 			}
-			if json.Unmarshal(member.Record, &record) != nil || !verifyRecordDigest(member.Record) || record.RecordVersion != "2C.3" || !sha256Hex(record.Digest) || record.RecordID == "" || record.Identity.ProblemID != request.Manifest.ProblemID || record.Identity.ProblemRevisionID != request.Manifest.ProblemRevisionID || record.Identity.TestdataVersionID != entry.TestdataVersionID || record.Identity.TestcaseID != entry.TestcaseID || record.Identity.InputSHA256 != entry.InputSHA256 || record.Identity.ExecutionProfileID != entry.ExecutionProfileID || record.ExecutionSetAttemptID != request.ExecutionSetAttemptID || record.TestcaseIndex != entry.Index || record.TestcaseSetManifestHash != request.Manifest.ManifestHash {
+			recordVersion := "2C.3"
+			if request.JudgeArtifactID != "" {
+				recordVersion = "artifact-execution-v1"
+			}
+			if json.Unmarshal(member.Record, &record) != nil || !verifyRecordDigest(member.Record) || record.RecordVersion != recordVersion || !sha256Hex(record.Digest) || record.RecordID == "" || record.Identity.ProblemID != request.Manifest.ProblemID || record.Identity.ProblemRevisionID != request.Manifest.ProblemRevisionID || record.Identity.TestdataVersionID != entry.TestdataVersionID || record.Identity.TestcaseID != entry.TestcaseID || record.Identity.InputSHA256 != entry.InputSHA256 || record.Identity.ExecutionProfileID != entry.ExecutionProfileID || record.ExecutionSetAttemptID != request.ExecutionSetAttemptID || record.TestcaseIndex != entry.Index || record.TestcaseSetManifestHash != request.Manifest.ManifestHash {
 				return errors.New("invalid testcase execution record binding")
 			}
 		}

@@ -1,6 +1,7 @@
 package supervisor
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"debug/elf"
@@ -129,6 +130,10 @@ func sandboxIDFor(value, stage string) string {
 }
 
 func ValidateRealExecutionRequest(request model.RealExecutionRequest) error {
+	return validateRealExecutionRequest(request, true)
+}
+
+func validateRealExecutionRequest(request model.RealExecutionRequest, inlineInput bool) error {
 	if request.ProtocolVersion != model.ExecutionContractVersion && request.ProtocolVersion != model.LegacyExecutionContractVersion {
 		return errors.New("unsupported real execution contract")
 	}
@@ -159,7 +164,7 @@ func ValidateRealExecutionRequest(request model.RealExecutionRequest) error {
 		if request.ProblemID == "" || request.TestcaseID == "" || request.TestcaseID != strings.TrimSpace(request.TestcaseID) || request.TestcaseID == "." || request.TestcaseID == ".." || len(request.TestcaseID) > 128 || strings.EqualFold(request.TestdataVersionRef, "latest") || request.ExecutionProfileID != CPP20ProfileID || strings.ContainsAny(request.TestcaseID, "/\\\x00") {
 			return errors.New("incomplete testcase identity")
 		}
-		if len(request.TestcaseInput) > maxTestcaseInputBytes || !sha256HexPattern(request.TestcaseInputSHA256) || digestBytes(request.TestcaseInput) != request.TestcaseInputSHA256 {
+		if !sha256HexPattern(request.TestcaseInputSHA256) || (inlineInput && (len(request.TestcaseInput) > maxTestcaseInputBytes || digestBytes(request.TestcaseInput) != request.TestcaseInputSHA256)) {
 			return errors.New("testcase input hash mismatch")
 		}
 	} else if request.ControlledInputID != "stdin-empty-v1" && request.ControlledInputID != "stdin-echo-v1" {
@@ -575,6 +580,10 @@ func (s *Supervisor) runExecutionStage(ctx context.Context, bundle, rootfs strin
 }
 
 func (s *Supervisor) runExecutionStageWithID(ctx context.Context, bundle, rootfs string, readonly bool, args []string, cwd string, env []string, mounts []bundleMount, limits model.ExecutionLimits, stdin []byte, watchedWorkspace, sandboxID string) stageRun {
+	return s.runExecutionStageReader(ctx, bundle, rootfs, readonly, args, cwd, env, mounts, limits, bytes.NewReader(stdin), watchedWorkspace, sandboxID)
+}
+
+func (s *Supervisor) runExecutionStageReader(ctx context.Context, bundle, rootfs string, readonly bool, args []string, cwd string, env []string, mounts []bundleMount, limits model.ExecutionLimits, stdin io.Reader, watchedWorkspace, sandboxID string) stageRun {
 	setupStarted := time.Now()
 	if err := os.MkdirAll(bundle, 0700); err != nil {
 		return stageRun{Err: err}
@@ -636,7 +645,7 @@ func (s *Supervisor) runExecutionStageWithID(ctx context.Context, bundle, rootfs
 			command.Env = append(command.Env, name+"="+value)
 		}
 	}
-	command.Stdin = strings.NewReader(string(stdin))
+	command.Stdin = stdin
 	stdout, stderr := boundedWriter{limit: limits.OutputBytes, onLimit: cancelStage}, boundedWriter{limit: limits.OutputBytes, onLimit: cancelStage}
 	command.Stdout, command.Stderr = &stdout, &stderr
 	resourceRequest := model.Request{MemoryBytes: limits.MemoryBytes, Pids: limits.Pids}

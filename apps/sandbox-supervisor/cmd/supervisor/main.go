@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -130,6 +131,8 @@ type protocolServer struct {
 	executionRecordRoot    string
 	executionSets          map[string]*executionSetRecord
 	executionSetRecordRoot string
+	artifactStaging        *supervisor.ArtifactStaging
+	artifactToken          string
 }
 
 type executionRecord struct {
@@ -186,6 +189,29 @@ func serve(address string) {
 	if err := server.loadExecutionSetRecords(); err != nil {
 		panic(fmt.Errorf("execution-set record recovery failed: %w", err))
 	}
+	server.artifactToken = os.Getenv("OJPLATFORM_SUPERVISOR_ARTIFACT_TOKEN")
+	if server.artifactToken != "" {
+		server.artifactStaging, err = supervisor.NewArtifactStaging(root + "-artifact-inputs")
+		if err != nil {
+			panic(err)
+		}
+		stopPruning := make(chan struct{})
+		defer close(stopPruning)
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stopPruning:
+					return
+				case <-ticker.C:
+					if err := server.artifactStaging.Prune(); err != nil {
+						log.Print(`{"event":"artifact_expiry_cleanup_failed"}`)
+					}
+				}
+			}
+		}()
+	}
 	if os.Getenv("OJPLATFORM_REAL_EXECUTION_ENABLED") == "true" {
 		compilerPath := os.Getenv("OJPLATFORM_CPP20_ROOTFS")
 		compilerIdentity := os.Getenv("OJPLATFORM_CPP20_ROOTFS_IDENTITY")
@@ -220,6 +246,11 @@ func serve(address string) {
 	h.HandleFunc("/v1/execution-sets/start", server.startExecutionSet)
 	h.HandleFunc("/v1/execution-sets/status", server.executionSetStatus)
 	h.HandleFunc("/v1/execution-sets/cancel", server.cancelExecutionSet)
+	h.HandleFunc("/v1/artifact-inputs", server.stageArtifactInput)
+	h.HandleFunc("/v1/artifact-inputs/release", server.releaseArtifactInputs)
+	h.HandleFunc("/v1/artifact-executions/start", server.startArtifactExecution)
+	h.HandleFunc("/v1/artifact-executions/status", server.artifactExecutionStatus)
+	h.HandleFunc("/v1/artifact-executions/cancel", server.cancelArtifactExecution)
 	httpServer := &http.Server{Addr: address, Handler: h, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second}
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		panic(err)
@@ -244,7 +275,11 @@ func (s *protocolServer) health(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
-	writeJSON(w, map[string]any{"status": "ok", "contract_version": model.ContractVersion, "execution_contract_version": model.ExecutionContractVersion, "execution_set_contract_version": model.ExecutionSetContractVersion, "real_submission_execution": s.realExecutionEnabled, "language_profiles": enabledLanguageProfiles(s.realExecutionEnabled), "supervisor_uid": os.Geteuid(), "supervisor_gid": os.Getegid()})
+	artifactVersion := ""
+	if s.artifactToken != "" && s.artifactStaging != nil && s.realExecutionEnabled {
+		artifactVersion = supervisor.ArtifactExecutionContract
+	}
+	writeJSON(w, map[string]any{"status": "ok", "contract_version": model.ContractVersion, "execution_contract_version": model.ExecutionContractVersion, "execution_set_contract_version": model.ExecutionSetContractVersion, "artifact_execution_contract_version": artifactVersion, "real_submission_execution": s.realExecutionEnabled, "language_profiles": enabledLanguageProfiles(s.realExecutionEnabled), "supervisor_uid": os.Geteuid(), "supervisor_gid": os.Getegid()})
 }
 
 func enabledLanguageProfiles(enabled bool) []string {

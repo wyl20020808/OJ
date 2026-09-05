@@ -6,6 +6,9 @@ import {
   type JudgeJobRepository,
   type JudgeProgressEvent,
   type JudgeProgressSink,
+  type JudgeArtifactReference,
+  ARTIFACT_EXECUTION_CONTRACT,
+  JUDGE_ARTIFACT_JOB_CONTRACT,
 } from '@ojplatform/judge-runtime';
 import { requestDigest, projectJudgeServiceResult } from './projection.js';
 import type {
@@ -127,11 +130,18 @@ function validSubmit(value: unknown): value is SubmitJudgeJobRequest {
 }
 
 const requiredCapabilities = (job: {
+  judgeArtifact?: JudgeArtifactReference | undefined;
   languageProfileId?: string | undefined;
   executionMode: RequiredNodeCapabilities['executionMode'];
   testcaseSet?:
     { entries: readonly { checkerType?: string | undefined }[] } | undefined;
 }): RequiredNodeCapabilities => ({
+  ...(job.judgeArtifact
+    ? {
+        artifactContractVersion: ARTIFACT_EXECUTION_CONTRACT,
+        checker: job.judgeArtifact.manifest.entries[0]!.checkerType,
+      }
+    : {}),
   languageProfile:
     job.languageProfileId === 'cpp20-gcc-13-v1'
       ? 'cpp20-gcc-13-v1'
@@ -1059,7 +1069,8 @@ export async function buildJudgeService(
       );
       if (!claim) continue;
       emitProgress(claim.job, 'EVALUATION_STARTED', { state: 'RUNNING' });
-      const first = claim.job.testcaseSet?.entries[0];
+      const first = (claim.job.testcaseSet ?? claim.job.judgeArtifact?.manifest)
+        ?.entries[0];
       if (first || claim.job.testcaseId)
         emitProgress(claim.job, 'TESTCASE_STARTED', {
           state: 'RUNNING',
@@ -1089,6 +1100,23 @@ export async function buildJudgeService(
         );
         continue;
       }
+      request.log.info(
+        {
+          requestId: claim.job.requestId,
+          submissionId: claim.job.submissionId,
+          evaluationGeneration: claim.job.evaluationGeneration,
+          judgeJobId: claim.job.id,
+          artifactId: claim.job.judgeArtifact?.id,
+          controlBytes: Buffer.byteLength(
+            JSON.stringify({
+              assignment,
+              job: claim.job,
+              leaseToken: claim.leaseToken,
+            }),
+          ),
+        },
+        'worker claim',
+      );
       return { assignment, job: claim.job, leaseToken: claim.leaseToken };
     }
     return { assignment: null, reason: 'NO_COMPATIBLE_JUDGE_NODE' };
@@ -1265,6 +1293,21 @@ export async function buildJudgeService(
         message: 'Invalid Judge job request',
       });
     const input = request.body;
+    if (
+      input.judgeArtifact &&
+      input.jobContract !== JUDGE_ARTIFACT_JOB_CONTRACT
+    )
+      return reply.code(400).send({ code: 'INVALID_ARTIFACT_CONTRACT' });
+    request.log.info(
+      {
+        requestId: input.requestId,
+        submissionId: input.externalSubmissionId,
+        evaluationGeneration: input.evaluationGeneration ?? 1,
+        artifactId: input.judgeArtifact?.id,
+        controlBytes: Buffer.byteLength(JSON.stringify(input)),
+      },
+      'judge intake',
+    );
     const existing = await options.state.getByClientRequestId(
       input.clientRequestId,
     );

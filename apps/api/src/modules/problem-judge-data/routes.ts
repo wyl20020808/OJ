@@ -1,13 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { Readable } from 'node:stream';
 import type { AuthContext } from '../problem/model.js';
 import { JudgeDataError } from './model.js';
 import type { ProblemJudgeDataService } from './service.js';
-import {
-  MAX_ARCHIVE_COMPRESSED_BYTES,
-  MAX_UPLOAD_BODY_BYTES,
-  MAX_TESTCASE_PAYLOAD_BYTES,
-} from './limits.js';
+import { MAX_UPLOAD_BODY_BYTES, MAX_TESTCASE_PAYLOAD_BYTES } from './limits.js';
 
 const decodedBase64Length = (value: string) => {
   const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
@@ -20,7 +17,7 @@ const isBase64 = (value: string) => {
     const code = value.charCodeAt(index);
     if (code === 61) {
       padding += 1;
-      if (index < value.length - padding || padding > 2) return false;
+      if (index < value.length - 2 || padding > 2) return false;
       continue;
     }
     if (
@@ -46,28 +43,6 @@ const decodeBase64 = (value: unknown, limit: number, message: string) => {
     throw new JudgeDataError('UPLOAD_TOO_LARGE', message, 413);
   return Buffer.from(value, 'base64');
 };
-const readBoundedUpload = async (
-  body: unknown,
-  limit: number,
-): Promise<Buffer> => {
-  if (body instanceof Uint8Array) {
-    if (body.byteLength > limit)
-      throw new JudgeDataError('UPLOAD_TOO_LARGE', 'ZIP upload too large', 413);
-    return Buffer.from(body);
-  }
-  if (!body || typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] !== 'function')
-    throw new JudgeDataError('UPLOAD_TOO_LARGE', 'ZIP upload body is required', 413);
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of body as AsyncIterable<Uint8Array>) {
-    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    size += bytes.length;
-    if (size > limit)
-      throw new JudgeDataError('UPLOAD_TOO_LARGE', 'ZIP upload too large', 413);
-    chunks.push(bytes);
-  }
-  return Buffer.concat(chunks, size);
-};
 export async function registerProblemJudgeDataRoutes(
   app: FastifyInstance,
   options: {
@@ -78,7 +53,7 @@ export async function registerProblemJudgeDataRoutes(
 ) {
   app.addContentTypeParser(
     ['application/zip', 'application/octet-stream'],
-    { parseAs: 'buffer', bodyLimit: MAX_ARCHIVE_COMPRESSED_BYTES },
+    {},
     (_request, payload, done) => done(null, payload),
   );
   const auth = options.getAuth;
@@ -275,27 +250,42 @@ export async function registerProblemJudgeDataRoutes(
   );
   app.post(
     '/api/problems/:problemId/judge-data/draft/upload-zip',
-    { bodyLimit: MAX_ARCHIVE_COMPRESSED_BYTES },
+    { bodyLimit: 1024 * 1024 },
     async (r, reply) => {
-      const contentType = (String(r.headers['content-type'] ?? '')
-        .split(';', 1)[0] ?? '')
+      const contentType = (
+        String(r.headers['content-type'] ?? '').split(';', 1)[0] ?? ''
+      )
         .trim()
         .toLowerCase();
       const b = r.body as any;
-      return mutate(r, reply, async () =>
-        options.service.addZip(
-          await problemId(r),
-          contentType === 'application/zip' ||
-            contentType === 'application/octet-stream'
-            ? await readBoundedUpload(b, MAX_ARCHIVE_COMPRESSED_BYTES)
-            : decodeBase64(
-                b?.zipBase64,
-                MAX_ARCHIVE_COMPRESSED_BYTES,
-                'ZIP upload too large',
-              ),
-          await auth(r),
-        ),
-      );
+      return mutate(r, reply, async () => {
+        const id = await problemId(r);
+        const user = await auth(r);
+        if (
+          contentType !== 'application/zip' &&
+          contentType !== 'application/octet-stream'
+        )
+          return options.service.addZip(
+            id,
+            decodeBase64(b?.zipBase64, 1024 * 1024, 'Use raw ZIP upload'),
+            user,
+          );
+        const controller = new AbortController();
+        const aborted = () => controller.abort();
+        r.raw.once('aborted', aborted);
+        try {
+          if (!(r.body instanceof Readable))
+            throw new JudgeDataError('UNSAFE_ARCHIVE', 'Invalid ZIP stream');
+          return await options.service.addZipStream(
+            id,
+            r.body,
+            user,
+            controller.signal,
+          );
+        } finally {
+          r.raw.off('aborted', aborted);
+        }
+      });
     },
   );
   app.post(
