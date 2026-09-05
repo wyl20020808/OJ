@@ -93,7 +93,7 @@ $LogRoot = Join-Path $RuntimeRoot 'logs'
 $Config = @{
   WebPort = 5173; ApiPort = 3010; JudgeServicePort = 3100; HostAgentPort = 3180; SupervisorPort = 19092
   ComposeProjectName = 'ojplatform-local'
-  WslDistro = 'Ubuntu-24.04'; SupervisorLinuxBinary = '/opt/ojplatform/bin/supervisor'; SupervisorExecutionSetContractVersion = '2C.4'
+  WslDistro = 'Ubuntu-24.04'; SupervisorLinuxBinary = '/tmp/ojplatform-sandbox/ojplatform-supervisor'; SupervisorExecutionSetContractVersion = '2C.4'
   SupervisorSystemdUnit = 'ojplatform-local-supervisor.service'
   SupervisorProbeLinuxPath = '/opt/ojplatform/bin/trusted-probe'; SupervisorSandboxRoot = '/tmp/ojplatform-sandbox'
   SupervisorRuncBinary = 'runc'; CompilerRootfsLinuxPath = '/opt/ojplatform/compiler-rootfs/cpp20-gcc-13-v1'
@@ -541,8 +541,12 @@ function Ensure-SupervisorBinaries {
       } else { Write-Host "$($item.label) REUSE ($($item.path))"; continue }
     }
     $parent = [IO.Path]::GetDirectoryName($item.path.Replace('/','\\')) -replace '\\','/'
-    $buildPath = "/tmp/ojplatform-sandbox/ojplatform-$($item.label)"
-    $command = "mkdir -p /tmp/ojplatform-sandbox; cd '$sourceWsl'; go build -trimpath -o '$buildPath' $($item.package); sudo install -m 755 '$buildPath' '$($item.path)'; rm -f '$buildPath'"
+    if ($item.path -like '/tmp/*') {
+      $command = "mkdir -p /tmp/ojplatform-sandbox; cd '$sourceWsl'; go build -trimpath -o '$($item.path)' $($item.package); chmod 755 '$($item.path)'"
+    } else {
+      $buildPath = "/tmp/ojplatform-sandbox/ojplatform-$($item.label)"
+      $command = "mkdir -p /tmp/ojplatform-sandbox; cd '$sourceWsl'; go build -trimpath -o '$buildPath' $($item.package); sudo -n install -m 755 '$buildPath' '$($item.path)'; rm -f '$buildPath'"
+    }
     Write-Host "$($item.label) BUILD (canonical source)"
     Invoke-Wsl @('-d',$Config.WslDistro,'--','bash','-lc',$command) 120000 | Out-Null
     if (-not (Test-WslFile $item.path -Executable)) { throw "$($item.label) build did not produce an executable at $($item.path)." }
