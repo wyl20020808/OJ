@@ -1,5 +1,11 @@
 # OJPlatform Project Status
 
+Post-Merge UI Regression Recovery V1: PARTIAL. Restored pre-wave global
+Evaluation List filters/layout and breadcrumb de-duplication while preserving
+Evaluation UX V4 and Admin permission-gated navigation. Build, focused tests,
+and browser smoke are blocked in the dependency-free recovery worktree. See
+`reports/OJPLATFORM_POST_MERGE_UI_REGRESSION_RECOVERY_V1_REPORT.md`.
+
 ## Root Submission Source Access V1
 
 PASS on branch `codex/root-submission-source-access-v1`. Submission detail

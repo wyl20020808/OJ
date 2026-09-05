@@ -6,6 +6,7 @@ import {
   useState,
   type ErrorInfo,
   type FormEvent,
+  type MouseEvent,
   type ReactNode,
 } from 'react';
 import {
@@ -14,6 +15,8 @@ import {
   type ApiClient,
   type AuthenticatedUser,
   type BackendContest,
+  type EvaluationListItem,
+  type EvaluationFilters,
   type Language,
   type Problem,
   type ProfileContest,
@@ -162,11 +165,13 @@ function Link({
   children,
   className,
   ariaLabel,
+  onClick,
 }: {
   to: string;
   children: ReactNode;
   className?: string;
   ariaLabel?: string;
+  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
     <a
@@ -174,6 +179,8 @@ function Link({
       className={className}
       aria-label={ariaLabel}
       onClick={(e) => {
+        onClick?.(e);
+        if (e.defaultPrevented) return;
         e.preventDefault();
         navigate(to);
       }}
@@ -185,20 +192,37 @@ function Link({
 
 type BreadcrumbItem = { label: string; to: string };
 const breadcrumbStorageKey = 'ojplatform:breadcrumb-history:v1';
+export function dedupeBreadcrumbHistory(
+  items: BreadcrumbItem[],
+  current?: BreadcrumbItem,
+): BreadcrumbItem[] {
+  const unique = items.reduce<BreadcrumbItem[]>((result, item) => {
+    const existing = result.findIndex((entry) => entry.to === item.to);
+    if (existing >= 0) result.splice(existing, 1);
+    result.push(item);
+    return result;
+  }, []);
+  if (current) {
+    const existing = unique.findIndex((entry) => entry.to === current.to);
+    if (existing >= 0) unique.splice(existing, 1);
+    unique.push(current);
+  }
+  return unique.slice(-5);
+}
 const breadcrumbHistory = (): BreadcrumbItem[] => {
   try {
     const value = JSON.parse(
       window.sessionStorage.getItem(breadcrumbStorageKey) ?? '[]',
     );
     return Array.isArray(value)
-      ? value
-          .filter(
+      ? dedupeBreadcrumbHistory(
+          value.filter(
             (item): item is BreadcrumbItem =>
               typeof item?.label === 'string' &&
               typeof item?.to === 'string' &&
               item.to.startsWith('/'),
-          )
-          .slice(-5)
+          ),
+        )
       : [];
   } catch {
     return [];
@@ -249,11 +273,7 @@ function Breadcrumbs({ current }: { current: Route }) {
   useEffect(() => {
     if (transient.includes(current.name)) return;
     setHistory((previous) => {
-      const last = previous.at(-1);
-      const next =
-        last?.to === currentItem.to
-          ? [...previous.slice(0, -1), currentItem]
-          : [...previous, currentItem].slice(-5);
+      const next = dedupeBreadcrumbHistory(previous, currentItem);
       try {
         window.sessionStorage.setItem(
           breadcrumbStorageKey,
@@ -497,6 +517,16 @@ export function JudgeStatus({ submission }: { submission: Submission }) {
       )}
     </div>
   );
+}
+
+function evaluationVerdictTone(value: string) {
+  if (value === 'AC') return 'accepted';
+  if (['WA', 'RE'].includes(value)) return 'failed';
+  if (value === 'TLE') return 'time-limit';
+  if (value === 'MLE' || value === 'CE') return 'compile-limit';
+  if (value === 'RUNNING' || value === 'QUEUED') return 'running';
+  if (value === 'INFRA_FAILED') return 'infra';
+  return 'pending';
 }
 function Home({
   api,
@@ -1773,24 +1803,25 @@ function SubmissionForm({
   );
 }
 
-function SubmissionHistory({
-  api,
-  user,
-}: {
-  api: ApiClient;
-  user: AuthenticatedUser | null;
-}) {
-  const [items, setItems] = useState<Submission[] | null>(null);
+function SubmissionHistory({ api }: { api: ApiClient }) {
+  const [items, setItems] = useState<EvaluationListItem[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [cursor, setCursor] = useState<string | undefined>();
+  const [resultFilter, setResultFilter] = useState('');
+  const [problemFilter, setProblemFilter] = useState('');
+  const [submitterFilter, setSubmitterFilter] = useState('');
   const requestVersion = useRef(0);
+  const filters = useMemo<EvaluationFilters>(() => {
+    const verdicts = new Set(['AC', 'WA', 'CE', 'RE', 'TLE', 'MLE']);
+    return { ...(resultFilter ? (verdicts.has(resultFilter) ? { verdict: resultFilter } : { status: resultFilter }) : {}), ...(problemFilter.trim() ? { problemId: problemFilter.trim() } : {}), ...(submitterFilter.trim() ? { submitterId: submitterFilter.trim() } : {}) };
+  }, [problemFilter, resultFilter, submitterFilter]);
   const load = () => {
     const version = ++requestVersion.current;
     setItems(null);
     setError('');
     void api
-      .submissions(cursor)
+      .evaluations(cursor, 20, filters)
       .then((d) => {
         if (version !== requestVersion.current) return;
         setItems(d.items);
@@ -1801,21 +1832,13 @@ function SubmissionHistory({
         setError(e instanceof ApiError ? e.message : '无法加载评测列表。');
       });
   };
-  useEffect(load, [api, cursor]);
+  useEffect(load, [api, cursor, filters]);
   useEffect(
     () => () => {
       requestVersion.current++;
     },
     [],
   );
-  if (!user)
-    return (
-      <State
-        title="请先登录"
-        text="登录后才能查看评测列表。"
-        action={<Link to="/login">登录</Link>}
-      />
-    );
   if (error)
     return (
       <State
@@ -1834,6 +1857,7 @@ function SubmissionHistory({
           <h1>评测列表</h1>
         </div>
       </div>
+      <div className="evaluation-filters" aria-label="评测筛选"><label>结果<select aria-label="结果" value={resultFilter} onChange={(e) => { setResultFilter(e.target.value); setCursor(undefined); }}><option value="">全部结果</option><option value="AC">AC</option><option value="WA">WA</option><option value="CE">CE</option><option value="RE">RE</option><option value="TLE">TLE</option><option value="MLE">MLE</option><option value="INFRA_FAILED">INFRA_FAILED</option><option value="QUEUED">QUEUED</option><option value="RUNNING">RUNNING</option></select></label><label>题目<input aria-label="题目" value={problemFilter} placeholder="题目 ID / slug" onChange={(e) => { setProblemFilter(e.target.value); setCursor(undefined); }} /></label><label>提交者<input aria-label="提交者" value={submitterFilter} placeholder="提交者 ID" onChange={(e) => { setSubmitterFilter(e.target.value); setCursor(undefined); }} /></label><button type="button" className="filter-clear" disabled={!resultFilter && !problemFilter && !submitterFilter} onClick={() => { setResultFilter(''); setProblemFilter(''); setSubmitterFilter(''); setCursor(undefined); }}>清除筛选</button></div>
       {items.length === 0 ? (
         <State title="暂无评测记录" text="你的提交评测会显示在这里。" />
       ) : (
@@ -1841,39 +1865,9 @@ function SubmissionHistory({
           <div className="evaluation-list-header" role="row">
             <span role="columnheader">评测 ID</span>
             <span role="columnheader">题目</span>
-            <span role="columnheader">语言</span>
-            <span role="columnheader">状态</span>
-            <span role="columnheader">时间</span>
+            <span role="columnheader">提交者</span><span role="columnheader">语言</span><span role="columnheader">状态</span><span role="columnheader">资源</span><span role="columnheader">时间</span>
           </div>
-          {items.map((s) => (
-            (() => {
-              const item = s as Submission & {
-                submissionId?: string;
-                publicNumber?: number;
-                problem?: { id: string; slug?: string; publicId?: string };
-                submitter?: { id: string };
-                languageProfileId?: string;
-              };
-              const submissionId = item.submissionId ?? item.id;
-              const problemId = item.problem?.publicId ?? item.problem?.slug ?? item.problem?.id ?? item.problemId;
-              const languageId = item.languageProfileId ?? item.languageId;
-              const submission = item.problem
-                ? { ...item, id: submissionId, ownerUserId: item.submitter?.id ?? item.ownerUserId, problemId, languageId }
-                : item;
-              return <Link
-              key={submissionId}
-              to={`/submissions/${encodeURIComponent(submissionId)}`}
-              className="evaluation-row"
-              ariaLabel={`查看评测 #${item.publicNumber ?? submissionId}`}
-            >
-              <span>#{item.publicNumber ?? submissionId}</span>
-              <span>{problemId}</span>
-              <span>{languageId}</span>
-              <JudgeStatus submission={submission} />
-              <time>{formatDate(item.createdAt)}</time>
-            </Link>;
-            })()
-          ))}
+          {items.map((s) => <div key={s.submissionId} className="evaluation-row" role="row"><Link to={`/submissions/${encodeURIComponent(s.submissionId)}`}>#{s.publicNumber ?? s.submissionId}</Link><Link to={`/problems/${encodeURIComponent(s.problem.id)}`} className="evaluation-problem"><strong>{s.problem.publicId || s.problem.slug}</strong> <span>{s.problem.title}</span></Link><span>{s.submitter.displayName}</span><span>{s.languageProfileId}</span><strong className={`evaluation-verdict tone-${evaluationVerdictTone(s.verdict ?? s.status)}`}>{s.verdict ?? s.status}</strong><span>{formatMilliseconds(s.totalTimeMs)} / {formatBytes(s.peakMemoryBytes)}</span><time>{formatDate(s.createdAt)}</time></div>)}
         </div>
       )}
       <div className="pagination">
@@ -2685,7 +2679,7 @@ export function App() {
     ) : current.name === 'submit' ? (
       <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
     ) : current.name === 'submissions' ? (
-      <SubmissionHistory api={api} user={user} />
+      <SubmissionHistory api={api} />
     ) : current.name === 'submission' ? (
       user && current.id ? (
         <SubmissionDetail api={api} id={current.id} user={user} />
