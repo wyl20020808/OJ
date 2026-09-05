@@ -1305,12 +1305,19 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
             );
           })();
       const payload = await body;
+      const transport = zip
+        ? {
+            method: 'POST',
+            headers: { 'content-type': 'application/zip' },
+            body: files[0]!,
+          }
+        : { method: 'POST', body: JSON.stringify(payload) };
       const response = await request<
         BackendJudgeDraft | { draft: BackendJudgeDraft }
       >(
         baseUrl,
         `/api/problems/${encodeURIComponent(problemId)}/judge-data/draft/${zip ? 'upload-zip' : 'upload'}`,
-        { method: 'POST', body: JSON.stringify(payload) },
+        transport,
         fetcher,
       );
       return normalizeJudgeDraft(
