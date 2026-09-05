@@ -94,6 +94,7 @@ describe('Web V4 R3 layout and information architecture contract', () => {
             items: [
               {
                 id: 'p1',
+                publicId: 'P0001',
                 slug: 'p1001',
                 title: '两数之和',
                 tags: ['数组', '哈希表'],
@@ -117,7 +118,7 @@ describe('Web V4 R3 layout and information architecture contract', () => {
     expect(
       document.querySelector('.problem-list-modern .problem-row'),
     ).toBeTruthy();
-    expect(screen.getByText('p1001')).toHaveClass('problem-id');
+    expect(screen.getByText('P0001')).toHaveClass('problem-id');
     expect(
       document.querySelector('.problem-list-modern .tag-row'),
     ).toHaveTextContent('数组');

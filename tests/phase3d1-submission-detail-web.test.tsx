@@ -2,7 +2,6 @@
 import '@testing-library/jest-dom/vitest';
 import {
   cleanup,
-  fireEvent,
   render,
   screen,
   waitFor,
@@ -118,7 +117,7 @@ afterEach(() => {
 
 describe('Phase 3D.1 submission detail Web projection', () => {
   it('shows authoritative testcase facts and keeps earlier generations read-only', async () => {
-    const { api, submissionEvaluation } = apiFor({
+    const { api } = apiFor({
       2: {
         evaluationGeneration: 2,
         attemptGeneration: 1,
@@ -159,7 +158,7 @@ describe('Phase 3D.1 submission detail Web projection', () => {
     render(<SubmissionDetail api={api} id={submission.id} user={user} />);
 
     expect(
-      await screen.findByRole('heading', { name: '评测 #s-7' }),
+      await screen.findByRole('heading', { name: /^评测 #s-7/ }),
     ).toBeInTheDocument();
     const progress = await screen.findByRole('region', { name: '测试点进度' });
     expect(within(progress).getByLabelText('测试点 2 AC')).toHaveTextContent(
@@ -178,13 +177,9 @@ describe('Phase 3D.1 submission detail Web projection', () => {
     const main = document.querySelector('.submission-primary');
     expect(main?.nextElementSibling).toBe(information);
     expect(
-      screen.getByRole('button', { name: /Generation 2 - Current/ }),
-    ).toHaveAttribute('aria-pressed', 'true');
-
-    fireEvent.click(screen.getByRole('button', { name: /Generation 1\s*WA/ }));
-    await waitFor(() => expect(screen.getAllByText('21 ms')).toHaveLength(2));
-    expect(screen.getAllByText('WA').length).toBeGreaterThan(0);
-    expect(submissionEvaluation).toHaveBeenLastCalledWith(submission.id, 1);
+      screen.queryByRole('button', { name: /Generation 2 - Current/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Generation History')).not.toBeInTheDocument();
   });
 
   it('does not invent testcase progress for a non-terminal evaluation', async () => {

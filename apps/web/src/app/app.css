@@ -742,6 +742,36 @@ pre {
 .submission-detail {
   max-width: 1180px;
 }
+.submission-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+.submission-tabs button {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.submission-tabs button.active {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+.source-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.copy-source {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
 .submission-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
@@ -936,11 +966,13 @@ pre {
 }
 .testcase-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 1fr;
   grid-template-rows: auto 1fr auto;
   aspect-ratio: 1;
   min-width: 0;
   padding: var(--space-2);
+  gap: 0.25rem;
+  overflow: hidden;
   border: 1px solid transparent;
   border-radius: 6px;
   background: var(--soft);
@@ -960,6 +992,8 @@ pre {
   align-self: end;
   font-size: 0.72rem;
   color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .testcase-row > span:nth-of-type(3) {
   text-align: right;
@@ -1629,7 +1663,7 @@ footer {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .testcase-row {
-    grid-template-columns: 3.5rem 4.5rem minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: 1fr 1fr;
   }
   .testcase-reason {
     grid-column: 3 / -1;
@@ -1855,12 +1889,12 @@ footer {
 }
 .tag-row > span {
   display: inline-flex;
-  padding: 0.15rem 0.4rem;
+  padding: 0.1rem 0.3rem;
   border-radius: 4px;
   background: #eaf0f2;
   color: #43545e;
   font-size: 0.7rem;
-  line-height: 1.4;
+  line-height: 1.15;
 }
 .problem-filters {
   display: grid;
@@ -1898,9 +1932,9 @@ footer {
   font-size: 0.78rem;
 }
 .problem-list-v4 .problem-table article {
-  grid-template-columns: 10rem minmax(0, 1fr) 8rem auto;
-  min-height: 5rem;
-  padding-block: var(--space-5);
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto auto;
+  min-height: 2.15rem;
+  padding-block: 0.2rem;
 }
 .evaluation-list {
   display: grid;
@@ -1911,7 +1945,9 @@ footer {
 }
 .evaluation-filters {
   display: grid;
-  grid-template-columns: minmax(9rem, 0.8fr) minmax(12rem, 1.4fr) minmax(12rem, 1.4fr) auto;
+  grid-template-columns:
+    minmax(9rem, 0.8fr) minmax(12rem, 1.4fr) minmax(12rem, 1.4fr)
+    auto;
   gap: var(--space-3);
   align-items: end;
   margin-bottom: var(--space-4);
@@ -1920,14 +1956,25 @@ footer {
   border-radius: var(--radius);
   background: var(--surface);
 }
-.evaluation-filters label { display: grid; gap: var(--space-1); color: var(--muted); font-size: 0.78rem; font-weight: 700; }
-.evaluation-filters input, .evaluation-filters select { min-width: 0; width: 100%; }
+.evaluation-filters label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.evaluation-filters input,
+.evaluation-filters select {
+  min-width: 0;
+  width: 100%;
+}
 .evaluation-list-header,
 .evaluation-row {
   display: grid;
   grid-template-columns:
     minmax(7rem, 0.7fr) minmax(8rem, 1.2fr) minmax(6rem, 0.8fr)
-    minmax(6rem, 0.8fr) minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(10rem, 1.1fr);
+    minmax(6rem, 0.8fr)
+    minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(10rem, 1.1fr);
   gap: var(--space-3);
   align-items: center;
   padding: var(--space-3) var(--space-4);
@@ -2095,6 +2142,22 @@ footer {
 .problem-aside {
   min-width: 0;
 }
+.problem-editor-slot {
+  min-width: 0;
+  margin-top: var(--space-8);
+}
+.plugin-slot-fallback {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--surface, #fff);
+  color: var(--muted);
+}
+.plugin-slot-fallback strong {
+  color: var(--text);
+}
 .problem-heading {
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--line);
@@ -2192,7 +2255,7 @@ footer {
     position: static;
   }
   .problem-list-v4 .problem-table article {
-    grid-template-columns: 8rem minmax(0, 1fr) auto;
+    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
   }
   .evaluation-list-header,
   .evaluation-row {
@@ -2334,7 +2397,7 @@ footer {
 }
 .problem-list-modern {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.3rem;
   overflow: visible;
   border: 0;
   background: transparent;
@@ -2359,34 +2422,34 @@ footer {
   text-decoration: none;
 }
 .problem-list-modern article {
-  grid-template-columns: minmax(6rem, 0.16fr) minmax(0, 1fr) auto auto;
-  min-height: 3.35rem;
-  padding: 0.65rem 1rem;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto auto;
+  min-height: 2.15rem;
+  padding: 0.2rem 0.7rem;
   align-items: center;
 }
 .problem-list-modern .problem-id {
   color: var(--accent-dark);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 1.05rem;
+  font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: 0;
 }
 .problem-list-modern h2 {
   margin: 0;
-  font-size: 0.98rem;
-  line-height: 1.25;
+  font-size: 0.92rem;
+  line-height: 1.15;
 }
 .problem-main-line {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.45rem;
   min-width: 0;
   flex-wrap: wrap;
 }
 .problem-list-modern .tag-row {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.2rem;
   margin-top: 0;
   flex-wrap: wrap;
 }
@@ -2395,13 +2458,16 @@ footer {
   border-radius: 999px;
   background: #f5f9fa;
   color: #536871;
-  font-size: 0.68rem;
+  padding: 0.08rem 0.28rem;
+  font-size: 0.64rem;
+  line-height: 1.1;
 }
 .problem-list-modern .problem-difficulty-chip {
   border-color: #d6e3d9;
   background: #f1f7f2;
   color: #44634c;
-  font-size: 0.74rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.68rem;
 }
 @media (max-width: 560px) {
   .breadcrumbs {
@@ -2410,7 +2476,7 @@ footer {
   }
   .problem-list-modern article {
     grid-template-columns: 1fr auto;
-    padding: 0.7rem 0.8rem;
+    padding: 0.35rem 0.6rem;
   }
   .problem-list-modern .problem-id {
     grid-column: 1 / -1;

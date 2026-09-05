@@ -81,6 +81,97 @@
   display: grid;
   gap: 1rem;
 }
+.statement-form-fields {
+  display: grid;
+  gap: 1.25rem;
+  min-width: 0;
+}
+.markdown-fields {
+  display: grid;
+  gap: 1rem;
+}
+.markdown-field-section {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-raised);
+}
+.markdown-field-section > h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.markdown-field-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+  border: 1px solid var(--line);
+}
+.markdown-editor-pane,
+.markdown-preview-pane {
+  min-width: 0;
+  padding: 0.75rem;
+}
+.markdown-editor-pane {
+  display: grid;
+  gap: 0.55rem;
+  border-right: 1px solid var(--line);
+  background: var(--soft);
+}
+.markdown-editor-pane textarea {
+  width: 100%;
+  min-height: 7rem;
+  resize: vertical;
+  font-family:
+    ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  line-height: 1.6;
+}
+.markdown-toolbar {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.markdown-tool {
+  min-width: 2.2rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.45rem;
+  border-color: var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.markdown-tool:hover:not(:disabled) {
+  background: var(--state-hover);
+  color: var(--accent-dark);
+  transform: none;
+}
+.markdown-preview-pane {
+  overflow: auto;
+  background: var(--surface);
+}
+.markdown-preview-pane:empty::after {
+  content: '实时预览';
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.markdown-preview-pane .problem-statement-renderer {
+  min-height: 7rem;
+}
+.markdown-preview-pane .problem-statement-renderer section {
+  display: grid;
+  gap: 0.4rem;
+}
+.markdown-preview-pane .problem-statement-renderer h3 {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
 .statement-preview {
   display: grid;
   gap: 1rem;
@@ -94,16 +185,54 @@
   gap: 1rem;
   align-items: start;
 }
-.statement-form-fields { display: grid; gap: 1rem; min-width: 0; }
-.problem-statement-renderer { display: grid; gap: 1rem; line-height: 1.65; min-width: 0; }
-.problem-statement-renderer h2, .problem-statement-renderer h3 { margin: 0; }
-.problem-statement-renderer p { margin: 0 0 .7rem; }
-.problem-statement-renderer pre { overflow-x: auto; padding: .75rem; background: #17252b; color: #f4f7f8; border-radius: 4px; }
-.problem-statement-renderer table { display: block; overflow-x: auto; border-collapse: collapse; }
-.problem-statement-renderer th, .problem-statement-renderer td { padding: .45rem .7rem; border: 1px solid var(--line); }
-.problem-statement-renderer img { max-width: 100%; }
-.problem-content-surface { padding: clamp(1rem, 3vw, 2rem); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-@media (max-width: 800px) { .statement-split { grid-template-columns: 1fr; } }
+.problem-statement-renderer {
+  display: grid;
+  gap: 1rem;
+  line-height: 1.65;
+  min-width: 0;
+}
+.problem-statement-renderer h2,
+.problem-statement-renderer h3 {
+  margin: 0;
+}
+.problem-statement-renderer p {
+  margin: 0 0 0.7rem;
+}
+.problem-statement-renderer pre {
+  overflow-x: auto;
+  padding: 0.75rem;
+  background: #17252b;
+  color: #f4f7f8;
+  border-radius: 4px;
+}
+.problem-statement-renderer table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.problem-statement-renderer th,
+.problem-statement-renderer td {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--line);
+}
+.problem-statement-renderer img {
+  max-width: 100%;
+}
+.problem-content-surface {
+  padding: clamp(1rem, 3vw, 2rem);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+@media (max-width: 800px) {
+  .markdown-field-split {
+    grid-template-columns: 1fr;
+  }
+  .markdown-editor-pane {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
 .statement-preview h2 {
   margin: 0;
   font-size: 1.4rem;
