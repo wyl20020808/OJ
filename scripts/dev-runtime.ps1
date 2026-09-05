@@ -532,7 +532,7 @@ function Ensure-SupervisorBinaries {
     if (Test-WslFile $item.path -Executable) {
       if ($item.label -eq 'supervisor') {
         $health = Get-HttpJson "$($Config.SupervisorOrigin)/v1/health"
-        $protocol = if ($health -and $health.body) { [string]$health.body.execution_contract_version } else { '' }
+        $protocol = if ($health -and $health.body) { [string]$health.body.execution_set_contract_version } else { '' }
         if ($protocol -eq [string]$Config.SupervisorExecutionSetContractVersion) {
           Write-Host "$($item.label) REUSE ($($item.path))"; continue
         }
@@ -656,9 +656,9 @@ function Start-Supervisor($state) {
   Resolve-CompilerRootfsIdentity | Out-Null
   Repair-SupervisorUserManager
   $health = Get-HttpJson "$($Config.SupervisorOrigin)/v1/health"
-  if ($health -and [string]$health.body.execution_contract_version -eq [string]$Config.SupervisorExecutionSetContractVersion) { Write-Host 'supervisor REUSE (healthy)'; return }
+  if ($health -and [string]$health.body.execution_set_contract_version -eq [string]$Config.SupervisorExecutionSetContractVersion) { Write-Host 'supervisor REUSE (healthy)'; return }
   if ($health) {
-    Write-Host "supervisor RESTART (protocol $([string]$health.body.execution_contract_version), expected $($Config.SupervisorExecutionSetContractVersion))"
+    Write-Host "supervisor RESTART (execution-set protocol $([string]$health.body.execution_set_contract_version), expected $($Config.SupervisorExecutionSetContractVersion))"
     Invoke-Wsl @('-d',$Config.WslDistro,'--user','oj-sandbox','--','env','XDG_RUNTIME_DIR=/run/user/1000','DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus','systemctl','--user','stop',$Config.SupervisorSystemdUnit) 30000 | Out-Null
     $deadline=(Get-Date).AddSeconds(15); do { Start-Sleep -Milliseconds 250 } while ((Test-TcpPort $Config.SupervisorPort) -and (Get-Date) -lt $deadline)
   }

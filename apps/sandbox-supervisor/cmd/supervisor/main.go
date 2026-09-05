@@ -244,7 +244,7 @@ func (s *protocolServer) health(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
-	writeJSON(w, map[string]any{"status": "ok", "contract_version": model.ContractVersion, "execution_contract_version": model.ExecutionContractVersion, "real_submission_execution": s.realExecutionEnabled, "language_profiles": enabledLanguageProfiles(s.realExecutionEnabled), "supervisor_uid": os.Geteuid(), "supervisor_gid": os.Getegid()})
+	writeJSON(w, map[string]any{"status": "ok", "contract_version": model.ContractVersion, "execution_contract_version": model.ExecutionContractVersion, "execution_set_contract_version": model.ExecutionSetContractVersion, "real_submission_execution": s.realExecutionEnabled, "language_profiles": enabledLanguageProfiles(s.realExecutionEnabled), "supervisor_uid": os.Geteuid(), "supervisor_gid": os.Getegid()})
 }
 
 func enabledLanguageProfiles(enabled bool) []string {
