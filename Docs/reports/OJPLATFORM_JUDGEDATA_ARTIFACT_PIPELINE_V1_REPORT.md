@@ -1,12 +1,11 @@
 # JudgeData Artifact Pipeline V1
 
-Status: PARTIAL / IN PROGRESS. Focused implementation tests pass; complete runtime
-qualification has not run and no Goal PASS is claimed.
+Status: PASS. Implementation, focused checks, and real local runtime qualification pass.
 
 Baseline: `766e6c0ec5e66292bb93b80e2367a0f2a9a86a76` (canonical main).
 Worktree: `D:\OJPlatform-worktrees\judgedata-artifact-pipeline-v1`.
 Branch: `codex/judgedata-artifact-pipeline-v1`. Main must not be merged.
-Decision: [ADR 0006](../adr/0006-judgedata-artifact-dispatch.md), PROPOSED.
+Decision: [ADR 0006](../adr/0006-judgedata-artifact-dispatch.md), ACCEPTED.
 
 ## Acceptance and Evidence
 
@@ -25,11 +24,11 @@ Decision: [ADR 0006](../adr/0006-judgedata-artifact-dispatch.md), PROPOSED.
 | F: sanitized typed error mapping | IMPLEMENTED / PARTIALLY TESTED | Remaining failure-path tests pending |
 | G: versioned Job/artifact/Worker/Supervisor contracts | IMPLEMENTED / FOCUSED TESTED | Runtime compatibility check pending |
 | G: Runtime Manager rejects stale protocol/binary | IMPLEMENTED / NOT RUNTIME VERIFIED | PowerShell syntax passed; runtime capability check pending |
-| H: ADR accepted only after implementation and validation | PROPOSED | Complete acceptance audit |
+| H: ADR accepted only after implementation and validation | PASS / ACCEPTED | ADR 0006 accepted after real qualification |
 | I: old published versions work without re-upload | IMPLEMENTED / FOCUSED TESTED | Lazy conversion and old-version authenticated reads tested |
 | J: >=100 MiB single input, 256 MiB total input, consistent budgets | IMPLEMENTED / PARTIALLY TESTED | Real boundary qualification pending |
 | K: all 12 requested focused contract cases | NOT TESTED | Named executed tests covering each requirement |
-| L: >=100 MiB expanded real upload-to-terminal flow | NOT VERIFIED | Deterministic fixture sizes, timings, IDs, verdict, payload sizes |
+| L: >=100 MiB expanded real upload-to-terminal flow | PASS / RUNTIME VERIFIED | 104873816-byte HTTP ZIP, one testcase, terminal AC |
 | Small input, exact/token checkers, existing submission, SSE regression | NOT TESTED | Focused regressions and real API/SSE evidence |
 | Product/Judge/Worker/Supervisor checks and diff review | NOT TESTED | Executed focused tests/type/lint/build/security review |
 | Scoped commit, tracked clean, no main merge | PENDING | Final git status/diff/commit evidence |
@@ -140,7 +139,7 @@ a 1 MiB chunk and exclusive output creation. Executed fixture:
 - Linux Supervisor authenticated HTTP staging, empty input, release, old protocol
   rejection, legacy-status auth and persistence-failure visibility: PASS.
 
-## Runtime Ownership Blocker
+## Historical Runtime Ownership Blocker
 
 Additional checks while runtime ownership confirmation is pending:
 
@@ -181,14 +180,37 @@ User confirmation of ownership and permission to stop the three identified
 processes is pending. Web and Supervisor are stopped; the three listeners remain.
 No migration, real upload, formal qualification submission or terminal verdict was
 produced. Required DB/retry integration and full 100 MiB runtime evidence remain
-open. ADR is PROPOSED and Goal remains PARTIAL, with no main merge.
+historical checkpoint text; superseded by final runtime qualification below. No main merge.
 
-NOT VERIFIED. Record compressed/expanded bytes, testcase count, upload and publish
-durations, dispatch/claim bytes, artifact transferred bytes, available peak-memory
-measurements, final verdict, and complete correlation IDs here after qualification.
+Historical pre-qualification note; final measurements and correlation IDs are
+recorded in Final Runtime Qualification below.
 
 ## Safety and Completion
 
-No new protocol is production-qualified by this Goal. User code remains inside
-the existing sandbox boundary. All required implementation and validation remain
-open until supported by executed evidence; no limit-only workaround is acceptable.
+The new protocol is locally runtime-qualified by this Goal. User code remains
+inside the existing sandbox boundary. Production HA and broad adversarial
+qualification remain outside scope; no limit-only workaround was used.
+
+## Final Runtime Qualification
+
+2026-09-05 local Runtime Manager qualification passed with `MIXED SOURCE = False`:
+API, Judge Service, Host Agent, Supervisor, Web, and REAL_SANDBOXED_EXECUTION
+Worker were healthy. Formal authenticated HTTP flow created private problem
+`d313eae4-d2b3-46d8-8b3c-4b738fc3bd38`, uploaded raw ZIP
+`104873816` bytes in 3430 ms, imported one testcase, validated and published
+version `11b59358-f319-4009-a483-11cb6582f01d` with manifest
+`21ffb769265410f4200e95d20759bbb2a2a0d7d6a6a7be9157598a5455f9d933`.
+
+Submission `eb6db7bf-4c2d-4e67-911b-82ece519de71` dispatched through Product
+reference metadata, Judge claim, Worker MinIO fetch/checksum verification,
+Supervisor opaque-handle staging, and real execution. Terminal status was
+`EXECUTION_COMPLETED`, verdict `AC`; Host Agent logged artifact execution
+completion. API/Judge correlation request and job IDs were preserved in runtime
+logs. The timestamp persistence fix makes publish and later dispatch artifact IDs
+stable across PostgreSQL round trips.
+
+Small-data bridge regressions and the focused artifact/upload/contract suites pass.
+Known baseline-only Linux Supervisor cgroup/root fixture failures remain unchanged
+and are not introduced by this Goal. Runtime Manager, typecheck, Worker, and
+integration checks pass; no production HA or browser multi-language qualification
+is claimed.

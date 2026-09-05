@@ -224,6 +224,12 @@ started.
 
 Last Updated: 2026-09-05
 
+JUDGEDATA ARTIFACT PIPELINE V1 (2026-09-05): PASS. Real authenticated 100 MiB
+raw ZIP upload, validate/publish, Product reference dispatch, Judge claim,
+MinIO checksum fetch, Supervisor opaque-handle execution, and terminal AC passed
+on current worktree. ADR 0006 ACCEPTED. See
+`Docs/reports/OJPLATFORM_JUDGEDATA_ARTIFACT_PIPELINE_V1_REPORT.md`.
+
 Recent Remediation Final Integration V2: PARTIAL. OJ and plugin main merges are
 complete; root checkouts align to main. Integration contains launcher status/stop, JudgeData
 execution reliability V2, submission/live-evaluation UX V2, and plugin hosted

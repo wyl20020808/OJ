@@ -2,7 +2,7 @@
 
 ## Status
 
-PROPOSED. Implementation and qualification are authorized by the JudgeData
+ACCEPTED. Implementation and qualification are authorized by the JudgeData
 Artifact Pipeline V1 Goal. Acceptance requires the complete evidence matrix in
 the Goal report, including a real >=100 MiB formal submission. This decision
 preserves the architecture baseline and ADR 0005's database separation.
