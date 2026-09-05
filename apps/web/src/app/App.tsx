@@ -1672,7 +1672,12 @@ export function ProblemDetail({
             </span>
             <h1>{problem.title}</h1>
             <div className="problem-header-actions" aria-label="题目操作">
-              <Link className="button" to={`/problems/${encodeURIComponent(id)}#solve`}>提交代码</Link>
+              <Link
+                className="button"
+                to={`/problems/${encodeURIComponent(id)}/submit`}
+              >
+                提交代码
+              </Link>
               {canEdit && (
                 <Link
                   to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
@@ -1686,14 +1691,6 @@ export function ProblemDetail({
                 收藏
               </button>
             </div>
-            <p className="muted">
-              {problem.currentRevisionId
-                ? `版本 ${problem.currentRevisionId}`
-                : '版本信息暂不可用'}
-              {problem.testdataVersion
-                ? ` · 测试数据 ${problem.testdataVersion}`
-                : ''}
-            </p>
           </header>
           <Section title="题目描述">{problem.statement}</Section>
           <Section title="输入格式">{problem.inputDescription}</Section>
@@ -1703,27 +1700,47 @@ export function ProblemDetail({
             <Section title="样例">
               {problem.examples.map((example, index) => (
                 <div className="sample-block" key={index}>
-                  <button
-                    type="button"
-                    className="secondary sample-copy"
-                    onClick={() => {
-                      if (!navigator.clipboard) {
-                        setCopyMessage('当前浏览器不支持复制样例。');
-                        return;
-                      }
-                      void navigator.clipboard
-                        .writeText(
-                          `输入\n${example.input}\n\n输出\n${example.output}`,
-                        )
-                        .then(() => setCopyMessage('样例已复制。'))
-                        .catch(() =>
-                          setCopyMessage('复制失败，请手动选择样例。'),
-                        );
-                    }}
-                  >
-                    复制样例
-                  </button>
-                  <pre>{`输入\n${example.input}\n\n输出\n${example.output}`}</pre>
+                  <div className="sample-heading">
+                    <h3>样例 {index + 1}</h3>
+                    <button
+                      type="button"
+                      className="secondary sample-copy"
+                      onClick={() => {
+                        if (!navigator.clipboard) {
+                          setCopyMessage('当前浏览器不支持复制样例。');
+                          return;
+                        }
+                        void navigator.clipboard
+                          .writeText(example.input)
+                          .then(() => setCopyMessage('样例输入已复制。'))
+                          .catch(() =>
+                            setCopyMessage('复制失败，请手动选择样例输入。'),
+                          );
+                      }}
+                    >
+                      复制样例
+                    </button>
+                  </div>
+                  <div className="sample-grid">
+                    <div>
+                      <h4>输入</h4>
+                      <pre
+                        className="sample-code sample-input"
+                        aria-label={`样例 ${index + 1} 输入`}
+                      >
+                        {example.input}
+                      </pre>
+                    </div>
+                    <div>
+                      <h4>输出</h4>
+                      <pre
+                        className="sample-code sample-output"
+                        aria-label={`样例 ${index + 1} 输出`}
+                      >
+                        {example.output}
+                      </pre>
+                    </div>
+                  </div>
                 </div>
               ))}
               {copyMessage && <p role="status">{copyMessage}</p>}

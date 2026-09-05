@@ -1,5 +1,14 @@
 # OJPlatform Project Status
 
+Problem Page UX Remediation V3: PASS. The Problem title action again opens the
+existing traditional submission route with its language selector, source field,
+and formal Submission API integration. Problem metadata is product-facing, the
+right information card remains in document flow, and sample input/output are
+separate light panels whose copy action preserves only the input text. Focused
+Web tests, Web typecheck, Web build, and diff checks pass. Runtime/browser E2E
+was explicitly excluded. See
+`reports/OJPLATFORM_PROBLEM_PAGE_UX_V3_REPORT.md`.
+
 Product/Judge/UI Remediation Runtime Resume V1: PARTIAL. Canonical main
 `511830d` merged into remediation at `4b0ea17`. A minimal Runtime Manager
 listener lookup fallback fixed a machine-specific `Get-NetTCPConnection` blind

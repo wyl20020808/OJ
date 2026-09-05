@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   cleanup,
   fireEvent,
@@ -39,6 +41,11 @@ const response = (body: unknown) => ({
   json: async () => body,
 });
 
+const appCss = readFileSync(
+  resolve(process.cwd(), 'apps/web/src/app/app.css'),
+  'utf8',
+);
+
 function renderApp(
   path: string,
   user: Record<string, unknown>,
@@ -58,6 +65,15 @@ function renderApp(
           page: { total: 1, offset: 0, limit: 20 },
         });
       if (url.endsWith('/api/problems/sum')) return response(detail);
+      if (url.endsWith('/api/submissions/languages'))
+        return response([
+          {
+            id: 'cpp20',
+            name: 'C++ 20',
+            extension: '.cpp',
+            maxSourceBytes: 65_536,
+          },
+        ]);
       if (url.includes('/api/evaluations'))
         return response({
           items: [
@@ -103,6 +119,86 @@ describe('Web UI polish', () => {
     expect(screen.getByRole('link', { name: '编辑题目' })).toHaveAttribute(
       'href',
       '/author/problems/p1/edit',
+    );
+    expect(screen.getByRole('link', { name: '提交代码' })).toHaveAttribute(
+      'href',
+      '/problems/sum/submit',
+    );
+    expect(screen.getByRole('link', { name: '提交代码' })).not.toHaveAttribute(
+      'href',
+      expect.stringContaining('#solve'),
+    );
+  });
+
+  it('opens the traditional submission surface from the problem action', async () => {
+    renderApp('/problems/sum', {
+      id: 'u2',
+      username: 'reader',
+      email: 'reader@example.test',
+      displayName: 'Reader',
+      status: 'active',
+    });
+
+    fireEvent.click(await screen.findByRole('link', { name: '提交代码' }));
+    expect(
+      await screen.findByRole('heading', { name: '提交代码' }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('编程语言')).toBeInTheDocument();
+    expect(screen.getByLabelText('源代码')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '提交源代码' }),
+    ).toBeInTheDocument();
+  });
+
+  it('hides internal metadata and copies only whitespace-preserved sample input', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    renderApp(
+      '/problems/sum',
+      {
+        id: 'u2',
+        username: 'reader',
+        email: 'reader@example.test',
+        displayName: 'Reader',
+        status: 'active',
+      },
+      {
+        ...problem,
+        currentRevisionId: '6b58a19a-160e-455e-9ee3-e8c9788212bc',
+        testdataVersion: 'phase1c-e2e-v1',
+        examples: [{ input: '  1 2\n\n', output: '3\n' }],
+      },
+    );
+
+    await screen.findByRole('heading', { name: 'A+B Problem' });
+    expect(
+      screen.queryByText('6b58a19a-160e-455e-9ee3-e8c9788212bc'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('phase1c-e2e-v1')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('样例 1 输入')).toHaveTextContent('1 2');
+    expect(screen.getByLabelText('样例 1 输出')).toHaveTextContent('3');
+    expect(screen.getByLabelText('样例 1 输入')).toHaveClass(
+      'sample-code',
+      'sample-input',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '复制样例' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('  1 2\n\n'));
+    expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining('3'));
+  });
+
+  it('keeps the information card in document flow and samples light', () => {
+    expect(appCss).not.toMatch(
+      /\.problem-aside\s*\{[^}]*position:\s*(?:sticky|fixed)/,
+    );
+    expect(appCss).toMatch(
+      /\.sample-code\s*\{[^}]*background:\s*#f7f9fa[^}]*color:\s*var\(--ink\)/,
+    );
+    expect(appCss).toMatch(
+      /\.sample-code\s*\{[^}]*white-space:\s*pre[^}]*overflow-x:\s*auto/,
     );
   });
 
