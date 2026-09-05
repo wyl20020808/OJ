@@ -1,5 +1,11 @@
 # OJPlatform Project Status
 
+Submission Direct Evaluation V2: PASS. Traditional submit now navigates directly
+to existing Submission/Evaluation Detail after create success; accepted
+intermediate state removed, duplicate submit guarded, and API errors remain on
+form. Focused Web tests, typecheck, and build pass. Browser smoke not verified.
+See `reports/OJPLATFORM_SUBMISSION_DIRECT_EVALUATION_V2_REPORT.md`.
+
 JudgeData Artifact Pipeline V1: PASS / INTEGRATED. Streaming upload, immutable
 artifacts, reference dispatch, bounded Worker fetch, Supervisor opaque-handle
 transport, and dispatch recovery are implemented. Real authenticated 100 MiB

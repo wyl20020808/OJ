@@ -1662,9 +1662,10 @@ function SubmissionForm({
   const [source, setSource] = useState('');
   const [problem, setProblem] = useState<Problem | null>(null);
   const [state, setState] = useState<
-    'loading' | 'ready' | 'saving' | 'success' | 'error'
+    'loading' | 'ready' | 'saving' | 'error'
   >('loading');
   const [error, setError] = useState('');
+  const submittingRef = useRef(false);
   useEffect(() => {
     if (!user) {
       setState('ready');
@@ -1695,6 +1696,7 @@ function SubmissionForm({
   if (state === 'error') return <State title="提交服务暂不可用" text={error} />;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (state === 'saving' || submittingRef.current) return;
     setError('');
     const effectiveLanguageId = languageId || languages[0]?.id || '';
     if (!effectiveLanguageId) {
@@ -1714,6 +1716,7 @@ function SubmissionForm({
       return;
     }
     setState('saving');
+    submittingRef.current = true;
     try {
       const result = await api.createSubmission({
         problemId: problem?.id ?? problemId,
@@ -1721,21 +1724,15 @@ function SubmissionForm({
         languageId: effectiveLanguageId,
         source,
       });
-      setState('success');
-      setError(`提交 ${result.id} 已接收，当前原始状态为 ${result.status}。`);
+      // Submission detail is the formal loading destination while evaluation
+      // projection completes asynchronously when needed.
+      navigate(`/submissions/${encodeURIComponent(result.id)}`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '无法提交源代码。');
       setState('ready');
+      submittingRef.current = false;
     }
   };
-  if (state === 'success')
-    return (
-      <State
-        title="提交已接收"
-        text={error}
-        action={<Link to="/submissions">查看评测列表</Link>}
-      />
-    );
   return (
     <section className="editor">
       <Link to={`/problems/${encodeURIComponent(problemId)}`}>← 返回题目</Link>
