@@ -1,5 +1,12 @@
 # OJPlatform Project Status
 
+Admin Chinese UX + Notification Popover V1: PARTIAL. Notification popup outside
+pointer dismissal, Escape dismissal, bell toggle, close button, inside-click
+preservation, and listener cleanup are implemented and focused-tested. Admin
+navigation is Chinese; full admin-page Chinese coverage is not claimed because
+the only current admin page is the explicitly excluded Judge surface. See
+`Docs/reports/OJPLATFORM_ADMIN_CN_NOTIFICATION_V1_REPORT.md`.
+
 Product/Judge/UI Remediation Runtime Resume V1: PARTIAL. Canonical main
 `511830d` merged into remediation at `4b0ea17`. A minimal Runtime Manager
 listener lookup fallback fixed a machine-specific `Get-NetTCPConnection` blind
