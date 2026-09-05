@@ -5,6 +5,13 @@ Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: WEB UI POLISH AND EVALUATION LIST V1 PARTIAL
 Current Status: WEB UI POLISH IMPLEMENTED AND TESTED / GLOBAL EVALUATION LIST BACKEND SUPPORT NOT AVAILABLE
 
+Evaluation UX V4: PARTIAL. Evaluation Detail progress, code, testcase grid, information card, and 3-second terminal-aware reconciliation are implemented. Browser runtime not verified; one legacy focused assertion expects removed/changed testcase presentation. See `OJPLATFORM_EVALUATION_UX_V4_REPORT.md`.
+
+Problem List Compact UX V2: PASS for focused Web scope. Problem rows are denser,
+IDs are emphasized, tags stay horizontal with responsive wrapping, and ordinary
+item source text is removed. Focused tests, typecheck, and Web build pass; runtime
+smoke was not run. See `OJPLATFORM_PROBLEM_LIST_COMPACT_UX_V2_REPORT.md`.
+
 Web UI Polish and Evaluation List V1: PARTIAL. Problem Detail actions are
 consolidated below the title with owner/Guest-owner edit entry; duplicate Web
 "我的题目" surfaces are retired and the existing create flow is available from

@@ -1121,17 +1121,16 @@ function ProblemList({
                   {p.slug || p.id}
                 </span>
                 <div className="problem-title-cell">
-                  <h2>{p.title}</h2>
-                  <div className="tag-row">
-                    {p.tags?.length ? (
-                      p.tags.map((item) => <span key={item}>{item}</span>)
-                    ) : (
-                      <span>暂无标签</span>
-                    )}
+                  <div className="problem-main-line">
+                    <h2>{p.title}</h2>
+                    <div className="tag-row" aria-label="题目标签">
+                      {p.tags?.length ? (
+                        p.tags.map((item) => <span key={item}>{item}</span>)
+                      ) : (
+                        <span>暂无标签</span>
+                      )}
+                    </div>
                   </div>
-                  {p.source && (
-                    <span className="problem-source">来源 · {p.source}</span>
-                  )}
                 </div>
                 <span className="difficulty-label problem-difficulty-chip">
                   {p.difficulty ?? '难度未提供'}
@@ -1952,6 +1951,26 @@ export function SubmissionDetail({
       active = false;
     };
   }, [api, id, selectedGeneration, user]);
+  useEffect(() => {
+    if (
+      !user ||
+      !selectedGeneration ||
+      !evaluation ||
+      isTerminalStatus(evaluation.status)
+    )
+      return;
+    const timer = window.setInterval(() => {
+      void api
+        .submissionEvaluation(id, selectedGeneration)
+        .then((response) => {
+          setEvaluation((current) =>
+            mergeEvaluation(current, response.evaluation),
+          );
+        })
+        .catch(() => undefined);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [api, id, selectedGeneration, user, evaluation?.status]);
   if (!user)
     return (
       <State
@@ -1994,19 +2013,10 @@ export function SubmissionDetail({
     );
   if (!submission)
     return <State title="正在加载提交" text="正在获取提交元数据…" />;
-  const isTerminal = evaluation
-    ? [
-        'COMPLETED_WITH_VERDICT',
-        'CANCELLED',
-        'INFRA_FAILED',
-        'NO_VERDICT',
-        'INCOMPLETE',
-      ].includes(evaluation.status)
-    : false;
+  const isTerminal = evaluation ? isTerminalStatus(evaluation.status) : false;
   return (
     <article className="detail submission-detail">
       <Link to="/submissions">← 返回评测列表</Link>
-      <p className="eyebrow">提交详情</p>
       <div className="submission-heading">
         <div>
           <h1>Submission #{submission.id}</h1>
@@ -2044,55 +2054,88 @@ export function SubmissionDetail({
           </dd>
         </div>
       </dl>
-      <div className="submission-detail-actions">
-        <button type="button" className="secondary" onClick={load}>
-          刷新执行状态
-        </button>
-      </div>
-      <Section title="源代码">
-        <pre className="source">{submission.source}</pre>
-      </Section>
-      <section
-        className="submission-generation"
-        aria-labelledby="generation-history-title"
-      >
-        <div className="section-heading-inline">
-          <div>
-            <p className="eyebrow">Generation History</p>
-            <h2 id="generation-history-title">评测历史</h2>
-          </div>
-        </div>
-        {history.length ? (
-          <div className="generation-list" role="list">
-            {history.map((item) => (
-              <div key={item.evaluationGeneration} role="listitem">
-                <button
-                  type="button"
-                  className={
-                    selectedGeneration === item.evaluationGeneration
-                      ? 'generation-current'
-                      : ''
-                  }
-                  aria-pressed={
-                    selectedGeneration === item.evaluationGeneration
-                  }
-                  onClick={() =>
-                    setSelectedGeneration(item.evaluationGeneration)
-                  }
+      <div className="submission-layout">
+        <div className="submission-primary">
+          {isTerminal && evaluation?.detail?.testcases?.length ? (
+            <div className="testcase-progress" aria-label="测试点进度">
+              {evaluation.detail.testcases.map((item) => (
+                <span
+                  key={item.ordinal}
+                  className={`progress-cell verdict-${item.verdict}`}
+                  aria-label={`测试点 ${item.ordinal} ${item.verdict}`}
                 >
-                  <span>
-                    Generation {item.evaluationGeneration}
-                    {item.current ? ' - Current' : ''}
-                  </span>
-                  <strong>{item.verdict ?? item.status}</strong>
-                </button>
+                  {item.verdict === 'AC' ? '✓' : '×'}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <Section title="源代码">
+            <pre className="source">{submission.source}</pre>
+          </Section>
+          <section
+            className="submission-generation"
+            aria-labelledby="generation-history-title"
+          >
+            <div className="section-heading-inline">
+              <div>
+                <p className="eyebrow">Generation History</p>
+                <h2 id="generation-history-title">评测历史</h2>
               </div>
-            ))}
-          </div>
-        ) : (
-          <p className="submission-muted">评测历史暂不可用。</p>
-        )}
-      </section>
+            </div>
+            {history.length ? (
+              <div className="generation-list" role="list">
+                {history.map((item) => (
+                  <div key={item.evaluationGeneration} role="listitem">
+                    <button
+                      type="button"
+                      className={
+                        selectedGeneration === item.evaluationGeneration
+                          ? 'generation-current'
+                          : ''
+                      }
+                      aria-pressed={
+                        selectedGeneration === item.evaluationGeneration
+                      }
+                      onClick={() =>
+                        setSelectedGeneration(item.evaluationGeneration)
+                      }
+                    >
+                      <span>
+                        Generation {item.evaluationGeneration}
+                        {item.current ? ' - Current' : ''}
+                      </span>
+                      <strong>{item.verdict ?? item.status}</strong>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="submission-muted">评测历史暂不可用。</p>
+            )}
+          </section>
+        </div>
+        <aside className="evaluation-info-card" aria-label="评测信息">
+          <h2>评测信息</h2>
+          <dl>
+            <div>
+              <dt>状态</dt>
+              <dd>{evaluation?.status ?? submission.status}</dd>
+            </div>
+            <div>
+              <dt>代次</dt>
+              <dd>{evaluation?.evaluationGeneration ?? '加载中'}</dd>
+            </div>
+            <div>
+              <dt>语言</dt>
+              <dd>{submission.languageId}</dd>
+            </div>
+            <div>
+              <dt>提交时间</dt>
+              <dd>{formatDate(submission.createdAt)}</dd>
+            </div>
+          </dl>
+        </aside>
+      </div>
       {evaluationError ? (
         <State
           title="评测详情暂不可用"
@@ -2144,34 +2187,22 @@ export function SubmissionDetail({
             className="testcase-results"
             aria-labelledby="testcase-results-title"
           >
-            <div className="section-heading-inline">
-              <div>
-                <p className="eyebrow">Testcase Results</p>
-                <h2 id="testcase-results-title">测试点结果</h2>
-              </div>
-            </div>
             {evaluation.detail?.testcases.length ? (
-              <div className="testcase-list" role="list">
+              <div
+                className="testcase-list"
+                role="list"
+                aria-label="测试点结果"
+              >
                 {evaluation.detail.testcases.map((item) => (
                   <article
                     key={item.ordinal}
                     role="listitem"
-                    className="testcase-row"
+                    className={`testcase-row verdict-${item.verdict}`}
                   >
                     <strong>#{item.ordinal}</strong>
                     <span className="testcase-verdict">{item.verdict}</span>
                     <span>{formatMilliseconds(item.timeMs)}</span>
                     <span>{formatBytes(item.memoryBytes)}</span>
-                    {item.runtimeReason && (
-                      <span className="testcase-reason">
-                        {item.runtimeReason}
-                      </span>
-                    )}
-                    {item.exitCode !== undefined && (
-                      <span className="testcase-reason">
-                        Exit {item.exitCode}
-                      </span>
-                    )}
                   </article>
                 ))}
               </div>
@@ -2188,13 +2219,34 @@ export function SubmissionDetail({
 }
 
 function formatMilliseconds(value: number | undefined) {
-  return value === undefined ? '未提供' : `${value} ms`;
+  return value === undefined ? '—' : `${value} ms`;
 }
 function formatBytes(value: number | undefined) {
-  if (value === undefined) return '未提供';
+  if (value === undefined) return '—';
   return value >= 1024 * 1024
     ? `${(value / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.ceil(value / 1024))} KB`;
+}
+
+function isTerminalStatus(status: SubmissionEvaluation['status']) {
+  return [
+    'COMPLETED_WITH_VERDICT',
+    'CANCELLED',
+    'INFRA_FAILED',
+    'NO_VERDICT',
+    'INCOMPLETE',
+  ].includes(status);
+}
+
+function mergeEvaluation(
+  current:
+    (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null,
+  incoming: SubmissionEvaluation & { detail?: SubmissionEvaluationDetail },
+) {
+  if (!current) return incoming;
+  if (isTerminalStatus(current.status) && !isTerminalStatus(incoming.status))
+    return current;
+  return incoming;
 }
 
 function Profile({
