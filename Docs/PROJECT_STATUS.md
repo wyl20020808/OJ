@@ -5,8 +5,8 @@ evaluation navigation, capability-driven problem editing, sample presentation,
 breadcrumb/admin navigation, and authenticated evaluation-list protection.
 Focused Web/Product/Auth checks pass (383 tests), and Runtime Manager restart with
 doctor now proves canonical product/plugin `main` sources with
-merge commit `2f28387298371af3526de596afb9fdec65129bbf` and
-`MIXED SOURCE = False`. Browser guest evaluation-list smoke passes; persisted
+matching Runtime Manager source identity and `MIXED SOURCE = False`.
+Browser guest evaluation-list smoke passes; persisted
 root credential and root/admin browser workflows remain NOT VERIFIED because no
 credential was changed. See
 `reports/OJPLATFORM_FULL_PRODUCT_STATE_DIAGNOSIS_RECOVERY_V1_REPORT.md`.

@@ -5,7 +5,7 @@ Status: PARTIAL
 ## Diagnosis
 
 - Runtime Manager registry pointed at `D:\OJPlatform-worktrees\judgedata-artifact-pipeline-v1`, branch `codex/judgedata-artifact-pipeline-v1`, commit `a9074841ec3d35fd95ab6cfe6ecb70b0c09ac647`.
-- Canonical product source was `D:\OJPlatform`, branch `main`, commit `df5ef4c6420e55d2be419e2a299e3fa28912af19` before integration; final merged `main` is `2f28387298371af3526de596afb9fdec65129bbf`.
+- Canonical product source was `D:\OJPlatform`, branch `main`, commit `df5ef4c6420e55d2be419e2a299e3fa28912af19` before integration; recovery merge and final documentation commits are on canonical `main`.
 - No target application listeners were running before recovery. Root cause included `RUNTIME_SOURCE_MISMATCH` and stale shared runtime ownership.
 - Historical merge comparison found lost evaluation row navigation, owner-only problem edit visibility, split sample presentation/copy behavior, desktop aside flow, Chinese Judge breadcrumb, anonymous evaluation-list protection, and permission-gated admin navigation.
 
@@ -28,7 +28,7 @@ Status: PARTIAL
 ## Runtime Verified
 
 - `scripts/dev-runtime.ps1 start -Verify` passed.
-- Final Runtime Manager status reports product `D:\OJPlatform`, branch `main`, commit `2f28387298371af3526de596afb9fdec65129bbf`; plugin reports canonical `main` commit `b8fbfcc49643e2487e47ac0c5b55d966270d13cc`.
+- Final Runtime Manager status reports product `D:\OJPlatform`, branch `main`, and the current `main` HEAD; plugin reports canonical `main` commit `b8fbfcc49643e2487e47ac0c5b55d966270d13cc`. Runtime source and HEAD matched at verification time.
 - PostgreSQL, Redis, MinIO, API, Web, Judge Service, Host Agent, Supervisor, and REAL_SANDBOXED worker passed manager health checks.
 - Final status reports `MIXED SOURCE = False`; application listeners are owned by `D:\OJPlatform`.
 
