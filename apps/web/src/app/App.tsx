@@ -2133,8 +2133,6 @@ export function SubmissionDetail({
   const [evaluation, setEvaluation] = useState<
     (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null
   >(null);
-  const evaluationRef = useRef(evaluation);
-  evaluationRef.current = evaluation;
   const [evaluationError, setEvaluationError] = useState(false);
   const [activeTab, setActiveTab] = useState<'testcases' | 'code'>('testcases');
   const requestVersion = useRef(0);
@@ -2200,12 +2198,11 @@ export function SubmissionDetail({
     };
   }, [api, id, selectedGeneration, user]);
   useEffect(() => {
-    const currentEvaluation = evaluationRef.current;
     if (
       !user ||
-      !currentEvaluation ||
-      selectedGeneration !== currentEvaluation.evaluationGeneration ||
-      isEvaluationTerminal(currentEvaluation.status) ||
+      !evaluation ||
+      selectedGeneration !== evaluation.evaluationGeneration ||
+      isEvaluationTerminal(evaluation.status) ||
       typeof api.submissionEvaluationStreamUrl !== 'function' ||
       typeof EventSource === 'undefined'
     )
@@ -2222,22 +2219,8 @@ export function SubmissionDetail({
           detail?: SubmissionEvaluationDetail;
           completedAt?: string;
         };
-        setEvaluation((current) => {
-          if (
-            !current ||
-            (event.status &&
-              isEvaluationTerminal(current.status) &&
-              !isEvaluationTerminal(event.status))
-          )
-            return current;
-          return {
-            ...current,
-            ...(event.status ? { status: event.status } : {}),
-            ...(event.verdict ? { verdict: event.verdict } : {}),
-            ...(event.completedAt ? { completedAt: event.completedAt } : {}),
-            ...(event.detail ? { detail: event.detail } : {}),
-          };
-        });
+        setEvaluation((current) => mergeEvaluationEvent(current, event));
+        if (event.status && isEvaluationTerminal(event.status)) stream.close();
       } catch {
         /* Ignore malformed deltas; snapshot remains authoritative. */
       }
@@ -2247,7 +2230,13 @@ export function SubmissionDetail({
     stream.addEventListener('evaluation.terminal', applyEvent);
     stream.addEventListener('replay-gap', () => load());
     return () => stream.close();
-  }, [api, id, selectedGeneration, user]);
+  }, [
+    api,
+    evaluation?.evaluationGeneration,
+    id,
+    selectedGeneration,
+    user,
+  ]);
   if (!user)
     return (
       <State
@@ -2317,209 +2306,253 @@ export function SubmissionDetail({
             </Link>
           </p>
         </div>
-        {evaluation?.verdict ? (
-          <strong className="submission-verdict">{evaluation.verdict}</strong>
-        ) : (
-          <JudgeStatus submission={submission} />
-        )}
       </div>
-      <dl className="submission-facts">
-        <div>
-          <dt>语言</dt>
-          <dd>{submission.languageId}</dd>
-        </div>
-        <div>
-          <dt>提交时间</dt>
-          <dd>{formatDate(submission.createdAt)}</dd>
-        </div>
-        <div>
-          <dt>评测时间</dt>
-          <dd>
-            {evaluation?.completedAt
-              ? formatDate(evaluation.completedAt)
-              : '评测中'}
-          </dd>
-        </div>
-      </dl>
-      <div className="submission-detail-actions">
-        <button type="button" className="secondary" onClick={load}>
-          刷新执行状态
-        </button>
-      </div>
-      <div className="submission-tabs" role="tablist" aria-label="评测详情视图">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'testcases'}
-          onClick={() => setActiveTab('testcases')}
-        >
-          测试点
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'code'}
-          onClick={() => setActiveTab('code')}
-        >
-          代码
-        </button>
-      </div>
-      {activeTab === 'code' ? (
-        <section className="submission-code-panel" aria-label="提交源代码">
-          <div className="section-heading-inline">
-            <h2>代码</h2>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() =>
-                void navigator.clipboard?.writeText(submission.source)
-              }
-              aria-label="复制代码"
-            >
-              复制代码
+      {evaluation?.detail?.testcases.length ? (
+        <TestcaseProgress detail={evaluation.detail} />
+      ) : null}
+      <div className="submission-evaluation-layout">
+        <div className="submission-evaluation-main">
+          <div className="submission-detail-actions">
+            <button type="button" className="secondary" onClick={load}>
+              刷新执行状态
             </button>
           </div>
-          <pre className="source">{submission.source}</pre>
-        </section>
-      ) : null}
-      {activeTab === 'testcases' ? (
-        <pre className="submission-source-a11y" aria-hidden="true">
-          {submission.source}
-        </pre>
-      ) : null}
-      {history.length ? (
-        <section className="submission-generation" aria-label="评测历史">
-          {history.map((item) => (
+          <div
+            className="submission-tabs"
+            role="tablist"
+            aria-label="评测详情视图"
+          >
             <button
-              key={item.evaluationGeneration}
               type="button"
-              aria-pressed={selectedGeneration === item.evaluationGeneration}
-              onClick={() => setSelectedGeneration(item.evaluationGeneration)}
+              role="tab"
+              aria-selected={activeTab === 'testcases'}
+              onClick={() => setActiveTab('testcases')}
             >
-              #{item.publicNumber ?? '?'} · Generation{' '}
-              {item.evaluationGeneration}
-              {item.current ? ' - Current' : ''} {item.verdict ?? item.status}
+              测试点
             </button>
-          ))}
-        </section>
-      ) : null}
-      {evaluationError ? (
-        <State
-          title="评测详情暂不可用"
-          text="无法加载评测详情，请刷新后重试。"
-          action={<button onClick={load}>刷新</button>}
-        />
-      ) : !evaluation ? (
-        <State
-          title="正在加载评测详情"
-          text="正在获取 Judge 已发布的评测结果…"
-        />
-      ) : (
-        <>
-          <section className="submission-metrics" aria-label="评测资源使用">
-            <div>
-              <span>Verdict</span>
-              <strong>{evaluation.verdict ?? evaluation.status}</strong>
-            </div>
-            <div>
-              <span>Time</span>
-              <strong>
-                {formatMilliseconds(evaluation.detail?.totalTimeMs)}
-              </strong>
-            </div>
-            <div>
-              <span>Memory</span>
-              <strong>{formatBytes(evaluation.detail?.peakMemoryBytes)}</strong>
-            </div>
-            <div>
-              <span>状态</span>
-              <strong>{evaluation.verdict ?? evaluation.status}</strong>
-            </div>
-          </section>
-          {activeTab === 'testcases' && evaluation.detail?.testcases.length ? (
-            <section className="testcase-progress" aria-label="测试点进度" aria-live="polite">
-              <div className="section-heading-inline"><div><p className="eyebrow">Live Progress</p><h2>测试点进度</h2></div><span>{evaluation.detail.testcases.filter((item) => item.verdict || (item.status && !['WAITING', 'RUNNING', 'STARTED'].includes(item.status))).length}/{evaluation.detail.testcases.length}</span></div>
-              <div className="testcase-progress-grid" role="list">
-                {evaluation.detail.testcases.map((item) => { const state = testcaseMark(item); return <span key={item.ordinal} role="listitem" className={`testcase-progress-cell testcase-state-${state.tone}`} aria-label={`测试点 ${item.ordinal} ${item.verdict ?? item.status ?? 'WAITING'}`} title={item.verdict ?? item.status ?? 'WAITING'}><strong>{item.ordinal}</strong><span aria-hidden="true">{state.mark}</span></span>; })}
-              </div>
-            </section>
-          ) : null}
-          {activeTab === 'testcases' &&
-            (isTerminal || hasLiveTestcases) &&
-            evaluation.detail?.compile?.diagnostics && (
-              <Section title="编译诊断">
-                <pre className="compiler-diagnostics">
-                  {evaluation.detail.compile.diagnostics}
-                </pre>
-              </Section>
-            )}
-          {activeTab === 'testcases' && (isTerminal || hasLiveTestcases) ? (
-            <section
-              className="testcase-results"
-              aria-labelledby="testcase-results-title"
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'code'}
+              onClick={() => setActiveTab('code')}
             >
+              代码
+            </button>
+          </div>
+          {activeTab === 'code' ? (
+            <section className="submission-code-panel" aria-label="提交源代码">
               <div className="section-heading-inline">
-                <div>
-                  <p className="eyebrow">Testcase Results</p>
-                  <h2 id="testcase-results-title">测试点结果</h2>
-                </div>
+                <h2>代码</h2>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    void navigator.clipboard?.writeText(submission.source)
+                  }
+                  aria-label="复制代码"
+                >
+                  复制代码
+                </button>
               </div>
-              {evaluation.detail?.testcases.length ? (
-                <div className="testcase-list" role="list">
-                  {evaluation.detail.testcases.map((item) => (
-                    <article
-                      key={item.ordinal}
-                      role="listitem"
-                      className="testcase-row"
-                    >
-                      {(() => {
-                        const state = testcaseMark(item);
-                        return (
-                          <span
-                            className={`testcase-state testcase-state-${state.tone}`}
-                            aria-label={`测试点 ${item.ordinal} ${item.verdict ?? item.status ?? 'WAITING'}`}
-                          >
-                            <span>{item.ordinal}</span>
-                            <strong aria-hidden="true">{state.mark}</strong>
+              <pre className="source">{submission.source}</pre>
+            </section>
+          ) : (
+            <pre className="submission-source-a11y" aria-hidden="true">
+              {submission.source}
+            </pre>
+          )}
+          {history.length ? (
+            <section className="submission-generation" aria-label="评测历史">
+              {history.map((item) => (
+                <button
+                  key={item.evaluationGeneration}
+                  type="button"
+                  aria-pressed={
+                    selectedGeneration === item.evaluationGeneration
+                  }
+                  onClick={() =>
+                    setSelectedGeneration(item.evaluationGeneration)
+                  }
+                >
+                  #{item.publicNumber ?? '?'} · Generation{' '}
+                  {item.evaluationGeneration}
+                  {item.current ? ' - Current' : ''}{' '}
+                  {item.verdict ?? item.status}
+                </button>
+              ))}
+            </section>
+          ) : null}
+          {evaluationError ? (
+            <State
+              title="评测详情暂不可用"
+              text="无法加载评测详情，请刷新后重试。"
+              action={<button onClick={load}>刷新</button>}
+            />
+          ) : !evaluation ? (
+            <State
+              title="正在加载评测详情"
+              text="正在获取 Judge 已发布的评测结果…"
+            />
+          ) : (
+            <>
+              {activeTab === 'testcases' &&
+                (isTerminal || hasLiveTestcases) &&
+                evaluation.detail?.compile?.diagnostics && (
+                  <Section title="编译诊断">
+                    <pre className="compiler-diagnostics">
+                      {evaluation.detail.compile.diagnostics}
+                    </pre>
+                  </Section>
+                )}
+              {activeTab === 'testcases' && (isTerminal || hasLiveTestcases) ? (
+                <section
+                  className="testcase-results"
+                  aria-labelledby="testcase-results-title"
+                >
+                  <div className="section-heading-inline">
+                    <div>
+                      <p className="eyebrow">Testcase Results</p>
+                      <h2 id="testcase-results-title">测试点结果</h2>
+                    </div>
+                  </div>
+                  {evaluation.detail?.testcases.length ? (
+                    <div className="testcase-list" role="list">
+                      {evaluation.detail.testcases.map((item) => (
+                        <article
+                          key={item.ordinal}
+                          role="listitem"
+                          className="testcase-row"
+                        >
+                          {(() => {
+                            const state = testcaseMark(item);
+                            return (
+                              <span
+                                className={`testcase-state testcase-state-${state.tone}`}
+                                aria-label={`测试点 ${item.ordinal} ${item.verdict ?? item.status ?? 'WAITING'}`}
+                              >
+                                <span>{item.ordinal}</span>
+                                <strong aria-hidden="true">{state.mark}</strong>
+                              </span>
+                            );
+                          })()}
+                          <span className="testcase-verdict">
+                            {item.verdict ?? item.status ?? 'WAITING'}
                           </span>
-                        );
-                      })()}
-                      <span className="testcase-verdict">
-                        {item.verdict ?? item.status ?? 'WAITING'}
-                      </span>
-                      <span>{formatMilliseconds(item.timeMs)}</span>
-                      <span>{formatBytes(item.memoryBytes)}</span>
-                      {item.runtimeReason && (
-                        <span className="testcase-reason">
-                          {item.runtimeReason}
-                        </span>
-                      )}
-                      {item.exitCode !== undefined && (
-                        <span className="testcase-reason">
-                          Exit {item.exitCode}
-                        </span>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p className="submission-muted">
-                  该评测代没有可展示的测试点执行记录。
-                </p>
-              )}
-            </section>
-          ) : null}
-          {!isTerminal && activeTab === 'testcases' && !hasLiveTestcases ? (
-            <section className="submission-pending" aria-live="polite">
-              <h2>
-                {evaluation.status === 'QUEUED' ? '正在排队评测' : '正在评测'}
-              </h2>
-              <p>正在评测，详细测试点结果将在评测完成后显示。</p>
-            </section>
-          ) : null}
-        </>
-      )}
+                          <span>{formatMilliseconds(item.timeMs)}</span>
+                          <span>{formatBytes(item.memoryBytes)}</span>
+                          {item.runtimeReason && (
+                            <span className="testcase-reason">
+                              {item.runtimeReason}
+                            </span>
+                          )}
+                          {item.exitCode !== undefined && (
+                            <span className="testcase-reason">
+                              Exit {item.exitCode}
+                            </span>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="submission-muted">
+                      该评测代没有可展示的测试点执行记录。
+                    </p>
+                  )}
+                </section>
+              ) : null}
+              {!isTerminal && activeTab === 'testcases' && !hasLiveTestcases ? (
+                <section className="submission-pending" aria-live="polite">
+                  <h2>
+                    {evaluation.status === 'QUEUED'
+                      ? '正在排队评测'
+                      : '正在评测'}
+                  </h2>
+                  <p>正在评测，详细测试点结果将在评测完成后显示。</p>
+                </section>
+              ) : null}
+            </>
+          )}
+        </div>
+        {evaluation ? (
+          <aside className="evaluation-info-card" aria-label="评测信息">
+            <h2>评测信息</h2>
+            <dl>
+              <div>
+                <dt>Language</dt>
+                <dd>{submission.languageId}</dd>
+              </div>
+              <div>
+                <dt>提交时间</dt>
+                <dd>{formatDate(submission.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>评测时间</dt>
+                <dd>
+                  {evaluation.completedAt
+                    ? formatDate(evaluation.completedAt)
+                    : '评测中'}
+                </dd>
+              </div>
+              <div>
+                <dt>Verdict</dt>
+                <dd>{evaluation.verdict ?? '未提供'}</dd>
+              </div>
+              <div>
+                <dt>Time</dt>
+                <dd>{formatMilliseconds(evaluation.detail?.totalTimeMs)}</dd>
+              </div>
+              <div>
+                <dt>Memory</dt>
+                <dd>{formatBytes(evaluation.detail?.peakMemoryBytes)}</dd>
+              </div>
+              <div>
+                <dt>状态</dt>
+                <dd>{evaluation.verdict ?? evaluation.status}</dd>
+              </div>
+            </dl>
+          </aside>
+        ) : null}
+      </div>
     </article>
+  );
+}
+
+function TestcaseProgress({ detail }: { detail: SubmissionEvaluationDetail }) {
+  const completed = detail.testcases.filter(isTestcaseTerminal).length;
+  return (
+    <section
+      className="testcase-progress"
+      aria-label="测试点进度"
+      aria-live="polite"
+    >
+      <div className="section-heading-inline">
+        <div>
+          <p className="eyebrow">Live Progress</p>
+          <h2>测试点进度</h2>
+        </div>
+        <span>
+          {completed}/{detail.testcases.length}
+        </span>
+      </div>
+      <div className="testcase-progress-grid" role="list">
+        {detail.testcases.map((item) => {
+          const state = testcaseMark(item);
+          const label = item.verdict ?? item.status ?? 'WAITING';
+          return (
+            <span
+              key={item.ordinal}
+              role="listitem"
+              className={`testcase-progress-cell testcase-state-${state.tone}`}
+              aria-label={`测试点 ${item.ordinal} ${label}`}
+              title={label}
+            >
+              <strong>{item.ordinal}</strong>
+              <span aria-hidden="true">{state.mark}</span>
+            </span>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -2532,6 +2565,76 @@ function isEvaluationTerminal(status: SubmissionEvaluation['status']) {
     'INCOMPLETE',
   ].includes(status);
 }
+
+type EvaluationLiveEvent = {
+  status?: SubmissionEvaluation['status'];
+  verdict?: SubmissionEvaluation['verdict'];
+  detail?: SubmissionEvaluationDetail;
+  completedAt?: string;
+};
+
+function mergeEvaluationEvent(
+  current:
+    (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null,
+  event: EvaluationLiveEvent,
+) {
+  if (!current || isEvaluationTerminal(current.status)) return current;
+  const detail = event.detail
+    ? mergeEvaluationDetail(current.detail, event.detail)
+    : current.detail;
+  return {
+    ...current,
+    ...(event.status ? { status: event.status } : {}),
+    ...(event.verdict ? { verdict: event.verdict } : {}),
+    ...(event.completedAt ? { completedAt: event.completedAt } : {}),
+    ...(detail ? { detail } : {}),
+  };
+}
+
+function mergeEvaluationDetail(
+  current: SubmissionEvaluationDetail | undefined,
+  incoming: SubmissionEvaluationDetail,
+) {
+  if (!current) return incoming;
+  const currentByOrdinal = new Map(
+    current.testcases.map((testcase) => [testcase.ordinal, testcase]),
+  );
+  return {
+    ...incoming,
+    completedTestcaseCount: Math.max(
+      current.completedTestcaseCount,
+      incoming.completedTestcaseCount,
+    ),
+    testcases: incoming.testcases.map((testcase) => {
+      const existing = currentByOrdinal.get(testcase.ordinal);
+      return existing &&
+        isTestcaseTerminal(existing) &&
+        !isTestcaseTerminal(testcase)
+        ? existing
+        : testcase;
+    }),
+  };
+}
+
+function isTestcaseTerminal(
+  testcase: SubmissionEvaluationDetail['testcases'][number],
+) {
+  return (
+    Boolean(testcase.verdict) ||
+    [
+      'PASS',
+      'AC',
+      'WA',
+      'CE',
+      'RE',
+      'TLE',
+      'MLE',
+      'CANCELLED',
+      'SKIPPED',
+    ].includes(testcase.status ?? '')
+  );
+}
+
 function formatMilliseconds(value: number | undefined) {
   return value === undefined ? '未提供' : `${value} ms`;
 }
@@ -2545,7 +2648,11 @@ function formatBytes(value: number | undefined) {
 function testcaseMark(item: SubmissionEvaluationDetail['testcases'][number]) {
   if (item.verdict === 'AC') return { mark: '✓', tone: 'pass' };
   if (item.verdict) return { mark: '×', tone: 'fail' };
-  if ((item.status as string | undefined) === 'INFRA_FAILED')
+  if (
+    ['INFRA_FAILED', 'CANCELLED', 'SKIPPED'].includes(
+      (item.status as string | undefined) ?? '',
+    )
+  )
     return { mark: '!', tone: 'infra' };
   if (['RUNNING', 'STARTED'].includes(item.status ?? ''))
     return { mark: '…', tone: 'running' };

@@ -1,5 +1,7 @@
 # OJPlatform Project Status
 
+Evaluation Detail UX + Live State Prep V3: PARTIAL. The desktop right-side information card, mobile natural stacking, preserved top testcase grid, post-snapshot SSE subscription, ordinal-aware monotonic live merge, and focused WAITING/RUNNING/AC/WA/infra fixtures are implemented and pass static gates. A frontend bug could prevent EventSource creation after the asynchronous initial snapshot and is fixed. Real SSE/browser runtime qualification was explicitly prohibited and remains not run. See `Docs/reports/OJPLATFORM_EVALUATION_DETAIL_UX_V3_REPORT.md`.
+
 Product/Judge/UI Remediation Runtime Resume V1: PARTIAL. Canonical main
 `511830d` merged into remediation at `4b0ea17`. A minimal Runtime Manager
 listener lookup fallback fixed a machine-specific `Get-NetTCPConnection` blind
