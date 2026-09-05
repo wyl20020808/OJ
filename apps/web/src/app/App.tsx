@@ -1846,18 +1846,33 @@ function SubmissionHistory({
             <span role="columnheader">时间</span>
           </div>
           {items.map((s) => (
-            <Link
-              key={s.id}
-              to={`/submissions/${encodeURIComponent(s.id)}`}
+            (() => {
+              const item = s as Submission & {
+                submissionId?: string;
+                publicNumber?: number;
+                problem?: { id: string; slug?: string; publicId?: string };
+                submitter?: { id: string };
+                languageProfileId?: string;
+              };
+              const submissionId = item.submissionId ?? item.id;
+              const problemId = item.problem?.publicId ?? item.problem?.slug ?? item.problem?.id ?? item.problemId;
+              const languageId = item.languageProfileId ?? item.languageId;
+              const submission = item.problem
+                ? { ...item, id: submissionId, ownerUserId: item.submitter?.id ?? item.ownerUserId, problemId, languageId }
+                : item;
+              return <Link
+              key={submissionId}
+              to={`/submissions/${encodeURIComponent(submissionId)}`}
               className="evaluation-row"
-              ariaLabel={`查看评测 ${s.id}`}
+              ariaLabel={`查看评测 #${item.publicNumber ?? submissionId}`}
             >
-              <span>#{s.id}</span>
-              <span>{s.problemId}</span>
-              <span>{s.languageId}</span>
-              <JudgeStatus submission={s} />
-              <time>{formatDate(s.createdAt)}</time>
-            </Link>
+              <span>#{item.publicNumber ?? submissionId}</span>
+              <span>{problemId}</span>
+              <span>{languageId}</span>
+              <JudgeStatus submission={submission} />
+              <time>{formatDate(item.createdAt)}</time>
+            </Link>;
+            })()
           ))}
         </div>
       )}
@@ -1992,6 +2007,24 @@ export function SubmissionDetail({
     stream.addEventListener('replay-gap', () => load());
     return () => stream.close();
   }, [api, evaluation?.evaluationGeneration, id, selectedGeneration, user]);
+  useEffect(() => {
+    if (
+      !user ||
+      !evaluation ||
+      selectedGeneration !== evaluation.evaluationGeneration ||
+      isTerminalStatus(evaluation.status)
+    )
+      return;
+    const timer = window.setInterval(() => {
+      void api
+        .submissionEvaluation(id, selectedGeneration)
+        .then((response) => {
+          setEvaluation((current) => mergeEvaluation(current, response.evaluation));
+        })
+        .catch(() => undefined);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [api, evaluation?.evaluationGeneration, evaluation?.status, id, selectedGeneration, user]);
   if (!user)
     return (
       <State
@@ -2040,7 +2073,7 @@ export function SubmissionDetail({
       <Link to="/submissions">← 返回评测列表</Link>
       <div className="submission-heading">
         <div>
-          <h1>Submission #{submission.id}</h1>
+          <h1>评测 #{evaluation?.publicNumber ?? submission.id}</h1>
           <p>{submission.problemId}</p>
         </div>
         {evaluation?.verdict ? (
@@ -2077,16 +2110,21 @@ export function SubmissionDetail({
       </dl>
       <div className="submission-layout">
         <div className="submission-primary">
-          {isTerminal && evaluation?.detail?.testcases?.length ? (
-            <div className="testcase-progress" aria-label="测试点进度">
+          {evaluation?.detail?.testcases?.length ? (
+            <div className="testcase-progress" role="region" aria-label="测试点进度">
               {evaluation.detail.testcases.map((item) => (
+                (() => {
+                  const state = item.verdict ?? item.status ?? 'WAITING';
+                  return (
                 <span
                   key={item.ordinal}
-                  className={`progress-cell verdict-${item.verdict}`}
-                  aria-label={`测试点 ${item.ordinal} ${item.verdict}`}
+                  className={`progress-cell verdict-${item.verdict ?? ''}`}
+                  aria-label={`测试点 ${item.ordinal} ${state}`}
                 >
-                  {item.verdict === 'AC' ? '✓' : '×'}
+                  {item.verdict === 'AC' ? '✓' : item.status === 'RUNNING' ? '…' : item.status === 'SKIPPED' ? '!' : item.verdict ? '×' : '·'}
                 </span>
+                  );
+                })()
               ))}
             </div>
           ) : null}
@@ -2265,7 +2303,7 @@ function mergeEvaluation(
   incoming: SubmissionEvaluation & { detail?: SubmissionEvaluationDetail },
 ) {
   if (!current) return incoming;
-  if (isTerminalStatus(current.status) && !isTerminalStatus(incoming.status))
+  if (isTerminalStatus(current.status))
     return current;
   return incoming;
 }

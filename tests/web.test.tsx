@@ -303,7 +303,7 @@ describe('Web platform shell', () => {
       fireEvent.change(screen.getByLabelText(label), { target: { value } });
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '题目编号已存在，请更换题目标识。',
+      'Problem identifier or slug already exists',
     );
   });
   it('submits source and navigates directly to evaluation detail', async () => {

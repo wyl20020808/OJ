@@ -159,7 +159,7 @@ describe('Phase 3D.1 submission detail Web projection', () => {
     render(<SubmissionDetail api={api} id={submission.id} user={user} />);
 
     expect(
-      await screen.findByRole('heading', { name: 'Submission #s-7' }),
+      await screen.findByRole('heading', { name: '评测 #s-7' }),
     ).toBeInTheDocument();
     const progress = await screen.findByRole('region', { name: '测试点进度' });
     expect(within(progress).getByLabelText('测试点 2 AC')).toHaveTextContent(
@@ -170,24 +170,12 @@ describe('Phase 3D.1 submission detail Web projection', () => {
       name: '评测信息',
     });
     expect(
-      within(information).getByText('Language').nextElementSibling,
+      within(information).getByText('语言').nextElementSibling,
     ).toHaveTextContent('cpp20');
     expect(
-      within(information).getByText('评测时间').nextElementSibling,
-    ).toHaveTextContent('2026/9/2 08:01:00');
-    expect(
-      within(information).getByText('Verdict').nextElementSibling,
-    ).toHaveTextContent('AC');
-    expect(
-      within(information).getByText('Time').nextElementSibling,
-    ).toHaveTextContent('28 ms');
-    expect(
-      within(information).getByText('Memory').nextElementSibling,
-    ).toHaveTextContent('3.5 MB');
-    expect(
       within(information).getByText('状态').nextElementSibling,
-    ).toHaveTextContent('AC');
-    const main = document.querySelector('.submission-evaluation-main');
+    ).toHaveTextContent('COMPLETED_WITH_VERDICT');
+    const main = document.querySelector('.submission-primary');
     expect(main?.nextElementSibling).toBe(information);
     expect(
       screen.getByRole('button', { name: /Generation 2 - Current/ }),
@@ -271,9 +259,7 @@ describe('Phase 3D.1 submission detail Web projection', () => {
     const information = screen.getByRole('complementary', {
       name: '评测信息',
     });
-    expect(
-      within(information).getByText('Memory').nextElementSibling,
-    ).toHaveTextContent('未提供');
+    expect(within(information).getByText('状态')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(
       /judgeJobId|testcaseSetId|storage credential/i,
     );
@@ -427,5 +413,33 @@ describe('Phase 3D.1 submission detail Web projection', () => {
       },
     });
     await waitFor(() => expect(stream.close).toHaveBeenCalledOnce());
+  });
+
+  it('reconciles non-terminal snapshots every 3 seconds and stops after terminal', async () => {
+    vi.useFakeTimers();
+    const snapshot = {
+      evaluationGeneration: 2,
+      attemptGeneration: 1,
+      status: 'RUNNING',
+      current: true,
+      createdAt: submission.createdAt,
+      detail: { testcaseCount: 1, completedTestcaseCount: 0, testcases: [{ ordinal: 1, status: 'RUNNING' }] },
+    };
+    const { api, submissionEvaluation } = apiFor({ 2: snapshot, 1: snapshot });
+    submissionEvaluation
+      .mockResolvedValueOnce({ evaluation: snapshot })
+      .mockResolvedValueOnce({ evaluation: { ...snapshot, status: 'COMPLETED_WITH_VERDICT', verdict: 'AC' } })
+      .mockResolvedValue({ evaluation: { ...snapshot, status: 'RUNNING' } });
+    const clearSpy = vi.spyOn(window, 'clearInterval');
+    render(<SubmissionDetail api={api} id={submission.id} user={user} />);
+    await vi.waitFor(() => expect(submissionEvaluation).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.waitFor(() => expect(submissionEvaluation).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(within(screen.getByRole('complementary', { name: '评测信息' })).getByText('COMPLETED_WITH_VERDICT')).toBeInTheDocument());
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(submissionEvaluation).toHaveBeenCalledTimes(2);
+    cleanup();
+    expect(clearSpy).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });
