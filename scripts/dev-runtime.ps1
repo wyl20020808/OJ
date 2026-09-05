@@ -349,7 +349,9 @@ function Start-Managed([string]$Name, [string]$FilePath, [string[]]$Arguments, [
       $template.env | Add-Member -NotePropertyName JUDGE_ARTIFACT_READ_TOKEN -NotePropertyValue $script:Secrets.judgeArtifactReadToken -Force
       $template.env | Add-Member -NotePropertyName OJPLATFORM_SUPERVISOR_ARTIFACT_TOKEN -NotePropertyValue $script:Secrets.supervisorArtifactToken -Force
     }
-    $Environment.JUDGE_HOST_AGENT_TEMPLATES_JSON = ConvertTo-Json -InputObject @($templates) -Depth 10 -Compress
+    # ConvertFrom-Json already returns an array for top-level template JSON.
+    # Wrapping it again produces a nested value/count object in PowerShell.
+    $Environment.JUDGE_HOST_AGENT_TEMPLATES_JSON = ConvertTo-Json -InputObject $templates -Depth 10 -Compress
   }
   $old = $state.processes[$Name]; $healthy = if ($HealthUrl.EndsWith('/')) { Test-HttpOk $HealthUrl } else { [bool](Get-HttpJson $HealthUrl $HealthHeaders) }
   $ownership = Resolve-OJPlatformProcessOwnership $Name $Port $state
