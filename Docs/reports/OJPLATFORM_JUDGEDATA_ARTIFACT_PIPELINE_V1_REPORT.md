@@ -20,7 +20,7 @@ Decision: [ADR 0006](../adr/0006-judgedata-artifact-dispatch.md), PROPOSED.
 | D: bounded Worker fetch, retry, checksum/truncation/oversize rejection | IMPLEMENTED / FOCUSED TESTED | Go fetch tests pass; real MinIO transfer pending |
 | E: reference/file-backed Supervisor input, no base64 dataset | IMPLEMENTED / NOT RUNTIME VERIFIED | Endpoint/control integration and real execution pending |
 | E: private handles, traversal/symlink/TOCTOU protection | PARTIALLY TESTED | Ownership/replacement/expiry/capacity tests pass under non-root WSL; full adversarial audit pending |
-| F: durable failure state, safe retry, crash recovery, idempotency | IMPLEMENTED / PARTIALLY TESTED | PostgreSQL crash/failure integration pending; Judge HTTP retry tested |
+| F: durable failure state, safe retry, crash recovery, idempotency | IMPLEMENTED / PARTIALLY TESTED | Real PostgreSQL temporary-table SQL tests and Judge HTTP retry passed; complete service crash/retry flow pending |
 | F: request/submission/evaluation/job/artifact correlation | IMPLEMENTED / NOT RUNTIME VERIFIED | Structured logs from complete real flow pending |
 | F: sanitized typed error mapping | IMPLEMENTED / PARTIALLY TESTED | Remaining failure-path tests pending |
 | G: versioned Job/artifact/Worker/Supervisor contracts | IMPLEMENTED / FOCUSED TESTED | Runtime compatibility check pending |
@@ -141,6 +141,25 @@ a 1 MiB chunk and exclusive output creation. Executed fixture:
   rejection, legacy-status auth and persistence-failure visibility: PASS.
 
 ## Runtime Ownership Blocker
+
+Additional checks while runtime ownership confirmation is pending:
+
+- `vitest run --config vitest.integration.config.ts
+  tests/integration/submission-dispatch.test.ts`: 5 tests PASS against real local
+  PostgreSQL. Formal migrations 0020/0021 execute in session-owned temporary
+  tables under `pg_temp`; each test rolls back and closes its connection. Business
+  tables and the runtime migration ledger are not changed. Test-only dependency
+  tables have the minimal columns needed for these migrations.
+- These tests prove artifact canonical JSON persistence, duplicate-save idempotency,
+  per-version conflict rejection, stored metadata tamper rejection, orphan backfill,
+  one outstanding claim, stale-claim fencing, finite failure retries, explicit retry,
+  and preservation of an existing terminal evaluation. They do not prove
+  multi-connection contention or the full service crash/recovery workflow.
+- Worker `go test ./internal/supervisorclient`: PASS, including new raw HTTP
+  upload/hash/binding checks, bounded handle response, 200 MiB input metadata below
+  4 KiB, host-path handle rejection and legacy Supervisor version rejection.
+- The three blocking PIDs were re-read from live CIM process state on the next
+  goal turn and remain present with the same creation times and relative commands.
 
 The first checkpoint is `2fb0718`. Runtime Manager `restart -UseCurrentCheckout`
 was executed after a tracked-clean commit. It stopped the registered Web and
