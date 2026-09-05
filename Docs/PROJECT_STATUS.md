@@ -1,5 +1,20 @@
 # OJPlatform Project Status
 
+## Root Submission Source Access V1
+
+PASS on branch `codex/root-submission-source-access-v1`. Submission detail
+authorization now uses canonical `submission:view:any` permission resolver
+for highest-admin cross-owner source access, while owner-only and anonymous /
+ordinary-user denial remain enforced. Global evaluation list and SSE paths do
+not expose source. Focused authorization tests, typecheck, build, and diff
+check pass; browser runtime was not run.
+
+Submission Direct Evaluation V2: PASS. Traditional submit now navigates directly
+to existing Submission/Evaluation Detail after create success; accepted
+intermediate state removed, duplicate submit guarded, and API errors remain on
+form. Focused Web tests, typecheck, and build pass. Browser smoke not verified.
+See `reports/OJPLATFORM_SUBMISSION_DIRECT_EVALUATION_V2_REPORT.md`.
+
 JudgeData Artifact Pipeline V1: PASS / INTEGRATED. Streaming upload, immutable
 artifacts, reference dispatch, bounded Worker fetch, Supervisor opaque-handle
 transport, and dispatch recovery are implemented. Real authenticated 100 MiB
@@ -105,6 +120,15 @@ AC `24affb4f-92af-424b-9dc2-161610938c07` and WA
 `598a0092-858d-4af8-ad3c-890bae9ed11e` ran through the Host-Agent-owned
 Worker. See
 `OJPLATFORM_UNIFIED_JUDGE_RUNTIME_INTEGRATION_V1_REPORT.md`.
+
+Evaluation UX V4: PARTIAL. Evaluation Detail progress, code, testcase grid, information card, and 3-second terminal-aware reconciliation are implemented. Browser runtime not verified; one legacy focused assertion expects removed/changed testcase presentation. See `OJPLATFORM_EVALUATION_UX_V4_REPORT.md`.
+
+Problem List Compact UX V2: PASS for focused Web scope. Problem rows are denser,
+IDs are emphasized, tags stay horizontal with responsive wrapping, and ordinary
+item source text is removed. Focused tests, typecheck, and Web build pass; runtime
+smoke was not run. See `OJPLATFORM_PROBLEM_LIST_COMPACT_UX_V2_REPORT.md`.
+
+PROFILE SOLVING HEATMAP V1: IMPLEMENTED and focused-tested; browser runtime not verified. See `OJPLATFORM_PROFILE_SOLVING_HEATMAP_V1_REPORT.md`.
 
 Web UI Polish and Evaluation List V1: PARTIAL. Problem Detail actions are
 consolidated below the title with owner/Guest-owner edit entry; duplicate Web
@@ -299,3 +323,11 @@ Stop Manual Recovery V2 (2026-09-05): PASS. Branch
 `codex/stop-manual-recovery-v2` merged normally into canonical `main` with
 structured BLOCKED/PARTIAL stop outcomes, listener ownership diagnostics, and
 manual recovery guidance. See `Docs/reports/OJPLATFORM_STOP_MANUAL_RECOVERY_V2_REPORT.md`.
+
+Product UX Wave Integration V1 (2026-09-05): PASS. Integration branch
+`codex/product-ux-wave-integration-v1` merges Evaluation UX V4, direct
+submission detail, root submission source authorization, Problem List compact,
+Problem Statement renderer/preview, and profile heatmap. Web typecheck/build
+and diff check pass; 47 focused tests pass, including 3-second snapshot
+reconciliation, terminal stop, unmount cleanup, SSE retention, and stale-state
+protection. See `Docs/reports/OJPLATFORM_PRODUCT_UX_WAVE_INTEGRATION_V1_REPORT.md`.

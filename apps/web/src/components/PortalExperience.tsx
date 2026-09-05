@@ -1171,14 +1171,14 @@ export function ActivityHeatmap({
       />
     );
   const metric = days[0]?.metric ?? 'SOLVED_PROBLEMS';
-  const max = Math.max(1, ...days.map((day) => day.count));
-  const total = days.reduce((sum, day) => sum + day.count, 0);
+  const max = Math.max(1, ...days.map((day) => day.count ?? 0));
+  const total = days.reduce((sum, day) => sum + (day.count ?? 0), 0);
   return (
     <div className="heatmap-block">
       <div className="heatmap-summary" role="status">
         最近一年共 {total}{' '}
         {metric === 'SOLVED_PROBLEMS' ? '道题目完成记录' : '次评测记录'}，共{' '}
-        {days.filter((day) => day.count > 0).length} 个活跃日。
+        {days.filter((day) => (day.count ?? 0) > 0).length} 个活跃日。
       </div>
       <div className="heatmap-scroll">
         <div className="heatmap-grid" aria-label="做题情况热力图">
@@ -1186,9 +1186,9 @@ export function ActivityHeatmap({
             <span
               key={day.date}
               className="heatmap-day"
-              style={{ '--heat': day.count / max } as CSSProperties}
-              title={`${day.date}：${day.count} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
-              aria-label={`${day.date}，${day.count} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
+              style={{ '--heat': (day.count ?? 0) / max } as CSSProperties}
+              title={`${day.date}：${day.count ?? 0} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
+              aria-label={`${day.date}，${day.count ?? 0} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
             />
           ))}
         </div>
@@ -1302,6 +1302,7 @@ export function ProfileExperience({
   const [favoriteError, setFavoriteError] = useState('');
   const [favoriteProblemId, setFavoriteProblemId] = useState('');
   const [favoriteAction, setFavoriteAction] = useState<string>();
+  const [profileActivityDays, setProfileActivityDays] = useState<UserActivityDay[]>();
   const isPublic = Boolean(username);
   const tabs = ['概览', '做题记录', '收藏', '我的题目', '团队'];
   const profileUsername = username ?? user?.username;
@@ -1341,6 +1342,16 @@ export function ProfileExperience({
     return () => {
       active = false;
     };
+  }, [api, profileRefresh, profileUsername]);
+
+  useEffect(() => {
+    if (!api || !profileUsername || typeof api.profileActivity !== 'function') return;
+    let active = true;
+    void api.profileActivity(profileUsername).then((result) => {
+      if (!active) return;
+      setProfileActivityDays(result.days.map((day) => ({ date: day.date, count: day.submissionCount, metric: 'SUBMISSIONS' })));
+    }).catch(() => active && setProfileActivityDays(undefined));
+    return () => { active = false; };
   }, [api, profileRefresh, profileUsername]);
 
   useEffect(() => {
@@ -1470,7 +1481,7 @@ export function ProfileExperience({
   const showLegacyActivity = !api && Boolean(activity);
 
   const renderActivity = () => {
-    if (showLegacyActivity) return <ActivityHeatmap days={activity} />;
+    if (showLegacyActivity) return <ActivityHeatmap days={profileActivityDays ?? activity} />;
     if (api && !activityCapability)
       return <p className="muted">正在加载个人资料能力…</p>;
     if (activityCapability && !activityCapability.available)
@@ -1480,7 +1491,7 @@ export function ProfileExperience({
           capability={activityCapability}
         />
       );
-    return <ActivityHeatmap days={activity} />;
+    return <ActivityHeatmap days={profileActivityDays ?? activity} />;
   };
 
   const renderFavorites = () => {

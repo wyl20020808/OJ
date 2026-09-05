@@ -92,7 +92,14 @@ describe('Web V4 R3 layout and information architecture contract', () => {
         if (url.includes('/api/problems?')) {
           return jsonResponse({
             items: [
-              { id: 'p1', slug: 'p1001', title: '两数之和', tags: ['数组'] },
+              {
+                id: 'p1',
+                slug: 'p1001',
+                title: '两数之和',
+                tags: ['数组', '哈希表'],
+                difficulty: '入门',
+                source: '内部来源不应展示',
+              },
             ],
             page: { total: 41, offset: 0, limit: 20 },
           });
@@ -110,6 +117,19 @@ describe('Web V4 R3 layout and information architecture contract', () => {
     expect(
       document.querySelector('.problem-list-modern .problem-row'),
     ).toBeTruthy();
+    expect(screen.getByText('p1001')).toHaveClass('problem-id');
+    expect(
+      document.querySelector('.problem-list-modern .tag-row'),
+    ).toHaveTextContent('数组');
+    expect(
+      document.querySelector('.problem-list-modern .tag-row'),
+    ).toHaveTextContent('哈希表');
+    expect(
+      document.querySelector('.problem-list-modern .problem-difficulty-chip'),
+    ).toHaveTextContent('入门');
+    expect(
+      document.querySelector('.problem-list-modern .problem-row'),
+    ).not.toHaveTextContent('内部来源不应展示');
     expect(screen.getByRole('button', { name: '第 2 页' })).toBeInTheDocument();
   });
 

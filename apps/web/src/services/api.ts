@@ -226,6 +226,10 @@ export type PublicProfile = {
   isSelf: boolean;
   canCreateProblems: boolean;
 };
+export type ProfileActivity = {
+  timezone: 'UTC';
+  days: Array<{ date: string; submissionCount: number; acceptedCount: number }>;
+};
 export type ProfileOverview = {
   createdProblemCount: number;
   solvedProblemCount: number;
@@ -776,6 +780,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<PublicProfile>(
         baseUrl,
         `/api/profiles/${encodeURIComponent(username)}`,
+        undefined,
+        fetcher,
+      ),
+    profileActivity: (username: string) =>
+      request<ProfileActivity>(
+        baseUrl,
+        `/api/profiles/${encodeURIComponent(username)}/activity`,
         undefined,
         fetcher,
       ),

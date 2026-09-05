@@ -303,10 +303,10 @@ describe('Web platform shell', () => {
       fireEvent.change(screen.getByLabelText(label), { target: { value } });
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      '题目编号已存在，请更换题目标识。',
+      'Problem identifier or slug already exists',
     );
   });
-  it('submits source through intake contract without presenting a verdict', async () => {
+  it('submits source and navigates directly to evaluation detail', async () => {
     const fetcher = vi
       .fn()
       .mockImplementation(
@@ -378,6 +378,65 @@ describe('Web platform shell', () => {
                 status: 'PENDING',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
+                evaluation: {
+                  publicNumber: 1,
+                  evaluationGeneration: 1,
+                  attemptGeneration: 0,
+                  status: 'QUEUED',
+                  current: true,
+                },
+              }),
+            };
+          if (url.endsWith('/api/submissions/sub1'))
+            return {
+              status: 200,
+              json: async () => ({
+                id: 'sub1',
+                ownerUserId: 'u1',
+                problemId: 'p1',
+                problemRevisionId: 'rev1',
+                testdataVersionRef: 'td1',
+                languageId: 'python',
+                source: 'print(1)',
+                sourceBytes: 8,
+                status: 'PENDING',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                evaluation: {
+                  publicNumber: 1,
+                  evaluationGeneration: 1,
+                  attemptGeneration: 0,
+                  status: 'QUEUED',
+                  current: true,
+                },
+              }),
+            };
+          if (url.includes('/api/submissions/sub1/evaluations/1'))
+            return {
+              status: 200,
+              json: async () => ({
+                evaluation: {
+                  publicNumber: 1,
+                  evaluationGeneration: 1,
+                  attemptGeneration: 0,
+                  status: 'QUEUED',
+                  current: true,
+                },
+              }),
+            };
+          if (url.endsWith('/api/submissions/sub1/evaluations'))
+            return {
+              status: 200,
+              json: async () => ({
+                items: [
+                  {
+                    publicNumber: 1,
+                    evaluationGeneration: 1,
+                    attemptGeneration: 0,
+                    status: 'QUEUED',
+                    current: true,
+                  },
+                ],
               }),
             };
           return {
@@ -397,9 +456,12 @@ describe('Web platform shell', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: '提交源代码' }));
     expect(
-      await screen.findByRole('heading', { name: '提交已接收' }),
+      await screen.findByRole('heading', { name: '评测 #1' }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/PENDING/)).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/submissions/sub1');
+    expect(
+      screen.queryByRole('heading', { name: '提交已接收' }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText(/ACCEPTED|WRONG ANSWER|RUNTIME ERROR/i),
     ).not.toBeInTheDocument();

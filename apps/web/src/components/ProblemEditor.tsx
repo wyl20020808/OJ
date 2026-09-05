@@ -17,6 +17,7 @@ import {
   type ProblemJudgeDefaults,
 } from '../services/api.js';
 import './problem-editor.css';
+import { ProblemStatementRenderer } from './ProblemStatementRenderer.js';
 
 type Tab = 'statement' | 'data' | 'settings';
 type Props = {
@@ -62,6 +63,7 @@ function pairPreview(files: File[]) {
     }));
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function StatementPreview({
   statement,
 }: {
@@ -147,9 +149,6 @@ export function ProblemEditor({
     tags: [] as string[],
     visibility: 'private' as Problem['visibility'],
   });
-  const [statementMode, setStatementMode] = useState<'edit' | 'preview'>(
-    'edit',
-  );
 
   const load = () => {
     setLoading(true);
@@ -508,15 +507,11 @@ export function ProblemEditor({
             <div className="panel-actions">
               <button
                 type="button"
-                className={statementMode === 'edit' ? '' : 'secondary'}
-                onClick={() => setStatementMode('edit')}
               >
                 编辑
               </button>
               <button
                 type="button"
-                className={statementMode === 'preview' ? '' : 'secondary'}
-                onClick={() => setStatementMode('preview')}
               >
                 预览
               </button>
@@ -525,10 +520,7 @@ export function ProblemEditor({
               </button>
             </div>
           </div>
-          {statementMode === 'preview' ? (
-            <StatementPreview statement={statement} />
-          ) : (
-            <>
+          <div className="statement-split"><div className="statement-form-fields">
               <label>
                 题目标题
                 <input
@@ -734,8 +726,7 @@ export function ProblemEditor({
                   添加样例
                 </button>
               </fieldset>
-            </>
-          )}{' '}
+            </div><aside className="statement-preview" aria-label="题面实时预览"><ProblemStatementRenderer content={statement} /></aside></div>
         </form>
       )}
       {tab === 'data' && (

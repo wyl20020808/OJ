@@ -71,6 +71,27 @@ describe('submission authorization policy', () => {
     ).toBe(false);
   });
 
+  it('resolves highest-admin capability through canonical permission resolver', async () => {
+    const policy = createSubmissionAuthorizationPolicy({
+      hasPermissions: (userId, permissions) =>
+        userId === 'root-user' && permissions.includes('submission:view:any'),
+    });
+    expect(await policy.canViewSubmission(active, submission)).toBe(true);
+    expect(
+      await policy.canViewSubmission(
+        { id: 'root-user', status: 'active' },
+        submission,
+      ),
+    ).toBe(true);
+    expect(
+      await policy.canViewSubmission(
+        { id: 'u2', status: 'active' },
+        submission,
+      ),
+    ).toBe(false);
+    expect(await policy.canViewSubmission(undefined, submission)).toBe(false);
+  });
+
   it('allows private submission only through ownership or explicit permission', async () => {
     const policy = createSubmissionAuthorizationPolicy({
       roles: new Map([['setter', new Set(['submission:create:private'])]]),

@@ -81,9 +81,7 @@ export async function registerProfileModule(
             auth ? 'GUEST_ACCOUNT_REQUIRES_UPGRADE' : 'AUTHENTICATION_REQUIRED',
           ),
     activity: { available: true },
-    heatmap: unavailable(
-      'UPSTREAM_BLOCKED_BY_AUTHORITATIVE_SUBMISSION_OUTCOME',
-    ),
+    heatmap: { available: true },
     teams: unavailable('PRODUCT_DOMAIN_NOT_IMPLEMENTED'),
     homework: unavailable('PRODUCT_DOMAIN_NOT_IMPLEMENTED'),
     wrongbook: unavailable(
@@ -128,6 +126,27 @@ export async function registerProfileModule(
       isSelf,
       canCreateProblems: isSelf && auth?.strength === 'password',
     });
+  });
+  app.get('/api/profiles/:username/activity', async (request, reply) => {
+    const username = (request.params as { username?: string }).username;
+    if (!username || username.length > 32)
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid username');
+    const user = await options.pool.query(
+      "SELECT id FROM users WHERE username=$1 AND status='active'",
+      [username.toLowerCase()],
+    );
+    if (!user.rows[0]) return error(reply, request, 404, 'NOT_FOUND', 'Profile not found');
+    const result = await options.pool.query(
+      `WITH days AS (SELECT generate_series((CURRENT_DATE AT TIME ZONE 'UTC')::date - 364, (CURRENT_DATE AT TIME ZONE 'UTC')::date, interval '1 day')::date AS day)
+       SELECT to_char(days.day, 'YYYY-MM-DD') AS date,
+              COALESCE(count(s.id), 0)::int AS submission_count,
+              COALESCE(count(s.id) FILTER (WHERE e.verdict='AC'), 0)::int AS accepted_count
+       FROM days LEFT JOIN submissions s ON s.owner_user_id=$1 AND (s.created_at AT TIME ZONE 'UTC')::date=days.day
+       LEFT JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=true
+       GROUP BY days.day ORDER BY days.day`,
+      [user.rows[0].id],
+    );
+    return reply.send({ timezone: 'UTC', days: result.rows.map((row) => ({ date: String(row.date), submissionCount: Number(row.submission_count), acceptedCount: Number(row.accepted_count) })) });
   });
   app.get('/api/profiles/:username/overview', async (request, reply) => {
     const target = await profileTarget(request, reply);

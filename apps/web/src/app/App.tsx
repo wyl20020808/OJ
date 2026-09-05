@@ -7,7 +7,6 @@ import {
   type ErrorInfo,
   type FormEvent,
   type ReactNode,
-  type MouseEvent,
 } from 'react';
 import {
   ApiError,
@@ -15,8 +14,6 @@ import {
   type ApiClient,
   type AuthenticatedUser,
   type BackendContest,
-  type EvaluationListItem,
-  type EvaluationFilters,
   type Language,
   type Problem,
   type ProfileContest,
@@ -31,10 +28,7 @@ import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
 import { ProblemEditor } from '../components/ProblemEditor.js';
-import { ProblemSolveEditorSlot } from '../plugins/ProblemSolveEditorSlot.js';
-import { HttpCodeRunAdapter } from '@ojplatform/online-code-editor/run/HttpCodeRunAdapter';
-import { HttpSubmissionAdapter } from '@ojplatform/online-code-editor/submission/SubmissionAdapter';
-import type { ProblemSolveEditorContext } from '@ojplatform/plugin-sdk';
+import { ProblemStatementRenderer } from '../components/ProblemStatementRenderer.js';
 import {
   ContestExperience,
   HomeworkPage,
@@ -168,13 +162,11 @@ function Link({
   children,
   className,
   ariaLabel,
-  onClick,
 }: {
   to: string;
   children: ReactNode;
   className?: string;
   ariaLabel?: string;
-  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
     <a
@@ -182,8 +174,6 @@ function Link({
       className={className}
       aria-label={ariaLabel}
       onClick={(e) => {
-        onClick?.(e);
-        if (e.defaultPrevented) return;
         e.preventDefault();
         navigate(to);
       }}
@@ -195,37 +185,20 @@ function Link({
 
 type BreadcrumbItem = { label: string; to: string };
 const breadcrumbStorageKey = 'ojplatform:breadcrumb-history:v1';
-export function dedupeBreadcrumbHistory(
-  items: BreadcrumbItem[],
-  current?: BreadcrumbItem,
-): BreadcrumbItem[] {
-  const unique = items.reduce<BreadcrumbItem[]>((result, item) => {
-    const existing = result.findIndex((entry) => entry.to === item.to);
-    if (existing >= 0) result.splice(existing, 1);
-    result.push(item);
-    return result;
-  }, []);
-  if (current) {
-    const existing = unique.findIndex((entry) => entry.to === current.to);
-    if (existing >= 0) unique.splice(existing, 1);
-    unique.push(current);
-  }
-  return unique.slice(-5);
-}
 const breadcrumbHistory = (): BreadcrumbItem[] => {
   try {
     const value = JSON.parse(
       window.sessionStorage.getItem(breadcrumbStorageKey) ?? '[]',
     );
     return Array.isArray(value)
-      ? dedupeBreadcrumbHistory(
-          value.filter(
+      ? value
+          .filter(
             (item): item is BreadcrumbItem =>
               typeof item?.label === 'string' &&
               typeof item?.to === 'string' &&
               item.to.startsWith('/'),
-          ),
-        )
+          )
+          .slice(-5)
       : [];
   } catch {
     return [];
@@ -261,7 +234,7 @@ function Breadcrumbs({ current }: { current: Route }) {
     'author-new': '创建题目',
     'author-edit': '编辑题目',
     sandbox: 'Sandbox 运维',
-    'judge-nodes': 'Judge 节点管理',
+    'judge-nodes': 'Judge Machines',
     'judge-node-detail': current.id ?? '节点详情',
     forbidden: '无权访问',
     error: '页面加载失败',
@@ -276,7 +249,11 @@ function Breadcrumbs({ current }: { current: Route }) {
   useEffect(() => {
     if (transient.includes(current.name)) return;
     setHistory((previous) => {
-      const next = dedupeBreadcrumbHistory(previous, currentItem);
+      const last = previous.at(-1);
+      const next =
+        last?.to === currentItem.to
+          ? [...previous.slice(0, -1), currentItem]
+          : [...previous, currentItem].slice(-5);
       try {
         window.sessionStorage.setItem(
           breadcrumbStorageKey,
@@ -482,7 +459,8 @@ export function JudgeStatus({ submission }: { submission: Submission }) {
       >
         <span className="status">{label}</span>
         <span className="judge-note">
-          第 {evaluation.attemptGeneration} 次尝试
+          第 {evaluation.evaluationGeneration} 代评测 · 第{' '}
+          {evaluation.attemptGeneration} 次尝试
         </span>
       </div>
     );
@@ -647,9 +625,7 @@ function Home({
             {dailyProblem ? (
               <div className="daily-problem">
                 <span className="problem-id">
-                  {dailyProblem.publicId ||
-                    dailyProblem.slug ||
-                    dailyProblem.id}
+                  {dailyProblem.slug || dailyProblem.id}
                 </span>
                 <strong>{dailyProblem.title}</strong>
                 <div className="tag-row">
@@ -1141,22 +1117,21 @@ function ProblemList({
               <article className="problem-row" role="listitem">
                 <span
                   className="problem-id"
-                  aria-label={`题目编号 ${p.publicId || p.slug || p.id}`}
+                  aria-label={`题目编号 ${p.slug || p.id}`}
                 >
-                  {p.publicId || p.slug || p.id}
+                  {p.slug || p.id}
                 </span>
                 <div className="problem-title-cell">
-                  <h2>{p.title}</h2>
-                  <div className="tag-row">
-                    {p.tags?.length ? (
-                      p.tags.map((item) => <span key={item}>{item}</span>)
-                    ) : (
-                      <span>暂无标签</span>
-                    )}
+                  <div className="problem-main-line">
+                    <h2>{p.title}</h2>
+                    <div className="tag-row" aria-label="题目标签">
+                      {p.tags?.length ? (
+                        p.tags.map((item) => <span key={item}>{item}</span>)
+                      ) : (
+                        <span>暂无标签</span>
+                      )}
+                    </div>
                   </div>
-                  {p.source && (
-                    <span className="problem-source">来源 · {p.source}</span>
-                  )}
                 </div>
                 <span className="difficulty-label problem-difficulty-chip">
                   {p.difficulty ?? '难度未提供'}
@@ -1189,38 +1164,32 @@ function formatMemoryLimit(bytes: number) {
 type Draft = {
   slug: string;
   title: string;
-  background: string;
   statement: string;
   inputDescription: string;
   outputDescription: string;
   constraints: string;
   notes: string;
-  samples: { ordinal: number; input: string; output: string }[];
+  examples: { input: string; output: string; note?: string }[];
   timeLimitMs: number;
   memoryLimitBytes: number;
   testdataVersion?: string | null;
   visibility: Problem['visibility'];
-  difficulty: NonNullable<Problem['difficulty']> | null;
-  tags: string[];
   status: Problem['status'];
   updatedAt?: string;
 };
 const emptyDraft: Draft = {
   slug: '',
   title: '',
-  background: '',
   statement: '',
   inputDescription: '',
   outputDescription: '',
   constraints: '',
   notes: '',
-  samples: [],
+  examples: [{ input: '', output: '', note: '' }],
   timeLimitMs: 1000,
   memoryLimitBytes: 256 * 1024 * 1024,
   testdataVersion: null,
   visibility: 'private' as const,
-  difficulty: null,
-  tags: [],
   status: 'draft' as const,
 };
 
@@ -1238,17 +1207,8 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       .then((p) =>
         setForm({
           ...p,
-          background: p.background ?? '',
           notes: p.notes ?? '',
-          samples:
-            p.samples ??
-            p.examples.map((sample, index) => ({
-              ordinal: index + 1,
-              input: sample.input,
-              output: sample.output,
-            })),
-          difficulty: p.difficulty ?? null,
-          tags: p.tags ?? [],
+          examples: p.examples.length ? p.examples : emptyDraft.examples,
         }),
       )
       .catch((e) => setError(e instanceof ApiError ? e : null))
@@ -1271,7 +1231,14 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     e.preventDefault();
     setMessage('');
     setError(null);
-    if (!form.slug || !form.title || !form.statement) {
+    if (
+      !form.slug ||
+      !form.title ||
+      !form.statement ||
+      !form.inputDescription ||
+      !form.outputDescription ||
+      !form.constraints
+    ) {
       setMessage('请先填写所有必填字段。');
       return;
     }
@@ -1280,19 +1247,15 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       const editable = {
         slug: form.slug,
         title: form.title,
-        background: form.background,
         statement: form.statement,
         inputDescription: form.inputDescription,
         outputDescription: form.outputDescription,
-        samples: form.samples,
+        examples: form.examples,
         constraints: form.constraints,
         notes: form.notes,
         timeLimitMs: form.timeLimitMs,
         memoryLimitBytes: form.memoryLimitBytes,
         testdataVersion: form.testdataVersion ?? null,
-        difficulty: form.difficulty,
-        visibility: form.visibility,
-        tags: form.tags,
       };
       const result = id
         ? await api.updateProblem(id, editable)
@@ -1306,26 +1269,16 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       if (!id) navigate(`/author/problems/${result.slug || result.id}/edit`);
     } catch (e) {
       setError(
-        e instanceof ApiError && e.code === 'CONFLICT'
-          ? new ApiError(
+        e instanceof ApiError
+          ? e
+          : new ApiError(
               {
-                code: e.code,
-                requestId: e.requestId,
-                ...(e.details === undefined ? {} : { details: e.details }),
-                message: '题目编号已存在，请更换题目标识。',
+                code: 'NETWORK_ERROR',
+                message: '无法保存草稿。',
+                requestId: 'unknown',
               },
-              e.status,
-            )
-          : e instanceof ApiError
-            ? e
-            : new ApiError(
-                {
-                  code: 'NETWORK_ERROR',
-                  message: '无法保存草稿。',
-                  requestId: 'unknown',
-                },
-                0,
-              ),
+              0,
+            ),
       );
     } finally {
       setSaving(false);
@@ -1380,184 +1333,68 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
           </span>
         )}
       </div>
-      <form className="authoring-workspace" onSubmit={submit} noValidate>
-        <section className="authoring-section">
-          <h2>基本信息</h2>
-          <div className="form-grid">
-            <Field
-              label="题目标题"
-              value={form.title}
-              onChange={(e) => update('title', e.target.value)}
-              required
-            />
-            <Field
-              label="题目标识"
-              value={form.slug}
-              onChange={(e) => update('slug', e.target.value)}
-              required
-            />
-            <label>
-              难度
-              <select
-                value={form.difficulty ?? ''}
-                onChange={(e) =>
-                  update(
-                    'difficulty',
-                    e.target.value === '' ? null : e.target.value,
-                  )
-                }
-              >
-                <option value="">未设置</option>
-                <option value="入门">入门</option>
-                <option value="简单">简单</option>
-                <option value="中等">中等</option>
-                <option value="困难">困难</option>
-                <option value="专家">专家</option>
-              </select>
-            </label>
-            <label>
-              可见性
-              <select
-                value={form.visibility}
-                onChange={(e) => update('visibility', e.target.value)}
-              >
-                <option value="private">仅自己可见</option>
-                <option value="public">公开</option>
-              </select>
-            </label>
-          </div>
-        </section>
-        <section className="authoring-section">
-          <h2>题目背景</h2>
-          <textarea
-            value={form.background}
-            onChange={(e) => update('background', e.target.value)}
-            rows={7}
+      <form onSubmit={submit} noValidate>
+        <div className="form-grid">
+          <Field
+            label="题目标题"
+            value={form.title}
+            onChange={(e) => update('title', e.target.value)}
+            required
           />
-        </section>
-        <section className="authoring-section">
-          <h2>题目描述</h2>
+          <Field
+            label="题目标识"
+            value={form.slug}
+            onChange={(e) => update('slug', e.target.value)}
+            required
+          />
+        </div>
+        <label>
+          题面
           <textarea
-            aria-label="题面"
             value={form.statement}
             onChange={(e) => update('statement', e.target.value)}
             rows={6}
             required
           />
-        </section>
-        <section className="authoring-section statement-grid">
+        </label>
+        <div className="form-grid">
           <label>
-            输入格式
+            输入说明
             <textarea
-              aria-label="输入说明"
               value={form.inputDescription}
               onChange={(e) => update('inputDescription', e.target.value)}
               rows={4}
+              required
             />
           </label>
           <label>
-            输出格式
+            输出说明
             <textarea
-              aria-label="输出说明"
               value={form.outputDescription}
               onChange={(e) => update('outputDescription', e.target.value)}
               rows={4}
+              required
             />
           </label>
-        </section>
-        <section className="authoring-section">
-          <h2>样例</h2>
-          {form.samples.map((sample, index) => (
-            <div className="sample-editor" key={sample.ordinal}>
-              <div className="sample-heading">
-                <strong>样例 #{index + 1}</strong>
-                <button
-                  className="secondary"
-                  type="button"
-                  onClick={() =>
-                    update(
-                      'samples',
-                      form.samples
-                        .filter((_, item) => item !== index)
-                        .map((item, ordinal) => ({
-                          ...item,
-                          ordinal: ordinal + 1,
-                        })),
-                    )
-                  }
-                >
-                  删除
-                </button>
-              </div>
-              <div className="statement-grid">
-                <label>
-                  输入
-                  <textarea
-                    rows={4}
-                    value={sample.input}
-                    onChange={(e) =>
-                      update(
-                        'samples',
-                        form.samples.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, input: e.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label>
-                  输出
-                  <textarea
-                    rows={4}
-                    value={sample.output}
-                    onChange={(e) =>
-                      update(
-                        'samples',
-                        form.samples.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, output: e.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-              </div>
-            </div>
-          ))}
-          <button
-            className="secondary"
-            type="button"
-            onClick={() =>
-              update('samples', [
-                ...form.samples,
-                { ordinal: form.samples.length + 1, input: '', output: '' },
-              ])
-            }
-          >
-            添加样例
-          </button>
-        </section>
-        <section className="authoring-section">
-          <h2>数据范围</h2>
+        </div>
+        <label>
+          数据范围
           <textarea
-            aria-label="数据范围"
             value={form.constraints}
             onChange={(e) => update('constraints', e.target.value)}
             rows={4}
+            required
           />
-        </section>
-        <section className="authoring-section">
-          <h2>说明 / 提示</h2>
+        </label>
+        <label>
+          补充说明
           <textarea
             value={form.notes}
             onChange={(e) => update('notes', e.target.value)}
             rows={3}
           />
-        </section>
-        <section className="authoring-section statement-grid">
+        </label>
+        <div className="form-grid">
           <Field
             label="时间限制（毫秒）"
             type="number"
@@ -1574,7 +1411,54 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
             onChange={(e) => update('memoryLimitBytes', Number(e.target.value))}
             required
           />
-        </section>
+        </div>
+        <fieldset>
+          <legend>样例</legend>
+          <div className="form-grid">
+            <label>
+              输入
+              <textarea
+                value={form.examples[0]?.input ?? ''}
+                onChange={(e) =>
+                  update('examples', [
+                    {
+                      ...form.examples[0],
+                      input: e.target.value,
+                      output: form.examples[0]?.output ?? '',
+                    },
+                  ])
+                }
+                rows={3}
+              />
+            </label>
+            <label>
+              输出
+              <textarea
+                value={form.examples[0]?.output ?? ''}
+                onChange={(e) =>
+                  update('examples', [
+                    {
+                      ...form.examples[0],
+                      output: e.target.value,
+                      input: form.examples[0]?.input ?? '',
+                    },
+                  ])
+                }
+                rows={3}
+              />
+            </label>
+          </div>
+        </fieldset>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={form.visibility === 'public'}
+            onChange={(e) =>
+              update('visibility', e.target.checked ? 'public' : 'private')
+            }
+          />{' '}
+          对外公开
+        </label>
         {(message || error) && (
           <FormMessage error={message || error?.message || ''} />
         )}
@@ -1612,23 +1496,18 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     </section>
   );
 }
-export function ProblemDetail({
+function ProblemDetail({
   api,
   id,
   user,
 }: {
   api: ApiClient;
   id: string;
-  user?: AuthenticatedUser | null;
+  user: AuthenticatedUser | null;
 }) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
-  const [checker, setChecker] = useState<'EXACT_BYTES' | 'TOKEN_WHITESPACE'>(
-    'EXACT_BYTES',
-  );
-  const codeRunAdapter = useMemo(() => new HttpCodeRunAdapter(), []);
-  const submissionAdapter = useMemo(() => new HttpSubmissionAdapter(), []);
   useEffect(() => {
     void api
       .problem(id)
@@ -1648,12 +1527,6 @@ export function ProblemDetail({
         ),
       );
   }, [api, id]);
-  useEffect(() => {
-    void api
-      .judgeData(id)
-      .then((data) => setChecker(data.defaults.checker))
-      .catch(() => undefined);
-  }, [api, id]);
   if (error)
     return error.code === 'NOT_FOUND' ? (
       <State title="题目不存在" text="该题目不存在或当前不可用。" />
@@ -1661,160 +1534,117 @@ export function ProblemDetail({
       <State title="题目暂不可用" text={error.message} />
     );
   if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
-  const canEdit = problem.capabilities?.canEdit === true;
+  const canEdit = problem.authorId === user?.id;
   return (
-    <>
-      <article className="problem-detail-v4">
-        <div className="problem-main">
-          <header className="problem-heading">
-            <span className="problem-id">
-              {problem.publicId || problem.slug || problem.id}
-            </span>
-            <h1>{problem.title}</h1>
-            <div className="problem-header-actions" aria-label="题目操作">
+    <article className="problem-detail-v4">
+      <div className="problem-main">
+        <header className="problem-heading">
+          <span className="problem-id">{problem.slug || problem.id}</span>
+          <h1>{problem.title}</h1>
+          <div className="problem-header-actions" aria-label="题目操作">
+            <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
+              <button type="button">提交代码</button>
+            </Link>
+            {canEdit && (
               <Link
-                className="button"
-                to={`/problems/${encodeURIComponent(id)}/submit`}
+                to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
               >
-                提交代码
+                <button type="button" className="secondary">
+                  编辑题目
+                </button>
               </Link>
-              {canEdit && (
-                <Link
-                  to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
+            )}
+            <button type="button" className="secondary" disabled>
+              收藏
+            </button>
+          </div>
+          <p className="muted">
+            {problem.currentRevisionId
+              ? `版本 ${problem.currentRevisionId}`
+              : '版本信息暂不可用'}
+            {problem.testdataVersion
+              ? ` · 测试数据 ${problem.testdataVersion}`
+              : ''}
+          </p>
+        </header>
+        <section className="problem-content-surface">
+          <ProblemStatementRenderer content={problem} showTitle={false} />
+        </section>
+        {problem.examples.length > 0 && (
+          <Section title="样例">
+            {problem.examples.map((example, index) => (
+              <div className="sample-block" key={index}>
+                <button
+                  type="button"
+                  className="secondary sample-copy"
+                  onClick={() => {
+                    if (!navigator.clipboard) {
+                      setCopyMessage('当前浏览器不支持复制样例。');
+                      return;
+                    }
+                    void navigator.clipboard
+                      .writeText(
+                        `输入\n${example.input}\n\n输出\n${example.output}`,
+                      )
+                      .then(() => setCopyMessage('样例已复制。'))
+                      .catch(() =>
+                        setCopyMessage('复制失败，请手动选择样例。'),
+                      );
+                  }}
                 >
-                  <button type="button" className="secondary">
-                    编辑题目
-                  </button>
-                </Link>
-              )}
-              <button type="button" className="secondary" disabled>
-                收藏
-              </button>
-            </div>
-          </header>
-          <Section title="题目描述">{problem.statement}</Section>
-          <Section title="输入格式">{problem.inputDescription}</Section>
-          <Section title="输出格式">{problem.outputDescription}</Section>
-          <Section title="数据范围">{problem.constraints}</Section>
-          {problem.examples.length > 0 && (
-            <Section title="样例">
-              {problem.examples.map((example, index) => (
-                <div className="sample-block" key={index}>
-                  <div className="sample-heading">
-                    <h3>样例 {index + 1}</h3>
-                    <button
-                      type="button"
-                      className="secondary sample-copy"
-                      onClick={() => {
-                        if (!navigator.clipboard) {
-                          setCopyMessage('当前浏览器不支持复制样例。');
-                          return;
-                        }
-                        void navigator.clipboard
-                          .writeText(example.input)
-                          .then(() => setCopyMessage('样例输入已复制。'))
-                          .catch(() =>
-                            setCopyMessage('复制失败，请手动选择样例输入。'),
-                          );
-                      }}
-                    >
-                      复制样例
-                    </button>
-                  </div>
-                  <div className="sample-grid">
-                    <div>
-                      <h4>输入</h4>
-                      <pre
-                        className="sample-code sample-input"
-                        aria-label={`样例 ${index + 1} 输入`}
-                      >
-                        {example.input}
-                      </pre>
-                    </div>
-                    <div>
-                      <h4>输出</h4>
-                      <pre
-                        className="sample-code sample-output"
-                        aria-label={`样例 ${index + 1} 输出`}
-                      >
-                        {example.output}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {copyMessage && <p role="status">{copyMessage}</p>}
-            </Section>
-          )}
-          {problem.notes && (
-            <Section title="说明与提示">{problem.notes}</Section>
-          )}
-        </div>
-        <aside className="problem-aside" aria-label="题目信息">
-          <dl className="problem-facts">
+                  复制样例
+                </button>
+                <pre>{`输入\n${example.input}\n\n输出\n${example.output}`}</pre>
+              </div>
+            ))}
+            {copyMessage && <p role="status">{copyMessage}</p>}
+          </Section>
+        )}
+        {problem.notes && <Section title="说明与提示">{problem.notes}</Section>}
+      </div>
+      <aside className="problem-aside" aria-label="题目信息">
+        <dl className="problem-facts">
+          <div>
+            <dt>难度</dt>
+            <dd>{problem.difficulty ?? '后端暂未提供'}</dd>
+          </div>
+          <div>
+            <dt>标签</dt>
+            <dd>
+              <span className="tag-row">
+                {problem.tags?.length
+                  ? problem.tags.map((tag) => <span key={tag}>{tag}</span>)
+                  : '后端暂未提供'}
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt>来源</dt>
+            <dd>{problem.source ?? '后端暂未提供'}</dd>
+          </div>
+          <div>
+            <dt>时间限制</dt>
+            <dd>{problem.timeLimitMs} ms</dd>
+          </div>
+          <div>
+            <dt>内存限制</dt>
+            <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
+          </div>
+          {problem.statistics && (
             <div>
-              <dt>难度</dt>
-              <dd>{problem.difficulty ?? '后端暂未提供'}</dd>
-            </div>
-            <div>
-              <dt>标签</dt>
+              <dt>真实提交统计</dt>
               <dd>
-                <span className="tag-row">
-                  {problem.tags?.length
-                    ? problem.tags.map((tag) => <span key={tag}>{tag}</span>)
-                    : '后端暂未提供'}
-                </span>
+                {problem.statistics.acceptedCount} /{' '}
+                {problem.statistics.submissionCount}
               </dd>
             </div>
-            <div>
-              <dt>来源</dt>
-              <dd>{problem.source ?? '后端暂未提供'}</dd>
-            </div>
-            <div>
-              <dt>时间限制</dt>
-              <dd>{problem.timeLimitMs} ms</dd>
-            </div>
-            <div>
-              <dt>内存限制</dt>
-              <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
-            </div>
-            {problem.statistics && (
-              <div>
-                <dt>真实提交统计</dt>
-                <dd>
-                  {problem.statistics.acceptedCount} /{' '}
-                  {problem.statistics.submissionCount}
-                </dd>
-              </div>
-            )}
-          </dl>
-          <p className="field-help">
-            收藏、题单、最近尝试与通过统计仅在后端提供真实 contract 后启用。
-          </p>
-        </aside>
-      </article>
-      <section id="solve" className="problem-editor-slot" aria-label="OnlineCodeEditor">
-        <ProblemSolveEditorSlot
-          context={
-            {
-              problemId: problem.id,
-              slug: problem.slug,
-              samples: problem.examples.map((sample, index) => ({
-                input: sample.input,
-                output: sample.output,
-                label: `样例 ${index + 1}`,
-              })),
-              problemRevisionId: problem.currentRevisionId ?? '',
-              checker,
-              codeRunAdapter,
-              ...(user ? { submissionAdapter } : {}),
-              onViewSubmission: (submissionId: string) =>
-                navigate(`/submissions/${encodeURIComponent(submissionId)}`),
-            } as ProblemSolveEditorContext
-          }
-        />
-      </section>
-    </>
+          )}
+        </dl>
+        <p className="field-help">
+          收藏、题单、最近尝试与通过统计仅在后端提供真实 contract 后启用。
+        </p>
+      </aside>
+    </article>
   );
 }
 
@@ -1832,9 +1662,10 @@ function SubmissionForm({
   const [source, setSource] = useState('');
   const [problem, setProblem] = useState<Problem | null>(null);
   const [state, setState] = useState<
-    'loading' | 'ready' | 'saving' | 'success' | 'error'
+    'loading' | 'ready' | 'saving' | 'error'
   >('loading');
   const [error, setError] = useState('');
+  const submittingRef = useRef(false);
   useEffect(() => {
     if (!user) {
       setState('ready');
@@ -1865,6 +1696,7 @@ function SubmissionForm({
   if (state === 'error') return <State title="提交服务暂不可用" text={error} />;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (state === 'saving' || submittingRef.current) return;
     setError('');
     const effectiveLanguageId = languageId || languages[0]?.id || '';
     if (!effectiveLanguageId) {
@@ -1884,6 +1716,7 @@ function SubmissionForm({
       return;
     }
     setState('saving');
+    submittingRef.current = true;
     try {
       const result = await api.createSubmission({
         problemId: problem?.id ?? problemId,
@@ -1891,21 +1724,15 @@ function SubmissionForm({
         languageId: effectiveLanguageId,
         source,
       });
-      setState('success');
-      setError(`提交 ${result.id} 已接收，当前原始状态为 ${result.status}。`);
+      // Submission detail is the formal loading destination while evaluation
+      // projection completes asynchronously when needed.
+      navigate(`/submissions/${encodeURIComponent(result.id)}`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '无法提交源代码。');
       setState('ready');
+      submittingRef.current = false;
     }
   };
-  if (state === 'success')
-    return (
-      <State
-        title="提交已接收"
-        text={error}
-        action={<Link to="/submissions">查看评测列表</Link>}
-      />
-    );
   return (
     <section className="editor">
       <Link to={`/problems/${encodeURIComponent(problemId)}`}>← 返回题目</Link>
@@ -1946,36 +1773,24 @@ function SubmissionForm({
   );
 }
 
-function SubmissionHistory({ api }: { api: ApiClient }) {
-  const [items, setItems] = useState<EvaluationListItem[] | null>(null);
+function SubmissionHistory({
+  api,
+  user,
+}: {
+  api: ApiClient;
+  user: AuthenticatedUser | null;
+}) {
+  const [items, setItems] = useState<Submission[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [cursor, setCursor] = useState<string | undefined>();
-  const [resultFilter, setResultFilter] = useState('');
-  const [problemFilter, setProblemFilter] = useState('');
-  const [submitterFilter, setSubmitterFilter] = useState('');
   const requestVersion = useRef(0);
-  const filters = useMemo<EvaluationFilters>(() => {
-    if (!resultFilter)
-      return {
-        ...(problemFilter ? { problemId: problemFilter.trim() } : {}),
-        ...(submitterFilter ? { submitterId: submitterFilter.trim() } : {}),
-      };
-    const verdicts = new Set(['AC', 'WA', 'CE', 'RE', 'TLE', 'MLE']);
-    return {
-      ...(verdicts.has(resultFilter)
-        ? { verdict: resultFilter }
-        : { status: resultFilter }),
-      ...(problemFilter ? { problemId: problemFilter.trim() } : {}),
-      ...(submitterFilter ? { submitterId: submitterFilter.trim() } : {}),
-    };
-  }, [problemFilter, resultFilter, submitterFilter]);
   const load = () => {
     const version = ++requestVersion.current;
     setItems(null);
     setError('');
     void api
-      .evaluations(cursor, 20, filters)
+      .submissions(cursor)
       .then((d) => {
         if (version !== requestVersion.current) return;
         setItems(d.items);
@@ -1986,13 +1801,21 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
         setError(e instanceof ApiError ? e.message : '无法加载评测列表。');
       });
   };
-  useEffect(load, [api, cursor, filters]);
+  useEffect(load, [api, cursor]);
   useEffect(
     () => () => {
       requestVersion.current++;
     },
     [],
   );
+  if (!user)
+    return (
+      <State
+        title="请先登录"
+        text="登录后才能查看评测列表。"
+        action={<Link to="/login">登录</Link>}
+      />
+    );
   if (error)
     return (
       <State
@@ -2002,7 +1825,7 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
       />
     );
   if (!items)
-    return <State title="正在加载评测列表" text="正在获取全站评测记录…" />;
+    return <State title="正在加载评测列表" text="正在获取你的评测记录…" />;
   return (
     <section>
       <div className="page-heading">
@@ -2011,110 +1834,45 @@ function SubmissionHistory({ api }: { api: ApiClient }) {
           <h1>评测列表</h1>
         </div>
       </div>
-      <div className="evaluation-filters" aria-label="评测筛选">
-        <label>
-          结果
-          <select
-            aria-label="结果"
-            value={resultFilter}
-            onChange={(event) => {
-              setResultFilter(event.target.value);
-              setCursor(undefined);
-            }}
-          >
-            <option value="">全部结果</option>
-            <option value="AC">AC</option>
-            <option value="WA">WA</option>
-            <option value="CE">CE</option>
-            <option value="RE">RE</option>
-            <option value="TLE">TLE</option>
-            <option value="MLE">MLE</option>
-            <option value="INFRA_FAILED">INFRA_FAILED</option>
-            <option value="QUEUED">QUEUED</option>
-            <option value="RUNNING">RUNNING</option>
-          </select>
-        </label>
-        <label>
-          题目
-          <input
-            aria-label="题目"
-            value={problemFilter}
-            placeholder="题目 ID / slug"
-            onChange={(event) => {
-              setProblemFilter(event.target.value);
-              setCursor(undefined);
-            }}
-          />
-        </label>
-        <label>
-          提交者
-          <input
-            aria-label="提交者"
-            value={submitterFilter}
-            placeholder="提交者 ID"
-            onChange={(event) => {
-              setSubmitterFilter(event.target.value);
-              setCursor(undefined);
-            }}
-          />
-        </label>
-        <button
-          type="button"
-          className="filter-clear"
-          onClick={() => {
-            setResultFilter('');
-            setProblemFilter('');
-            setSubmitterFilter('');
-            setCursor(undefined);
-          }}
-          disabled={!resultFilter && !problemFilter && !submitterFilter}
-        >
-          清除筛选
-        </button>
-      </div>
       {items.length === 0 ? (
-        <State title="暂无评测记录" text="新的提交评测会显示在这里。" />
+        <State title="暂无评测记录" text="你的提交评测会显示在这里。" />
       ) : (
         <div className="evaluation-list" role="table" aria-label="评测列表">
           <div className="evaluation-list-header" role="row">
             <span role="columnheader">评测 ID</span>
             <span role="columnheader">题目</span>
-            <span role="columnheader">提交者</span>
             <span role="columnheader">语言</span>
             <span role="columnheader">状态</span>
-            <span role="columnheader">资源</span>
             <span role="columnheader">时间</span>
           </div>
           {items.map((s) => (
-            <div key={s.submissionId} className="evaluation-row" role="row" tabIndex={0} onClick={() => navigate(`/submissions/${encodeURIComponent(s.submissionId)}`)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/submissions/${encodeURIComponent(s.submissionId)}`); } }}>
-              <Link
-                to={`/submissions/${encodeURIComponent(s.submissionId)}`}
-                ariaLabel={`查看评测 ${s.publicNumber !== undefined ? `#${s.publicNumber}` : s.submissionId}`}
-              >
-                #
-                {s.publicNumber !== undefined ? s.publicNumber : s.submissionId}
-              </Link>
-              <Link
-                to={`/problems/${encodeURIComponent(s.problem.id)}`}
-                className="evaluation-problem"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <strong>{s.problem.publicId || s.problem.slug}</strong>{' '}
-                <span>{s.problem.title}</span>
-              </Link>
-              <span>{s.submitter.displayName}</span>
-              <span>{s.languageProfileId}</span>
-              <strong
-                className={`evaluation-verdict tone-${evaluationVerdictTone(s.verdict ?? s.status)}`}
-              >
-                {s.verdict ?? s.status}
-              </strong>
-              <span>
-                {formatMilliseconds(s.totalTimeMs)} /{' '}
-                {formatBytes(s.peakMemoryBytes)}
-              </span>
-              <time>{formatDate(s.createdAt)}</time>
-            </div>
+            (() => {
+              const item = s as Submission & {
+                submissionId?: string;
+                publicNumber?: number;
+                problem?: { id: string; slug?: string; publicId?: string };
+                submitter?: { id: string };
+                languageProfileId?: string;
+              };
+              const submissionId = item.submissionId ?? item.id;
+              const problemId = item.problem?.publicId ?? item.problem?.slug ?? item.problem?.id ?? item.problemId;
+              const languageId = item.languageProfileId ?? item.languageId;
+              const submission = item.problem
+                ? { ...item, id: submissionId, ownerUserId: item.submitter?.id ?? item.ownerUserId, problemId, languageId }
+                : item;
+              return <Link
+              key={submissionId}
+              to={`/submissions/${encodeURIComponent(submissionId)}`}
+              className="evaluation-row"
+              ariaLabel={`查看评测 #${item.publicNumber ?? submissionId}`}
+            >
+              <span>#{item.publicNumber ?? submissionId}</span>
+              <span>{problemId}</span>
+              <span>{languageId}</span>
+              <JudgeStatus submission={submission} />
+              <time>{formatDate(item.createdAt)}</time>
+            </Link>;
+            })()
           ))}
         </div>
       )}
@@ -2140,9 +1898,6 @@ export function SubmissionDetail({
   user: AuthenticatedUser | null;
 }) {
   const [submission, setSubmission] = useState<Submission | null>(null);
-  const [submissionProblem, setSubmissionProblem] = useState<Problem | null>(
-    null,
-  );
   const [error, setError] = useState<ApiError | null>(null);
   const [transportError, setTransportError] = useState('');
   const [history, setHistory] = useState<SubmissionEvaluation[]>([]);
@@ -2151,7 +1906,6 @@ export function SubmissionDetail({
     (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null
   >(null);
   const [evaluationError, setEvaluationError] = useState(false);
-  const [activeTab, setActiveTab] = useState<'testcases' | 'code'>('testcases');
   const requestVersion = useRef(0);
   const load = () => {
     const version = ++requestVersion.current;
@@ -2162,11 +1916,6 @@ export function SubmissionDetail({
       .then((value) => {
         if (version !== requestVersion.current) return;
         setSubmission(value);
-        if (typeof api.problem === 'function')
-          void api
-            .problem(value.problemId)
-            .then(setSubmissionProblem)
-            .catch(() => setSubmissionProblem(null));
         void api
           .submissionEvaluations(id)
           .then((response) => {
@@ -2219,7 +1968,7 @@ export function SubmissionDetail({
       !user ||
       !evaluation ||
       selectedGeneration !== evaluation.evaluationGeneration ||
-      isEvaluationTerminal(evaluation.status) ||
+      isTerminalStatus(evaluation.status) ||
       typeof api.submissionEvaluationStreamUrl !== 'function' ||
       typeof EventSource === 'undefined'
     )
@@ -2236,8 +1985,18 @@ export function SubmissionDetail({
           detail?: SubmissionEvaluationDetail;
           completedAt?: string;
         };
-        setEvaluation((current) => mergeEvaluationEvent(current, event));
-        if (event.status && isEvaluationTerminal(event.status)) stream.close();
+        setEvaluation((current) => {
+          if (!current) return current;
+          const incoming = {
+            ...current,
+            ...(event.status ? { status: event.status } : {}),
+            ...(event.verdict ? { verdict: event.verdict } : {}),
+            ...(event.detail ? { detail: event.detail } : {}),
+            ...(event.completedAt ? { completedAt: event.completedAt } : {}),
+          };
+          return mergeEvaluation(current, incoming);
+        });
+        if (event.status && isTerminalStatus(event.status)) stream.close();
       } catch {
         /* Ignore malformed deltas; snapshot remains authoritative. */
       }
@@ -2247,13 +2006,25 @@ export function SubmissionDetail({
     stream.addEventListener('evaluation.terminal', applyEvent);
     stream.addEventListener('replay-gap', () => load());
     return () => stream.close();
-  }, [
-    api,
-    evaluation?.evaluationGeneration,
-    id,
-    selectedGeneration,
-    user,
-  ]);
+  }, [api, evaluation?.evaluationGeneration, id, selectedGeneration, user]);
+  useEffect(() => {
+    if (
+      !user ||
+      !evaluation ||
+      selectedGeneration !== evaluation.evaluationGeneration ||
+      isTerminalStatus(evaluation.status)
+    )
+      return;
+    const timer = window.setInterval(() => {
+      void api
+        .submissionEvaluation(id, selectedGeneration)
+        .then((response) => {
+          setEvaluation((current) => mergeEvaluation(current, response.evaluation));
+        })
+        .catch(() => undefined);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [api, evaluation?.evaluationGeneration, evaluation?.status, id, selectedGeneration, user]);
   if (!user)
     return (
       <State
@@ -2296,284 +2067,227 @@ export function SubmissionDetail({
     );
   if (!submission)
     return <State title="正在加载提交" text="正在获取提交元数据…" />;
-  const isTerminal = evaluation
-    ? [
-        'COMPLETED_WITH_VERDICT',
-        'CANCELLED',
-        'INFRA_FAILED',
-        'NO_VERDICT',
-        'INCOMPLETE',
-      ].includes(evaluation.status)
-    : false;
-  const hasLiveTestcases = Boolean(
-    evaluation?.detail?.testcases.some((item) => item.status),
-  );
+  const isTerminal = evaluation ? isTerminalStatus(evaluation.status) : false;
   return (
     <article className="detail submission-detail">
       <Link to="/submissions">← 返回评测列表</Link>
-      <p className="eyebrow">提交详情</p>
       <div className="submission-heading">
         <div>
-          <h1>评测 #{evaluation?.publicNumber ?? '?'}</h1>
-          <h2 className="submission-a11y-label">Submission #{submission.id}</h2>
-          <p>
-            <Link to={`/problems/${encodeURIComponent(submission.problemId)}`}>
-              {submissionProblem?.publicId || submissionProblem?.slug || '题目'}{' '}
-              {submissionProblem?.title || ''}
-            </Link>
-          </p>
+          <h1>评测 #{evaluation?.publicNumber ?? submission.id}</h1>
+          <p>{submission.problemId}</p>
         </div>
+        {evaluation?.verdict ? (
+          <strong className="submission-verdict">{evaluation.verdict}</strong>
+        ) : (
+          <JudgeStatus submission={submission} />
+        )}
       </div>
-      {evaluation?.detail?.testcases.length ? (
-        <TestcaseProgress detail={evaluation.detail} />
-      ) : null}
-      <div className="submission-evaluation-layout">
-        <div className="submission-evaluation-main">
-          <div className="submission-detail-actions">
-            <button type="button" className="secondary" onClick={load}>
-              刷新执行状态
-            </button>
-          </div>
-          <div
-            className="submission-tabs"
-            role="tablist"
-            aria-label="评测详情视图"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'testcases'}
-              onClick={() => setActiveTab('testcases')}
-            >
-              测试点
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'code'}
-              onClick={() => setActiveTab('code')}
-            >
-              代码
-            </button>
-          </div>
-          {activeTab === 'code' ? (
-            <section className="submission-code-panel" aria-label="提交源代码">
-              <div className="section-heading-inline">
-                <h2>代码</h2>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() =>
-                    void navigator.clipboard?.writeText(submission.source)
-                  }
-                  aria-label="复制代码"
+      <dl className="submission-facts">
+        <div>
+          <dt>语言</dt>
+          <dd>{submission.languageId}</dd>
+        </div>
+        <div>
+          <dt>提交时间</dt>
+          <dd>{formatDate(submission.createdAt)}</dd>
+        </div>
+        <div>
+          <dt>完成时间</dt>
+          <dd>
+            {evaluation?.completedAt
+              ? formatDate(evaluation.completedAt)
+              : '评测中'}
+          </dd>
+        </div>
+        <div>
+          <dt>评测代次</dt>
+          <dd>
+            {evaluation
+              ? `Generation ${evaluation.evaluationGeneration}`
+              : '加载中'}
+          </dd>
+        </div>
+      </dl>
+      <div className="submission-layout">
+        <div className="submission-primary">
+          {evaluation?.detail?.testcases?.length ? (
+            <div className="testcase-progress" role="region" aria-label="测试点进度">
+              {evaluation.detail.testcases.map((item) => (
+                (() => {
+                  const state = item.verdict ?? item.status ?? 'WAITING';
+                  return (
+                <span
+                  key={item.ordinal}
+                  className={`progress-cell verdict-${item.verdict ?? ''}`}
+                  aria-label={`测试点 ${item.ordinal} ${state}`}
                 >
-                  复制代码
-                </button>
-              </div>
-              <pre className="source">{submission.source}</pre>
-            </section>
-          ) : (
-            <pre className="submission-source-a11y" aria-hidden="true">
-              {submission.source}
-            </pre>
-          )}
-          {history.length ? (
-            <section className="submission-generation" aria-label="评测历史">
-              {history.map((item) => (
-                <button
-                  key={item.evaluationGeneration}
-                  type="button"
-                  aria-pressed={
-                    selectedGeneration === item.evaluationGeneration
-                  }
-                  onClick={() =>
-                    setSelectedGeneration(item.evaluationGeneration)
-                  }
-                >
-                  #{item.publicNumber ?? '?'} · Generation{' '}
-                  {item.evaluationGeneration}
-                  {item.current ? ' - Current' : ''}{' '}
-                  {item.verdict ?? item.status}
-                </button>
+                  {item.verdict === 'AC' ? '✓' : item.status === 'RUNNING' ? '…' : item.status === 'SKIPPED' ? '!' : item.verdict ? '×' : '·'}
+                </span>
+                  );
+                })()
               ))}
-            </section>
+            </div>
           ) : null}
-          {evaluationError ? (
-            <State
-              title="评测详情暂不可用"
-              text="无法加载评测详情，请刷新后重试。"
-              action={<button onClick={load}>刷新</button>}
-            />
-          ) : !evaluation ? (
-            <State
-              title="正在加载评测详情"
-              text="正在获取 Judge 已发布的评测结果…"
-            />
-          ) : (
-            <>
-              {activeTab === 'testcases' &&
-                (isTerminal || hasLiveTestcases) &&
-                evaluation.detail?.compile?.diagnostics && (
-                  <Section title="编译诊断">
-                    <pre className="compiler-diagnostics">
-                      {evaluation.detail.compile.diagnostics}
-                    </pre>
-                  </Section>
-                )}
-              {activeTab === 'testcases' && (isTerminal || hasLiveTestcases) ? (
-                <section
-                  className="testcase-results"
-                  aria-labelledby="testcase-results-title"
-                >
-                  <div className="section-heading-inline">
-                    <div>
-                      <p className="eyebrow">Testcase Results</p>
-                      <h2 id="testcase-results-title">测试点结果</h2>
-                    </div>
+          <Section title="源代码">
+            <pre className="source">{submission.source}</pre>
+          </Section>
+          <section
+            className="submission-generation"
+            aria-labelledby="generation-history-title"
+          >
+            <div className="section-heading-inline">
+              <div>
+                <p className="eyebrow">Generation History</p>
+                <h2 id="generation-history-title">评测历史</h2>
+              </div>
+            </div>
+            {history.length ? (
+              <div className="generation-list" role="list">
+                {history.map((item) => (
+                  <div key={item.evaluationGeneration} role="listitem">
+                    <button
+                      type="button"
+                      className={
+                        selectedGeneration === item.evaluationGeneration
+                          ? 'generation-current'
+                          : ''
+                      }
+                      aria-pressed={
+                        selectedGeneration === item.evaluationGeneration
+                      }
+                      onClick={() =>
+                        setSelectedGeneration(item.evaluationGeneration)
+                      }
+                    >
+                      <span>
+                        Generation {item.evaluationGeneration}
+                        {item.current ? ' - Current' : ''}
+                      </span>
+                      <strong>{item.verdict ?? item.status}</strong>
+                    </button>
                   </div>
-                  {evaluation.detail?.testcases.length ? (
-                    <div className="testcase-list" role="list">
-                      {evaluation.detail.testcases.map((item) => (
-                        <article
-                          key={item.ordinal}
-                          role="listitem"
-                          className="testcase-row"
-                        >
-                          {(() => {
-                            const state = testcaseMark(item);
-                            return (
-                              <span
-                                className={`testcase-state testcase-state-${state.tone}`}
-                                aria-label={`测试点 ${item.ordinal} ${item.verdict ?? item.status ?? 'WAITING'}`}
-                              >
-                                <span>{item.ordinal}</span>
-                                <strong aria-hidden="true">{state.mark}</strong>
-                              </span>
-                            );
-                          })()}
-                          <span className="testcase-verdict">
-                            {item.verdict ?? item.status ?? 'WAITING'}
-                          </span>
-                          <span>{formatMilliseconds(item.timeMs)}</span>
-                          <span>{formatBytes(item.memoryBytes)}</span>
-                          {item.runtimeReason && (
-                            <span className="testcase-reason">
-                              {item.runtimeReason}
-                            </span>
-                          )}
-                          {item.exitCode !== undefined && (
-                            <span className="testcase-reason">
-                              Exit {item.exitCode}
-                            </span>
-                          )}
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="submission-muted">
-                      该评测代没有可展示的测试点执行记录。
-                    </p>
-                  )}
-                </section>
-              ) : null}
-              {!isTerminal && activeTab === 'testcases' && !hasLiveTestcases ? (
-                <section className="submission-pending" aria-live="polite">
-                  <h2>
-                    {evaluation.status === 'QUEUED'
-                      ? '正在排队评测'
-                      : '正在评测'}
-                  </h2>
-                  <p>正在评测，详细测试点结果将在评测完成后显示。</p>
-                </section>
-              ) : null}
-            </>
-          )}
+                ))}
+              </div>
+            ) : (
+              <p className="submission-muted">评测历史暂不可用。</p>
+            )}
+          </section>
         </div>
-        {evaluation ? (
-          <aside className="evaluation-info-card" aria-label="评测信息">
-            <h2>评测信息</h2>
-            <dl>
-              <div>
-                <dt>Language</dt>
-                <dd>{submission.languageId}</dd>
-              </div>
-              <div>
-                <dt>提交时间</dt>
-                <dd>{formatDate(submission.createdAt)}</dd>
-              </div>
-              <div>
-                <dt>评测时间</dt>
-                <dd>
-                  {evaluation.completedAt
-                    ? formatDate(evaluation.completedAt)
-                    : '评测中'}
-                </dd>
-              </div>
-              <div>
-                <dt>Verdict</dt>
-                <dd>{evaluation.verdict ?? '未提供'}</dd>
-              </div>
-              <div>
-                <dt>Time</dt>
-                <dd>{formatMilliseconds(evaluation.detail?.totalTimeMs)}</dd>
-              </div>
-              <div>
-                <dt>Memory</dt>
-                <dd>{formatBytes(evaluation.detail?.peakMemoryBytes)}</dd>
-              </div>
-              <div>
-                <dt>状态</dt>
-                <dd>{evaluation.verdict ?? evaluation.status}</dd>
-              </div>
-            </dl>
-          </aside>
-        ) : null}
+        <aside className="evaluation-info-card" aria-label="评测信息">
+          <h2>评测信息</h2>
+          <dl>
+            <div>
+              <dt>状态</dt>
+              <dd>{evaluation?.status ?? submission.status}</dd>
+            </div>
+            <div>
+              <dt>代次</dt>
+              <dd>{evaluation?.evaluationGeneration ?? '加载中'}</dd>
+            </div>
+            <div>
+              <dt>语言</dt>
+              <dd>{submission.languageId}</dd>
+            </div>
+            <div>
+              <dt>提交时间</dt>
+              <dd>{formatDate(submission.createdAt)}</dd>
+            </div>
+          </dl>
+        </aside>
       </div>
+      {evaluationError ? (
+        <State
+          title="评测详情暂不可用"
+          text="无法加载此代评测详情，请刷新后重试。"
+          action={<button onClick={load}>刷新</button>}
+        />
+      ) : !evaluation ? (
+        <State
+          title="正在加载评测详情"
+          text="正在获取 Judge 已发布的评测结果…"
+        />
+      ) : !isTerminal ? (
+        <section className="submission-pending" aria-live="polite">
+          <h2>
+            {evaluation.status === 'QUEUED' ? '正在排队评测' : '正在评测'}
+          </h2>
+          <p>正在评测，详细测试点结果将在评测完成后显示。</p>
+        </section>
+      ) : (
+        <>
+          <section className="submission-metrics" aria-label="评测资源使用">
+            <div>
+              <span>Verdict</span>
+              <strong>{evaluation.verdict ?? evaluation.status}</strong>
+            </div>
+            <div>
+              <span>Time</span>
+              <strong>
+                {formatMilliseconds(evaluation.detail?.totalTimeMs)}
+              </strong>
+            </div>
+            <div>
+              <span>Memory</span>
+              <strong>{formatBytes(evaluation.detail?.peakMemoryBytes)}</strong>
+            </div>
+            <div>
+              <span>Generation</span>
+              <strong>{evaluation.evaluationGeneration}</strong>
+            </div>
+          </section>
+          {evaluation.detail?.compile?.diagnostics && (
+            <Section title="编译诊断">
+              <pre className="compiler-diagnostics">
+                {evaluation.detail.compile.diagnostics}
+              </pre>
+            </Section>
+          )}
+          <section
+            className="testcase-results"
+            aria-labelledby="testcase-results-title"
+          >
+            {evaluation.detail?.testcases.length ? (
+              <div
+                className="testcase-list"
+                role="list"
+                aria-label="测试点结果"
+              >
+                {evaluation.detail.testcases.map((item) => (
+                  <article
+                    key={item.ordinal}
+                    role="listitem"
+                    className={`testcase-row verdict-${item.verdict}`}
+                  >
+                    <strong>#{item.ordinal}</strong>
+                    <span className="testcase-verdict">{item.verdict}</span>
+                    <span>{formatMilliseconds(item.timeMs)}</span>
+                    <span>{formatBytes(item.memoryBytes)}</span>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="submission-muted">
+                该评测代没有可展示的测试点执行记录。
+              </p>
+            )}
+          </section>
+        </>
+      )}
     </article>
   );
 }
 
-function TestcaseProgress({ detail }: { detail: SubmissionEvaluationDetail }) {
-  const completed = detail.testcases.filter(isTestcaseTerminal).length;
-  return (
-    <section
-      className="testcase-progress"
-      aria-label="测试点进度"
-      aria-live="polite"
-    >
-      <div className="section-heading-inline">
-        <div>
-          <p className="eyebrow">Live Progress</p>
-          <h2>测试点进度</h2>
-        </div>
-        <span>
-          {completed}/{detail.testcases.length}
-        </span>
-      </div>
-      <div className="testcase-progress-grid" role="list">
-        {detail.testcases.map((item) => {
-          const state = testcaseMark(item);
-          const label = item.verdict ?? item.status ?? 'WAITING';
-          return (
-            <span
-              key={item.ordinal}
-              role="listitem"
-              className={`testcase-progress-cell testcase-state-${state.tone}`}
-              aria-label={`测试点 ${item.ordinal} ${label}`}
-              title={label}
-            >
-              <strong>{item.ordinal}</strong>
-              <span aria-hidden="true">{state.mark}</span>
-            </span>
-          );
-        })}
-      </div>
-    </section>
-  );
+function formatMilliseconds(value: number | undefined) {
+  return value === undefined ? '—' : `${value} ms`;
+}
+function formatBytes(value: number | undefined) {
+  if (value === undefined) return '—';
+  return value >= 1024 * 1024
+    ? `${(value / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.ceil(value / 1024))} KB`;
 }
 
-function isEvaluationTerminal(status: SubmissionEvaluation['status']) {
+function isTerminalStatus(status: SubmissionEvaluation['status']) {
   return [
     'COMPLETED_WITH_VERDICT',
     'CANCELLED',
@@ -2583,107 +2297,15 @@ function isEvaluationTerminal(status: SubmissionEvaluation['status']) {
   ].includes(status);
 }
 
-type EvaluationLiveEvent = {
-  status?: SubmissionEvaluation['status'];
-  verdict?: SubmissionEvaluation['verdict'];
-  detail?: SubmissionEvaluationDetail;
-  completedAt?: string;
-};
-
-function mergeEvaluationEvent(
+function mergeEvaluation(
   current:
     (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null,
-  event: EvaluationLiveEvent,
-) {
-  if (!current || isEvaluationTerminal(current.status)) return current;
-  const detail = event.detail
-    ? mergeEvaluationDetail(current.detail, event.detail)
-    : current.detail;
-  return {
-    ...current,
-    ...(event.status ? { status: event.status } : {}),
-    ...(event.verdict ? { verdict: event.verdict } : {}),
-    ...(event.completedAt ? { completedAt: event.completedAt } : {}),
-    ...(detail ? { detail } : {}),
-  };
-}
-
-function mergeEvaluationDetail(
-  current: SubmissionEvaluationDetail | undefined,
-  incoming: SubmissionEvaluationDetail,
+  incoming: SubmissionEvaluation & { detail?: SubmissionEvaluationDetail },
 ) {
   if (!current) return incoming;
-  const currentByOrdinal = new Map(
-    current.testcases.map((testcase) => [testcase.ordinal, testcase]),
-  );
-  return {
-    ...incoming,
-    completedTestcaseCount: Math.max(
-      current.completedTestcaseCount,
-      incoming.completedTestcaseCount,
-    ),
-    testcases: incoming.testcases.map((testcase) => {
-      const existing = currentByOrdinal.get(testcase.ordinal);
-      return existing &&
-        isTestcaseTerminal(existing) &&
-        !isTestcaseTerminal(testcase)
-        ? existing
-        : testcase;
-    }),
-  };
-}
-
-function isTestcaseTerminal(
-  testcase: SubmissionEvaluationDetail['testcases'][number],
-) {
-  return (
-    Boolean(testcase.verdict) ||
-    [
-      'PASS',
-      'AC',
-      'WA',
-      'CE',
-      'RE',
-      'TLE',
-      'MLE',
-      'CANCELLED',
-      'SKIPPED',
-    ].includes(testcase.status ?? '')
-  );
-}
-
-function formatMilliseconds(value: number | undefined) {
-  return value === undefined ? '未提供' : `${value} ms`;
-}
-function formatBytes(value: number | undefined) {
-  if (value === undefined) return '未提供';
-  return value >= 1024 * 1024
-    ? `${(value / (1024 * 1024)).toFixed(1)} MB`
-    : `${Math.max(1, Math.ceil(value / 1024))} KB`;
-}
-
-function testcaseMark(item: SubmissionEvaluationDetail['testcases'][number]) {
-  if (item.verdict === 'AC') return { mark: '✓', tone: 'pass' };
-  if (item.verdict) return { mark: '×', tone: 'fail' };
-  if (
-    ['INFRA_FAILED', 'CANCELLED', 'SKIPPED'].includes(
-      (item.status as string | undefined) ?? '',
-    )
-  )
-    return { mark: '!', tone: 'infra' };
-  if (['RUNNING', 'STARTED'].includes(item.status ?? ''))
-    return { mark: '…', tone: 'running' };
-  return { mark: '·', tone: 'waiting' };
-}
-
-function evaluationVerdictTone(value: string) {
-  if (value === 'AC') return 'accepted';
-  if (['WA', 'RE'].includes(value)) return 'failed';
-  if (value === 'TLE') return 'time-limit';
-  if (value === 'MLE' || value === 'CE') return 'compile-limit';
-  if (value === 'RUNNING' || value === 'QUEUED') return 'running';
-  if (value === 'INFRA_FAILED') return 'infra';
-  return 'pending';
+  if (isTerminalStatus(current.status))
+    return current;
+  return incoming;
 }
 
 function Profile({
@@ -2971,7 +2593,6 @@ export function App() {
   const [authState, setAuthState] = useState<
     'loading' | 'authenticated' | 'unauthenticated' | 'unavailable'
   >('loading');
-  const [canViewJudgeAdmin, setCanViewJudgeAdmin] = useState(false);
   useEffect(() => {
     const h = () => setCurrent(route());
     window.addEventListener('popstate', h);
@@ -2980,14 +2601,9 @@ export function App() {
       .then((value) => {
         setUser(value);
         setAuthState('authenticated');
-        void api
-          .judgeAdminCapabilities()
-          .then((capability) => setCanViewJudgeAdmin(capability.canView))
-          .catch(() => setCanViewJudgeAdmin(false));
       })
       .catch((error) => {
         setUser(null);
-        setCanViewJudgeAdmin(false);
         setAuthState(
           error instanceof ApiError && error.status === 401
             ? 'unauthenticated'
@@ -3008,10 +2624,6 @@ export function App() {
         onUser={(value) => {
           setUser(value);
           setAuthState('authenticated');
-          void api
-            .judgeAdminCapabilities()
-            .then((capability) => setCanViewJudgeAdmin(capability.canView))
-            .catch(() => setCanViewJudgeAdmin(false));
         }}
         onNavigate={navigate}
       />
@@ -3073,7 +2685,7 @@ export function App() {
     ) : current.name === 'submit' ? (
       <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
     ) : current.name === 'submissions' ? (
-      <SubmissionHistory api={api} />
+      <SubmissionHistory api={api} user={user} />
     ) : current.name === 'submission' ? (
       user && current.id ? (
         <SubmissionDetail api={api} id={current.id} user={user} />
@@ -3213,14 +2825,6 @@ export function App() {
           >
             评测列表
           </Link>
-          {canViewJudgeAdmin && (
-            <Link
-              to="/admin/judge/nodes"
-              className={current.name.startsWith('judge-') ? 'active' : ''}
-            >
-              管理
-            </Link>
-          )}
           <NotificationBell navigate={navigate} api={api} />
           {user ? (
             <>
@@ -3238,7 +2842,6 @@ export function App() {
                 onClick={() => {
                   void api.logout().finally(() => {
                     setUser(null);
-                    setCanViewJudgeAdmin(false);
                     setAuthState('unauthenticated');
                     navigate('/');
                   });
