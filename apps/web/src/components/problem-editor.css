@@ -88,6 +88,22 @@
   border: 1px solid var(--line);
   background: var(--surface-raised);
 }
+.statement-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+.statement-form-fields { display: grid; gap: 1rem; min-width: 0; }
+.problem-statement-renderer { display: grid; gap: 1rem; line-height: 1.65; min-width: 0; }
+.problem-statement-renderer h2, .problem-statement-renderer h3 { margin: 0; }
+.problem-statement-renderer p { margin: 0 0 .7rem; }
+.problem-statement-renderer pre { overflow-x: auto; padding: .75rem; background: #17252b; color: #f4f7f8; border-radius: 4px; }
+.problem-statement-renderer table { display: block; overflow-x: auto; border-collapse: collapse; }
+.problem-statement-renderer th, .problem-statement-renderer td { padding: .45rem .7rem; border: 1px solid var(--line); }
+.problem-statement-renderer img { max-width: 100%; }
+.problem-content-surface { padding: clamp(1rem, 3vw, 2rem); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+@media (max-width: 800px) { .statement-split { grid-template-columns: 1fr; } }
 .statement-preview h2 {
   margin: 0;
   font-size: 1.4rem;
