@@ -757,6 +757,13 @@ function assertArtifactRetry(existing: JudgeJob, input: JudgeJobCreateInput) {
     throw new JudgeJobConflictError('Conflicting artifact dispatch identity');
 }
 
+const copyJob = (job: JudgeJob): JudgeJob => {
+  const copy = structuredClone(job);
+  if (copy.testcaseSet)
+    copy.testcaseSet = immutableTestcaseSet(copy.testcaseSet);
+  return copy;
+};
+
 export class InMemoryJudgeJobRepository implements JudgeJobRepository {
   private jobs = new Map<string, JudgeJob>();
   private keys = new Map<string, string>();
@@ -782,18 +789,18 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       if (existing) {
         const job = this.jobs.get(existing)!;
         assertArtifactRetry(job, i);
-        return { job: structuredClone(job), created: false };
+        return { job: copyJob(job), created: false };
       }
       const j = normalize({ ...i, idempotencyKey: k });
       this.jobs.set(j.id, j);
       this.keys.set(k, j.id);
       this.keys.set(`submission:${j.submissionId}`, j.id);
-      return { job: structuredClone(j), created: true };
+      return { job: copyJob(j), created: true };
     });
   }
   async getById(id: string) {
     const j = this.jobs.get(id);
-    return j ? structuredClone(j) : undefined;
+    return j ? copyJob(j) : undefined;
   }
   async getBySubmissionId(id: string) {
     const k = this.keys.get(`submission:${id}`);
@@ -824,7 +831,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
           updatedAt: stamp(),
         };
       this.jobs.set(j.id, leased);
-      return { job: structuredClone(leased), leaseToken: token };
+      return { job: copyJob(leased), leaseToken: token };
     });
   }
   async claimById(id: string, worker: string, ms: number) {
@@ -851,13 +858,13 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
           updatedAt: stamp(),
         };
       this.jobs.set(id, leased);
-      return { job: structuredClone(leased), leaseToken: token };
+      return { job: copyJob(leased), leaseToken: token };
     });
   }
   async complete(id: string, t: string, f: string) {
     return this.atomic(async () => {
       const j = this.jobs.get(id);
-      if (j?.status === 'SUCCEEDED_FAKE') return structuredClone(j);
+      if (j?.status === 'SUCCEEDED_FAKE') return copyJob(j);
       lease(j, t);
       if (j.executionMode !== safeMode) throw new JudgeJobConflictError();
       const done = clear({
@@ -868,7 +875,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         updatedAt: stamp(),
       });
       this.jobs.set(id, done);
-      return structuredClone(done);
+      return copyJob(done);
     });
   }
   async completeReal(id: string, t: string, result: RawExecutionResult) {
@@ -876,7 +883,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       const j = this.jobs.get(id);
       if (j?.status === 'COMPLETED') {
         if (j.rawResultDigest && j.rawResultDigest === rawDigest(result))
-          return structuredClone(j);
+          return copyJob(j);
         throw new JudgeJobConflictError('Conflicting duplicate real result');
       }
       lease(j, t);
@@ -892,7 +899,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         updatedAt: stamp(),
       });
       this.jobs.set(id, done);
-      return structuredClone(done);
+      return copyJob(done);
     });
   }
   async retry(id: string, t: string, reason: string) {
@@ -912,7 +919,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         updatedAt: stamp(),
       });
       this.jobs.set(id, x);
-      return structuredClone(x);
+      return copyJob(x);
     });
   }
   private async recoverUnsafe(at: Date) {
@@ -956,7 +963,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         updatedAt: stamp(),
       });
       this.jobs.set(id, x);
-      return structuredClone(x);
+      return copyJob(x);
     });
   }
   private cancelUnsafe(id: string, token?: string) {
@@ -967,7 +974,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
         j.status,
       )
     )
-      return structuredClone(j);
+      return copyJob(j);
     if (token !== undefined) lease(j, token);
     const x = clear({
       ...j,
@@ -978,7 +985,7 @@ export class InMemoryJudgeJobRepository implements JudgeJobRepository {
       updatedAt: stamp(),
     });
     this.jobs.set(id, x);
-    return structuredClone(x);
+    return copyJob(x);
   }
   async cancel(id: string) {
     return this.atomic(() => this.cancelUnsafe(id));

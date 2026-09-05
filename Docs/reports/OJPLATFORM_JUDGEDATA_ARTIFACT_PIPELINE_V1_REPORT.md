@@ -96,11 +96,70 @@ whole-memory ZIP access; lazy file-backed ZIP reading is needed for bounded
 ingestion. No core stack change. Production dependency audit reported zero
 vulnerabilities; this is dependency evidence, not security qualification.
 
-Known verification gaps: six full-suite TS failures remain to compare with the
-baseline. Two lint `any` errors and two broad Linux Supervisor failures also need
-baseline/platform confirmation. The manager ownership harness reported an unknown
-web process in its mocked environment. These are not classified as regressions or
-baseline failures without further evidence.
+Baseline comparison executed against canonical commit `766e6c0`:
+
+- Baseline TS: 813 passed, 7 failed, 5 skipped. Six failures overlap with this
+  branch: SDK version expectation, phone registration, two Worker UI cases,
+  localized route shell and unauthenticated history. Baseline's private-author
+  submission failure passes on this branch.
+- Latest full branch TS run: 838 passed, 7 failed, 5 skipped. Besides the six
+  baseline failures, the OTP grants test failed once (expected HTTP 200, got 400)
+  and passed on a focused rerun. Its intermittent failure is recorded as residual
+  test risk, not classified as a proven baseline failure. Build and architecture
+  gate passed after the latest changes.
+- A copy-isolation change initially introduced a legacy manifest-freezing test
+  failure. `copyJob` now preserves that contract. The existing test and related
+  artifact/guest tests pass (22 tests); assertions were not weakened.
+- Both changed-file lint failures (`apps/api/src/app.ts` code-run `as any` and
+  `apps/judge-service/src/projection.ts` raw result `Record<string, any>`) exist in
+  the baseline. No new changed-file lint failures remain.
+- Baseline Linux Supervisor reproduces the same two failures under `oj-sandbox`:
+  `TestOCIConfigCarriesFiniteResources` expects system.slice instead of user.slice;
+  `TestProductionSupervisorRejectsRootQualification` assumes root and fails on the
+  missing trusted probe when run non-root. Neither assertion was changed.
+- Baseline Runtime Manager ownership harness also fails its fake web-listener
+  source-identity check. No actual service lifecycle is exercised by that harness.
+
+## Offline 100 MiB Boundary Evidence
+
+`scripts/generate-artifact-qualification.ps1` creates deterministic ZIP bytes using
+a 1 MiB chunk and exclusive output creation. Executed fixture:
+
+- ZIP bytes: 104,873,816; input bytes: 104,857,600; output bytes: 10; testcase count: 1.
+- ZIP SHA-256: `939416d1516811c8b89a0e28d90a756cb7d635af4751758abdd052b16d917f3d`.
+- Input SHA-256: `5bd62fc9bf2d86651969d44c6a68d4cb2be54a240353ad78465bee731da7cd64`.
+- Real file-backed ingestion function: PASS, 783 ms; temporary files absent after
+  completion. HTTP upload, storage publication and judge execution were not tested
+  by this offline check.
+- This exposed a compressed-entry limit bug: DEFLATE overhead makes a 100 MiB raw
+  entry slightly larger in compressed form. Compressed bytes now use the existing
+  256 MiB archive budget; raw entry size remains limited to 100 MiB. Expanded-total,
+  ratio, CRC, hash and path checks remain enforced.
+- Upload tests now also verify the two-ingestion concurrency limit and capacity
+  recovery after cancellation (13 upload tests PASS).
+- Linux Supervisor authenticated HTTP staging, empty input, release, old protocol
+  rejection, legacy-status auth and persistence-failure visibility: PASS.
+
+## Runtime Ownership Blocker
+
+The first checkpoint is `2fb0718`. Runtime Manager `restart -UseCurrentCheckout`
+was executed after a tracked-clean commit. It stopped the registered Web and
+Supervisor, but refused three unregistered listeners:
+
+| Service | Port | PID | Observed command |
+| --- | --- | --- | --- |
+| Product API | 3010 | 30208 | `node --import tsx apps/api/src/server.ts` |
+| Judge Service | 3100 | 45772 | `node --import tsx apps/judge-service/src/server.ts` |
+| Host Agent | 3180 | 39108 | `node --import tsx apps/judge-host-agent/src/server.ts` |
+
+Their relative commands do not identify a worktree, and the shared registry records
+different PIDs. Manager reports EXTERNAL ownership and
+`APPLICATION_PORT_REMAINS_OCCUPIED: 3010, 3100, 3180`. These processes were not killed.
+User confirmation of ownership and permission to stop the three identified
+processes is pending. Web and Supervisor are stopped; the three listeners remain.
+No migration, real upload, formal qualification submission or terminal verdict was
+produced. Required DB/retry integration and full 100 MiB runtime evidence remain
+open. ADR is PROPOSED and Goal remains PARTIAL, with no main merge.
 
 NOT VERIFIED. Record compressed/expanded bytes, testcase count, upload and publish
 durations, dispatch/claim bytes, artifact transferred bytes, available peak-memory

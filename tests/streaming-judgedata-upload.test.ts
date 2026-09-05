@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Readable } from 'node:stream';
+import { Readable, PassThrough } from 'node:stream';
 import { access, readFile, readdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -74,6 +74,37 @@ const source = (data: Buffer) =>
   );
 
 describe('file-backed ZIP ingestion', () => {
+  it('rejects a third ingestion and restores capacity after cancellation', async () => {
+    const controllers = [new AbortController(), new AbortController()];
+    const pending = controllers.map((controller) =>
+      withStreamingZip(
+        new PassThrough(),
+        async () => {
+          throw new Error('cancelled consumer must not run');
+        },
+        controller.signal,
+      ).then(
+        () => undefined,
+        (error) => error,
+      ),
+    );
+    try {
+      await expect(
+        withStreamingZip(source(zip(pair)), async () => undefined),
+      ).rejects.toMatchObject({
+        code: 'JUDGE_DATA_CAPACITY_UNAVAILABLE',
+        status: 503,
+      });
+    } finally {
+      controllers.forEach((controller) => controller.abort());
+      const results = await Promise.all(pending);
+      expect(results.every((error) => error?.name === 'AbortError')).toBe(true);
+    }
+    await expect(
+      withStreamingZip(source(zip(pair)), async (pairs) => pairs.length),
+    ).resolves.toBe(1);
+  });
+
   it('processes chunked ZIPs and removes its private files after consumption', async () => {
     let root = '';
     await withStreamingZip(source(zip(pair)), async (pairs) => {

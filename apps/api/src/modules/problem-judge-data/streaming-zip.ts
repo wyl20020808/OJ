@@ -131,7 +131,6 @@ async function extract(
       compressed += entry.compressedSize;
       if (
         entry.uncompressedSize > MAX_TESTCASE_PAYLOAD_BYTES ||
-        entry.compressedSize > MAX_TESTCASE_PAYLOAD_BYTES ||
         expanded > MAX_ARCHIVE_UNCOMPRESSED_BYTES ||
         compressed > MAX_ARCHIVE_COMPRESSED_BYTES ||
         entry.uncompressedSize > Math.max(1, entry.compressedSize) * 1000
@@ -210,7 +209,11 @@ export async function withStreamingZip<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   if (activeIngestions >= MAX_CONCURRENT_INGESTIONS)
-    throw new JudgeDataError('JUDGE_DATA_CAPACITY_UNAVAILABLE', 'Upload capacity unavailable', 503);
+    throw new JudgeDataError(
+      'JUDGE_DATA_CAPACITY_UNAVAILABLE',
+      'Upload capacity unavailable',
+      503,
+    );
   activeIngestions += 1;
   let root: string | undefined;
   try {
@@ -232,7 +235,10 @@ export async function withStreamingZip<T>(
     signal?.throwIfAborted();
     return await consume(pairs);
   } finally {
-    try { if (root) await rm(root, { recursive: true, force: true }); }
-    finally { activeIngestions -= 1; }
+    try {
+      if (root) await rm(root, { recursive: true, force: true });
+    } finally {
+      activeIngestions -= 1;
+    }
   }
 }
