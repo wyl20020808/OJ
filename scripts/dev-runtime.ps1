@@ -699,6 +699,12 @@ function Start-Supervisor($state) {
   $envArgs=($env.Keys|ForEach-Object { "$_=$($env[$_] -replace '"','\\"')" }) -join ' '
   $artifactEnvironment = Join-Path $RuntimeRoot 'supervisor-artifact.env'
   if ($script:Secrets.supervisorArtifactToken -notmatch '^[a-fA-F0-9]+$') { throw 'Supervisor artifact token has an invalid local format.' }
+  $existingArtifactEnvironment = Get-Item -LiteralPath $artifactEnvironment -ErrorAction SilentlyContinue
+  if ($existingArtifactEnvironment -and $existingArtifactEnvironment.LinkType) {
+    # WSL cannot reliably follow a Windows symlink through /mnt/c; credentials
+    # must be a regular runtime-owned file before crossing the boundary.
+    Remove-Item -LiteralPath $artifactEnvironment -Force
+  }
   [IO.File]::WriteAllText($artifactEnvironment, "OJPLATFORM_SUPERVISOR_ARTIFACT_TOKEN=$($script:Secrets.supervisorArtifactToken)`n", [Text.UTF8Encoding]::new($false))
   $artifactEnvironmentWsl = Convert-WindowsPathToWsl $artifactEnvironment
   $linuxEnvironment = '/home/oj-sandbox/.config/ojplatform/supervisor-artifact.env'
