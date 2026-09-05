@@ -258,3 +258,16 @@ readiness, Worker ONLINE and real AC/WA/CE/RE/TLE/MLE qualification passed on th
 current machine. Existing Product/browser A+B evidence remains the application
 qualification reference; a fresh browser rerun was not part of this manager-only
 change.
+
+Runtime Reliability + Real Qualification V1 (2026-09-05): PARTIAL pending
+user-run browser qualification. JudgeData ZIP transport now uses bounded raw
+application/zip parsing, fixing the multi-megabyte base64/giant-regex stack
+overflow. Runtime Manager now exposes and qualifies the execution-set
+contract, rebuilds stale Supervisor binaries from the selected feature source,
+and reports Web/API/Judge/Host Agent/Supervisor plus REAL_SANDBOXED_EXECUTION
+Worker healthy with MIXED SOURCE = False. Focused JudgeData/Web tests (30),
+TypeScript typecheck, and Worker tests (64) pass. Supervisor Go suite remains
+partial because Windows cannot compile trusted-probe syscall code and four
+existing root/cgroup fixture tests fail. Browser ZIP persistence/Validate and
+live SSE terminal-chain evidence were delegated to the user. See
+Docs/reports/OJPLATFORM_RUNTIME_RELIABILITY_V1_REPORT.md.
