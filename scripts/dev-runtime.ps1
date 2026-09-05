@@ -697,7 +697,11 @@ function Start-Supervisor($state) {
   if (Test-TcpPort $Config.SupervisorPort) { throw "supervisor port $($Config.SupervisorPort) is occupied by an unknown process." }
   $env=@{XDG_RUNTIME_DIR='/run/user/1000';DBUS_SESSION_BUS_ADDRESS='unix:path=/run/user/1000/bus';OJPLATFORM_SANDBOX_ROOT=$Config.SupervisorSandboxRoot;OJPLATFORM_RUNC_BIN=$Config.SupervisorRuncBinary;OJPLATFORM_SANDBOX_PROBE_PATH=$Config.SupervisorProbeLinuxPath;OJPLATFORM_REAL_EXECUTION_ENABLED='true';OJPLATFORM_CPP20_ROOTFS=$Config.CompilerRootfsLinuxPath;OJPLATFORM_CPP20_ROOTFS_IDENTITY=$Config.CompilerRootfsIdentity}
   $envArgs=($env.Keys|ForEach-Object { "$_=$($env[$_] -replace '"','\\"')" }) -join ' '
-  $artifactEnvironment = Join-Path $RuntimeRoot 'supervisor-artifact.env'
+  # Runtime state directory may virtualize files as Windows symlinks. Use the
+  # checkout's ignored runtime scratch path for a WSL-readable regular file.
+  $artifactEnvironment = Join-Path $ProjectRoot '.runtime\supervisor-artifact.env'
+  Ensure-RuntimeFolders
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $artifactEnvironment) | Out-Null
   if ($script:Secrets.supervisorArtifactToken -notmatch '^[a-fA-F0-9]+$') { throw 'Supervisor artifact token has an invalid local format.' }
   $existingArtifactEnvironment = Get-Item -LiteralPath $artifactEnvironment -ErrorAction SilentlyContinue
   if ($existingArtifactEnvironment -and $existingArtifactEnvironment.LinkType) {
