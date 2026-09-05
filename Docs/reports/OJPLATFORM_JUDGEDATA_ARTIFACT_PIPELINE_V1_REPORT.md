@@ -147,7 +147,8 @@ Additional checks while runtime ownership confirmation is pending:
 - `vitest run --config vitest.integration.config.ts
   tests/integration/submission-dispatch.test.ts`: 5 tests PASS against real local
   PostgreSQL. Formal migrations 0020/0021 execute in session-owned temporary
-  tables under `pg_temp`; each test rolls back and closes its connection. Business
+  tables under `pg_temp`; each test rolls back and releases its pooled connection,
+  and the pool closes at suite completion. Business
   tables and the runtime migration ledger are not changed. Test-only dependency
   tables have the minimal columns needed for these migrations.
 - These tests prove artifact canonical JSON persistence, duplicate-save idempotency,
@@ -158,6 +159,8 @@ Additional checks while runtime ownership confirmation is pending:
 - Worker `go test ./internal/supervisorclient`: PASS, including new raw HTTP
   upload/hash/binding checks, bounded handle response, 200 MiB input metadata below
   4 KiB, host-path handle rejection and legacy Supervisor version rejection.
+- New integration test uses the existing database package's typed pool boundary;
+  final `pnpm typecheck` and the five-test integration rerun PASS.
 - The three blocking PIDs were re-read from live CIM process state on the next
   goal turn and remain present with the same creation times and relative commands.
 

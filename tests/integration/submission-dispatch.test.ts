@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import pg from 'pg';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createDatabase } from '../../packages/database/src/index.js';
 import { loadConfig } from '../../apps/api/src/config.js';
 import { SubmissionDispatchStore } from '../../apps/api/src/modules/submission/dispatch.js';
 import { createHash } from 'node:crypto';
@@ -12,14 +12,15 @@ import {
 } from '@ojplatform/judge-runtime';
 import { PostgresJudgeDataRepository } from '../../apps/api/src/modules/problem-judge-data/repository.js';
 
-let client: pg.Client;
+const database = createDatabase({
+  url: loadConfig().databaseUrl,
+  connectionTimeoutMs: 3000,
+});
+const connect = () => database.pool.connect();
+let client: Awaited<ReturnType<typeof connect>>;
 let store: SubmissionDispatchStore;
 beforeEach(async () => {
-  client = new pg.Client({
-    connectionString: loadConfig().databaseUrl,
-    connectionTimeoutMillis: 3000,
-  });
-  await client.connect();
+  client = await connect();
   await client.query('BEGIN');
   // Session-owned tables keep the real migration and store SQL away from business data.
   await client.query(`CREATE TEMP TABLE submissions (
@@ -48,10 +49,11 @@ afterEach(async () => {
     try {
       await client.query('ROLLBACK');
     } finally {
-      await client.end();
+      client.release();
     }
   }
 });
+afterAll(() => database.pool.end());
 
 const row = async () =>
   (
@@ -117,7 +119,9 @@ describe('dispatch outbox PostgreSQL transaction isolation', () => {
       })),
     });
     const artifact = createJudgeArtifact(manifest);
-    const repository = new PostgresJudgeDataRepository(client);
+    const repository = new PostgresJudgeDataRepository({
+      query: (sql, values) => client.query(sql, values),
+    });
     expect(await repository.saveArtifact(artifact)).toEqual(artifact);
     expect(await repository.saveArtifact(artifact)).toEqual(artifact);
     expect(await repository.getArtifact(artifact.id)).toEqual(artifact);
