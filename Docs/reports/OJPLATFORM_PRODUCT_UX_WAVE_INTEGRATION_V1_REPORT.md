@@ -1,6 +1,6 @@
 # OJPlatform Product UX Wave Integration V1
 
-Status: PARTIAL
+Status: PASS
 
 ## Sources
 
@@ -24,9 +24,8 @@ activity aggregation.
 - Web typecheck: PASS
 - Web build: PASS
 - `git diff --check`: PASS
-- Focused tests: 39 PASS; legacy `tests/web.test.tsx` has 3 stale contract
-  failures (old duplicate-slug English message and pre-wave submission detail
-  fixtures). No feature code reverted to satisfy stale assertions.
+- Focused tests: 47 PASS, including 3-second polling, terminal stop, unmount
+  cleanup, SSE retention, and stale terminal protection.
 - Browser smoke: NOT VERIFIED (scope/time rule)
 - Runtime: NOT APPLICABLE; no feature runtime started
 
@@ -34,6 +33,5 @@ activity aggregation.
 
 Integration branch: `codex/product-ux-wave-integration-v1`
 
-Known risk: evaluation App/CSS conflict was resolved retaining wave UX and
-reinstating existing SSE path. Main merge remains pending because focused test
-contract cleanup is required before acceptance.
+Evaluation App/CSS conflict resolved retaining wave UX and SSE path. Stale
+tests now match current product contracts.

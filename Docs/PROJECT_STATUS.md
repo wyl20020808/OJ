@@ -324,10 +324,10 @@ Stop Manual Recovery V2 (2026-09-05): PASS. Branch
 structured BLOCKED/PARTIAL stop outcomes, listener ownership diagnostics, and
 manual recovery guidance. See `Docs/reports/OJPLATFORM_STOP_MANUAL_RECOVERY_V2_REPORT.md`.
 
-Product UX Wave Integration V1 (2026-09-05): PARTIAL. Integration branch
+Product UX Wave Integration V1 (2026-09-05): PASS. Integration branch
 `codex/product-ux-wave-integration-v1` merges Evaluation UX V4, direct
 submission detail, root submission source authorization, Problem List compact,
 Problem Statement renderer/preview, and profile heatmap. Web typecheck/build
-and diff check pass; 39 focused tests pass. Three legacy Web assertions still
-target superseded submission/detail contracts. Main merge pending stale-test
-contract closure. See `Docs/reports/OJPLATFORM_PRODUCT_UX_WAVE_INTEGRATION_V1_REPORT.md`.
+and diff check pass; 47 focused tests pass, including 3-second snapshot
+reconciliation, terminal stop, unmount cleanup, SSE retention, and stale-state
+protection. See `Docs/reports/OJPLATFORM_PRODUCT_UX_WAVE_INTEGRATION_V1_REPORT.md`.
