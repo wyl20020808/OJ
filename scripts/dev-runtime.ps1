@@ -533,11 +533,11 @@ function Ensure-SupervisorBinaries {
       if ($item.label -eq 'supervisor') {
         $health = Get-HttpJson "$($Config.SupervisorOrigin)/v1/health"
         $protocol = if ($health -and $health.body) { [string]$health.body.execution_contract_version } else { '' }
-        if ($protocol -and $protocol -ne [string]$Config.SupervisorExecutionSetContractVersion) {
-          Write-Host "supervisor REBUILD (protocol $protocol, expected $($Config.SupervisorExecutionSetContractVersion))"
-        } else {
+        if ($protocol -eq [string]$Config.SupervisorExecutionSetContractVersion) {
           Write-Host "$($item.label) REUSE ($($item.path))"; continue
         }
+        $observed = if ($protocol) { $protocol } else { 'unknown' }
+        Write-Host "supervisor REBUILD (protocol $observed, expected $($Config.SupervisorExecutionSetContractVersion))"
       } else { Write-Host "$($item.label) REUSE ($($item.path))"; continue }
     }
     $parent = [IO.Path]::GetDirectoryName($item.path.Replace('/','\\')) -replace '\\','/'
