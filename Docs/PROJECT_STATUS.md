@@ -5,6 +5,8 @@ Architecture Baseline: [V1](OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 Current Stage: WEB UI POLISH AND EVALUATION LIST V1 PARTIAL
 Current Status: WEB UI POLISH IMPLEMENTED AND TESTED / GLOBAL EVALUATION LIST BACKEND SUPPORT NOT AVAILABLE
 
+PROFILE SOLVING HEATMAP V1: IMPLEMENTED and focused-tested; browser runtime not verified. See `OJPLATFORM_PROFILE_SOLVING_HEATMAP_V1_REPORT.md`.
+
 Web UI Polish and Evaluation List V1: PARTIAL. Problem Detail actions are
 consolidated below the title with owner/Guest-owner edit entry; duplicate Web
 "我的题目" surfaces are retired and the existing create flow is available from

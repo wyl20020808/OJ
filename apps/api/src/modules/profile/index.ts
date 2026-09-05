@@ -80,10 +80,8 @@ export async function registerProfileModule(
         : unavailable(
             auth ? 'GUEST_ACCOUNT_REQUIRES_UPGRADE' : 'AUTHENTICATION_REQUIRED',
           ),
-    activity: unavailable('NO_AUTHORITATIVE_PRODUCT_ACTIVITY_SOURCE'),
-    heatmap: unavailable(
-      'UPSTREAM_BLOCKED_BY_AUTHORITATIVE_SUBMISSION_OUTCOME',
-    ),
+    activity: { available: true },
+    heatmap: { available: true },
     teams: unavailable('PRODUCT_DOMAIN_NOT_IMPLEMENTED'),
     homework: unavailable('PRODUCT_DOMAIN_NOT_IMPLEMENTED'),
     wrongbook: unavailable(
@@ -110,6 +108,32 @@ export async function registerProfileModule(
       createdAt: new Date(String(user.created_at)).toISOString(),
       capabilities: profileCapabilities(),
     });
+  });
+  app.get('/api/profiles/:username/activity', async (request, reply) => {
+    const username = (request.params as { username?: string }).username;
+    if (!username || username.length > 32)
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid username');
+    const user = await options.pool.query(
+      "SELECT id FROM users WHERE username=$1 AND status='active'",
+      [username.toLowerCase()],
+    );
+    if (!user.rows[0]) return error(reply, request, 404, 'NOT_FOUND', 'Profile not found');
+    const result = await options.pool.query(
+      `WITH bounds AS (SELECT (CURRENT_DATE AT TIME ZONE 'UTC')::date AS today),
+       days AS (SELECT generate_series(today - 364, today, interval '1 day')::date AS day FROM bounds)
+       SELECT to_char(days.day, 'YYYY-MM-DD') AS date,
+              COALESCE(count(s.id), 0)::int AS submission_count,
+              COALESCE(count(s.id) FILTER (WHERE e.verdict='AC'), 0)::int AS accepted_count
+       FROM days
+       LEFT JOIN submissions s ON s.owner_user_id=$1
+         AND (s.created_at AT TIME ZONE 'UTC')::date=days.day
+       LEFT JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=true
+       GROUP BY days.day ORDER BY days.day`,
+      [user.rows[0].id],
+    );
+    return reply.send({ timezone: 'UTC', days: result.rows.map((row) => ({
+      date: String(row.date), submissionCount: Number(row.submission_count), acceptedCount: Number(row.accepted_count),
+    })) });
   });
   app.get('/api/profile/favorites', async (request, reply) => {
     const auth = await passwordUser(request, reply);

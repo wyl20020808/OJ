@@ -13,6 +13,7 @@ import type {
   AuthenticatedUser,
   FavoriteProblem,
   ProfileCapabilities,
+  ProfileActivity,
   ProfileContest,
   ProfileContestRelationship,
   PublicProfile,
@@ -1168,15 +1169,14 @@ export function ActivityHeatmap({
         request="PROFILE-ACTIVITY-BACKEND-INTEGRATION-REQUEST"
       />
     );
-  const metric = days[0]?.metric ?? 'SOLVED_PROBLEMS';
-  const max = Math.max(1, ...days.map((day) => day.count));
-  const total = days.reduce((sum, day) => sum + day.count, 0);
+  const count = (day: UserActivityDay) => day.submissionCount ?? day.count ?? 0;
+  const max = Math.max(1, ...days.map(count));
+  const total = days.reduce((sum, day) => sum + count(day), 0);
   return (
     <div className="heatmap-block">
       <div className="heatmap-summary" role="status">
-        最近一年共 {total}{' '}
-        {metric === 'SOLVED_PROBLEMS' ? '道题目完成记录' : '次评测记录'}，共{' '}
-        {days.filter((day) => day.count > 0).length} 个活跃日。
+        最近一年共 {total} 次提交，共{' '}
+        {days.filter((day) => count(day) > 0).length} 个活跃日。
       </div>
       <div className="heatmap-scroll">
         <div className="heatmap-grid" aria-label="做题情况热力图">
@@ -1184,9 +1184,9 @@ export function ActivityHeatmap({
             <span
               key={day.date}
               className="heatmap-day"
-              style={{ '--heat': day.count / max } as CSSProperties}
-              title={`${day.date}：${day.count} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
-              aria-label={`${day.date}，${day.count} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
+              style={{ '--heat': count(day) / max } as CSSProperties}
+              title={`${day.date}：提交 ${count(day)} 次，AC ${day.acceptedCount ?? 0} 次`}
+              aria-label={`${day.date}，提交 ${count(day)} 次，AC ${day.acceptedCount ?? 0} 次`}
             />
           ))}
         </div>
@@ -1289,6 +1289,7 @@ export function ProfileExperience({
     ProfileCapabilities | undefined
   >();
   const [publicProfile, setPublicProfile] = useState<PublicProfile>();
+  const [profileActivity, setProfileActivity] = useState<UserActivityDay[]>([]);
   const [profileLoading, setProfileLoading] = useState(Boolean(api));
   const [profileError, setProfileError] = useState('');
   const [profileRefresh, setProfileRefresh] = useState(0);
@@ -1345,6 +1346,20 @@ export function ProfileExperience({
       active = false;
     };
   }, [api, profileRefresh, username]);
+
+  useEffect(() => {
+    const activityUsername = username ?? user?.username;
+    if (!api || !activityUsername) return;
+    let active = true;
+    void api.profileActivity(activityUsername)
+      .then((result: ProfileActivity) => {
+        if (active) setProfileActivity(result.days);
+      })
+      .catch(() => {
+        if (active) setProfileActivity([]);
+      });
+    return () => { active = false; };
+  }, [api, username, user?.username, profileRefresh]);
 
   const loadFavorites = useCallback(
     (append = false) => {
@@ -1470,7 +1485,7 @@ export function ProfileExperience({
           capability={activityCapability}
         />
       );
-    return <ActivityHeatmap days={activity} />;
+    return <ActivityHeatmap days={api ? profileActivity : activity} />;
   };
 
   const renderFavorites = () => {

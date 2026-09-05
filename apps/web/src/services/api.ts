@@ -204,6 +204,10 @@ export type PublicProfile = {
   createdAt: string;
   capabilities: ProfileCapabilities;
 };
+export type ProfileActivity = {
+  timezone: string;
+  days: Array<{ date: string; submissionCount: number; acceptedCount: number }>;
+};
 export type FavoriteProblem = {
   problemId: string;
   slug: string;
@@ -703,6 +707,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<PublicProfile>(
         baseUrl,
         `/api/profiles/${encodeURIComponent(username)}`,
+        undefined,
+        fetcher,
+      ),
+    profileActivity: (username: string) =>
+      request<ProfileActivity>(
+        baseUrl,
+        `/api/profiles/${encodeURIComponent(username)}/activity`,
         undefined,
         fetcher,
       ),
