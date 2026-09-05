@@ -261,7 +261,7 @@ function Breadcrumbs({ current }: { current: Route }) {
     'author-new': '创建题目',
     'author-edit': '编辑题目',
     sandbox: 'Sandbox 运维',
-    'judge-nodes': 'Judge Machines',
+    'judge-nodes': 'Judge 节点管理',
     'judge-node-detail': current.id ?? '节点详情',
     forbidden: '无权访问',
     error: '页面加载失败',

@@ -16,7 +16,7 @@ test('Product Backend reads the frozen Judge Admin service boundary', async ({
   await expect(page).toHaveURL(/\/problems$/);
 
   await page.goto('/admin/judge/nodes');
-  await expect(page.getByText('Registry 为空', { exact: true })).toBeVisible();
+  await expect(page.getByText('节点注册表为空', { exact: true })).toBeVisible();
   const summary = await page.evaluate(async () => {
     const response = await fetch('/api/admin/judge/summary', {
       credentials: 'include',

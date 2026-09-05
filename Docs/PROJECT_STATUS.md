@@ -9,6 +9,12 @@ Web tests, Web typecheck, Web build, and diff checks pass. Runtime/browser E2E
 was explicitly excluded. See
 `reports/OJPLATFORM_PROBLEM_PAGE_UX_V3_REPORT.md`.
 Evaluation Detail UX + Live State Prep V3: PARTIAL. The desktop right-side information card, mobile natural stacking, preserved top testcase grid, post-snapshot SSE subscription, ordinal-aware monotonic live merge, and focused WAITING/RUNNING/AC/WA/infra fixtures are implemented and pass static gates. A frontend bug could prevent EventSource creation after the asynchronous initial snapshot and is fixed. Real SSE/browser runtime qualification was explicitly prohibited and remains not run. See `Docs/reports/OJPLATFORM_EVALUATION_DETAIL_UX_V3_REPORT.md`.
+Admin Chinese UX + Notification Popover V1: PASS. The Admin Judge page now uses
+Chinese presentation for headings, metrics, state display, actions, supporting
+copy, and empty/loading/error states while preserving technical identifiers and
+backend enum values. Notification outside-click, Escape, toggle, close button,
+inside-click preservation, and listener cleanup are focused-tested. See
+`Docs/reports/OJPLATFORM_ADMIN_CN_NOTIFICATION_V1_REPORT.md`.
 
 Product/Judge/UI Remediation Runtime Resume V1: PARTIAL. Canonical main
 `511830d` merged into remediation at `4b0ea17`. A minimal Runtime Manager

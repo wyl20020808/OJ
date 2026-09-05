@@ -1,6 +1,7 @@
 import {
   useCallback,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
@@ -1805,6 +1806,7 @@ export function NotificationBell({
   navigate: Navigate;
   api?: ApiClient | undefined;
 }) {
+  const controlRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationSummary[]>([]);
   const [unread, setUnread] = useState(0);
@@ -1838,6 +1840,21 @@ export function NotificationBell({
       .catch(() => setError('通知暂时不可用，请稍后重试。'))
       .finally(() => setLoading(false));
   }, [api, open]);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!controlRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside, true);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside, true);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
   const mark = (id: string) => {
     if (!api) return;
     void api
@@ -1851,7 +1868,7 @@ export function NotificationBell({
       .catch(() => setError('标记通知失败，请稍后重试。'));
   };
   return (
-    <div className="notification-control">
+    <div className="notification-control" ref={controlRef}>
       <button
         type="button"
         className="icon-button"
