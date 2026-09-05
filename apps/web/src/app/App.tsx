@@ -31,6 +31,10 @@ import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
 import { ProblemEditor } from '../components/ProblemEditor.js';
+import { ProblemSolveEditorSlot } from '../plugins/ProblemSolveEditorSlot.js';
+import { HttpCodeRunAdapter } from '@ojplatform/online-code-editor/run/HttpCodeRunAdapter';
+import { HttpSubmissionAdapter } from '@ojplatform/online-code-editor/submission/SubmissionAdapter';
+import type { ProblemSolveEditorContext } from '@ojplatform/plugin-sdk';
 import { ProblemStatementRenderer } from '../components/ProblemStatementRenderer.js';
 import {
   ContestExperience,
@@ -1533,11 +1537,16 @@ function ProblemDetail({
 }: {
   api: ApiClient;
   id: string;
-  user: AuthenticatedUser | null;
+  user?: AuthenticatedUser | null;
 }) {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
+  const [checker, setChecker] = useState<'EXACT_BYTES' | 'TOKEN_WHITESPACE'>(
+    'EXACT_BYTES',
+  );
+  const codeRunAdapter = useMemo(() => new HttpCodeRunAdapter(), []);
+  const submissionAdapter = useMemo(() => new HttpSubmissionAdapter(), []);
   useEffect(() => {
     void api
       .problem(id)
@@ -1557,6 +1566,14 @@ function ProblemDetail({
         ),
       );
   }, [api, id]);
+  useEffect(() => {
+    void api
+      .judgeData(id)
+      .then((data) => setChecker(data.defaults.checker))
+      .catch((e) =>
+        console.error('[ProblemDetail] judge checker unavailable', e),
+      );
+  }, [api, id]);
   if (error)
     return error.code === 'NOT_FOUND' ? (
       <State title="题目不存在" text="该题目不存在或当前不可用。" />
@@ -1566,135 +1583,164 @@ function ProblemDetail({
   if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
   const canEdit = problem.capabilities?.canEdit === true;
   return (
-    <article className="problem-detail-v4">
-      <div className="problem-main">
-        <header className="problem-heading">
-          <span className="problem-id">{problem.slug || problem.id}</span>
-          <h1>{problem.title}</h1>
-          <div className="problem-header-actions" aria-label="题目操作">
-            <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
-              <button type="button">提交代码</button>
-            </Link>
-            {canEdit && (
-              <Link
-                to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
-              >
-                <button type="button" className="secondary">
-                  编辑题目
-                </button>
+    <>
+      <article className="problem-detail-v4">
+        <div className="problem-main">
+          <header className="problem-heading">
+            <span className="problem-id">{problem.slug || problem.id}</span>
+            <h1>{problem.title}</h1>
+            <div className="problem-header-actions" aria-label="题目操作">
+              <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
+                <button type="button">提交代码</button>
               </Link>
-            )}
-            <button type="button" className="secondary" disabled>
-              收藏
-            </button>
-          </div>
-          <p className="muted">
-            {problem.currentRevisionId
-              ? `版本 ${problem.currentRevisionId}`
-              : '版本信息暂不可用'}
-            {problem.testdataVersion
-              ? ` · 测试数据 ${problem.testdataVersion}`
-              : ''}
-          </p>
-        </header>
-        <section className="problem-content-surface">
-          <ProblemStatementRenderer content={problem} showTitle={false} />
-        </section>
-        {problem.examples.length > 0 && (
-          <Section title="样例">
-            {problem.examples.map((example, index) => (
-              <div className="sample-block" key={index}>
-                <div className="sample-heading section-heading-inline">
-                  <h3>样例 {index + 1}</h3>
-                  <button
-                    type="button"
-                    className="secondary sample-copy"
-                    onClick={() => {
-                      if (!navigator.clipboard) {
-                        setCopyMessage('当前浏览器不支持复制样例。');
-                        return;
-                      }
-                      void navigator.clipboard
-                        .writeText(example.input)
-                        .then(() => setCopyMessage('样例输入已复制。'))
-                        .catch(() =>
-                          setCopyMessage('复制失败，请手动选择样例输入。'),
-                        );
-                    }}
-                  >
-                    复制样例
+              {canEdit && (
+                <Link
+                  to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
+                >
+                  <button type="button" className="secondary">
+                    编辑题目
                   </button>
-                </div>
-                <div className="sample-grid">
-                  <div>
-                    <h4>输入</h4>
-                    <pre
-                      className="sample-code sample-input"
-                      aria-label={`样例 ${index + 1} 输入`}
+                </Link>
+              )}
+              <button type="button" className="secondary" disabled>
+                收藏
+              </button>
+            </div>
+            <p className="muted">
+              {problem.currentRevisionId
+                ? `版本 ${problem.currentRevisionId}`
+                : '版本信息暂不可用'}
+              {problem.testdataVersion
+                ? ` · 测试数据 ${problem.testdataVersion}`
+                : ''}
+            </p>
+          </header>
+          <section className="problem-content-surface">
+            <ProblemStatementRenderer content={problem} showTitle={false} />
+          </section>
+          {problem.examples.length > 0 && (
+            <Section title="样例">
+              {problem.examples.map((example, index) => (
+                <div className="sample-block" key={index}>
+                  <div className="sample-heading section-heading-inline">
+                    <h3>样例 {index + 1}</h3>
+                    <button
+                      type="button"
+                      className="secondary sample-copy"
+                      onClick={() => {
+                        if (!navigator.clipboard) {
+                          setCopyMessage('当前浏览器不支持复制样例。');
+                          return;
+                        }
+                        void navigator.clipboard
+                          .writeText(example.input)
+                          .then(() => setCopyMessage('样例输入已复制。'))
+                          .catch(() =>
+                            setCopyMessage('复制失败，请手动选择样例输入。'),
+                          );
+                      }}
                     >
-                      {example.input}
-                    </pre>
+                      复制样例
+                    </button>
                   </div>
-                  <div>
-                    <h4>输出</h4>
-                    <pre
-                      className="sample-code sample-output"
-                      aria-label={`样例 ${index + 1} 输出`}
-                    >
-                      {example.output}
-                    </pre>
+                  <div className="sample-grid">
+                    <div>
+                      <h4>输入</h4>
+                      <pre
+                        className="sample-code sample-input"
+                        aria-label={`样例 ${index + 1} 输入`}
+                      >
+                        {example.input}
+                      </pre>
+                    </div>
+                    <div>
+                      <h4>输出</h4>
+                      <pre
+                        className="sample-code sample-output"
+                        aria-label={`样例 ${index + 1} 输出`}
+                      >
+                        {example.output}
+                      </pre>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-            {copyMessage && <p role="status">{copyMessage}</p>}
-          </Section>
-        )}
-        {problem.notes && <Section title="说明与提示">{problem.notes}</Section>}
-      </div>
-      <aside className="problem-aside" aria-label="题目信息">
-        <dl className="problem-facts">
-          <div>
-            <dt>难度</dt>
-            <dd>{problem.difficulty ?? '后端暂未提供'}</dd>
-          </div>
-          <div>
-            <dt>标签</dt>
-            <dd>
-              <span className="tag-row">
-                {problem.tags?.length
-                  ? problem.tags.map((tag) => <span key={tag}>{tag}</span>)
-                  : '后端暂未提供'}
-              </span>
-            </dd>
-          </div>
-          <div>
-            <dt>来源</dt>
-            <dd>{problem.source ?? '后端暂未提供'}</dd>
-          </div>
-          <div>
-            <dt>时间限制</dt>
-            <dd>{problem.timeLimitMs} ms</dd>
-          </div>
-          <div>
-            <dt>内存限制</dt>
-            <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
-          </div>
-          {problem.statistics && (
+              ))}
+              {copyMessage && <p role="status">{copyMessage}</p>}
+            </Section>
+          )}
+          {problem.notes && (
+            <Section title="说明与提示">{problem.notes}</Section>
+          )}
+        </div>
+        <aside className="problem-aside" aria-label="题目信息">
+          <dl className="problem-facts">
             <div>
-              <dt>真实提交统计</dt>
+              <dt>难度</dt>
+              <dd>{problem.difficulty ?? '后端暂未提供'}</dd>
+            </div>
+            <div>
+              <dt>标签</dt>
               <dd>
-                {problem.statistics.acceptedCount} /{' '}
-                {problem.statistics.submissionCount}
+                <span className="tag-row">
+                  {problem.tags?.length
+                    ? problem.tags.map((tag) => <span key={tag}>{tag}</span>)
+                    : '后端暂未提供'}
+                </span>
               </dd>
             </div>
-          )}
-        </dl>
-        <p className="field-help">
-          收藏、题单、最近尝试与通过统计仅在后端提供真实 contract 后启用。
-        </p>
-      </aside>
-    </article>
+            <div>
+              <dt>来源</dt>
+              <dd>{problem.source ?? '后端暂未提供'}</dd>
+            </div>
+            <div>
+              <dt>时间限制</dt>
+              <dd>{problem.timeLimitMs} ms</dd>
+            </div>
+            <div>
+              <dt>内存限制</dt>
+              <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
+            </div>
+            {problem.statistics && (
+              <div>
+                <dt>真实提交统计</dt>
+                <dd>
+                  {problem.statistics.acceptedCount} /{' '}
+                  {problem.statistics.submissionCount}
+                </dd>
+              </div>
+            )}
+          </dl>
+          <p className="field-help">
+            收藏、题单、最近尝试与通过统计仅在后端提供真实 contract 后启用。
+          </p>
+        </aside>
+      </article>
+      <section
+        id="solve"
+        className="problem-editor-slot"
+        aria-label="OnlineCodeEditor"
+      >
+        <ProblemSolveEditorSlot
+          context={
+            {
+              problemId: problem.id,
+              slug: problem.slug,
+              samples: problem.examples.map((sample, index) => ({
+                input: sample.input,
+                output: sample.output,
+                label: `样例 ${index + 1}`,
+              })),
+              problemRevisionId: problem.currentRevisionId ?? problem.id,
+              checker,
+              codeRunAdapter,
+              ...(user ? { submissionAdapter } : {}),
+              onViewSubmission: (submissionId: string) =>
+                navigate(`/submissions/${encodeURIComponent(submissionId)}`),
+            } as ProblemSolveEditorContext
+          }
+        />
+      </section>
+    </>
   );
 }
 
@@ -1711,9 +1757,9 @@ function SubmissionForm({
   const [languageId, setLanguageId] = useState('');
   const [source, setSource] = useState('');
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [state, setState] = useState<
-    'loading' | 'ready' | 'saving' | 'error'
-  >('loading');
+  const [state, setState] = useState<'loading' | 'ready' | 'saving' | 'error'>(
+    'loading',
+  );
   const [error, setError] = useState('');
   const submittingRef = useRef(false);
   useEffect(() => {
@@ -1840,7 +1886,17 @@ function SubmissionHistory({
   const requestVersion = useRef(0);
   const filters = useMemo<EvaluationFilters>(() => {
     const verdicts = new Set(['AC', 'WA', 'CE', 'RE', 'TLE', 'MLE']);
-    return { ...(resultFilter ? (verdicts.has(resultFilter) ? { verdict: resultFilter } : { status: resultFilter }) : {}), ...(problemFilter.trim() ? { problemId: problemFilter.trim() } : {}), ...(submitterFilter.trim() ? { submitterId: submitterFilter.trim() } : {}) };
+    return {
+      ...(resultFilter
+        ? verdicts.has(resultFilter)
+          ? { verdict: resultFilter }
+          : { status: resultFilter }
+        : {}),
+      ...(problemFilter.trim() ? { problemId: problemFilter.trim() } : {}),
+      ...(submitterFilter.trim()
+        ? { submitterId: submitterFilter.trim() }
+        : {}),
+    };
   }, [problemFilter, resultFilter, submitterFilter]);
   const load = () => {
     const version = ++requestVersion.current;
@@ -1891,7 +1947,67 @@ function SubmissionHistory({
           <h1>评测列表</h1>
         </div>
       </div>
-      <div className="evaluation-filters" aria-label="评测筛选"><label>结果<select aria-label="结果" value={resultFilter} onChange={(e) => { setResultFilter(e.target.value); setCursor(undefined); }}><option value="">全部结果</option><option value="AC">AC</option><option value="WA">WA</option><option value="CE">CE</option><option value="RE">RE</option><option value="TLE">TLE</option><option value="MLE">MLE</option><option value="INFRA_FAILED">INFRA_FAILED</option><option value="QUEUED">QUEUED</option><option value="RUNNING">RUNNING</option></select></label><label>题目<input aria-label="题目" value={problemFilter} placeholder="题目 ID / slug" onChange={(e) => { setProblemFilter(e.target.value); setCursor(undefined); }} /></label><label>提交者<input aria-label="提交者" value={submitterFilter} placeholder="提交者 ID" onChange={(e) => { setSubmitterFilter(e.target.value); setCursor(undefined); }} /></label><button type="button" className="filter-clear" disabled={!resultFilter && !problemFilter && !submitterFilter} onClick={() => { setResultFilter(''); setProblemFilter(''); setSubmitterFilter(''); setCursor(undefined); }}>清除筛选</button></div>
+      <div className="evaluation-filters" aria-label="评测筛选">
+        <label>
+          结果
+          <select
+            aria-label="结果"
+            value={resultFilter}
+            onChange={(e) => {
+              setResultFilter(e.target.value);
+              setCursor(undefined);
+            }}
+          >
+            <option value="">全部结果</option>
+            <option value="AC">AC</option>
+            <option value="WA">WA</option>
+            <option value="CE">CE</option>
+            <option value="RE">RE</option>
+            <option value="TLE">TLE</option>
+            <option value="MLE">MLE</option>
+            <option value="INFRA_FAILED">INFRA_FAILED</option>
+            <option value="QUEUED">QUEUED</option>
+            <option value="RUNNING">RUNNING</option>
+          </select>
+        </label>
+        <label>
+          题目
+          <input
+            aria-label="题目"
+            value={problemFilter}
+            placeholder="题目 ID / slug"
+            onChange={(e) => {
+              setProblemFilter(e.target.value);
+              setCursor(undefined);
+            }}
+          />
+        </label>
+        <label>
+          提交者
+          <input
+            aria-label="提交者"
+            value={submitterFilter}
+            placeholder="提交者 ID"
+            onChange={(e) => {
+              setSubmitterFilter(e.target.value);
+              setCursor(undefined);
+            }}
+          />
+        </label>
+        <button
+          type="button"
+          className="filter-clear"
+          disabled={!resultFilter && !problemFilter && !submitterFilter}
+          onClick={() => {
+            setResultFilter('');
+            setProblemFilter('');
+            setSubmitterFilter('');
+            setCursor(undefined);
+          }}
+        >
+          清除筛选
+        </button>
+      </div>
       {items.length === 0 ? (
         <State title="暂无评测记录" text="你的提交评测会显示在这里。" />
       ) : (
@@ -1899,7 +2015,11 @@ function SubmissionHistory({
           <div className="evaluation-list-header" role="row">
             <span role="columnheader">评测 ID</span>
             <span role="columnheader">题目</span>
-            <span role="columnheader">提交者</span><span role="columnheader">语言</span><span role="columnheader">状态</span><span role="columnheader">资源</span><span role="columnheader">时间</span>
+            <span role="columnheader">提交者</span>
+            <span role="columnheader">语言</span>
+            <span role="columnheader">状态</span>
+            <span role="columnheader">资源</span>
+            <span role="columnheader">时间</span>
           </div>
           {items.map((s) => (
             <div
@@ -2093,12 +2213,21 @@ export function SubmissionDetail({
       void api
         .submissionEvaluation(id, selectedGeneration)
         .then((response) => {
-          setEvaluation((current) => mergeEvaluation(current, response.evaluation));
+          setEvaluation((current) =>
+            mergeEvaluation(current, response.evaluation),
+          );
         })
         .catch(() => undefined);
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [api, evaluation?.evaluationGeneration, evaluation?.status, id, selectedGeneration, user]);
+  }, [
+    api,
+    evaluation?.evaluationGeneration,
+    evaluation?.status,
+    id,
+    selectedGeneration,
+    user,
+  ]);
   if (!user)
     return (
       <State
@@ -2185,21 +2314,33 @@ export function SubmissionDetail({
       <div className="submission-layout">
         <div className="submission-primary">
           {evaluation?.detail?.testcases?.length ? (
-            <div className="testcase-progress" role="region" aria-label="测试点进度">
-              {evaluation.detail.testcases.map((item) => (
+            <div
+              className="testcase-progress"
+              role="region"
+              aria-label="测试点进度"
+            >
+              {evaluation.detail.testcases.map((item) =>
                 (() => {
                   const state = item.verdict ?? item.status ?? 'WAITING';
                   return (
-                <span
-                  key={item.ordinal}
-                  className={`progress-cell verdict-${item.verdict ?? ''}`}
-                  aria-label={`测试点 ${item.ordinal} ${state}`}
-                >
-                  {item.verdict === 'AC' ? '✓' : item.status === 'RUNNING' ? '…' : item.status === 'SKIPPED' ? '!' : item.verdict ? '×' : '·'}
-                </span>
+                    <span
+                      key={item.ordinal}
+                      className={`progress-cell verdict-${item.verdict ?? ''}`}
+                      aria-label={`测试点 ${item.ordinal} ${state}`}
+                    >
+                      {item.verdict === 'AC'
+                        ? '✓'
+                        : item.status === 'RUNNING'
+                          ? '…'
+                          : item.status === 'SKIPPED'
+                            ? '!'
+                            : item.verdict
+                              ? '×'
+                              : '·'}
+                    </span>
                   );
-                })()
-              ))}
+                })(),
+              )}
             </div>
           ) : null}
           <Section title="源代码">
@@ -2377,8 +2518,7 @@ function mergeEvaluation(
   incoming: SubmissionEvaluation & { detail?: SubmissionEvaluationDetail },
 ) {
   if (!current) return incoming;
-  if (isTerminalStatus(current.status))
-    return current;
+  if (isTerminalStatus(current.status)) return current;
   return incoming;
 }
 

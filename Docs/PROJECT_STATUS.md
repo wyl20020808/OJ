@@ -1,5 +1,14 @@
 # OJPlatform Project Status
 
+Online Code Editor Visibility & Integration V1: PARTIAL. Product `ProblemDetail`
+now mounts canonical Plugin `ojplatform.online-code-editor` at
+`problem.solve.editor` after statement/samples, with Run/Submit adapters and
+visible plugin failure fallback. Plugin tests/typecheck/build and Product
+focused tests/Web typecheck/build pass. Runtime browser verification is blocked
+by existing worker `HOST_CAPACITY_EXHAUSTED` recovery failure; full Product
+suite retains unrelated existing failures. See
+`reports/OJPLATFORM_ONLINE_CODE_EDITOR_VISIBILITY_INTEGRATION_V1_REPORT.md`.
+
 Full Product State Diagnosis & Recovery V1: PARTIAL. Recovered merge-lost
 evaluation navigation, capability-driven problem editing, sample presentation,
 breadcrumb/admin navigation, and authenticated evaluation-list protection.
