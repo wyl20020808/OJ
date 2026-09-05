@@ -331,13 +331,17 @@ async function verifyProblemList(id: number) {
 }
 
 async function verifyProblemDetail(id: number) {
-  if ([54, 57, 58].includes(id)) {
+  if (id === 54) {
+    expect(appCss).not.toMatch(
+      /\.problem-aside\s*\{[^}]*position:\s*(?:sticky|fixed)/,
+    );
+    return;
+  }
+  if ([57, 58].includes(id)) {
     const expectation =
-      id === 54
-        ? /position: sticky/
-        : id === 57
-          ? /problem-detail-v4[\s\S]*grid-template-columns: 1fr/
-          : /overflow-wrap/;
+      id === 57
+        ? /problem-detail-v4[\s\S]*grid-template-columns: 1fr/
+        : /overflow-wrap/;
     expect(appCss).toMatch(expectation);
     return;
   }

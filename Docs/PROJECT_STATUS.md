@@ -1,5 +1,30 @@
 # OJPlatform Project Status
 
+V3 UI Final Integration V1: PASS. Problem Page UX V3, Evaluation Detail UX V3,
+and Admin Chinese + Notification V1 are integrated with their required
+traditional submission, normal-flow Problem information card, live Evaluation
+state monotonicity, Admin Chinese presentation, and notification dismissal
+behavior preserved. Focused tests pass 20/20, 10/10, and 172/172; Web typecheck,
+build, targeted ESLint, and diff checks pass. Runtime/browser/real-SSE
+qualification was explicitly excluded and remains not verified. See
+`reports/OJPLATFORM_V3_UI_FINAL_INTEGRATION_V1_REPORT.md`.
+
+Problem Page UX Remediation V3: PASS. The Problem title action again opens the
+existing traditional submission route with its language selector, source field,
+and formal Submission API integration. Problem metadata is product-facing, the
+right information card remains in document flow, and sample input/output are
+separate light panels whose copy action preserves only the input text. Focused
+Web tests, Web typecheck, Web build, and diff checks pass. Runtime/browser E2E
+was explicitly excluded. See
+`reports/OJPLATFORM_PROBLEM_PAGE_UX_V3_REPORT.md`.
+Evaluation Detail UX + Live State Prep V3: PARTIAL. The desktop right-side information card, mobile natural stacking, preserved top testcase grid, post-snapshot SSE subscription, ordinal-aware monotonic live merge, and focused WAITING/RUNNING/AC/WA/infra fixtures are implemented and pass static gates. A frontend bug could prevent EventSource creation after the asynchronous initial snapshot and is fixed. Real SSE/browser runtime qualification was explicitly prohibited and remains not run. See `Docs/reports/OJPLATFORM_EVALUATION_DETAIL_UX_V3_REPORT.md`.
+Admin Chinese UX + Notification Popover V1: PASS. The Admin Judge page now uses
+Chinese presentation for headings, metrics, state display, actions, supporting
+copy, and empty/loading/error states while preserving technical identifiers and
+backend enum values. Notification outside-click, Escape, toggle, close button,
+inside-click preservation, and listener cleanup are focused-tested. See
+`Docs/reports/OJPLATFORM_ADMIN_CN_NOTIFICATION_V1_REPORT.md`.
+
 Product/Judge/UI Remediation Runtime Resume V1: PARTIAL. Canonical main
 `511830d` merged into remediation at `4b0ea17`. A minimal Runtime Manager
 listener lookup fallback fixed a machine-specific `Get-NetTCPConnection` blind

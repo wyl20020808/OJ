@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SubmissionDetail } from '../apps/web/src/app/App.js';
@@ -78,6 +79,43 @@ function apiFor(evaluations: Record<number, Record<string, unknown>>) {
 
 afterEach(cleanup);
 
+class FixtureEventSource {
+  static instances: FixtureEventSource[] = [];
+  readonly listeners = new Map<
+    string,
+    Array<(event: MessageEvent<string>) => void>
+  >();
+  readonly close = vi.fn();
+
+  constructor(
+    readonly url: string | URL,
+    readonly options?: EventSourceInit,
+  ) {
+    FixtureEventSource.instances.push(this);
+  }
+
+  addEventListener(
+    type: string,
+    listener: (event: MessageEvent<string>) => void,
+  ) {
+    const listeners = this.listeners.get(type) ?? [];
+    listeners.push(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  emit(type: string, data: Record<string, unknown>) {
+    const event = new MessageEvent<string>(type, {
+      data: JSON.stringify(data),
+    });
+    for (const listener of this.listeners.get(type) ?? []) listener(event);
+  }
+}
+
+afterEach(() => {
+  FixtureEventSource.instances = [];
+  vi.unstubAllGlobals();
+});
+
 describe('Phase 3D.1 submission detail Web projection', () => {
   it('shows authoritative testcase facts and keeps earlier generations read-only', async () => {
     const { api, submissionEvaluation } = apiFor({
@@ -123,8 +161,34 @@ describe('Phase 3D.1 submission detail Web projection', () => {
     expect(
       await screen.findByRole('heading', { name: 'Submission #s-7' }),
     ).toBeInTheDocument();
-    expect(await screen.findByLabelText('测试点 2 AC')).toHaveTextContent('✓');
+    const progress = await screen.findByRole('region', { name: '测试点进度' });
+    expect(within(progress).getByLabelText('测试点 2 AC')).toHaveTextContent(
+      '✓',
+    );
     expect(screen.getByText('28 ms')).toBeInTheDocument();
+    const information = screen.getByRole('complementary', {
+      name: '评测信息',
+    });
+    expect(
+      within(information).getByText('Language').nextElementSibling,
+    ).toHaveTextContent('cpp20');
+    expect(
+      within(information).getByText('评测时间').nextElementSibling,
+    ).toHaveTextContent('2026/9/2 08:01:00');
+    expect(
+      within(information).getByText('Verdict').nextElementSibling,
+    ).toHaveTextContent('AC');
+    expect(
+      within(information).getByText('Time').nextElementSibling,
+    ).toHaveTextContent('28 ms');
+    expect(
+      within(information).getByText('Memory').nextElementSibling,
+    ).toHaveTextContent('3.5 MB');
+    expect(
+      within(information).getByText('状态').nextElementSibling,
+    ).toHaveTextContent('AC');
+    const main = document.querySelector('.submission-evaluation-main');
+    expect(main?.nextElementSibling).toBe(information);
     expect(
       screen.getByRole('button', { name: /Generation 2 - Current/ }),
     ).toHaveAttribute('aria-pressed', 'true');
@@ -204,8 +268,164 @@ describe('Phase 3D.1 submission detail Web projection', () => {
     expect(
       screen.getByText('该评测代没有可展示的测试点执行记录。'),
     ).toBeInTheDocument();
+    const information = screen.getByRole('complementary', {
+      name: '评测信息',
+    });
+    expect(
+      within(information).getByText('Memory').nextElementSibling,
+    ).toHaveTextContent('未提供');
     expect(document.body.textContent).not.toMatch(
       /judgeJobId|testcaseSetId|storage credential/i,
     );
+  });
+
+  it('applies authoritative testcase SSE fixtures without terminal regression', async () => {
+    vi.stubGlobal('EventSource', FixtureEventSource);
+    const waiting = [1, 2, 3].map((ordinal) => ({
+      ordinal,
+      status: 'WAITING',
+    }));
+    const { api } = apiFor({
+      2: {
+        evaluationGeneration: 2,
+        attemptGeneration: 1,
+        status: 'RUNNING',
+        current: true,
+        createdAt: submission.createdAt,
+        detail: {
+          testcaseCount: 3,
+          completedTestcaseCount: 0,
+          testcases: waiting,
+        },
+      },
+      1: {
+        evaluationGeneration: 1,
+        attemptGeneration: 1,
+        status: 'COMPLETED_WITH_VERDICT',
+        verdict: 'WA',
+        current: false,
+        createdAt: submission.createdAt,
+      },
+    });
+    Object.assign(api as object, {
+      submissionEvaluationStreamUrl: vi.fn().mockReturnValue('/stream'),
+    });
+    render(<SubmissionDetail api={api} id={submission.id} user={user} />);
+
+    const progress = await screen.findByRole('region', { name: '测试点进度' });
+    expect(
+      within(progress).getByLabelText('测试点 1 WAITING'),
+    ).toHaveTextContent('·');
+    await waitFor(() => expect(FixtureEventSource.instances).toHaveLength(1));
+    const stream = FixtureEventSource.instances[0]!;
+    expect(stream.url).toBe('/stream');
+    expect(stream.options).toEqual({ withCredentials: true });
+
+    stream.emit('testcase.updated', {
+      status: 'RUNNING',
+      detail: {
+        testcaseCount: 3,
+        completedTestcaseCount: 0,
+        testcases: [{ ordinal: 1, status: 'RUNNING' }, ...waiting.slice(1)],
+      },
+    });
+    expect(
+      await within(progress).findByLabelText('测试点 1 RUNNING'),
+    ).toHaveTextContent('…');
+
+    stream.emit('testcase.updated', {
+      status: 'RUNNING',
+      detail: {
+        testcaseCount: 3,
+        completedTestcaseCount: 1,
+        testcases: [
+          { ordinal: 1, status: 'AC', verdict: 'AC', timeMs: 11 },
+          ...waiting.slice(1),
+        ],
+      },
+    });
+    expect(
+      await within(progress).findByLabelText('测试点 1 AC'),
+    ).toHaveTextContent('✓');
+
+    stream.emit('testcase.updated', {
+      status: 'RUNNING',
+      detail: {
+        testcaseCount: 3,
+        completedTestcaseCount: 1,
+        testcases: [
+          { ordinal: 1, status: 'AC', verdict: 'AC', timeMs: 11 },
+          { ordinal: 2, status: 'RUNNING' },
+          waiting[2],
+        ],
+      },
+    });
+    expect(
+      await within(progress).findByLabelText('测试点 2 RUNNING'),
+    ).toHaveTextContent('…');
+
+    stream.emit('testcase.updated', {
+      status: 'RUNNING',
+      detail: {
+        testcaseCount: 3,
+        completedTestcaseCount: 2,
+        testcases: [
+          { ordinal: 1, status: 'AC', verdict: 'AC', timeMs: 11 },
+          { ordinal: 2, status: 'WA', verdict: 'WA', timeMs: 14 },
+          waiting[2],
+        ],
+      },
+    });
+    expect(
+      await within(progress).findByLabelText('测试点 2 WA'),
+    ).toHaveTextContent('×');
+
+    stream.emit('testcase.updated', {
+      status: 'RUNNING',
+      detail: {
+        testcaseCount: 3,
+        completedTestcaseCount: 1,
+        testcases: [
+          { ordinal: 1, status: 'RUNNING' },
+          { ordinal: 2, status: 'WA', verdict: 'WA', timeMs: 14 },
+          waiting[2],
+        ],
+      },
+    });
+    expect(within(progress).getByLabelText('测试点 1 AC')).toHaveTextContent(
+      '✓',
+    );
+
+    stream.emit('testcase.updated', {
+      status: 'RUNNING',
+      detail: {
+        testcaseCount: 3,
+        completedTestcaseCount: 3,
+        testcases: [
+          { ordinal: 1, status: 'AC', verdict: 'AC', timeMs: 11 },
+          { ordinal: 2, status: 'WA', verdict: 'WA', timeMs: 14 },
+          { ordinal: 3, status: 'SKIPPED' },
+        ],
+      },
+    });
+    expect(
+      await within(progress).findByLabelText('测试点 3 SKIPPED'),
+    ).toHaveTextContent('!');
+
+    stream.emit('evaluation.terminal', {
+      status: 'COMPLETED_WITH_VERDICT',
+      verdict: 'WA',
+      completedAt: '2026-09-02T00:01:00.000Z',
+      detail: {
+        testcaseCount: 3,
+        completedTestcaseCount: 3,
+        testcases: [
+          { ordinal: 1, status: 'AC', verdict: 'AC', timeMs: 11 },
+          { ordinal: 2, status: 'WA', verdict: 'WA', timeMs: 14 },
+          { ordinal: 3, status: 'SKIPPED' },
+        ],
+      },
+    });
+    await waitFor(() => expect(stream.close).toHaveBeenCalledOnce());
   });
 });

@@ -771,7 +771,7 @@ pre {
   margin-top: 0.65rem;
 }
 .submission-detail {
-  max-width: 940px;
+  max-width: 1080px;
 }
 .submission-heading {
   display: flex;
@@ -841,43 +841,45 @@ pre {
   border-color: var(--line);
   background: var(--surface);
 }
-.submission-verdict {
-  min-width: 4.75rem;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid #9dd6bb;
-  border-radius: 6px;
-  background: #edf9f1;
-  color: var(--success);
-  font-size: 1.1rem;
-  text-align: center;
-}
-.submission-facts,
-.submission-metrics {
+.submission-evaluation-layout {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  margin: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 16rem);
+  gap: var(--space-6);
+  align-items: start;
+}
+.submission-evaluation-main {
+  min-width: 0;
+}
+.evaluation-info-card {
+  padding: var(--space-5);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--line);
-}
-.submission-facts > div,
-.submission-metrics > div {
-  min-width: 0;
-  padding: var(--space-3) var(--space-4);
   background: var(--surface);
 }
-.submission-facts dt,
-.submission-metrics span {
+.evaluation-info-card h2 {
+  margin: 0 0 var(--space-4);
+  font-size: 1rem;
+}
+.evaluation-info-card dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+.evaluation-info-card dl > div {
+  min-width: 0;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--line);
+}
+.evaluation-info-card dt {
   color: var(--muted);
   font-size: 0.75rem;
+  font-weight: 700;
 }
-.submission-facts dd,
-.submission-metrics strong {
+.evaluation-info-card dd {
   display: block;
   margin: var(--space-1) 0 0;
   overflow-wrap: anywhere;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 .submission-detail-actions {
@@ -926,9 +928,6 @@ pre {
 .submission-pending p {
   margin-bottom: 0;
   color: var(--muted);
-}
-.submission-metrics {
-  margin-top: var(--space-8);
 }
 .compiler-diagnostics {
   min-height: 0;
@@ -1603,9 +1602,11 @@ footer {
   .problem-meta {
     display: none;
   }
-  .submission-facts,
-  .submission-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .submission-evaluation-layout {
+    grid-template-columns: 1fr;
+  }
+  .evaluation-info-card {
+    width: 100%;
   }
   .testcase-row {
     grid-template-columns: 3.5rem 4.5rem minmax(0, 1fr) minmax(0, 1fr);
@@ -1736,13 +1737,6 @@ footer {
   }
   .submission-heading h1 {
     font-size: 2rem;
-  }
-  .submission-verdict {
-    align-self: flex-start;
-  }
-  .submission-facts,
-  .submission-metrics {
-    grid-template-columns: 1fr;
   }
   .generation-list button {
     align-items: flex-start;
@@ -1947,9 +1941,27 @@ footer {
 .evaluation-row { cursor: pointer; }
 .evaluation-row:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: -2px; }
 .problem-header-actions a.button { display: inline-flex; align-items: center; justify-content: center; }
-.testcase-progress { margin: 1.25rem 0; padding: 1rem; border: 1px solid var(--border, #d6d9df); background: var(--surface, #fff); }
-.testcase-progress-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(3.25rem, 1fr)); gap: .5rem; }
-.testcase-progress-cell { min-height: 3rem; display: flex; align-items: center; justify-content: center; gap: .25rem; border: 1px solid currentColor; border-radius: 4px; font-variant-numeric: tabular-nums; }
+.testcase-progress {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px solid var(--border, #d6d9df);
+  background: var(--surface, #fff);
+}
+.testcase-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.25rem, 1fr));
+  gap: 0.5rem;
+}
+.testcase-progress-cell {
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
 .evaluation-row .judge-status {
   min-width: 0;
 }
@@ -2155,8 +2167,6 @@ footer {
   width: auto;
 }
 .problem-aside {
-  position: sticky;
-  top: 1rem;
   padding: var(--panel-padding);
   border: 1px solid var(--line);
   border-top: 3px solid var(--accent);
@@ -2185,15 +2195,35 @@ footer {
   overflow-wrap: anywhere;
 }
 .sample-block {
-  position: relative;
+  margin-top: var(--space-5);
+}
+.sample-block .sample-heading {
+  align-items: center;
+}
+.sample-block .sample-heading h3,
+.sample-grid h4 {
+  margin: 0;
 }
 .sample-copy {
-  position: absolute;
-  top: 0.55rem;
-  right: 0.55rem;
-  z-index: 1;
   padding: 0.35rem 0.55rem;
   font-size: 0.74rem;
+}
+.sample-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+.sample-code {
+  margin: var(--space-2) 0 0;
+  border: 1px solid var(--line);
+  background: #f7f9fa;
+  color: var(--ink);
+  font-family:
+    ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
 }
 @media (max-width: 1000px) {
   .problem-filters {
@@ -2208,8 +2238,8 @@ footer {
   .problem-detail-v4 {
     grid-template-columns: 1fr;
   }
-  .problem-aside {
-    position: static;
+  .sample-grid {
+    grid-template-columns: 1fr;
   }
   .problem-list-v4 .problem-table article {
     grid-template-columns: 8rem minmax(0, 1fr) auto;
