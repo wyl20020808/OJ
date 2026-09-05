@@ -343,7 +343,7 @@ function Get-Secrets([switch]$Create) {
 function Start-Managed([string]$Name, [string]$FilePath, [string[]]$Arguments, [hashtable]$Environment, [int]$Port, [string]$HealthUrl, [string]$Signature, $state, [hashtable]$HealthHeaders = @{}) {
   if ($Name -eq 'api') { $Environment.JUDGE_ARTIFACT_READ_TOKEN = $script:Secrets.judgeArtifactReadToken }
   if ($Name -eq 'host-agent') {
-    $templates = @(ConvertFrom-Json -InputObject $Environment.JUDGE_HOST_AGENT_TEMPLATES_JSON)
+    $templates = @(ConvertFrom-Json -InputObject $Environment.JUDGE_HOST_AGENT_TEMPLATES_JSON | ForEach-Object { $_ })
     foreach ($template in $templates) {
       $template.env | Add-Member -NotePropertyName JUDGE_ARTIFACT_DATA_URL -NotePropertyValue $Config.ApiOrigin -Force
       $template.env | Add-Member -NotePropertyName JUDGE_ARTIFACT_READ_TOKEN -NotePropertyValue $script:Secrets.judgeArtifactReadToken -Force
