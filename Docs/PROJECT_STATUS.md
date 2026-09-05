@@ -1,5 +1,14 @@
 # OJPlatform Project Status
 
+Final Release Gate & Main Merge V1 (2026-09-06): PARTIAL. Candidate
+`codex/conservative-product-ux-final-integration-v1` is at `a80fe32`; canonical
+main started at `7b812a8` and drift was recorded. Focused candidate checks pass
+(`255/255`), typecheck/build/diff check pass. Formal Runtime Manager recovery
+restored PostgreSQL/Redis/MinIO but left API/Judge owned by another checkout,
+Web/Host Agent down, Worker stale, and `MIXED SOURCE = True`; browser and real
+Run/Submit remain NOT VERIFIED. Main merge was intentionally not performed.
+See `reports/OJPLATFORM_FINAL_RELEASE_GATE_MAIN_MERGE_V1_REPORT.md`.
+
 Online Code Editor Visibility & Integration V1: PARTIAL. Product `ProblemDetail`
 now mounts canonical Plugin `ojplatform.online-code-editor` at
 `problem.solve.editor` after statement/samples, with Run/Submit adapters and
