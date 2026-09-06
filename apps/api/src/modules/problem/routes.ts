@@ -3,6 +3,7 @@ import {
   ProblemConflictError,
   ProblemNotFoundError,
   ProblemValidationError,
+  ProblemDeleteConflictError,
   type AuthContext,
   type AuthorizationPolicy,
   type AuditHook,
@@ -256,6 +257,19 @@ export async function registerProblemModule(
           'RATE_LIMITED',
           'Request rate limited',
         );
+      throw e;
+    }
+  });
+  app.delete('/api/problems/:idOrSlug', async (request, reply) => {
+    if (!csrf(request)) return error(reply, request, 403, 'FORBIDDEN', 'CSRF validation failed');
+    try {
+      const key = (request.params as { idOrSlug: string }).idOrSlug;
+      return reply.send(await service.delete(key, request.body, await auth(request), request.id));
+    } catch (e) {
+      if (e instanceof ProblemNotFoundError) return error(reply, request, 404, 'NOT_FOUND', 'Problem not found');
+      if (e instanceof ProblemDeleteConflictError) return error(reply, request, 409, 'CONFLICT', e.message);
+      if (e instanceof Error && e.message === 'FORBIDDEN') return error(reply, request, 403, 'FORBIDDEN', 'Problem deletion is forbidden');
+      if (e instanceof Error && e.message === 'VALIDATION_ERROR') return error(reply, request, 400, 'VALIDATION_ERROR', 'Delete reason and expectedUpdatedAt required');
       throw e;
     }
   });

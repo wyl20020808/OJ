@@ -39,14 +39,19 @@ export type Problem = {
   testdataVersion: string | null;
   authorId: string | null;
   source?: string | null;
-  sourceType?: string;
+  sourceType?: 'CREATOR' | 'EXTERNAL' | 'IMPORT' | 'TEST_FIXTURE' | 'API_AUTOMATION';
   tags: string[];
   createdAt: string;
   updatedAt: string;
   currentRevisionId?: string;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  deleteReason?: string | null;
+  provenance?: Record<string, unknown> | null;
 };
 export type ProblemCapabilities = {
   canEdit: boolean;
+  canDelete?: boolean;
 };
 export type ProblemProjection = Problem & {
   capabilities: ProblemCapabilities;
@@ -66,7 +71,9 @@ export type ProblemCreateInput = Omit<
   | 'createdAt'
   | 'updatedAt'
   | 'source'
-  | 'sourceType'
+  | 'deletedAt'
+  | 'deletedBy'
+  | 'deleteReason'
 > & { id?: string };
 export type ProblemUpdateInput = Partial<
   Omit<
@@ -79,6 +86,9 @@ export type ProblemUpdateInput = Partial<
     | 'authorId'
     | 'source'
     | 'sourceType'
+    | 'deletedAt'
+    | 'deletedBy'
+    | 'deleteReason'
   >
 >;
 
@@ -127,5 +137,11 @@ export class ProblemConflictError extends Error {
   constructor(message = 'Problem identifier or slug already exists') {
     super(message);
     this.name = 'ProblemConflictError';
+  }
+}
+export class ProblemDeleteConflictError extends Error {
+  constructor(message = 'Problem changed or is already deleted') {
+    super(message);
+    this.name = 'ProblemDeleteConflictError';
   }
 }

@@ -398,7 +398,7 @@ export async function registerContestModule(
     try {
       const c = await get(contestId(r), await auth(r));
       const x = await o.pool.query(
-        'SELECT cp.problem_id,cp.ordinal,cp.label,cp.points_config,p.title FROM contest_problems cp JOIN problems p ON p.id=cp.problem_id WHERE cp.contest_id=$1 ORDER BY cp.ordinal',
+        'SELECT cp.problem_id,cp.ordinal,cp.label,cp.points_config,p.title FROM contest_problems cp JOIN problems p ON p.id=cp.problem_id WHERE cp.contest_id=$1 AND p.deleted_at IS NULL ORDER BY cp.ordinal',
         [c.id],
       );
       return {

@@ -568,3 +568,11 @@
     grid-column: 2;
   }
 }
+.danger-zone {
+  border-color: #b42318;
+}
+.danger-button {
+  color: #b42318;
+  border: 1px solid #b42318;
+  background: transparent;
+}

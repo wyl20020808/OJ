@@ -277,6 +277,7 @@ export function ProblemEditor({
   const [uploading, setUploading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [publishPending, setPublishPending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [statement, setStatement] = useState({
     title: '',
@@ -551,6 +552,21 @@ export function ProblemEditor({
       setNotice('测试点已删除。');
     } catch (e) {
       setNotice(errorText(e));
+    }
+  };
+  const deleteProblem = async () => {
+    if (!problem || !canEdit || deleting) return;
+    const label = `${problem.publicId || problem.slug} - ${problem.title}`;
+    if (!window.confirm(`Confirm delete ${label}? History remains; new submissions will be rejected.`)) return;
+    const reason = window.prompt('Short deletion reason', 'problem author request')?.trim();
+    if (!reason) return;
+    setDeleting(true);
+    try {
+      await api.deleteProblem(problemId, reason, problem.updatedAt);
+      window.location.assign('/problems');
+    } catch (e) {
+      setNotice(errorText(e));
+      setDeleting(false);
     }
   };
 
@@ -853,6 +869,16 @@ export function ProblemEditor({
             </fieldset>
           </div>
         </form>
+      )}
+      {canEdit && (
+        <section className="editor-panel danger-zone" aria-label="Danger zone">
+          <div className="panel-heading">
+            <div><h2>Danger zone</h2><p>Deleted problems leave historical submissions and evaluations intact.</p></div>
+            <button type="button" className="danger-button" onClick={() => void deleteProblem()} disabled={deleting}>
+              {deleting ? 'Deleting...' : 'Delete problem'}
+            </button>
+          </div>
+        </section>
       )}
       {tab === 'data' && (
         <div className="editor-panel data-panel">
