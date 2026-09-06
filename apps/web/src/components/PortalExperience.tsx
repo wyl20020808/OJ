@@ -1170,31 +1170,48 @@ export function ActivityHeatmap({
         request="PROFILE-ACTIVITY-BACKEND-INTEGRATION-REQUEST"
       />
     );
-  const metric = days[0]?.metric ?? 'SOLVED_PROBLEMS';
-  const max = Math.max(1, ...days.map((day) => day.count ?? 0));
-  const total = days.reduce((sum, day) => sum + (day.count ?? 0), 0);
+  const emptyDays = emptyActivityDays();
+  const byDate = new Map(days.map((day) => [day.date, day]));
+  const displayDays = emptyDays.map((day) => byDate.get(day.date) ?? day);
+  const count = (day: UserActivityDay) => day.submissionCount ?? day.count ?? 0;
+  const max = Math.max(1, ...displayDays.map(count));
+  const total = displayDays.reduce((sum, day) => sum + count(day), 0);
   return (
     <div className="heatmap-block">
       <div className="heatmap-summary" role="status">
-        最近一年共 {total}{' '}
-        {metric === 'SOLVED_PROBLEMS' ? '道题目完成记录' : '次评测记录'}，共{' '}
-        {days.filter((day) => (day.count ?? 0) > 0).length} 个活跃日。
+        最近一年共 {total} 次提交，共{' '}
+        {displayDays.filter((day) => count(day) > 0).length} 个活跃日。
       </div>
       <div className="heatmap-scroll">
         <div className="heatmap-grid" aria-label="做题情况热力图">
-          {days.map((day) => (
+          {displayDays.map((day) => (
             <span
               key={day.date}
               className="heatmap-day"
-              style={{ '--heat': (day.count ?? 0) / max } as CSSProperties}
-              title={`${day.date}：${day.count ?? 0} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
-              aria-label={`${day.date}，${day.count ?? 0} ${metric === 'SOLVED_PROBLEMS' ? '题' : '次提交'}`}
+              style={{ '--heat': count(day) / max } as CSSProperties}
+              title={`${day.date}：提交 ${count(day)} 次，AC ${day.acceptedCount ?? 0} 次`}
+              aria-label={`${day.date}，提交 ${count(day)} 次，AC ${day.acceptedCount ?? 0} 次`}
             />
           ))}
         </div>
       </div>
     </div>
   );
+}
+
+function emptyActivityDays() {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  return Array.from({ length: 365 }, (_, index) => {
+    const date = new Date(today);
+    date.setUTCDate(today.getUTCDate() - (364 - index));
+    return {
+      date: date.toISOString().slice(0, 10),
+      submissionCount: 0,
+      acceptedCount: 0,
+      metric: 'SUBMISSIONS' as const,
+    };
+  });
 }
 
 const profileReasonText: Record<string, string> = {
@@ -1302,7 +1319,10 @@ export function ProfileExperience({
   const [favoriteError, setFavoriteError] = useState('');
   const [favoriteProblemId, setFavoriteProblemId] = useState('');
   const [favoriteAction, setFavoriteAction] = useState<string>();
-  const [profileActivityDays, setProfileActivityDays] = useState<UserActivityDay[]>();
+  const [profileActivityDays, setProfileActivityDays] =
+    useState<UserActivityDay[]>();
+  const [profileActivityLoading, setProfileActivityLoading] = useState(false);
+  const [profileActivityError, setProfileActivityError] = useState('');
   const isPublic = Boolean(username);
   const tabs = ['概览', '做题记录', '收藏', '我的题目', '团队'];
   const profileUsername = username ?? user?.username;
@@ -1345,14 +1365,33 @@ export function ProfileExperience({
   }, [api, profileRefresh, profileUsername]);
 
   useEffect(() => {
-    if (!api || !profileUsername || typeof api.profileActivity !== 'function') return;
+    if (
+      !api ||
+      !profileUsername ||
+      !capabilities ||
+      typeof api.profileActivity !== 'function'
+    )
+      return;
+    if (!capabilities.activity.available) return;
     let active = true;
-    void api.profileActivity(profileUsername).then((result) => {
-      if (!active) return;
-      setProfileActivityDays(result.days.map((day) => ({ date: day.date, count: day.submissionCount, metric: 'SUBMISSIONS' })));
-    }).catch(() => active && setProfileActivityDays(undefined));
-    return () => { active = false; };
-  }, [api, profileRefresh, profileUsername]);
+    setProfileActivityLoading(true);
+    setProfileActivityError('');
+    void api
+      .profileActivity(profileUsername)
+      .then((result) => {
+        if (!active) return;
+        setProfileActivityDays(result.days);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setProfileActivityDays(undefined);
+        setProfileActivityError(profileErrorText(error, '做题热力图'));
+      })
+      .finally(() => active && setProfileActivityLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [api, capabilities, profileRefresh, profileUsername]);
 
   useEffect(() => {
     if (!api || !profileUsername || !profileApi?.profileOverview) return;
@@ -1481,7 +1520,21 @@ export function ProfileExperience({
   const showLegacyActivity = !api && Boolean(activity);
 
   const renderActivity = () => {
-    if (showLegacyActivity) return <ActivityHeatmap days={profileActivityDays ?? activity} />;
+    if (showLegacyActivity)
+      return <ActivityHeatmap days={profileActivityDays ?? activity} />;
+    if (api && profileActivityLoading)
+      return (
+        <p className="muted" role="status">
+          正在加载做题热力图…
+        </p>
+      );
+    if (api && profileActivityError)
+      return (
+        <ProfileLoadError
+          text={profileActivityError}
+          onRetry={() => setProfileRefresh((value) => value + 1)}
+        />
+      );
     if (api && !activityCapability)
       return <p className="muted">正在加载个人资料能力…</p>;
     if (activityCapability && !activityCapability.available)
@@ -1595,27 +1648,30 @@ export function ProfileExperience({
     if (!api) return renderActivity();
     if (solvedError)
       return <ProfileLoadError text={solvedError} onRetry={loadSolved} />;
-    if (!solvedLoaded)
-      return (
-        <p className="muted" role="status">
-          正在加载做题记录…
-        </p>
-      );
-    return solvedItems.length ? (
-      <ul className="profile-data-list">
-        {solvedItems.map((item) => (
-          <li key={item.problemId}>
-            <div>
-              <PortalLink to={`/problems/${item.slug}`} navigate={navigate}>
-                <strong>{item.title}</strong>
-              </PortalLink>
-              <small>最近通过于 {profileDate(item.lastAcceptedAt)}</small>
-            </div>
-          </li>
-        ))}
-      </ul>
-    ) : (
-      <p className="muted">暂无已解决题目。</p>
+    return (
+      <>
+        {renderActivity()}
+        {!solvedLoaded ? (
+          <p className="muted" role="status">
+            正在加载已解决题目…
+          </p>
+        ) : solvedItems.length ? (
+          <ul className="profile-data-list">
+            {solvedItems.map((item) => (
+              <li key={item.problemId}>
+                <div>
+                  <PortalLink to={`/problems/${item.slug}`} navigate={navigate}>
+                    <strong>{item.title}</strong>
+                  </PortalLink>
+                  <small>最近通过于 {profileDate(item.lastAcceptedAt)}</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">暂无已解决题目。</p>
+        )}
+      </>
     );
   };
 

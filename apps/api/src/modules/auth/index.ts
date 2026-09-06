@@ -45,6 +45,7 @@ export type AuthModuleOptions = {
   guestStore?: GuestAuthStore;
   guestRateLimiter?: GuestAuthRateLimiter;
   guestResumeTtlMs?: number;
+  canViewAnySubmission?: (userId: string) => Promise<boolean> | boolean;
 };
 type AuthBody = {
   username?: unknown;
@@ -127,8 +128,16 @@ export async function registerAuthModule(
     );
   const isGuest = async (userId: string) =>
     Boolean(options.guestStore && (await options.guestStore.isGuest(userId)));
-  const projectUser = async (user: User) =>
-    publicUser(user, await isGuest(user.id));
+  const projectUser = async (user: User) => {
+    const projected = publicUser(user, await isGuest(user.id));
+    if (!options.canViewAnySubmission) return projected;
+    return {
+      ...projected,
+      capabilities: {
+        canViewAnySubmission: await options.canViewAnySubmission(user.id),
+      },
+    };
+  };
   const resolveUser = async (userId: string) =>
     (await options.repository.findById(userId)) ??
     (options.guestStore ? await options.guestStore.findUser(userId) : null);
@@ -576,6 +585,7 @@ export async function registerAuthModule(
       : { production: options.production }),
     sessionTtlMs: ttl,
     guestLoginAvailable: guestAvailable,
+    projectUser,
     ...(options.verificationTtlMs === undefined
       ? {}
       : { verificationTtlMs: options.verificationTtlMs }),

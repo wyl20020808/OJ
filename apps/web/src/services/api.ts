@@ -21,7 +21,10 @@ export type AuthenticatedUser = {
   status: 'active';
   guest?: boolean;
   upgradeHint?: string;
-  capabilities?: { canViewJudgeAdmin?: boolean };
+  capabilities?: {
+    canViewJudgeAdmin?: boolean;
+    canViewAnySubmission?: boolean;
+  };
 };
 export type Account = AuthenticatedUser & {
   createdAt: string;
@@ -393,7 +396,7 @@ export type Submission = {
   judgeDataVersionNumber?: number;
   judgeDataManifestSha256?: string;
   languageId: string;
-  source: string;
+  source?: string;
   sourceBytes: number;
   status: SubmissionStatus;
   createdAt: string;

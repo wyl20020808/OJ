@@ -4,7 +4,12 @@ import type { AuthV2Repository } from './v2-types.js';
 export type AuthenticatedUser = Pick<
   User,
   'id' | 'username' | 'email' | 'displayName'
-> & { status: 'active'; guest?: boolean; upgradeHint?: string };
+> & {
+  status: 'active';
+  guest?: boolean;
+  upgradeHint?: string;
+  capabilities?: { canViewAnySubmission?: boolean };
+};
 export type AccountView = AuthenticatedUser & {
   createdAt: string;
   updatedAt: string;

@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SubmissionDetail } from '../apps/web/src/app/App.js';
 
@@ -38,13 +44,27 @@ const evaluation = {
     ],
   },
 };
-function makeApi() {
+function makeApi(
+  testcases: Array<{
+    ordinal: number;
+    verdict?: string;
+    status?: string;
+    timeMs: number;
+    memoryBytes: number;
+  }> = evaluation.detail.testcases,
+) {
   return {
     submission: vi.fn().mockResolvedValue(submission),
     submissionEvaluations: vi
       .fn()
       .mockResolvedValue({ items: [submission.evaluation] }),
-    submissionEvaluation: vi.fn().mockResolvedValue({ submission, evaluation }),
+    submissionEvaluation: vi.fn().mockResolvedValue({
+      submission,
+      evaluation: {
+        ...evaluation,
+        detail: { ...evaluation.detail, testcases },
+      },
+    }),
     problem: vi.fn().mockResolvedValue({
       id: 'sum',
       slug: 'P0001',
@@ -60,7 +80,10 @@ const user = {
   displayName: 'Ada',
   status: 'active' as const,
 };
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe('Evaluation Detail UX V5', () => {
   it('separates result and code tabs, copies source, and centralizes metadata', async () => {
@@ -105,4 +128,25 @@ describe('Evaluation Detail UX V5', () => {
     expect(card).toHaveTextContent('Time 128 ms');
     expect(card).toHaveTextContent('Memory 4.7 MB');
   });
+
+  it.each(['AC', 'WA', 'RE', 'TLE', 'MLE', 'RUNNING', 'WAITING'] as const)(
+    'renders %s testcase status with all card facts visible',
+    async (status) => {
+      const api = makeApi([
+        {
+          ordinal: 12,
+          status,
+          timeMs: 128,
+          memoryBytes: 4_900_000,
+        },
+      ]);
+      render(<SubmissionDetail api={api} id={submission.id} user={user} />);
+      const card = await screen.findByRole('listitem');
+      expect(card).toHaveClass(`verdict-${status}`);
+      expect(card).toHaveTextContent('#12');
+      expect(card).toHaveTextContent(status);
+      expect(card).toHaveTextContent('Time 128 ms');
+      expect(card).toHaveTextContent('Memory 4.7 MB');
+    },
+  );
 });

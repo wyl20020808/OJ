@@ -407,3 +407,12 @@ are recorded as historical baseline failures. Runtime was DOWN/CLEAN; no
 runtime repair or browser qualification was attempted. User dirty
 `scripts/dev-runtime.ps1` and untracked artifacts were preserved. See
 `Docs/reports/OJPLATFORM_FINAL_MAIN_ALIGNMENT_SAFE_MERGE_V1_REPORT.md`.
+
+Conservative Fix Wave Integration V1 (2026-09-06): PASS for automated code
+integration. Problem Edit Save, Admin Source Access, Profile Heatmap, and
+Evaluation Testcase Card were merged in order from the real `main` baseline
+without conflicts. Focused tests (16/16), regression subset (228/228), Web/API
+type/build checks, and diff check pass. Full lint has nine pre-existing errors
+that reproduce on pristine `main`. Real PostgreSQL save and browser/runtime
+smoke were not verified. See
+`Docs/reports/OJPLATFORM_CONSERVATIVE_FIX_WAVE_INTEGRATION_V1_REPORT.md`.

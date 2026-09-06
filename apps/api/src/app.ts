@@ -277,6 +277,23 @@ export async function buildApp(options: AppOptions = {}) {
       'ojplatform:guest-authoring:rate',
     );
     const auditHook = createMemoryAuditHook();
+    const hasSubmissionPermissions = async (
+      userId: string,
+      required: readonly string[],
+    ) => {
+      if (configuredOperatorUserIds.has(userId)) return true;
+      if (
+        required.every((permission) =>
+          options.judgeAdminPermissions?.get(userId)?.has(permission),
+        )
+      )
+        return true;
+      const result = await database.pool.query(
+        'SELECT COUNT(DISTINCT p.permission)::int AS matched FROM auth_user_roles ur JOIN auth_roles r ON r.name=ur.role_name CROSS JOIN LATERAL unnest(r.permissions) p(permission) WHERE ur.user_id=$1 AND p.permission = ANY($2::text[])',
+        [userId, required],
+      );
+      return Number(result.rows[0]?.matched ?? 0) === required.length;
+    };
     const problemAuditHook: ProblemAuditHook = {
       record: (event) =>
         auditHook.record({
@@ -293,6 +310,8 @@ export async function buildApp(options: AppOptions = {}) {
       rateLimiter: createRedisRateLimiter(cache),
       guestStore: createPostgresGuestAuthStore(database.pool),
       guestRateLimiter: new RedisGuestRateLimiter(cache),
+      canViewAnySubmission: (userId) =>
+        hasSubmissionPermissions(userId, ['submission:view:any']),
     });
     const judgeAdminUrl =
       process.env.JUDGE_SERVICE_ADMIN_URL ?? process.env.JUDGE_SERVICE_URL;
@@ -559,7 +578,7 @@ export async function buildApp(options: AppOptions = {}) {
     app.addHook('onReady', async () => submissionDispatcher.start());
     const submissionPolicy = createSubmissionAuthorizationPolicy({
       hasPermissions: (userId, permissions) =>
-        hasPermissions(userId, permissions),
+        hasSubmissionPermissions(userId, permissions),
     });
     const problemResolver: ProblemRevisionResolver = {
       getRevision: async (problemId, revisionId) => {
@@ -984,6 +1003,15 @@ export async function buildApp(options: AppOptions = {}) {
     const qualificationMode =
       process.env.OJPLATFORM_PHASE1E_QUALIFICATION === 'true';
     const auditHook = createMemoryAuditHook();
+    const hasSubmissionPermissions = async (
+      userId: string,
+      required: readonly string[],
+    ) => {
+      if (configuredOperatorUserIds.has(userId)) return true;
+      return required.every((permission) =>
+        options.judgeAdminPermissions?.get(userId)?.has(permission),
+      );
+    };
     const problemAuditHook: ProblemAuditHook = {
       record: (event) =>
         auditHook.record({
@@ -999,6 +1027,8 @@ export async function buildApp(options: AppOptions = {}) {
       auditHook,
       guestStore: createMemoryGuestAuthStore(memoryAuthRepository),
       guestRateLimiter: memoryGuestLimiter,
+      canViewAnySubmission: (userId) =>
+        hasSubmissionPermissions(userId, ['submission:view:any']),
     });
     const adminAdapter =
       options.judgeAdminAdapter ??
@@ -1182,7 +1212,7 @@ export async function buildApp(options: AppOptions = {}) {
     );
     const submissionPolicy = createSubmissionAuthorizationPolicy({
       hasPermissions: (userId, permissions) =>
-        hasPermissions(userId, permissions),
+        hasSubmissionPermissions(userId, permissions),
     });
     await registerSubmissionModule(app, {
       repository: submissionRepository,
