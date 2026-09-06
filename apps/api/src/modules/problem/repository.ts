@@ -319,53 +319,56 @@ export class PostgresProblemRepository implements ProblemRepository {
   async update(key: string, input: ProblemUpdateInput) {
     const row = await this.get(key);
     if (!row) throw new Error('NOT_FOUND');
+    const hasSamples = 'samples' in input || 'examples' in input;
     const fields = (Object.keys(input) as (keyof ProblemUpdateInput)[]).filter(
       (field) => field !== 'samples' && field !== 'tags',
     );
+    if (hasSamples && !fields.includes('examples')) fields.push('examples');
     if (!fields.length && !('tags' in input)) return row;
-    const columns: string[] = [];
-    const params: unknown[] = [];
-    for (const field of fields) {
-      const column = String(field).replace(
-        /[A-Z]/g,
-        (m) => `_${m.toLowerCase()}`,
-      );
-      const value = input[field];
-      params.push(
-        field === 'examples'
-          ? JSON.stringify(storedSamples(input.samples ?? row.samples))
-          : value,
-      );
-      columns.push(`${column} = $${params.length}`);
-    }
-    params.push(row.id);
-    const updated = fields.length
-      ? mapRow(
-          (
-            await this.pool.query(
-              `UPDATE problems SET ${columns.join(', ')}, updated_at=now() WHERE id=$${params.length} RETURNING *`,
-              params,
-            )
-          ).rows[0]!,
-        )
-      : { ...row, updatedAt: now() };
-    if ('tags' in input) {
-      await this.persistTags(this.pool, row.id, input.tags ?? []);
-      updated.tags = input.tags ?? [];
-    }
-    if (
-      updated.currentRevisionId &&
-      (input.status !== undefined || input.visibility !== undefined)
-    )
-      await this.pool.query(
-        'UPDATE problem_revisions SET status=COALESCE($1,status), visibility=COALESCE($2,visibility) WHERE id=$3',
-        [
-          input.status ?? null,
-          input.visibility ?? null,
-          updated.currentRevisionId,
-        ],
-      );
-    return updated;
+    return this.transaction(async (executor) => {
+      const columns: string[] = [];
+      const params: unknown[] = [];
+      for (const field of fields) {
+        const column = String(field).replace(
+          /[A-Z]/g,
+          (m) => `_${m.toLowerCase()}`,
+        );
+        const value =
+          field === 'examples'
+            ? JSON.stringify(storedSamples(input.samples ?? row.samples))
+            : input[field];
+        params.push(value);
+        columns.push(`${column} = $${params.length}`);
+      }
+      params.push(row.id);
+      const updated = fields.length
+        ? mapRow(
+            (
+              await executor.query(
+                `UPDATE problems SET ${columns.join(', ')}, updated_at=now() WHERE id=$${params.length} RETURNING *`,
+                params,
+              )
+            ).rows[0]!,
+          )
+        : { ...row, updatedAt: now() };
+      if ('tags' in input) {
+        await this.persistTags(executor, row.id, input.tags ?? []);
+        updated.tags = input.tags ?? [];
+      }
+      if (
+        updated.currentRevisionId &&
+        (input.status !== undefined || input.visibility !== undefined)
+      )
+        await executor.query(
+          'UPDATE problem_revisions SET status=COALESCE($1,status), visibility=COALESCE($2,visibility) WHERE id=$3',
+          [
+            input.status ?? null,
+            input.visibility ?? null,
+            updated.currentRevisionId,
+          ],
+        );
+      return updated;
+    });
   }
   async revisions(key: string) {
     const row = await this.get(key);
@@ -387,7 +390,7 @@ export class PostgresProblemRepository implements ProblemRepository {
     const revs = await this.revisions(key);
     const revisionId = randomUUID();
     await this.pool.query(
-      'INSERT INTO problem_revisions (id,problem_id,public_number,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)',
+      'INSERT INTO problem_revisions (id,problem_id,public_number,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)',
       [
         revisionId,
         row.id,
