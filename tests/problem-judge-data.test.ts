@@ -232,6 +232,51 @@ describe('problem judge data backend', () => {
     ).toBe(2000);
   });
 
+  it('rebinds a cloned draft to current Problem revision', async () => {
+    const repo = new InMemoryJudgeDataRepository();
+    const storage = new MemoryByteStorage();
+    let currentIdentity = identity;
+    const svc = new ProblemJudgeDataService(
+      repo,
+      storage,
+      async () => true,
+      async () => true,
+      async () => currentIdentity,
+    );
+    const [input, output] = await Promise.all([
+      storage.put(
+        Uint8Array.of(1),
+        'judge-data/problems/p-1/draft/i',
+        '1.in',
+        'p-1',
+      ),
+      storage.put(
+        Uint8Array.of(2),
+        'judge-data/problems/p-1/draft/o',
+        '1.out',
+        'p-1',
+      ),
+    ]);
+    await svc.addTestcase('p-1', { input, expectedOutput: output }, user);
+    await svc.validate('p-1', user);
+    const published = await svc.publish('p-1', user);
+    currentIdentity = {
+      ...identity,
+      problemRevisionId: 'revision-2',
+      testdataVersionId: 'testdata-v2',
+      testcaseSetId: 'set-2',
+    };
+    const draft = await svc.createDraftFromLatestVersion('p-1', user);
+    expect(draft).toMatchObject({
+      problemRevisionId: 'revision-2',
+      testdataVersionId: 'testdata-v2',
+      testcaseSetId: 'set-2',
+    });
+    expect(
+      (await repo.getVersion('p-1', published.versionId))?.problemRevisionId,
+    ).toBe('revision-1');
+  });
+
   it('rejects testcase data that the Judge manifest cannot execute', async () => {
     const { svc } = service();
     await expect(

@@ -4,6 +4,9 @@ export type SubmissionAuthorizationUser = {
   id: string;
   status: 'active' | 'disabled' | 'deactivated';
   roles?: readonly string[];
+  capabilities?: {
+    canViewAnySubmission?: boolean;
+  };
 };
 
 export type SubmissionProblemRevision = {
@@ -95,6 +98,7 @@ export function createSubmissionAuthorizationPolicy(
       if (!active(user) || !submission?.id || !submission.ownerUserId)
         return false;
       if (submission.ownerUserId === user!.id) return true;
+      if (user!.capabilities?.canViewAnySubmission === true) return true;
       if (hasPermission(user!, 'submission:view:any', roles)) return true;
       return hasPermissions
         ? hasPermissions(user!.id, ['submission:view:any'])
