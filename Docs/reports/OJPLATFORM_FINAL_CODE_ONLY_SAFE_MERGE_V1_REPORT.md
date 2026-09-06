@@ -12,6 +12,7 @@ Status: PASS for code-only integration and automated gates
 - Main drift: `NO`; merge-base equals root HEAD
 - Integration branch: `codex/final-code-only-safe-merge-v1`
 - Integration merge commit: `8288ea54eb09647c4738d3ce1f12157f3bea33ff`
+- Integration HEAD: `886fcdfe11115bfa8c1b762a27108ba20e99474b`
 
 ## Feature Presence
 
@@ -39,3 +40,10 @@ facts/layout.
 `scripts/dev-runtime.ps1` and all root untracked artifacts were preserved.
 No runtime was started or changed. No browser/UI acceptance was performed;
 manual UI acceptance remains pending user.
+
+## Main Merge
+
+- Main merge commit: `2d0bceda77cfd92ee869fdbbc81ab95b0ec1a495`
+- Final main HEAD: `2d0bceda77cfd92ee869fdbbc81ab95b0ec1a495`
+- Root branch after: `main`
+- Root aligned: `YES`
