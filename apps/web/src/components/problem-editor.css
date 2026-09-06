@@ -332,7 +332,7 @@
   display: grid;
   gap: 0.6rem;
 }
-.testcase-row {
+.problem-editor .testcase-row {
   display: grid;
   grid-template-columns: minmax(10rem, 1fr) minmax(0, 2.2fr) auto;
   gap: 1rem;
@@ -341,8 +341,11 @@
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--surface-raised);
+  position: relative;
+  min-height: 0;
+  overflow: visible;
 }
-.case-main {
+.problem-editor .case-main {
   display: grid;
   gap: 0.25rem;
   min-width: 0;
@@ -356,12 +359,12 @@
   color: var(--muted);
   font-size: 0.7rem;
 }
-.case-limits {
+.problem-editor .case-limits {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.55rem;
 }
-.case-limit {
+.problem-editor .case-limit {
   display: grid;
   gap: 0.25rem;
   min-width: 0;
@@ -385,7 +388,7 @@
   color: var(--muted);
   font-size: 0.74rem;
 }
-.danger-button {
+.problem-editor .danger-button {
   border-color: #e2b4ae;
   color: var(--danger);
   background: #fff;
@@ -494,7 +497,7 @@
   gap: 0.5rem;
 }
 @media (max-width: 800px) {
-  .testcase-row {
+  .problem-editor .testcase-row {
     grid-template-columns: 1fr auto;
   }
   .case-limits {
@@ -524,15 +527,15 @@
   .limits-grid {
     grid-template-columns: 1fr;
   }
-  .testcase-row {
+  .problem-editor .testcase-row {
     grid-template-columns: 1fr;
   }
-  .danger-button {
+  .problem-editor .danger-button {
     grid-column: auto;
     grid-row: auto;
     justify-self: start;
   }
-  .case-limits {
+  .problem-editor .case-limits {
     grid-template-columns: 1fr;
   }
   .version-history li {

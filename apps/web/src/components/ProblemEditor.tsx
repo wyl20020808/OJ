@@ -64,7 +64,7 @@ function pairPreview(files: File[]) {
     }));
 }
 
-type MarkdownFieldKey =
+export type MarkdownFieldKey =
   | 'background'
   | 'statement'
   | 'inputDescription'
@@ -197,7 +197,7 @@ function MarkdownToolbar({
   );
 }
 
-function MarkdownFieldSection({
+export function MarkdownFieldSection({
   fieldKey,
   label,
   value,
