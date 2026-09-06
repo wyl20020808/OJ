@@ -146,6 +146,7 @@ export class ProblemJudgeDataService {
         'No published Judge Data version',
         404,
       );
+    const identity = await this.resolveIdentity(problemId);
     const defaults = {
       timeLimitMs: latest.testcases[0]?.effectiveTimeLimitMs ?? 1000,
       memoryLimitBytes:
@@ -157,10 +158,12 @@ export class ProblemJudgeDataService {
     };
     const draft: JudgeDraft = {
       problemId,
-      problemRevisionId: latest.problemRevisionId,
-      testdataVersionId: latest.testdataVersionId,
-      testcaseSetId: latest.testcaseSetId,
-      executionProfileId: latest.executionProfileId,
+      // Preserve testcase bytes and limits, but bind the editable draft to
+      // current Problem revision. Published versions remain immutable.
+      problemRevisionId: identity.problemRevisionId,
+      testdataVersionId: identity.testdataVersionId,
+      testcaseSetId: identity.testcaseSetId,
+      executionProfileId: identity.executionProfileId,
       status: 'DRAFT',
       revision: 0,
       defaults,

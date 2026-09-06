@@ -1,5 +1,19 @@
 # OJPlatform Project Status
 
+Core Submission & Admin Source Repair V1 (2026-09-06): PARTIAL. Branch
+`codex/core-submission-admin-source-v1` starts at main
+`6719304fb436e1699e8b4a64dc8e82b97828be45`. Session-derived
+`canViewAnySubmission` now reaches Submission/Evaluation authorization and the
+real Product detail endpoint; owner/admin/other/anonymous endpoint matrix and
+real `buildApp` session-chain test pass. JudgeData draft cloning now rebinds to
+current Problem revision while preserving immutable published versions. Online
+Editor Submit delegates to formal Product Submission service and preserves
+business errors. Focused tests, typecheck, Web/API builds, targeted lint,
+architecture, formatting, and diff checks pass. Full repository tests/lint and
+one existing database composition assertion retain unrelated failures; browser
+acceptance remains pending user verification. See
+`reports/OJPLATFORM_CORE_SUBMISSION_ADMIN_SOURCE_REPAIR_V1_REPORT.md`.
+
 Browser-Verified Repair V2 Final Acceptance (2026-09-06): PARTIAL. Candidate
 `codex/browser-verified-repair-v2-integration` ran with `MIXED SOURCE = False`
 and healthy Web/API/PostgreSQL. Live Profile heatmap tooltip and existing

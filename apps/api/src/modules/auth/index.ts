@@ -170,6 +170,13 @@ export async function registerAuthModule(
       userId: user.id,
       sessionId: s.id,
       strength: (await isGuest(user.id)) ? 'guest' : 'password',
+      ...(options.canViewAnySubmission
+        ? {
+            capabilities: {
+              canViewAnySubmission: await options.canViewAnySubmission(user.id),
+            },
+          }
+        : {}),
     };
   };
   const audit = async (

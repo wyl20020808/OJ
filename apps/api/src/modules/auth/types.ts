@@ -21,6 +21,9 @@ export type AuthContext = {
   userId: string;
   sessionId: string;
   strength: 'password' | 'guest';
+  capabilities?: {
+    canViewAnySubmission?: boolean;
+  };
 };
 export type AuthRepository = {
   createUser(input: {
