@@ -160,7 +160,9 @@ export class InMemoryProblemRepository implements ProblemRepository {
     const rev = this.toRevision(updated, createdBy, list.length + 1);
     list.push(rev);
     this.history.set(row.id, list);
-    return { ...updated, currentRevisionId: rev.revisionId };
+    updated.currentRevisionId = rev.revisionId;
+    this.rows.set(row.id, updated);
+    return updated;
   }
   private toRevision(
     row: Problem,
@@ -414,6 +416,10 @@ export class PostgresProblemRepository implements ProblemRepository {
         next.authorId,
         createdBy,
       ],
+    );
+    await this.pool.query(
+      'UPDATE problems SET current_revision_id=$1, updated_at=now() WHERE id=$2',
+      [revisionId, row.id],
     );
     return {
       ...next,

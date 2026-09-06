@@ -1402,7 +1402,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
           {(
             [
               ['background', '背景', 4],
-              ['statement', '题面描述', 6],
+              ['statement', '题面', 6],
               ['inputDescription', '输入说明', 4],
               ['outputDescription', '输出说明', 4],
               ['constraints', '数据范围', 4],
@@ -1505,7 +1505,11 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
         )}
         <div className="actions">
           <button disabled={saving}>
-            {saving ? '保存中…' : id && form.status === 'published' ? '保存并更新题目' : '保存草稿'}
+            {saving
+              ? '保存中…'
+              : id && form.status === 'published'
+                ? '保存并更新题目'
+                : '保存草稿'}
           </button>
           {id && form.status === 'draft' && (
             <button
