@@ -1,5 +1,15 @@
 # OJPlatform Project Status
 
+Core Fix Wave 1 Conservative Integration V1 (2026-09-06): PASS for the
+conservative code/docs integration gate. Canonical main base
+`6719304fb436e1699e8b4a64dc8e82b97828be45` had no drift. Source A and B were
+normal-merged in order; the four named read-only audit documents were added in
+an isolated docs commit. Combined critical regression (`206/206`), typecheck,
+build, architecture, changed-file lint, and diff checks pass. One existing
+`app.ts` lint error is reproduced on latest main and is recorded as
+PRE-EXISTING BASELINE. Manual UI acceptance remains PENDING USER. See
+`reports/OJPLATFORM_CORE_FIX_WAVE1_CONSERVATIVE_INTEGRATION_V1_REPORT.md`.
+
 Core Submission & Admin Source Repair V1 (2026-09-06): PARTIAL. Branch
 `codex/core-submission-admin-source-v1` starts at main
 `6719304fb436e1699e8b4a64dc8e82b97828be45`. Session-derived
