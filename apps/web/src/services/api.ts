@@ -109,7 +109,7 @@ export type Problem = {
   status: 'draft' | 'published' | 'archived';
   testdataVersion: string | null;
   authorId: string | null;
-  capabilities?: { canEdit: boolean };
+  capabilities?: { canEdit: boolean; canDelete?: boolean };
   currentRevisionId?: string;
   difficulty?: ProblemDifficulty | null;
   tags?: string[];
@@ -120,6 +120,9 @@ export type Problem = {
   };
   createdAt: string;
   updatedAt: string;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  deleteReason?: string | null;
 };
 export type ProblemJudgeDefaults = {
   timeLimitMs: number;
@@ -1166,6 +1169,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         baseUrl,
         `/api/problems/${encodeURIComponent(idOrSlug)}`,
         { method: 'PATCH', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    deleteProblem: (idOrSlug: string, reason: string, expectedUpdatedAt: string) =>
+      request<Problem>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(idOrSlug)}`,
+        { method: 'DELETE', body: JSON.stringify({ reason, expectedUpdatedAt }) },
         fetcher,
       ),
     transitionProblem: (

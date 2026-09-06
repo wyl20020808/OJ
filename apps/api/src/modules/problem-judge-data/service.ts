@@ -67,6 +67,7 @@ export class ProblemJudgeDataService {
       action: 'manage' | 'publish',
       user: unknown,
     ) => Promise<void>,
+    private readonly problemIsDeleted?: (id: string) => Promise<boolean>,
   ) {}
   private assertDraftRef(problemId: string, ref: { key: string }) {
     const prefix = `judge-data/problems/${problemId}/draft/`;
@@ -96,6 +97,8 @@ export class ProblemJudgeDataService {
       }
     if (!(await this.problemExists(p)))
       throw new JudgeDataError('NOT_FOUND', 'Problem not found', 404);
+    if ((action === 'manage' || action === 'publish') && (await this.problemIsDeleted?.(p)))
+      throw new JudgeDataError('PROBLEM_DELETED', 'Problem is deleted', 409);
   }
   async draft(problemId: string, user: unknown) {
     await this.auth('view', user, problemId);

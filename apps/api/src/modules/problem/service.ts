@@ -68,6 +68,7 @@ export class ProblemService {
   async detail(key: string, context?: AuthContext): Promise<ProblemProjection> {
     const row = await this.repository.get(key);
     if (!row) throw new ProblemNotFoundError();
+    if (row.deletedAt) throw new ProblemNotFoundError();
     if (row.visibility === 'public' && row.status === 'published')
       return this.project(row, context);
     if (
@@ -79,6 +80,22 @@ export class ProblemService {
     )
       throw new ProblemNotFoundError();
     return this.project(row, context);
+  }
+  async delete(key: string, raw: unknown, context?: AuthContext, requestId?: string) {
+    if (!context) throw new Error('FORBIDDEN');
+    const current = await this.repository.get(key);
+    if (!current) throw new ProblemNotFoundError();
+    if (!(await this.policy.can('delete', 'problem', context, { id: current.id, type: 'problem' }))) {
+      await this.audit?.record({ actorUserId: context.userId, action: 'problem:delete', resource: 'problem', resourceId: current.id, outcome: 'denied', ...(requestId ? { requestId } : {}), occurredAt: new Date().toISOString() });
+      throw new Error('FORBIDDEN');
+    }
+    const body = raw as Record<string, unknown>;
+    const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+    const expectedUpdatedAt = typeof body?.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt : typeof body?.updatedAt === 'string' ? body.updatedAt : '';
+    if (!reason || reason.length > 500 || !expectedUpdatedAt) throw new Error('VALIDATION_ERROR');
+    const result = await this.repository.tombstone(key, { reason, expectedUpdatedAt }, context.userId);
+    await this.audit?.record({ actorUserId: context.userId, action: 'problem:delete', resource: 'problem', resourceId: current.id, outcome: 'success', ...(requestId ? { requestId } : {}), occurredAt: new Date().toISOString() });
+    return result;
   }
   async create(raw: unknown, context?: AuthContext) {
     if (!context || !(await this.policy.can('create', 'problem', context)))
@@ -105,6 +122,7 @@ export class ProblemService {
   async update(key: string, raw: unknown, context?: AuthContext) {
     const current = await this.repository.get(key);
     if (!current) throw new ProblemNotFoundError();
+    if (current.deletedAt) throw new ProblemNotFoundError();
     if (
       !context ||
       !(await this.policy.can('update', 'problem', context, {
@@ -146,6 +164,7 @@ export class ProblemService {
   ) {
     const current = await this.repository.get(key);
     if (!current) throw new ProblemNotFoundError();
+    if (current.deletedAt) throw new ProblemNotFoundError();
     if (
       !context ||
       !(await this.policy.can('transition', 'problem', context, {
@@ -187,6 +206,7 @@ export class ProblemService {
   async history(key: string, context?: AuthContext) {
     const row = await this.repository.get(key);
     if (!row) throw new ProblemNotFoundError();
+    if (row.deletedAt) throw new ProblemNotFoundError();
     if (
       !context ||
       !(await this.policy.can('read', 'problem', context, {
@@ -214,7 +234,7 @@ export class ProblemService {
     return {
       ...problem,
       ...(this.projectMetadata ? await this.projectMetadata(problem) : {}),
-      capabilities: { canEdit },
+      capabilities: { canEdit, canDelete: canEdit },
     };
   }
 }
