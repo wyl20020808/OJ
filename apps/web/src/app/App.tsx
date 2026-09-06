@@ -1587,7 +1587,9 @@ function ProblemDetail({
       <article className="problem-detail-v4">
         <div className="problem-main">
           <header className="problem-heading">
-            <span className="problem-id">{problem.publicId ?? '编号不可用'}</span>
+            <span className="problem-id">
+              {problem.publicId ?? '编号不可用'}
+            </span>
             <h1>{problem.title}</h1>
             <div className="problem-header-actions" aria-label="题目操作">
               <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
@@ -2102,6 +2104,7 @@ export function SubmissionDetail({
     (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null
   >(null);
   const [evaluationError, setEvaluationError] = useState(false);
+  const canViewSource = typeof submission?.source === 'string';
   const requestVersion = useRef(0);
   const load = () => {
     const version = ++requestVersion.current;
@@ -2287,6 +2290,8 @@ export function SubmissionDetail({
     : submission.problemId;
   const copySource = async () => {
     try {
+      if (typeof submission.source !== 'string')
+        throw new Error('source unavailable');
       if (!navigator.clipboard?.writeText)
         throw new Error('clipboard unavailable');
       await navigator.clipboard.writeText(submission.source);
@@ -2327,17 +2332,19 @@ export function SubmissionDetail({
             >
               评测结果
             </button>
-            <button
-              type="button"
-              role="tab"
-              className={activeTab === 'code' ? 'active' : ''}
-              aria-selected={activeTab === 'code'}
-              onClick={() => setActiveTab('code')}
-            >
-              代码
-            </button>
+            {canViewSource ? (
+              <button
+                type="button"
+                role="tab"
+                className={activeTab === 'code' ? 'active' : ''}
+                aria-selected={activeTab === 'code'}
+                onClick={() => setActiveTab('code')}
+              >
+                代码
+              </button>
+            ) : null}
           </nav>
-          {activeTab === 'code' ? (
+          {activeTab === 'code' && canViewSource ? (
             <Section title="源代码">
               <div className="source-heading">
                 <span>{submission.languageId}</span>

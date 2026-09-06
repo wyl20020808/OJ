@@ -12,7 +12,12 @@ import {
   tokenHash,
   verifyPasswordDiagnostic,
 } from './crypto.js';
-import { publicUser, type AuthContext, type AuthRepository } from './types.js';
+import {
+  publicUser,
+  type AuthContext,
+  type AuthRepository,
+  type AuthenticatedUser,
+} from './types.js';
 import {
   createDefaultMessageProvider,
   createDefaultSocialProvider,
@@ -33,6 +38,7 @@ import type {
   VerificationChannel,
   VerificationPurpose,
 } from './v2-types.js';
+import type { User } from '../user/model.js';
 
 type V2Options = {
   repository: AuthRepository;
@@ -50,6 +56,7 @@ type V2Options = {
   socialProviders?: Partial<Record<AuthProvider, AuthProviderAdapter>>;
   rateLimiter?: RateLimiter;
   guestLoginAvailable?: boolean;
+  projectUser?: (user: User) => Promise<AuthenticatedUser> | AuthenticatedUser;
   audit?: (
     context: AuthContext | undefined,
     action: string,
@@ -225,6 +232,8 @@ export async function registerAuthV2Routes(
     );
     return null;
   };
+  const project = (user: User) =>
+    options.projectUser ? options.projectUser(user) : publicUser(user);
 
   const audit = async (
     context: AuthContext | undefined,
@@ -469,7 +478,7 @@ export async function registerAuthV2Routes(
           request.id,
           continuation.id,
         );
-        return reply.send(publicUser(current));
+        return reply.send(await project(current));
       }
       const result = await createJitUser(storeValue, {
         username,
@@ -485,7 +494,7 @@ export async function registerAuthV2Routes(
         request.id,
         result.user.id,
       );
-      return reply.send(publicUser(result.user));
+      return reply.send(await project(result.user));
     } catch (cause) {
       if (isDuplicate(cause))
         return sendError(
@@ -904,7 +913,7 @@ export async function registerAuthV2Routes(
         request.id,
         result.user.id,
       );
-      return reply.status(201).send(publicUser(result.user));
+      return reply.status(201).send(await project(result.user));
     } catch (cause) {
       if (isDuplicate(cause))
         return sendError(
@@ -1012,7 +1021,7 @@ export async function registerAuthV2Routes(
       request.id,
       found.id,
     );
-    return reply.send(publicUser(found));
+    return reply.send(await project(found));
   };
   app.post('/api/auth/login/password', passwordLogin);
 
@@ -1072,7 +1081,7 @@ export async function registerAuthV2Routes(
         request.id,
         user.id,
       );
-      return reply.send(publicUser(user));
+      return reply.send(await project(user));
     }
     const continuationId = randomUUID();
     await storeValue.createContinuation({
@@ -1387,7 +1396,7 @@ export async function registerAuthV2Routes(
       );
       return reply.send({
         status: 'AUTHENTICATED',
-        user: publicUser(current),
+        user: await project(current),
         returnTo: transaction.returnTo,
       });
     }
@@ -1410,7 +1419,7 @@ export async function registerAuthV2Routes(
       );
       return reply.send({
         status: 'AUTHENTICATED',
-        user: publicUser(user),
+        user: await project(user),
         returnTo: transaction.returnTo,
       });
     }
