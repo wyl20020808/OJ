@@ -1,5 +1,13 @@
 # OJPlatform Project Status
 
+Browser-Verified Repair V2 Final Acceptance (2026-09-06): PARTIAL. Candidate
+`codex/browser-verified-repair-v2-integration` ran with `MIXED SOURCE = False`
+and healthy Web/API/PostgreSQL. Live Profile heatmap tooltip and existing
+Evaluation testcase cards were observed. Admin cross-owner source, Create UI,
+published Problem persistence, and JudgeData editor were not fully browser
+verified; main merge is not allowed. See
+`reports/OJPLATFORM_BROWSER_VERIFIED_REPAIR_V2_FINAL_ACCEPTANCE_REPORT.md`.
+
 Browser-Verified Product Repair Wave V2 (2026-09-06): PARTIAL. Integration
 candidate `codex/browser-verified-repair-v2-integration` contains Admin Source,
 shared Problem Authoring/published save, Heatmap tooltip, JudgeData editor flow,
