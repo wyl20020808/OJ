@@ -30,7 +30,11 @@ import { JudgeMachinesPage } from '../components/JudgeMachinesPage.js';
 import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';
 import { AuthExperience } from '../components/AuthExperience.js';
-import { ProblemEditor } from '../components/ProblemEditor.js';
+import {
+  MarkdownFieldSection,
+  ProblemEditor,
+  type MarkdownFieldKey,
+} from '../components/ProblemEditor.js';
 import { ProblemSolveEditorSlot } from '../plugins/ProblemSolveEditorSlot.js';
 import { HttpCodeRunAdapter } from '@ojplatform/online-code-editor/run/HttpCodeRunAdapter';
 import { HttpSubmissionAdapter } from '@ojplatform/online-code-editor/submission/SubmissionAdapter';
@@ -1198,11 +1202,13 @@ function formatMemoryLimit(bytes: number) {
 type Draft = {
   slug: string;
   title: string;
+  background: string;
   statement: string;
   inputDescription: string;
   outputDescription: string;
   constraints: string;
   notes: string;
+  tags: string[];
   examples: { input: string; output: string; note?: string }[];
   timeLimitMs: number;
   memoryLimitBytes: number;
@@ -1214,11 +1220,13 @@ type Draft = {
 const emptyDraft: Draft = {
   slug: '',
   title: '',
+  background: '',
   statement: '',
   inputDescription: '',
   outputDescription: '',
   constraints: '',
   notes: '',
+  tags: [],
   examples: [{ input: '', output: '', note: '' }],
   timeLimitMs: 1000,
   memoryLimitBytes: 256 * 1024 * 1024,
@@ -1241,7 +1249,9 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       .then((p) =>
         setForm({
           ...p,
+          background: p.background ?? '',
           notes: p.notes ?? '',
+          tags: p.tags ?? [],
           examples: p.examples.length ? p.examples : emptyDraft.examples,
         }),
       )
@@ -1281,12 +1291,14 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       const editable = {
         slug: form.slug,
         title: form.title,
+        background: form.background,
         statement: form.statement,
         inputDescription: form.inputDescription,
         outputDescription: form.outputDescription,
         examples: form.examples,
         constraints: form.constraints,
         notes: form.notes,
+        tags: form.tags,
         timeLimitMs: form.timeLimitMs,
         memoryLimitBytes: form.memoryLimitBytes,
         testdataVersion: form.testdataVersion ?? null,
@@ -1298,7 +1310,11 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
             visibility: form.visibility,
             status: form.status,
           });
-      setMessage('草稿已保存。');
+      setMessage(
+        id && form.status === 'published'
+          ? '题目已保存并更新正式版本。'
+          : '草稿已保存。',
+      );
       setDirty(false);
       if (!id) navigate(`/author/problems/${result.slug || result.id}/edit`);
     } catch (e) {
@@ -1382,50 +1398,41 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
             required
           />
         </div>
-        <label>
-          题面
-          <textarea
-            value={form.statement}
-            onChange={(e) => update('statement', e.target.value)}
-            rows={6}
-            required
-          />
-        </label>
-        <div className="form-grid">
-          <label>
-            输入说明
-            <textarea
-              value={form.inputDescription}
-              onChange={(e) => update('inputDescription', e.target.value)}
-              rows={4}
-              required
+        <div className="markdown-fields authoring-markdown-fields">
+          {(
+            [
+              ['background', '背景', 4],
+              ['statement', '题面', 6],
+              ['inputDescription', '输入说明', 4],
+              ['outputDescription', '输出说明', 4],
+              ['constraints', '数据范围', 4],
+              ['notes', '补充说明', 3],
+            ] as const
+          ).map(([fieldKey, label, rows]) => (
+            <MarkdownFieldSection
+              key={fieldKey}
+              fieldKey={fieldKey as MarkdownFieldKey}
+              label={label}
+              value={form[fieldKey]}
+              rows={rows}
+              disabled={false}
+              onChange={(value) => update(fieldKey, value)}
             />
-          </label>
-          <label>
-            输出说明
-            <textarea
-              value={form.outputDescription}
-              onChange={(e) => update('outputDescription', e.target.value)}
-              rows={4}
-              required
-            />
-          </label>
+          ))}
         </div>
         <label>
-          数据范围
-          <textarea
-            value={form.constraints}
-            onChange={(e) => update('constraints', e.target.value)}
-            rows={4}
-            required
-          />
-        </label>
-        <label>
-          补充说明
-          <textarea
-            value={form.notes}
-            onChange={(e) => update('notes', e.target.value)}
-            rows={3}
+          标签（逗号分隔）
+          <input
+            value={form.tags.join(', ')}
+            onChange={(e) =>
+              update(
+                'tags',
+                e.target.value
+                  .split(',')
+                  .map((tag) => tag.trim())
+                  .filter(Boolean),
+              )
+            }
           />
         </label>
         <div className="form-grid">
@@ -1497,7 +1504,13 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
           <FormMessage error={message || error?.message || ''} />
         )}
         <div className="actions">
-          <button disabled={saving}>{saving ? '保存中…' : '保存草稿'}</button>
+          <button disabled={saving}>
+            {saving
+              ? '保存中…'
+              : id && form.status === 'published'
+                ? '保存并更新题目'
+                : '保存草稿'}
+          </button>
           {id && form.status === 'draft' && (
             <button
               type="button"

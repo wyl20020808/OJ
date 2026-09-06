@@ -88,6 +88,12 @@ describe('Profile heatmap V2', () => {
     expect(await screen.findByText(/最近一年共 3 次提交/)).toBeInTheDocument();
     const day = screen.getByTitle('2026-09-05：提交 3 次，AC 2 次');
     expect(day).toHaveAttribute('aria-label', '2026-09-05，提交 3 次，AC 2 次');
+    fireEvent.mouseEnter(day);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('2026-09-05');
+    expect(screen.getByRole('tooltip')).toHaveTextContent('提交：3 次');
+    expect(screen.getByRole('tooltip')).toHaveTextContent('通过：2 次');
+    fireEvent.mouseLeave(day);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     expect(document.querySelectorAll('.heatmap-day')).toHaveLength(365);
     expect(document.querySelector('.heatmap-scroll')).toBeInTheDocument();
     expect(calls).toContain('/api/profiles/ada/activity');
@@ -102,5 +108,10 @@ describe('Profile heatmap V2', () => {
       await screen.findByText('最近一年共 0 次提交，共 0 个活跃日。'),
     ).toBeInTheDocument();
     expect(document.querySelectorAll('.heatmap-day')).toHaveLength(365);
+    const emptyDay = document.querySelector<HTMLElement>('.heatmap-day');
+    expect(emptyDay).not.toBeNull();
+    fireEvent.mouseEnter(emptyDay!);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('提交：0 次');
+    expect(screen.getByRole('tooltip')).toHaveTextContent('通过：0 次');
   });
 });

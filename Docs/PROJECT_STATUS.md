@@ -1,5 +1,21 @@
 # OJPlatform Project Status
 
+Browser-Verified Repair V2 Final Acceptance (2026-09-06): PARTIAL. Candidate
+`codex/browser-verified-repair-v2-integration` ran with `MIXED SOURCE = False`
+and healthy Web/API/PostgreSQL. Live Profile heatmap tooltip and existing
+Evaluation testcase cards were observed. Admin cross-owner source, Create UI,
+published Problem persistence, and JudgeData editor were not fully browser
+verified; main merge is not allowed. See
+`reports/OJPLATFORM_BROWSER_VERIFIED_REPAIR_V2_FINAL_ACCEPTANCE_REPORT.md`.
+
+Browser-Verified Product Repair Wave V2 (2026-09-06): PARTIAL. Integration
+candidate `codex/browser-verified-repair-v2-integration` contains Admin Source,
+shared Problem Authoring/published save, Heatmap tooltip, JudgeData editor flow,
+and Evaluation testcase card repairs. Focused tests (35), Web/API typechecks,
+Web/API builds, and diff check pass. Real Runtime/browser acceptance was not
+verified, so Issues 1/4/5/6 are not full PASS and candidate is not merged to
+main. See `reports/OJPLATFORM_BROWSER_VERIFIED_PRODUCT_REPAIR_WAVE_V2_REPORT.md`.
+
 Final Release Gate & Main Merge V1 (2026-09-06): PARTIAL. Candidate
 `codex/conservative-product-ux-final-integration-v1` is at `a80fe32`; canonical
 main started at `7b812a8` and drift was recorded. Focused candidate checks pass
@@ -416,3 +432,14 @@ type/build checks, and diff check pass. Full lint has nine pre-existing errors
 that reproduce on pristine `main`. Real PostgreSQL save and browser/runtime
 smoke were not verified. See
 `Docs/reports/OJPLATFORM_CONSERVATIVE_FIX_WAVE_INTEGRATION_V1_REPORT.md`.
+
+Final Code-Only Safe Merge V1 (2026-09-06): PASS for code-only integration.
+Candidate `codex/browser-verified-repair-v2-integration` was based on current
+`main` with no drift and merged normally into
+`codex/final-code-only-safe-merge-v1`. Six requested repairs are present.
+Focused feature tests `52/52`, critical regression tests `135/135`, Web/API
+typecheck/build, touched-path lint, and diff check pass. A published-save
+revision-pointer regression found during audit was fixed and covered; full
+lint and unrelated full-suite failures reproduce on pristine `main`. DB/API
+runtime was unavailable. Main merge and post-merge checks are recorded in
+`Docs/reports/OJPLATFORM_FINAL_CODE_ONLY_SAFE_MERGE_V1_REPORT.md`.
