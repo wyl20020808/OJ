@@ -438,8 +438,9 @@ Candidate `codex/browser-verified-repair-v2-integration` was based on current
 `main` with no drift and merged normally into
 `codex/final-code-only-safe-merge-v1`. Six requested repairs are present.
 Focused feature tests `52/52`, critical regression tests `135/135`, Web/API
-typecheck/build, touched-path lint, and diff check pass. A published-save
-revision-pointer regression found during audit was fixed and covered; full
-lint and unrelated full-suite failures reproduce on pristine `main`. DB/API
-runtime was unavailable. Main merge and post-merge checks are recorded in
+typecheck/build, changed-feature-path lint, and diff check pass. One existing
+`apps/api/src/app.ts` lint finding and unrelated full-suite failures reproduce
+on pristine `main`. A published-save revision-pointer regression found during
+audit was fixed and covered; DB/API runtime was unavailable. Main merge and
+post-merge checks are recorded in
 `Docs/reports/OJPLATFORM_FINAL_CODE_ONLY_SAFE_MERGE_V1_REPORT.md`.

@@ -28,8 +28,9 @@ facts/layout.
 - Critical regression subset: PASS, `135/135`
 - Web/API typecheck: PASS
 - Web/API build: PASS
-- Targeted lint on touched paths: PASS; full lint has nine errors also present
-  on pristine `main` and is recorded as `PRE-EXISTING BASELINE`
+- Targeted lint: PASS for changed feature paths; `apps/api/src/app.ts` retains
+  one pre-existing `no-explicit-any` finding. Full lint has nine errors also
+  present on pristine `main` and is recorded as `PRE-EXISTING BASELINE`
 - `git diff --check`: PASS
 - Full unit suite: baseline failures reproduced on pristine `main`; no new
   candidate-specific failure remains after authoring compatibility fix
