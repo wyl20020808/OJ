@@ -5,6 +5,7 @@ import type { IncomingMessage } from 'node:http';
 import { createHash } from 'node:crypto';
 import { Type } from '@sinclair/typebox';
 import type { TestcaseSetManifest } from '@ojplatform/judge-runtime';
+import type { JudgeJobCreateInput } from '@ojplatform/judge-runtime';
 import { createDatabase, checkDatabase } from '@ojplatform/database';
 import { createCache, checkCache } from '@ojplatform/cache';
 import { createRedisRateLimiter } from './modules/auth/rate-limiter.js';
@@ -1001,7 +1002,10 @@ export async function buildApp(options: AppOptions = {}) {
         (await auth.getAuthContext(request)) ?? undefined,
     });
     await registerTeamModule(app, {
-      service: new TeamService(new PostgresTeamRepository(database.pool)),
+      service: new TeamService(
+        new PostgresTeamRepository(database.pool),
+        auditHook,
+      ),
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
     });
@@ -1113,7 +1117,11 @@ export async function buildApp(options: AppOptions = {}) {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       submit: async (input) => {
-        const { clientRequestId, externalSubmissionId, ...job } = input as any;
+        const { clientRequestId, externalSubmissionId, ...job } =
+          input as unknown as JudgeJobCreateInput & {
+            clientRequestId: string;
+            externalSubmissionId: string;
+          };
         const result = await judgeRepository.enqueue({
           ...job,
           submissionId: externalSubmissionId,
@@ -1462,7 +1470,7 @@ export async function buildApp(options: AppOptions = {}) {
       },
     });
     await registerTeamModule(app, {
-      service: new TeamService(new InMemoryTeamRepository()),
+      service: new TeamService(new InMemoryTeamRepository(), auditHook),
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
     });

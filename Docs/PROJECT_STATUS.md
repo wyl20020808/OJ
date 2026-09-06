@@ -1,5 +1,16 @@
 # OJPlatform Project Status
 
+Team Core V1 Completion (2026-09-07): PARTIAL for runtime qualification. Team
+schema/migration, repository transactions and locks, API integration, audit
+hook wiring, dedicated member counts, cursor consistency, authorization, and
+concurrency regressions are implemented. Focused Team/API/Web tests (25), API
+and Web builds, typecheck, targeted lint, architecture, and diff checks pass.
+PostgreSQL migration apply is NOT VERIFIED because local `127.0.0.1:55432` is
+unavailable; manual UI acceptance remains PENDING USER. Ownership transfer,
+archive/delete, content collections, assignments, discussion, analytics, and
+tags remain deferred. See
+`reports/OJPLATFORM_TEAM_CORE_V1_REPORT.md`.
+
 Core Fix Wave 1 Conservative Integration V1 (2026-09-06): PASS for the
 conservative code/docs integration gate. Canonical main base
 `6719304fb436e1699e8b4a64dc8e82b97828be45` had no drift. Source A and B were

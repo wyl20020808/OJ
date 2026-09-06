@@ -106,10 +106,25 @@ export type TeamRepository = {
   getInviteCode(id: string): Promise<TeamInviteCode | null>;
   useInviteCode(id: string): Promise<TeamInviteCode | null>;
   revokeInviteCode(id: string): Promise<TeamInviteCode | null>;
+  approveJoinRequest(
+    id: string,
+    reviewer: string,
+  ): Promise<{ request: TeamJoinRequest; member: TeamMember } | null>;
+  acceptInvitation(id: string, userId: string): Promise<TeamMember | null>;
+  joinWithInviteCode(id: string, userId: string): Promise<TeamMember | null>;
 };
 
 const cursorEncode = (value: string) =>
   Buffer.from(value).toString('base64url');
+const cursorDecode = (value?: string) => {
+  if (!value) return undefined;
+  try {
+    const decoded = Buffer.from(value, 'base64url').toString('utf8');
+    return decoded && decoded.length <= 128 ? decoded : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 export class InMemoryTeamRepository implements TeamRepository {
   readonly teams = new Map<string, Team>();
@@ -149,8 +164,9 @@ export class InMemoryTeamRepository implements TeamRepository {
     const all = [...this.teams.values()]
       .filter((t) => t.visibility === 'PUBLIC')
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    const start = cursor
-      ? Math.max(0, all.findIndex((x) => x.id === cursor) + 1)
+    const decodedCursor = cursorDecode(cursor);
+    const start = decodedCursor
+      ? Math.max(0, all.findIndex((x) => x.id === decodedCursor) + 1)
       : 0;
     const items = all.slice(start, start + limit);
     return {
@@ -168,8 +184,9 @@ export class InMemoryTeamRepository implements TeamRepository {
         ),
       )
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    const start = cursor
-      ? Math.max(0, all.findIndex((x) => x.id === cursor) + 1)
+    const decodedCursor = cursorDecode(cursor);
+    const start = decodedCursor
+      ? Math.max(0, all.findIndex((x) => x.id === decodedCursor) + 1)
       : 0;
     const items = all.slice(start, start + limit).map((t) => ({
       ...t,
@@ -216,8 +233,9 @@ export class InMemoryTeamRepository implements TeamRepository {
     const all = [...this.membersMap.values()]
       .filter((m) => m.teamId === teamId)
       .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt));
-    const start = cursor
-      ? Math.max(0, all.findIndex((x) => x.userId === cursor) + 1)
+    const decodedCursor = cursorDecode(cursor);
+    const start = decodedCursor
+      ? Math.max(0, all.findIndex((x) => x.userId === decodedCursor) + 1)
       : 0;
     const items = all.slice(start, start + limit);
     return {
@@ -383,6 +401,43 @@ export class InMemoryTeamRepository implements TeamRepository {
     x.isActive = false;
     return x;
   }
+  async approveJoinRequest(id: string, reviewer: string) {
+    const request = await this.joinRequest(id);
+    if (!request || request.status !== 'PENDING') return null;
+    const member = await this.addMember(
+      request.teamId,
+      request.userId,
+      'MEMBER',
+    );
+    await this.updateJoinRequest(id, 'APPROVED', reviewer);
+    return { request: (await this.joinRequest(id))!, member };
+  }
+  async acceptInvitation(id: string, userId: string) {
+    const invite = await this.invitation(id);
+    if (
+      !invite ||
+      invite.invitedUserId !== userId ||
+      invite.status !== 'PENDING'
+    )
+      return null;
+    const member = await this.addMember(invite.teamId, userId, 'MEMBER');
+    await this.updateInvitation(id, 'ACCEPTED');
+    return member;
+  }
+  async joinWithInviteCode(id: string, userId: string) {
+    const code = await this.getInviteCode(id);
+    if (
+      !code ||
+      !code.isActive ||
+      (code.expiresAt !== null && new Date(code.expiresAt) <= new Date()) ||
+      (code.maxUses !== null && code.usedCount >= code.maxUses)
+    )
+      return null;
+    const existing = await this.member(code.teamId, userId);
+    if (existing) return existing;
+    if (!(await this.useInviteCode(id))) return null;
+    return this.addMember(code.teamId, userId, 'MEMBER');
+  }
 }
 
 type QueryResult = {
@@ -444,20 +499,24 @@ export class PostgresTeamRepository implements TeamRepository {
     return r.rows[0] ? mapTeam(r.rows[0]) : null;
   }
   async listPublic(limit: number, cursor?: string) {
+    const decodedCursor = cursorDecode(cursor);
     const r = await this.pool.query(
       "SELECT * FROM teams WHERE visibility='PUBLIC' AND ($1::uuid IS NULL OR id<$1) ORDER BY id DESC LIMIT $2",
-      [cursor ?? null, limit],
+      [decodedCursor ?? null, limit],
     );
     const items = r.rows.map(mapTeam);
     return {
       items,
-      ...(items.length === limit ? { nextCursor: items.at(-1)!.id } : {}),
+      ...(items.length === limit
+        ? { nextCursor: cursorEncode(items.at(-1)!.id) }
+        : {}),
     };
   }
   async listMine(userId: string, limit: number, cursor?: string) {
+    const decodedCursor = cursorDecode(cursor);
     const r = await this.pool.query(
       'SELECT t.*,m.role,(SELECT count(*) FROM team_members x WHERE x.team_id=t.id)::int member_count FROM teams t JOIN team_members m ON m.team_id=t.id AND m.user_id=$1 WHERE ($2::uuid IS NULL OR t.id<$2) ORDER BY t.id DESC LIMIT $3',
-      [userId, cursor ?? null, limit],
+      [userId, decodedCursor ?? null, limit],
     );
     const items = r.rows.map((x) => ({
       ...mapTeam(x),
@@ -466,7 +525,9 @@ export class PostgresTeamRepository implements TeamRepository {
     }));
     return {
       items,
-      ...(items.length === limit ? { nextCursor: items.at(-1)!.id } : {}),
+      ...(items.length === limit
+        ? { nextCursor: cursorEncode(items.at(-1)!.id) }
+        : {}),
     };
   }
   async updateTeam(
@@ -513,14 +574,17 @@ export class PostgresTeamRepository implements TeamRepository {
     return Number(r.rows[0]?.count ?? 0);
   }
   async members(teamId: string, limit: number, cursor?: string) {
+    const decodedCursor = cursorDecode(cursor);
     const r = await this.pool.query(
       'SELECT m.*,u.username,u.display_name FROM team_members m JOIN users u ON u.id=m.user_id WHERE m.team_id=$1 AND ($2::uuid IS NULL OR m.user_id>$2) ORDER BY m.user_id LIMIT $3',
-      [teamId, cursor ?? null, limit],
+      [teamId, decodedCursor ?? null, limit],
     );
     const items = r.rows.map(mapMember);
     return {
       items,
-      ...(items.length === limit ? { nextCursor: items.at(-1)!.userId } : {}),
+      ...(items.length === limit
+        ? { nextCursor: cursorEncode(items.at(-1)!.userId) }
+        : {}),
     };
   }
   async addMember(teamId: string, userId: string, role: TeamRole) {
@@ -666,6 +730,137 @@ export class PostgresTeamRepository implements TeamRepository {
       [id],
     );
     return r.rows[0] ? mapCode(r.rows[0]) : null;
+  }
+  async approveJoinRequest(id: string, reviewer: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const found = await client.query(
+        'SELECT * FROM team_join_requests WHERE id=$1 FOR UPDATE',
+        [id],
+      );
+      const requestRow = found.rows[0];
+      if (!requestRow) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      if (requestRow.status !== 'PENDING') {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      await client.query(
+        "INSERT INTO team_members(team_id,user_id,role) VALUES($1,$2,'MEMBER') ON CONFLICT(team_id,user_id) DO NOTHING",
+        [requestRow.team_id, requestRow.user_id],
+      );
+      await client.query(
+        "UPDATE team_join_requests SET status='APPROVED',reviewed_by=$2,reviewed_at=now() WHERE id=$1",
+        [id, reviewer],
+      );
+      const memberResult = await client.query(
+        'SELECT m.*,u.username,u.display_name FROM team_members m JOIN users u ON u.id=m.user_id WHERE m.team_id=$1 AND m.user_id=$2',
+        [requestRow.team_id, requestRow.user_id],
+      );
+      const requestResult = await client.query(
+        'SELECT * FROM team_join_requests WHERE id=$1',
+        [id],
+      );
+      await client.query('COMMIT');
+      return {
+        request: mapRequest(requestResult.rows[0]!),
+        member: mapMember(memberResult.rows[0]!),
+      };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+  async acceptInvitation(id: string, userId: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const found = await client.query(
+        'SELECT * FROM team_invitations WHERE id=$1 AND invited_user_id=$2 FOR UPDATE',
+        [id, userId],
+      );
+      const invite = found.rows[0];
+      if (
+        !invite ||
+        invite.status !== 'PENDING' ||
+        new Date(String(invite.expires_at)) <= new Date()
+      ) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      await client.query(
+        "INSERT INTO team_members(team_id,user_id,role) VALUES($1,$2,'MEMBER') ON CONFLICT(team_id,user_id) DO NOTHING",
+        [invite.team_id, userId],
+      );
+      await client.query(
+        "UPDATE team_invitations SET status='ACCEPTED' WHERE id=$1",
+        [id],
+      );
+      const memberResult = await client.query(
+        'SELECT m.*,u.username,u.display_name FROM team_members m JOIN users u ON u.id=m.user_id WHERE m.team_id=$1 AND m.user_id=$2',
+        [invite.team_id, userId],
+      );
+      await client.query('COMMIT');
+      return mapMember(memberResult.rows[0]!);
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+  async joinWithInviteCode(id: string, userId: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const codeResult = await client.query(
+        'SELECT * FROM team_invite_codes WHERE id=$1 FOR UPDATE',
+        [id],
+      );
+      const code = codeResult.rows[0];
+      if (
+        !code ||
+        !code.is_active ||
+        (code.expires_at && new Date(String(code.expires_at)) <= new Date()) ||
+        (code.max_uses !== null &&
+          Number(code.used_count) >= Number(code.max_uses))
+      ) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      const existing = await client.query(
+        'SELECT m.*,u.username,u.display_name FROM team_members m JOIN users u ON u.id=m.user_id WHERE m.team_id=$1 AND m.user_id=$2',
+        [code.team_id, userId],
+      );
+      if (existing.rows[0]) {
+        await client.query('ROLLBACK');
+        return mapMember(existing.rows[0]);
+      }
+      await client.query(
+        'UPDATE team_invite_codes SET used_count=used_count+1,is_active=CASE WHEN max_uses IS NOT NULL AND used_count+1>=max_uses THEN false ELSE is_active END WHERE id=$1',
+        [id],
+      );
+      await client.query(
+        "INSERT INTO team_members(team_id,user_id,role) VALUES($1,$2,'MEMBER')",
+        [code.team_id, userId],
+      );
+      const memberResult = await client.query(
+        'SELECT m.*,u.username,u.display_name FROM team_members m JOIN users u ON u.id=m.user_id WHERE m.team_id=$1 AND m.user_id=$2',
+        [code.team_id, userId],
+      );
+      await client.query('COMMIT');
+      return mapMember(memberResult.rows[0]!);
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   }
 }
 const mapTeam = (r: Record<string, unknown>): Team => ({

@@ -1,9 +1,32 @@
 import { createHash } from 'node:crypto';
 import type { TeamRepository } from './repository.js';
 import { roleRank, type TeamRole } from './model.js';
+import type { AuditHook } from '../authz/types.js';
+type AuditContext = { requestId?: string };
 
 export class TeamService {
-  constructor(public readonly repository: TeamRepository) {}
+  constructor(
+    public readonly repository: TeamRepository,
+    private readonly audit?: AuditHook,
+  ) {}
+  private async record(
+    actorUserId: string,
+    action: string,
+    teamId: string,
+    requestId?: string,
+    resourceId?: string,
+  ) {
+    await this.audit?.record({
+      actorUserId,
+      action,
+      resource: 'team',
+      resourceId: resourceId ?? teamId,
+      outcome: 'allowed',
+      requestId: requestId ?? 'internal',
+      occurredAt: new Date().toISOString(),
+      metadata: { teamId },
+    });
+  }
   private async team(slug: string) {
     const t = await this.repository.getTeam(slug);
     if (!t)
@@ -18,6 +41,12 @@ export class TeamService {
     const m = await this.repository.member(t.id, userId);
     return { team: t, member: m };
   }
+  async listPublic(limit: number, cursor?: string) {
+    return this.repository.listPublic(limit, cursor);
+  }
+  async listMine(userId: string, limit: number, cursor?: string) {
+    return this.repository.listMine(userId, limit, cursor);
+  }
   private require(
     m: Awaited<ReturnType<TeamService['actor']>>['member'],
     min: TeamRole,
@@ -29,7 +58,10 @@ export class TeamService {
       });
     return m;
   }
-  async create(input: Parameters<TeamRepository['createTeam']>[0]) {
+  async create(
+    input: Parameters<TeamRepository['createTeam']>[0],
+    context?: AuditContext,
+  ) {
     const slug = input.slug.trim().toLowerCase();
     if (!/^[a-z0-9][a-z0-9-]{2,48}$/.test(slug))
       throw Object.assign(new Error('INVALID_TEAM_SLUG'), {
@@ -44,7 +76,14 @@ export class TeamService {
         code: 'INVALID_TEAM_POLICY',
         status: 400,
       });
-    return this.repository.createTeam({ ...input, slug });
+    const team = await this.repository.createTeam({ ...input, slug });
+    await this.record(
+      input.ownerId,
+      'TEAM_CREATED',
+      team.id,
+      context?.requestId,
+    );
+    return team;
   }
   async detail(slug: string, userId?: string) {
     const team = await this.team(slug);
@@ -66,6 +105,7 @@ export class TeamService {
     slug: string,
     userId: string,
     patch: Parameters<TeamRepository['updateTeam']>[1],
+    context?: AuditContext,
   ) {
     const { member } = await this.actor(slug, userId);
     this.require(member, 'OWNER');
@@ -79,20 +119,35 @@ export class TeamService {
     const clean = Object.fromEntries(
       Object.entries(patch).filter(([key]) => allowed.includes(key)),
     );
-    return this.repository.updateTeam(
+    const result = await this.repository.updateTeam(
       slug,
       clean as Parameters<TeamRepository['updateTeam']>[1],
     );
+    await this.record(
+      userId,
+      'TEAM_SETTINGS_UPDATED',
+      result?.id ?? slug,
+      context?.requestId,
+    );
+    return result;
   }
-  async join(slug: string, userId: string) {
+  async join(slug: string, userId: string, context?: AuditContext) {
     const team = await this.team(slug);
     const existing = await this.repository.member(team.id, userId);
     if (existing) return { status: 'ALREADY_MEMBER', member: existing };
-    if (team.joinPolicy === 'OPEN')
-      return {
-        status: 'JOINED',
+    if (team.joinPolicy === 'OPEN') {
+      const result = {
+        status: 'JOINED' as const,
         member: await this.repository.addMember(team.id, userId, 'MEMBER'),
       };
+      await this.record(
+        userId,
+        'TEAM_MEMBER_JOINED',
+        team.id,
+        context?.requestId,
+      );
+      return result;
+    }
     if (team.joinPolicy === 'REQUEST') {
       const pending = await this.repository.pendingJoinRequest(team.id, userId);
       if (pending)
@@ -100,7 +155,7 @@ export class TeamService {
           code: 'JOIN_REQUEST_PENDING',
           status: 409,
         });
-      return {
+      const result = {
         status: 'REQUESTED',
         request: await this.repository.createJoinRequest({
           teamId: team.id,
@@ -108,13 +163,14 @@ export class TeamService {
           message: null,
         }),
       };
+      return result;
     }
     throw Object.assign(new Error('INVITE_ONLY'), {
       code: 'INVITE_ONLY',
       status: 403,
     });
   }
-  async leave(slug: string, userId: string) {
+  async leave(slug: string, userId: string, context?: AuditContext) {
     const { team, member } = await this.actor(slug, userId);
     if (!member)
       throw Object.assign(new Error('NOT_MEMBER'), {
@@ -130,6 +186,13 @@ export class TeamService {
         status: 409,
       });
     await this.repository.removeMember(team.id, userId);
+    await this.record(
+      userId,
+      'TEAM_MEMBER_LEFT',
+      team.id,
+      context?.requestId,
+      userId,
+    );
     return { status: 'LEFT' };
   }
   async members(slug: string, userId: string, limit: number, cursor?: string) {
@@ -142,6 +205,7 @@ export class TeamService {
     actorId: string,
     targetId: string,
     role: TeamRole,
+    context?: AuditContext,
   ) {
     const { team, member } = await this.actor(slug, actorId);
     this.require(member, 'OWNER');
@@ -170,9 +234,22 @@ export class TeamService {
         code: 'OWNERSHIP_TRANSFER_REQUIRED',
         status: 409,
       });
-    return this.repository.setRole(team.id, targetId, role);
+    const result = await this.repository.setRole(team.id, targetId, role);
+    await this.record(
+      actorId,
+      'TEAM_ROLE_CHANGED',
+      team.id,
+      context?.requestId,
+      targetId,
+    );
+    return result;
   }
-  async remove(slug: string, actorId: string, targetId: string) {
+  async remove(
+    slug: string,
+    actorId: string,
+    targetId: string,
+    context?: AuditContext,
+  ) {
     const { team, member } = await this.actor(slug, actorId);
     const actorMember = this.require(member, 'MANAGER');
     const target = await this.repository.member(team.id, targetId);
@@ -187,12 +264,20 @@ export class TeamService {
         status: 403,
       });
     await this.repository.removeMember(team.id, targetId);
+    await this.record(
+      actorId,
+      'TEAM_MEMBER_REMOVED',
+      team.id,
+      context?.requestId,
+      targetId,
+    );
     return { status: 'REMOVED' };
   }
   async invite(
     slug: string,
     actorId: string,
     input: { invitedUserId: string; expiresAt?: string },
+    context?: AuditContext,
   ) {
     const { team, member } = await this.actor(slug, actorId);
     this.require(member, 'MANAGER');
@@ -206,15 +291,23 @@ export class TeamService {
         code: 'INVITATION_PENDING',
         status: 409,
       });
-    return this.repository.createInvitation({
+    const result = await this.repository.createInvitation({
       teamId: team.id,
       invitedUserId: input.invitedUserId,
       invitedBy: actorId,
       expiresAt:
         input.expiresAt ?? new Date(Date.now() + 7 * 86400000).toISOString(),
     });
+    await this.record(
+      actorId,
+      'TEAM_INVITATION_CREATED',
+      team.id,
+      context?.requestId,
+      result.id,
+    );
+    return result;
   }
-  async acceptInvitation(id: string, userId: string) {
+  async acceptInvitation(id: string, userId: string, context?: AuditContext) {
     const invite = await this.repository.invitation(id);
     if (!invite || invite.invitedUserId !== userId)
       throw Object.assign(new Error('INVITATION_NOT_FOUND'), {
@@ -226,20 +319,39 @@ export class TeamService {
         code: 'INVITATION_EXPIRED',
         status: 409,
       });
-    const m = await this.repository.addMember(invite.teamId, userId, 'MEMBER');
-    await this.repository.updateInvitation(id, 'ACCEPTED');
+    const m = await this.repository.acceptInvitation(id, userId);
+    if (!m)
+      throw Object.assign(new Error('INVITATION_CONFLICT'), {
+        code: 'INVITATION_CONFLICT',
+        status: 409,
+      });
+    await this.record(
+      userId,
+      'TEAM_INVITATION_ACCEPTED',
+      invite.teamId,
+      context?.requestId,
+      id,
+    );
     return m;
   }
-  async declineInvitation(id: string, userId: string) {
+  async declineInvitation(id: string, userId: string, context?: AuditContext) {
     const invite = await this.repository.invitation(id);
     if (!invite || invite.invitedUserId !== userId)
       throw Object.assign(new Error('INVITATION_NOT_FOUND'), {
         code: 'INVITATION_NOT_FOUND',
         status: 404,
       });
-    return this.repository.updateInvitation(id, 'DECLINED');
+    const result = await this.repository.updateInvitation(id, 'DECLINED');
+    await this.record(
+      userId,
+      'TEAM_INVITATION_DECLINED',
+      invite.teamId,
+      context?.requestId,
+      id,
+    );
+    return result;
   }
-  async revokeInvitation(id: string, actorId: string) {
+  async revokeInvitation(id: string, actorId: string, context?: AuditContext) {
     const invite = await this.repository.invitation(id);
     if (!invite)
       throw Object.assign(new Error('INVITATION_NOT_FOUND'), {
@@ -252,15 +364,29 @@ export class TeamService {
         code: 'TEAM_NOT_FOUND',
         status: 404,
       });
+    if (invite.status !== 'PENDING')
+      throw Object.assign(new Error('INVITATION_CONFLICT'), {
+        code: 'INVITATION_CONFLICT',
+        status: 409,
+      });
     const { member } = await this.actor(team.slug, actorId);
     this.require(member, 'MANAGER');
-    return this.repository.updateInvitation(id, 'REVOKED');
+    const result = await this.repository.updateInvitation(id, 'REVOKED');
+    await this.record(
+      actorId,
+      'TEAM_INVITATION_REVOKED',
+      team.id,
+      context?.requestId,
+      id,
+    );
+    return result;
   }
   async reviewRequest(
     slug: string,
     actorId: string,
     id: string,
     approve: boolean,
+    context?: AuditContext,
   ) {
     const { team, member } = await this.actor(slug, actorId);
     this.require(member, 'MANAGER');
@@ -271,16 +397,40 @@ export class TeamService {
         status: 404,
       });
     if (request.status !== 'PENDING') return request;
-    const updated = await this.repository.updateJoinRequest(
+    if (approve) {
+      const result = await this.repository.approveJoinRequest(id, actorId);
+      if (!result) {
+        const current = await this.repository.joinRequest(id);
+        if (current) return current;
+        throw Object.assign(new Error('JOIN_REQUEST_NOT_FOUND'), {
+          code: 'JOIN_REQUEST_NOT_FOUND',
+          status: 404,
+        });
+      }
+      await this.record(
+        actorId,
+        'TEAM_JOIN_REQUEST_APPROVED',
+        team.id,
+        context?.requestId,
+        id,
+      );
+      return result.request;
+    }
+    const result = await this.repository.updateJoinRequest(
       id,
-      approve ? 'APPROVED' : 'REJECTED',
+      'REJECTED',
       actorId,
     );
-    if (approve)
-      await this.repository.addMember(team.id, request.userId, 'MEMBER');
-    return updated;
+    await this.record(
+      actorId,
+      'TEAM_JOIN_REQUEST_REJECTED',
+      team.id,
+      context?.requestId,
+      id,
+    );
+    return result;
   }
-  async cancelJoinRequest(id: string, userId: string) {
+  async cancelJoinRequest(id: string, userId: string, context?: AuditContext) {
     const request = await this.repository.joinRequest(id);
     if (!request || request.userId !== userId)
       throw Object.assign(new Error('JOIN_REQUEST_NOT_FOUND'), {
@@ -288,22 +438,43 @@ export class TeamService {
         status: 404,
       });
     if (request.status !== 'PENDING') return request;
-    return this.repository.updateJoinRequest(id, 'CANCELLED', userId);
+    const result = await this.repository.updateJoinRequest(
+      id,
+      'CANCELLED',
+      userId,
+    );
+    await this.record(
+      userId,
+      'TEAM_JOIN_REQUEST_CANCELLED',
+      request.teamId,
+      context?.requestId,
+      id,
+    );
+    return result;
   }
   async inviteCode(
     slug: string,
     actorId: string,
     input: { expiresAt: string | null; maxUses: number | null },
+    context?: AuditContext,
   ) {
     const { team, member } = await this.actor(slug, actorId);
     this.require(member, 'MANAGER');
-    return this.repository.createInviteCode({
+    const result = await this.repository.createInviteCode({
       teamId: team.id,
       createdBy: actorId,
       ...input,
     });
+    await this.record(
+      actorId,
+      'TEAM_INVITE_CODE_CREATED',
+      team.id,
+      context?.requestId,
+      result.record.id,
+    );
+    return result;
   }
-  async joinCode(code: string, userId: string) {
+  async joinCode(code: string, userId: string, context?: AuditContext) {
     const record = await this.repository.findInviteCode(
       createHash('sha256').update(code).digest('hex'),
     );
@@ -317,20 +488,26 @@ export class TeamService {
         code: 'ALREADY_MEMBER',
         status: 409,
       });
-    const claimed = await this.repository.useInviteCode(record.id);
-    if (!claimed)
+    const member = await this.repository.joinWithInviteCode(record.id, userId);
+    if (!member)
       throw Object.assign(new Error('INVALID_INVITE_CODE'), {
         code: 'INVALID_INVITE_CODE',
         status: 409,
       });
-    const member = await this.repository.addMember(
-      record.teamId,
+    await this.record(
       userId,
-      'MEMBER',
+      'TEAM_MEMBER_JOINED',
+      record.teamId,
+      context?.requestId,
     );
     return member;
   }
-  async revokeInviteCode(slug: string, actorId: string, id: string) {
+  async revokeInviteCode(
+    slug: string,
+    actorId: string,
+    id: string,
+    context?: AuditContext,
+  ) {
     const { team, member } = await this.actor(slug, actorId);
     this.require(member, 'MANAGER');
     const code = await this.repository.getInviteCode(id);
@@ -339,6 +516,14 @@ export class TeamService {
         code: 'INVITE_CODE_NOT_FOUND',
         status: 404,
       });
-    return this.repository.revokeInviteCode(id);
+    const result = await this.repository.revokeInviteCode(id);
+    await this.record(
+      actorId,
+      'TEAM_INVITE_CODE_REVOKED',
+      team.id,
+      context?.requestId,
+      id,
+    );
+    return result;
   }
 }
