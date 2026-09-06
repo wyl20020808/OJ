@@ -14,6 +14,16 @@ one existing database composition assertion retain unrelated failures; browser
 acceptance remains pending user verification. See
 `reports/OJPLATFORM_CORE_SUBMISSION_ADMIN_SOURCE_REPAIR_V1_REPORT.md`.
 
+Problem Authoring Layout Repair V1 (2026-09-06): PASS for implemented and
+focused-tested scope. Create/Edit authoring routes now use an authoring-only
+`80vw` desktop workspace capped at `1560px` with `96vw` narrow-screen sizing.
+JudgeData testcase cards use normal document flow with independent Input and
+Expected Output controls, responsive desktop/two-column and narrow/one-column
+layouts, and bounded textarea overflow. Focused ProblemEditor tests (22/22),
+Web typecheck, Web build, targeted ESLint, and diff check pass. Manual browser
+acceptance remains PENDING USER by task policy; no main merge was performed.
+See `reports/OJPLATFORM_PROBLEM_AUTHORING_LAYOUT_REPAIR_V1_REPORT.md`.
+
 Browser-Verified Repair V2 Final Acceptance (2026-09-06): PARTIAL. Candidate
 `codex/browser-verified-repair-v2-integration` ran with `MIXED SOURCE = False`
 and healthy Web/API/PostgreSQL. Live Profile heatmap tooltip and existing

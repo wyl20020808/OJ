@@ -1370,7 +1370,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       />
     );
   return (
-    <section className="editor">
+    <section className="editor authoring-workspace">
       <Link to="/problems">← 返回题库</Link>
       <div className="page-heading">
         <div>
@@ -3121,7 +3121,15 @@ export function App() {
         </nav>
       </header>
       <Breadcrumbs current={current} />
-      <main className="shell">{page}</main>
+      <main
+        className={
+          current.name === 'author-new' || current.name === 'author-edit'
+            ? 'shell shell-authoring'
+            : 'shell'
+        }
+      >
+        {page}
+      </main>
       <footer>OJPlatform · 练习、学习、持续进步。</footer>
     </div>
   );

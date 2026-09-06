@@ -332,30 +332,65 @@
   display: grid;
   gap: 0.6rem;
 }
-.problem-editor .testcase-row {
+.problem-editor .testcase-card {
   display: grid;
-  grid-template-columns: minmax(10rem, 1fr) minmax(0, 2.2fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: none;
+  grid-template-areas: none;
+  aspect-ratio: auto;
   gap: 1rem;
-  align-items: start;
   padding: 0.85rem;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--surface-raised);
-  position: relative;
+  min-width: 0;
   min-height: 0;
-  overflow: visible;
 }
-.problem-editor .case-main {
+.testcase-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+.testcase-card-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.testcase-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  min-width: 0;
+}
+.testcase-content-field {
+  min-width: 0;
+}
+.testcase-content-field textarea {
+  min-height: 7rem;
+  max-height: 16rem;
+  resize: vertical;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+}
+.testcase-content-field textarea[readonly] {
+  background: var(--soft);
+  color: var(--muted);
+  cursor: default;
+}
+.case-metadata {
   display: grid;
   gap: 0.25rem;
   min-width: 0;
 }
-.case-main span {
+.case-file-pair {
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.78rem;
 }
-.case-main small {
+.case-metadata small {
   color: var(--muted);
   font-size: 0.7rem;
 }
@@ -497,15 +532,11 @@
   gap: 0.5rem;
 }
 @media (max-width: 800px) {
-  .problem-editor .testcase-row {
-    grid-template-columns: 1fr auto;
+  .testcase-content-grid {
+    grid-template-columns: 1fr;
   }
-  .case-limits {
-    grid-column: 1 / -1;
-  }
-  .danger-button {
-    grid-column: 2;
-    grid-row: 1;
+  .problem-editor .case-limits {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 560px) {
@@ -526,14 +557,6 @@
   .statement-grid,
   .limits-grid {
     grid-template-columns: 1fr;
-  }
-  .problem-editor .testcase-row {
-    grid-template-columns: 1fr;
-  }
-  .problem-editor .danger-button {
-    grid-column: auto;
-    grid-row: auto;
-    justify-self: start;
   }
   .problem-editor .case-limits {
     grid-template-columns: 1fr;
