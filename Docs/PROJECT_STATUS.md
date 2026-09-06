@@ -339,7 +339,16 @@ scope for the next approved Goal. Product E2E multi-language support, Contest,
 production HA, and production deployment are not qualified; Phase 2D is not
 started.
 
-Last Updated: 2026-09-05
+Last Updated: 2026-09-06
+
+Team Core V1 (2026-09-06): PARTIAL. Branch `codex/team-core-v1` starts from
+`f9da2e1ab2c48842f07d457d55f614efa8fb70b6`. Team schema, repository/service,
+backend authorization, open/request/invite-only membership, invitations, join
+requests, hashed invite codes, basic Web routes, and stable Team contract are
+implemented. Team service tests (3/3), repository-wide TypeScript typecheck,
+and Web build pass. PostgreSQL migration/API integration, full lint,
+architecture, runtime, and manual UI acceptance are not verified. See
+`Docs/reports/OJPLATFORM_TEAM_CORE_V1_REPORT.md`.
 
 Evaluation Detail UX V5 (2026-09-06): PASS for implemented/static Web scope.
 Result/code tabs, source copy feedback, right-side evaluation metadata,

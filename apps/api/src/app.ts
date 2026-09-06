@@ -86,6 +86,12 @@ import {
   PostgresEditorDraftRepository,
   registerEditorDraftModule,
 } from './modules/editor-draft/index.js';
+import {
+  InMemoryTeamRepository,
+  PostgresTeamRepository,
+  TeamService,
+  registerTeamModule,
+} from './modules/team/index.js';
 
 const operatorUserIds = () =>
   new Set(
@@ -230,14 +236,31 @@ export async function buildApp(options: AppOptions = {}) {
     const statusCode =
       typeof error === 'object' &&
       error !== null &&
-      'statusCode' in error &&
-      typeof error.statusCode === 'number' &&
-      error.statusCode >= 400
-        ? error.statusCode
+      ('statusCode' in error || 'status' in error) &&
+      typeof ('statusCode' in error ? error.statusCode : error.status) ===
+        'number' &&
+      (('statusCode' in error ? error.statusCode : error.status) as number) >=
+        400
+        ? (('statusCode' in error ? error.statusCode : error.status) as number)
         : 500;
     return reply.status(statusCode).send({
-      code: statusCode === 404 ? 'NOT_FOUND' : 'INTERNAL_ERROR',
-      message: statusCode === 404 ? 'Route not found' : 'Internal server error',
+      code:
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        typeof error.code === 'string'
+          ? error.code
+          : statusCode === 404
+            ? 'NOT_FOUND'
+            : 'INTERNAL_ERROR',
+      message:
+        statusCode === 404
+          ? 'Route not found'
+          : typeof error === 'object' && error !== null && 'code' in error
+            ? error instanceof Error
+              ? error.message
+              : 'Request failed'
+            : 'Internal server error',
       requestId: request.id,
     });
   });
@@ -977,6 +1000,11 @@ export async function buildApp(options: AppOptions = {}) {
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
     });
+    await registerTeamModule(app, {
+      service: new TeamService(new PostgresTeamRepository(database.pool)),
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+    });
     await registerWorkerControlRoutes(app, {
       cache,
       ...(process.env.OJPLATFORM_WORKER_HEARTBEAT_PREFIX
@@ -1432,6 +1460,11 @@ export async function buildApp(options: AppOptions = {}) {
             : {}),
         };
       },
+    });
+    await registerTeamModule(app, {
+      service: new TeamService(new InMemoryTeamRepository()),
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
     await registerWorkerControlRoutes(app, {
       getAuthContext: async (request) =>
