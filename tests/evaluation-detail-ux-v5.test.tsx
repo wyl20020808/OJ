@@ -44,7 +44,15 @@ const evaluation = {
     ],
   },
 };
-function makeApi(testcases = evaluation.detail.testcases) {
+function makeApi(
+  testcases: Array<{
+    ordinal: number;
+    verdict?: string;
+    status?: string;
+    timeMs: number;
+    memoryBytes: number;
+  }> = evaluation.detail.testcases,
+) {
   return {
     submission: vi.fn().mockResolvedValue(submission),
     submissionEvaluations: vi
