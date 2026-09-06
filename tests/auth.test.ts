@@ -99,6 +99,28 @@ describe('auth foundation', () => {
     await server.close();
   });
 
+  it('projects submission capability from server authorization resolver', async () => {
+    const server = Fastify({ logger: false });
+    await registerAuthModule(server, {
+      repository: createMemoryAuthRepository(),
+      canViewAnySubmission: () => true,
+    });
+    const registration = await server.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: {
+        username: 'capability-user-id',
+        email: 'capability@example.com',
+        displayName: 'Capability User',
+        password: 'correct-password',
+      },
+    });
+    expect(registration.json().capabilities).toEqual({
+      canViewAnySubmission: true,
+    });
+    await server.close();
+  });
+
   it('serves a safe account view and manages sessions through the authenticated boundary', async () => {
     const server = await app();
     await server.inject({
