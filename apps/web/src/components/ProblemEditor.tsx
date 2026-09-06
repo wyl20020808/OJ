@@ -599,7 +599,7 @@ export function ProblemEditor({
       );
   };
   return (
-    <section className="problem-editor">
+    <section className="problem-editor authoring-workspace">
       <header className="problem-editor-header">
         <div>
           <p className="eyebrow">
@@ -1212,13 +1212,43 @@ function TestcaseRow({
   const effectiveOutput =
     t.outputLimitBytesOverride ?? defaults.outputLimitBytes;
   return (
-    <article className="testcase-row">
-      <div className="case-main">
-        <strong>
-          #{displayOrdinal}
+    <article className="testcase-card testcase-row">
+      <header className="testcase-card-header">
+        <h3>
+          Test Case #{displayOrdinal}
           {t.label ? ` · ${t.label}` : ''}
-        </strong>
-        <span>
+        </h3>
+        <button
+          type="button"
+          className="danger-button"
+          onClick={() => onRemove(t, displayOrdinal)}
+          disabled={!canManage}
+        >
+          删除
+        </button>
+      </header>
+      <div className="testcase-content-grid">
+        <label className="testcase-content-field">
+          Input
+          <textarea
+            readOnly
+            value={t.input.fileName}
+            aria-label={`Test Case #${displayOrdinal} Input`}
+            rows={5}
+          />
+        </label>
+        <label className="testcase-content-field">
+          Expected Output
+          <textarea
+            readOnly
+            value={t.expectedOutput.fileName}
+            aria-label={`Test Case #${displayOrdinal} Expected Output`}
+            rows={5}
+          />
+        </label>
+      </div>
+      <div className="case-metadata">
+        <span className="case-file-pair">
           {t.input.fileName} / {t.expectedOutput.fileName}
         </span>
         <small>
@@ -1240,14 +1270,6 @@ function TestcaseRow({
           1024 * 1024,
         )}
       </div>
-      <button
-        type="button"
-        className="danger-button"
-        onClick={() => onRemove(t, displayOrdinal)}
-        disabled={!canManage}
-      >
-        删除
-      </button>
     </article>
   );
 }

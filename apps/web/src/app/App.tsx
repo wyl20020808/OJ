@@ -37,7 +37,6 @@ import {
 } from '../components/ProblemEditor.js';
 import { ProblemSolveEditorSlot } from '../plugins/ProblemSolveEditorSlot.js';
 import { HttpCodeRunAdapter } from '@ojplatform/online-code-editor/run/HttpCodeRunAdapter';
-import { HttpSubmissionAdapter } from '@ojplatform/online-code-editor/submission/SubmissionAdapter';
 import type { ProblemSolveEditorContext } from '@ojplatform/plugin-sdk';
 import { ProblemStatementRenderer } from '../components/ProblemStatementRenderer.js';
 import {
@@ -71,6 +70,7 @@ import {
   translateProblemStatus,
   zhCN,
 } from './locale.js';
+import { ProductSubmissionAdapter } from '../services/submission-adapter.js';
 
 type Route = {
   name:
@@ -1370,7 +1370,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
       />
     );
   return (
-    <section className="editor">
+    <section className="editor authoring-workspace">
       <Link to="/problems">← 返回题库</Link>
       <div className="page-heading">
         <div>
@@ -1559,7 +1559,10 @@ function ProblemDetail({
     'EXACT_BYTES',
   );
   const codeRunAdapter = useMemo(() => new HttpCodeRunAdapter(), []);
-  const submissionAdapter = useMemo(() => new HttpSubmissionAdapter(), []);
+  const submissionAdapter = useMemo(
+    () => new ProductSubmissionAdapter(api),
+    [api],
+  );
   useEffect(() => {
     void api
       .problem(id)
@@ -3118,7 +3121,15 @@ export function App() {
         </nav>
       </header>
       <Breadcrumbs current={current} />
-      <main className="shell">{page}</main>
+      <main
+        className={
+          current.name === 'author-new' || current.name === 'author-edit'
+            ? 'shell shell-authoring'
+            : 'shell'
+        }
+      >
+        {page}
+      </main>
       <footer>OJPlatform · 练习、学习、持续进步。</footer>
     </div>
   );

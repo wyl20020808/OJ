@@ -623,7 +623,13 @@ export async function buildApp(options: AppOptions = {}) {
           submission.ownerUserId === context.userId ||
           (context.strength === 'password' &&
             (await submissionPolicy.canViewSubmission(
-              { id: context.userId, status: 'active' },
+              {
+                id: context.userId,
+                status: 'active',
+                ...(context.capabilities
+                  ? { capabilities: context.capabilities }
+                  : {}),
+              },
               {
                 id: submission.id,
                 ownerUserId: submission.ownerUserId,
@@ -1247,7 +1253,13 @@ export async function buildApp(options: AppOptions = {}) {
           submission.ownerUserId === context.userId ||
           (context.strength === 'password' &&
             (await submissionPolicy.canViewSubmission(
-              { id: context.userId, status: 'active' },
+              {
+                id: context.userId,
+                status: 'active',
+                ...(context.capabilities
+                  ? { capabilities: context.capabilities }
+                  : {}),
+              },
               {
                 id: submission.id,
                 ownerUserId: submission.ownerUserId,

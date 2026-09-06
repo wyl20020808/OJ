@@ -168,6 +168,9 @@ export type AuthContext = {
   userId: string;
   sessionId?: string;
   strength?: string;
+  capabilities?: {
+    canViewAnySubmission?: boolean;
+  };
 };
 
 export type SubmissionAuthorizationPolicy = {
