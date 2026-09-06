@@ -8,6 +8,7 @@ type PoolLike = QueryExecutor & {
 };
 import {
   ProblemConflictError,
+  ProblemDeleteConflictError,
   type Problem,
   type ProblemCreateInput,
   type ProblemUpdateInput,
@@ -37,6 +38,7 @@ export interface ProblemRepository {
   get(idOrSlug: string): Promise<Problem | undefined>;
   list(query: ProblemListQuery): Promise<{ items: Problem[]; total: number }>;
   update(idOrSlug: string, input: ProblemUpdateInput): Promise<Problem>;
+  tombstone(idOrSlug: string, input: { reason: string; expectedUpdatedAt: string }, deletedBy: string): Promise<Problem>;
   revisions(idOrSlug: string): Promise<ProblemRevision[]>;
   createRevision(
     idOrSlug: string,
@@ -78,11 +80,21 @@ export class InMemoryProblemRepository implements ProblemRepository {
       (p) => p.id === key || p.slug === key || p.publicId === key,
     );
   }
+  async tombstone(key: string, input: { reason: string; expectedUpdatedAt: string }, deletedBy: string) {
+    const row = await this.get(key);
+    if (!row) throw new Error('NOT_FOUND');
+    if (row.deletedAt) return row;
+    if (row.updatedAt !== input.expectedUpdatedAt) throw new ProblemDeleteConflictError('Problem version is stale');
+    const timestamp = now();
+    const updated = { ...row, deletedAt: timestamp, deletedBy, deleteReason: input.reason, updatedAt: timestamp };
+    this.rows.set(row.id, updated);
+    return updated;
+  }
   async list(query: ProblemListQuery) {
     const rows = [...this.rows.values()]
       .filter(
         (p) =>
-          (!query.publicOnly ||
+          (!p.deletedAt && (!query.publicOnly ||
             (p.visibility === 'public' && p.status === 'published')) &&
           (!query.ownedOrPublicBy ||
             p.authorId === query.ownedOrPublicBy ||
@@ -93,7 +105,7 @@ export class InMemoryProblemRepository implements ProblemRepository {
           (!query.search ||
             `${p.slug} ${p.title}`
               .toLocaleLowerCase()
-              .includes(query.search.toLocaleLowerCase())),
+              .includes(query.search.toLocaleLowerCase()))),
       )
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     return {
@@ -104,6 +116,7 @@ export class InMemoryProblemRepository implements ProblemRepository {
   async update(key: string, input: ProblemUpdateInput) {
     const row = await this.get(key);
     if (!row) throw new Error('NOT_FOUND');
+    if (row.deletedAt) throw new Error('PROBLEM_DELETED');
     if (
       input.slug &&
       [...this.rows.values()].some(
@@ -149,6 +162,7 @@ export class InMemoryProblemRepository implements ProblemRepository {
   ) {
     const row = await this.get(key);
     if (!row) throw new Error('NOT_FOUND');
+    if (row.deletedAt) throw new Error('PROBLEM_DELETED');
     const updated = {
       ...row,
       ...input,
@@ -202,7 +216,7 @@ export class PostgresProblemRepository implements ProblemRepository {
     return this.transaction(async (executor) => {
       const id = input.id ?? randomUUID();
       const result = await executor.query(
-        'INSERT INTO problems (id, slug, title, background, statement, input_description, output_description, examples, constraints, notes, time_limit_ms, memory_limit_bytes, visibility, difficulty, status, testdata_version, author_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *',
+        'INSERT INTO problems (id, slug, title, background, statement, input_description, output_description, examples, constraints, notes, time_limit_ms, memory_limit_bytes, visibility, difficulty, status, testdata_version, author_id, source_type, provenance) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *',
         [
           id,
           input.slug,
@@ -221,6 +235,8 @@ export class PostgresProblemRepository implements ProblemRepository {
           input.status,
           input.testdataVersion,
           input.authorId,
+          input.sourceType ?? 'CREATOR',
+          input.provenance ? JSON.stringify(input.provenance) : null,
         ],
       );
       const problem = mapRow(result.rows[0]!);
@@ -265,17 +281,28 @@ export class PostgresProblemRepository implements ProblemRepository {
       `SELECT p.*, COALESCE((SELECT array_agg(t.display_name ORDER BY t.display_name)
         FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), ARRAY[]::text[]) AS tags
        FROM problems p
-       WHERE p.id = $1 OR p.slug = $1
+       WHERE (p.id = $1 OR p.slug = $1)
           OR p.public_number = CASE WHEN $1 ~ '^P[0-9]+$' THEN substring($1 FROM 2)::bigint END
        LIMIT 1`,
       [key],
     );
     return result.rows[0] ? mapRow(result.rows[0]) : undefined;
   }
+  async tombstone(key: string, input: { reason: string; expectedUpdatedAt: string }, deletedBy: string) {
+    const row = await this.get(key);
+    if (!row) throw new Error('NOT_FOUND');
+    if (row.deletedAt) return row;
+    return this.transaction(async (executor) => {
+      const result = await executor.query(
+        'UPDATE problems SET deleted_at=now(), deleted_by=$1, delete_reason=$2, updated_at=now() WHERE id=$3 AND deleted_at IS NULL AND updated_at=$4 RETURNING *',
+        [deletedBy, input.reason, row.id, input.expectedUpdatedAt],
+      );
+      if (!result.rows[0]) throw new ProblemDeleteConflictError('Problem version is stale');
+      return mapRow(result.rows[0]);
+    });
+  }
   async list(query: ProblemListQuery) {
-    const clauses = query.publicOnly
-      ? ["visibility='public'", "status='published'"]
-      : [];
+    const clauses = ['deleted_at IS NULL', ...(query.publicOnly ? ["visibility='public'", "status='published'"] : [])];
     const params: unknown[] = [];
     if (query.ownedOrPublicBy) {
       params.push(query.ownedOrPublicBy);
@@ -321,6 +348,7 @@ export class PostgresProblemRepository implements ProblemRepository {
   async update(key: string, input: ProblemUpdateInput) {
     const row = await this.get(key);
     if (!row) throw new Error('NOT_FOUND');
+    if (row.deletedAt) throw new Error('PROBLEM_DELETED');
     const hasSamples = 'samples' in input || 'examples' in input;
     const fields = (Object.keys(input) as (keyof ProblemUpdateInput)[]).filter(
       (field) => field !== 'samples' && field !== 'tags',
@@ -388,6 +416,7 @@ export class PostgresProblemRepository implements ProblemRepository {
   ) {
     const row = await this.get(key);
     if (!row) throw new Error('NOT_FOUND');
+    if (row.deletedAt) throw new Error('PROBLEM_DELETED');
     const next = { ...row, ...input };
     const revs = await this.revisions(key);
     const revisionId = randomUUID();
@@ -498,13 +527,17 @@ function mapRow(row: Record<string, unknown>): Problem {
       : row.author_id
         ? String(row.author_id)
         : null,
-    sourceType: String(row.source_type ?? 'CREATOR'),
+    sourceType: String(row.source_type ?? 'CREATOR') as NonNullable<Problem['sourceType']>,
     tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at ?? row.created_at)).toISOString(),
     ...(row.current_revision_id
       ? { currentRevisionId: String(row.current_revision_id) }
       : {}),
+    deletedAt: row.deleted_at ? new Date(String(row.deleted_at)).toISOString() : null,
+    deletedBy: row.deleted_by == null ? null : String(row.deleted_by),
+    deleteReason: row.delete_reason == null ? null : String(row.delete_reason),
+    provenance: row.provenance && typeof row.provenance === 'object' ? row.provenance as Record<string, unknown> : null,
   };
 }
 

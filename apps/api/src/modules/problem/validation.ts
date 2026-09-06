@@ -134,6 +134,9 @@ export function validateCreate(input: unknown): ProblemCreateInput {
     value.testdataVersion === null || value.testdataVersion === undefined
       ? null
       : text(value.testdataVersion, 'testdataVersion', 512);
+  const sourceType = value.sourceType ?? 'CREATOR';
+  if (!['CREATOR', 'EXTERNAL', 'IMPORT', 'TEST_FIXTURE', 'API_AUTOMATION'].includes(String(sourceType)))
+    throw new ProblemValidationError({ sourceType: 'invalid value' });
   const result: ProblemCreateInput = {
     slug,
     title: text(value.title, 'title', 300),
@@ -159,6 +162,8 @@ export function validateCreate(input: unknown): ProblemCreateInput {
         ? null
         : text(value.authorId, 'authorId', 128),
     tags: tags(value.tags),
+    sourceType: sourceType as NonNullable<ProblemCreateInput['sourceType']>,
+    provenance: value.provenance && typeof value.provenance === 'object' ? value.provenance as Record<string, unknown> : null,
   };
   if (value.id !== undefined) result.id = text(value.id, 'id', 128);
   return result;

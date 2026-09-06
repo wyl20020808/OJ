@@ -478,3 +478,11 @@ on pristine `main`. A published-save revision-pointer regression found during
 audit was fixed and covered; DB/API runtime was unavailable. Main merge and
 post-merge checks are recorded in
 `Docs/reports/OJPLATFORM_FINAL_CODE_ONLY_SAFE_MERGE_V1_REPORT.md`.
+Problem Delete & Generated Fixture Cleanup V1 (2026-09-06): PARTIAL. Implemented
+soft-delete/tombstone schema and API with optimistic concurrency, backend delete
+authorization, active projection filtering, submission/JudgeData mutation guards,
+provenance foundation, Web Danger Zone confirmation, and exact-allowlist cleanup
+maintenance command. Focused tests 54/54, typecheck, Web/API builds, and diff check
+pass. PostgreSQL cleanup not executed because DATABASE_URL is unavailable; unknown
+rows were not touched by code. See
+`Docs/reports/OJPLATFORM_PROBLEM_DELETE_GENERATED_FIXTURE_CLEANUP_V1_REPORT.md`.

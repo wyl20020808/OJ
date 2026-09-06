@@ -113,7 +113,9 @@ export async function registerProfileModule(
     return { auth, isSelf: auth?.userId === String(user.id), user };
   };
   const publicProblemFilter = (isSelf: boolean) =>
-    isSelf ? '' : " AND p.visibility='public' AND p.status='published'";
+    isSelf
+      ? " AND p.deleted_at IS NULL"
+      : " AND p.deleted_at IS NULL AND p.visibility='public' AND p.status='published'";
   app.get('/api/profiles/:username', async (request, reply) => {
     const target = await profileTarget(request, reply);
     if (!target) return;
@@ -268,14 +270,14 @@ export async function registerProfileModule(
       ? ''
       : " AND visibility='public' AND status='published'";
     const result = await options.pool.query(
-      `SELECT id,public_number,slug,title,status,visibility,created_at,updated_at FROM problems WHERE author_id=$1${filter}
+        `SELECT id,public_number,slug,title,status,visibility,created_at,updated_at FROM problems WHERE deleted_at IS NULL AND author_id=$1${filter}
        ${cursor ? 'AND (created_at,id)<($2,$3)' : ''} ORDER BY created_at DESC,id DESC LIMIT $${cursor ? 4 : 2}`,
       cursor
         ? [String(target.user.id), cursor.createdAt, cursor.id, limit]
         : [String(target.user.id), limit],
     );
     const count = await options.pool.query(
-      `SELECT count(*)::int total FROM problems WHERE author_id=$1${filter}`,
+      `SELECT count(*)::int total FROM problems WHERE deleted_at IS NULL AND author_id=$1${filter}`,
       [String(target.user.id)],
     );
     const items = result.rows.map((row) => ({
@@ -322,7 +324,7 @@ export async function registerProfileModule(
     const result = await options.pool.query(
       `SELECT p.id,p.slug,p.title,p.time_limit_ms,p.memory_limit_bytes,pf.created_at
        FROM problem_favorites pf JOIN problems p ON p.id=pf.problem_id
-       WHERE pf.user_id=$1 AND p.visibility='public' AND p.status='published'
+       WHERE pf.user_id=$1 AND p.deleted_at IS NULL AND p.visibility='public' AND p.status='published'
        ${cursor ? 'AND (pf.created_at,pf.problem_id)<($2,$3)' : ''}
        ORDER BY pf.created_at DESC,pf.problem_id DESC LIMIT $${cursor ? 4 : 2}`,
       cursor
@@ -330,7 +332,7 @@ export async function registerProfileModule(
         : [auth.userId, limit],
     );
     const count = await options.pool.query(
-      "SELECT count(*)::int total FROM problem_favorites pf JOIN problems p ON p.id=pf.problem_id WHERE pf.user_id=$1 AND p.visibility='public' AND p.status='published'",
+      "SELECT count(*)::int total FROM problem_favorites pf JOIN problems p ON p.id=pf.problem_id WHERE pf.user_id=$1 AND p.deleted_at IS NULL AND p.visibility='public' AND p.status='published'",
       [auth.userId],
     );
     const items = result.rows.map((row) => ({
@@ -467,14 +469,14 @@ export async function registerProfileModule(
         'Invalid pagination',
       );
     const result = await options.pool.query(
-      `SELECT id,public_number,slug,title,status,visibility,created_at,updated_at FROM problems WHERE author_id=$1
+      `SELECT id,public_number,slug,title,status,visibility,created_at,updated_at FROM problems WHERE deleted_at IS NULL AND author_id=$1
        ${cursor ? 'AND (created_at,id)<($2,$3)' : ''} ORDER BY created_at DESC,id DESC LIMIT $${cursor ? 4 : 2}`,
       cursor
         ? [auth.userId, cursor.createdAt, cursor.id, limit]
         : [auth.userId, limit],
     );
     const count = await options.pool.query(
-      'SELECT count(*)::int total FROM problems WHERE author_id=$1',
+      'SELECT count(*)::int total FROM problems WHERE deleted_at IS NULL AND author_id=$1',
       [auth.userId],
     );
     const items = result.rows.map((row) => ({
