@@ -252,6 +252,49 @@ describe('ProblemEditor judge-data contract UI', () => {
     expect(screen.getAllByText(/Default/).length).toBeGreaterThanOrEqual(3);
   });
 
+  it.each([3, 10, 20])(
+    'keeps testcase editors independent and in normal document flow at %i cases',
+    async (count) => {
+      const testcases = Array.from({ length: count }, (_, index) =>
+        testcase({
+          testcaseId: `tc-${index + 1}`,
+          ordinal: index + 1,
+          input: {
+            ...testcase().input,
+            fileName: `${String(index + 1).padStart(2, '0')}.in`,
+          },
+          expectedOutput: {
+            ...testcase().expectedOutput,
+            fileName: `${String(index + 1).padStart(2, '0')}.out`,
+          },
+        }),
+      );
+      const api = makeApi({
+        judgeDraft: vi.fn().mockResolvedValue(draft(testcases)),
+      });
+      const { container } = render(<ProblemEditor api={api} problemId="p1" />);
+
+      fireEvent.click(await screen.findByRole('button', { name: '评测数据' }));
+      const cards = container.querySelectorAll('.testcase-card');
+      expect(cards).toHaveLength(count);
+      cards.forEach((card, index) => {
+        const view = within(card as HTMLElement);
+        expect(
+          view.getByRole('heading', {
+            name: new RegExp(`Test Case #${index + 1}`),
+          }),
+        ).toBeInTheDocument();
+        expect(view.getByRole('button', { name: '删除' })).toBeInTheDocument();
+        expect(
+          view.getByLabelText(`Test Case #${index + 1} Input`),
+        ).toHaveAttribute('readonly');
+        expect(
+          view.getByLabelText(`Test Case #${index + 1} Expected Output`),
+        ).toHaveAttribute('readonly');
+      });
+    },
+  );
+
   it('saves judge defaults through the typed config endpoint', async () => {
     const api = makeApi();
     render(<ProblemEditor api={api} problemId="p1" />);
