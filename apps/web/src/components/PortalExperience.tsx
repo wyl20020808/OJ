@@ -1162,6 +1162,42 @@ export function ActivityHeatmap({
 }: {
   days?: UserActivityDay[] | undefined;
 }) {
+  const heatmapRef = useRef<HTMLDivElement>(null);
+  const [tooltip, setTooltip] = useState<{
+    day: UserActivityDay;
+    anchor: HTMLSpanElement;
+    left: number;
+    top: number;
+  }>();
+  const updateTooltipPosition = useCallback(() => {
+    if (!tooltip || !heatmapRef.current) return;
+    const blockRect = heatmapRef.current.getBoundingClientRect();
+    const anchorRect = tooltip.anchor.getBoundingClientRect();
+    const tooltipHalfWidth = 120;
+    const rawLeft = anchorRect.left - blockRect.left + anchorRect.width / 2;
+    const left = Math.min(
+      Math.max(rawLeft, tooltipHalfWidth),
+      Math.max(tooltipHalfWidth, blockRect.width - tooltipHalfWidth),
+    );
+    const top = anchorRect.bottom - blockRect.top + 8;
+    setTooltip((current) =>
+      current && (current.left !== left || current.top !== top)
+        ? { ...current, left, top }
+        : current,
+    );
+  }, [tooltip]);
+
+  useEffect(() => {
+    if (!tooltip) return;
+    updateTooltipPosition();
+    window.addEventListener('resize', updateTooltipPosition);
+    window.addEventListener('scroll', updateTooltipPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateTooltipPosition);
+      window.removeEventListener('scroll', updateTooltipPosition, true);
+    };
+  }, [tooltip, updateTooltipPosition]);
+
   if (!days)
     return (
       <CapabilityNotice
@@ -1176,8 +1212,25 @@ export function ActivityHeatmap({
   const count = (day: UserActivityDay) => day.submissionCount ?? day.count ?? 0;
   const max = Math.max(1, ...displayDays.map(count));
   const total = displayDays.reduce((sum, day) => sum + count(day), 0);
+  const showTooltip = (day: UserActivityDay, anchor: HTMLSpanElement) => {
+    const blockRect = heatmapRef.current?.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    if (!blockRect) return;
+    const tooltipHalfWidth = 120;
+    const rawLeft = anchorRect.left - blockRect.left + anchorRect.width / 2;
+    const left = Math.min(
+      Math.max(rawLeft, tooltipHalfWidth),
+      Math.max(tooltipHalfWidth, blockRect.width - tooltipHalfWidth),
+    );
+    setTooltip({
+      day,
+      anchor,
+      left,
+      top: anchorRect.bottom - blockRect.top + 8,
+    });
+  };
   return (
-    <div className="heatmap-block">
+    <div className="heatmap-block" ref={heatmapRef}>
       <div className="heatmap-summary" role="status">
         最近一年共 {total} 次提交，共{' '}
         {displayDays.filter((day) => count(day) > 0).length} 个活跃日。
@@ -1191,10 +1244,26 @@ export function ActivityHeatmap({
               style={{ '--heat': count(day) / max } as CSSProperties}
               title={`${day.date}：提交 ${count(day)} 次，AC ${day.acceptedCount ?? 0} 次`}
               aria-label={`${day.date}，提交 ${count(day)} 次，AC ${day.acceptedCount ?? 0} 次`}
+              tabIndex={0}
+              onMouseEnter={(event) => showTooltip(day, event.currentTarget)}
+              onMouseLeave={() => setTooltip(undefined)}
+              onFocus={(event) => showTooltip(day, event.currentTarget)}
+              onBlur={() => setTooltip(undefined)}
             />
           ))}
         </div>
       </div>
+      {tooltip ? (
+        <div
+          className="heatmap-tooltip"
+          role="tooltip"
+          style={{ left: tooltip.left, top: tooltip.top }}
+        >
+          <strong>{tooltip.day.date}</strong>
+          <span>提交：{count(tooltip.day)} 次</span>
+          <span>通过：{tooltip.day.acceptedCount ?? 0} 次</span>
+        </div>
+      ) : null}
     </div>
   );
 }
