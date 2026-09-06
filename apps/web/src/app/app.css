@@ -966,29 +966,40 @@ pre {
 }
 .testcase-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    'number number'
+    'verdict verdict'
+    'time memory';
   aspect-ratio: 1;
   min-width: 0;
+  min-height: 112px;
   padding: var(--space-2);
   gap: 0.25rem;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid transparent;
   border-radius: 6px;
   background: var(--soft);
   font-variant-numeric: tabular-nums;
 }
 .testcase-row > strong {
+  grid-area: number;
   align-self: start;
+  min-width: 0;
 }
 .testcase-row > .testcase-verdict {
-  grid-column: 1 / -1;
+  grid-area: verdict;
+  min-width: 0;
   align-self: center;
   justify-self: center;
+  text-align: center;
+  overflow-wrap: anywhere;
   font-size: 1.15rem;
 }
 .testcase-row > span:nth-of-type(2),
 .testcase-row > span:nth-of-type(3) {
+  grid-area: time;
   align-self: end;
   font-size: 0.72rem;
   color: var(--muted);
@@ -996,6 +1007,7 @@ pre {
   overflow-wrap: anywhere;
 }
 .testcase-row > span:nth-of-type(3) {
+  grid-area: memory;
   text-align: right;
 }
 .testcase-row.verdict-AC {
