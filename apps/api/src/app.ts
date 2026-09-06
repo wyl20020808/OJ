@@ -277,11 +277,16 @@ export async function buildApp(options: AppOptions = {}) {
       'ojplatform:guest-authoring:rate',
     );
     const auditHook = createMemoryAuditHook();
+    const resolveSubmissionUserName = async (userId: string) =>
+      (await auth.getUser(userId))?.username;
     const hasSubmissionPermissions = async (
       userId: string,
       required: readonly string[],
     ) => {
       if (configuredOperatorUserIds.has(userId)) return true;
+      const username = await resolveSubmissionUserName?.(userId);
+      if (username && configuredOperatorUsernames.has(username.toLowerCase()))
+        return true;
       if (
         required.every((permission) =>
           options.judgeAdminPermissions?.get(userId)?.has(permission),
@@ -1003,11 +1008,16 @@ export async function buildApp(options: AppOptions = {}) {
     const qualificationMode =
       process.env.OJPLATFORM_PHASE1E_QUALIFICATION === 'true';
     const auditHook = createMemoryAuditHook();
+    const resolveSubmissionUserName = async (userId: string) =>
+      (await auth.getUser(userId))?.username;
     const hasSubmissionPermissions = async (
       userId: string,
       required: readonly string[],
     ) => {
       if (configuredOperatorUserIds.has(userId)) return true;
+      const username = await resolveSubmissionUserName?.(userId);
+      if (username && configuredOperatorUsernames.has(username.toLowerCase()))
+        return true;
       return required.every((permission) =>
         options.judgeAdminPermissions?.get(userId)?.has(permission),
       );
