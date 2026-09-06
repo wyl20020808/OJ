@@ -117,7 +117,14 @@ export class ProblemService {
     const patch = validateUpdate(raw);
     const result =
       current.status === 'published'
-        ? await this.repository.createRevision(key, patch, context.userId)
+        ? await (async () => {
+            await this.repository.createRevision(key, patch, context.userId);
+            return this.repository.update(key, {
+              ...patch,
+              status: 'published',
+              visibility: patch.visibility ?? current.visibility,
+            });
+          })()
         : await this.repository.update(key, patch);
     await this.audit?.record({
       actorUserId: context.userId,
