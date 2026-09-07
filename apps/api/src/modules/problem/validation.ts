@@ -108,6 +108,31 @@ const tags = (value: unknown): string[] => {
   });
 };
 
+const tagIds = (value: unknown): number[] | undefined => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 50)
+    throw new ProblemValidationError({
+      tagIds: 'must be an array of at most 50 ids',
+    });
+  const seen = new Set<number>();
+  return value.map((item, index) => {
+    const id =
+      typeof item === 'number' && Number.isSafeInteger(item)
+        ? item
+        : Number(item);
+    if (!Number.isSafeInteger(id) || id < 1)
+      throw new ProblemValidationError({
+        [`tagIds.${index}`]: 'must be a positive integer id',
+      });
+    if (seen.has(id))
+      throw new ProblemValidationError({
+        tagIds: 'must not contain duplicate tag ids',
+      });
+    seen.add(id);
+    return id;
+  });
+};
+
 export function validateCreate(input: unknown): ProblemCreateInput {
   if (!input || typeof input !== 'object')
     throw new ProblemValidationError({ body: 'must be an object' });
@@ -135,8 +160,17 @@ export function validateCreate(input: unknown): ProblemCreateInput {
       ? null
       : text(value.testdataVersion, 'testdataVersion', 512);
   const sourceType = value.sourceType ?? 'CREATOR';
-  if (!['CREATOR', 'EXTERNAL', 'IMPORT', 'TEST_FIXTURE', 'API_AUTOMATION'].includes(String(sourceType)))
+  if (
+    ![
+      'CREATOR',
+      'EXTERNAL',
+      'IMPORT',
+      'TEST_FIXTURE',
+      'API_AUTOMATION',
+    ].includes(String(sourceType))
+  )
     throw new ProblemValidationError({ sourceType: 'invalid value' });
+  const parsedTagIds = tagIds(value.tagIds);
   const result: ProblemCreateInput = {
     slug,
     title: text(value.title, 'title', 300),
@@ -162,8 +196,12 @@ export function validateCreate(input: unknown): ProblemCreateInput {
         ? null
         : text(value.authorId, 'authorId', 128),
     tags: tags(value.tags),
+    ...(parsedTagIds === undefined ? {} : { tagIds: parsedTagIds }),
     sourceType: sourceType as NonNullable<ProblemCreateInput['sourceType']>,
-    provenance: value.provenance && typeof value.provenance === 'object' ? value.provenance as Record<string, unknown> : null,
+    provenance:
+      value.provenance && typeof value.provenance === 'object'
+        ? (value.provenance as Record<string, unknown>)
+        : null,
   };
   if (value.id !== undefined) result.id = text(value.id, 'id', 128);
   return result;
@@ -190,6 +228,7 @@ export function validateUpdate(input: unknown): ProblemUpdateInput {
     'memoryLimitBytes',
     'testdataVersion',
     'tags',
+    'tagIds',
   ];
   const unknown = Object.keys(source).find((key) => !allowed.includes(key));
   if (unknown)
@@ -234,6 +273,7 @@ export function validateUpdate(input: unknown): ProblemUpdateInput {
   }
   if ('difficulty' in source) result.difficulty = difficulty(source.difficulty);
   if ('tags' in source) result.tags = tags(source.tags);
+  if ('tagIds' in source) result.tagIds = tagIds(source.tagIds);
   if (
     'visibility' in source &&
     source.visibility !== 'private' &&

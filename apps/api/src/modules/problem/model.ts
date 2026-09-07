@@ -16,6 +16,14 @@ export type ProblemSample = {
   output: string;
   explanation?: string | null;
 };
+export type ProblemTag = {
+  id: number;
+  slug: string;
+  name: string;
+  category: string;
+  displayOrder: number;
+  isActive: boolean;
+};
 
 export type Problem = {
   id: string;
@@ -39,8 +47,10 @@ export type Problem = {
   testdataVersion: string | null;
   authorId: string | null;
   source?: string | null;
-  sourceType?: 'CREATOR' | 'EXTERNAL' | 'IMPORT' | 'TEST_FIXTURE' | 'API_AUTOMATION';
+  sourceType?:
+    'CREATOR' | 'EXTERNAL' | 'IMPORT' | 'TEST_FIXTURE' | 'API_AUTOMATION';
   tags: string[];
+  tagDetails?: ProblemTag[];
   createdAt: string;
   updatedAt: string;
   currentRevisionId?: string;
@@ -71,10 +81,11 @@ export type ProblemCreateInput = Omit<
   | 'createdAt'
   | 'updatedAt'
   | 'source'
+  | 'tagDetails'
   | 'deletedAt'
   | 'deletedBy'
   | 'deleteReason'
-> & { id?: string };
+> & { id?: string; tagIds?: number[] };
 export type ProblemUpdateInput = Partial<
   Omit<
     Problem,
@@ -89,8 +100,9 @@ export type ProblemUpdateInput = Partial<
     | 'deletedAt'
     | 'deletedBy'
     | 'deleteReason'
+    | 'tagDetails'
   >
->;
+> & { tagIds?: number[] };
 
 export type AuthContext = {
   userId: string;

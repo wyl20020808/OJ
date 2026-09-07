@@ -11,6 +11,7 @@ import {
 } from './model.js';
 import { validateCreate, validateUpdate } from './validation.js';
 import type { ProblemRepository } from './repository.js';
+import type { TagCatalogRepository } from './catalog.js';
 
 export class ProblemService {
   constructor(
@@ -24,7 +25,21 @@ export class ProblemService {
     private readonly projectMetadata?: (
       problem: Problem,
     ) => Promise<Partial<Problem>> | Partial<Problem>,
+    private readonly tagCatalog?: TagCatalogRepository,
   ) {}
+
+  private async resolveTags(input: ProblemCreateInput | ProblemUpdateInput) {
+    if (input.tagIds === undefined) return input;
+    if (!this.tagCatalog) throw new Error('TAG_CATALOG_UNAVAILABLE');
+    const tags = await this.tagCatalog.getByIds(input.tagIds);
+    if (
+      tags.length !== input.tagIds.length ||
+      tags.some((tag) => !tag.isActive)
+    ) {
+      throw new Error('INVALID_TAGS');
+    }
+    return { ...input, tags: tags.map((tag) => tag.name), tagDetails: tags };
+  }
   async list(query: {
     limit: number;
     offset?: number;
@@ -81,20 +96,56 @@ export class ProblemService {
       throw new ProblemNotFoundError();
     return this.project(row, context);
   }
-  async delete(key: string, raw: unknown, context?: AuthContext, requestId?: string) {
+  async delete(
+    key: string,
+    raw: unknown,
+    context?: AuthContext,
+    requestId?: string,
+  ) {
     if (!context) throw new Error('FORBIDDEN');
     const current = await this.repository.get(key);
     if (!current) throw new ProblemNotFoundError();
-    if (!(await this.policy.can('delete', 'problem', context, { id: current.id, type: 'problem' }))) {
-      await this.audit?.record({ actorUserId: context.userId, action: 'problem:delete', resource: 'problem', resourceId: current.id, outcome: 'denied', ...(requestId ? { requestId } : {}), occurredAt: new Date().toISOString() });
+    if (
+      !(await this.policy.can('delete', 'problem', context, {
+        id: current.id,
+        type: 'problem',
+      }))
+    ) {
+      await this.audit?.record({
+        actorUserId: context.userId,
+        action: 'problem:delete',
+        resource: 'problem',
+        resourceId: current.id,
+        outcome: 'denied',
+        ...(requestId ? { requestId } : {}),
+        occurredAt: new Date().toISOString(),
+      });
       throw new Error('FORBIDDEN');
     }
     const body = raw as Record<string, unknown>;
     const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
-    const expectedUpdatedAt = typeof body?.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt : typeof body?.updatedAt === 'string' ? body.updatedAt : '';
-    if (!reason || reason.length > 500 || !expectedUpdatedAt) throw new Error('VALIDATION_ERROR');
-    const result = await this.repository.tombstone(key, { reason, expectedUpdatedAt }, context.userId);
-    await this.audit?.record({ actorUserId: context.userId, action: 'problem:delete', resource: 'problem', resourceId: current.id, outcome: 'success', ...(requestId ? { requestId } : {}), occurredAt: new Date().toISOString() });
+    const expectedUpdatedAt =
+      typeof body?.expectedUpdatedAt === 'string'
+        ? body.expectedUpdatedAt
+        : typeof body?.updatedAt === 'string'
+          ? body.updatedAt
+          : '';
+    if (!reason || reason.length > 500 || !expectedUpdatedAt)
+      throw new Error('VALIDATION_ERROR');
+    const result = await this.repository.tombstone(
+      key,
+      { reason, expectedUpdatedAt },
+      context.userId,
+    );
+    await this.audit?.record({
+      actorUserId: context.userId,
+      action: 'problem:delete',
+      resource: 'problem',
+      resourceId: current.id,
+      outcome: 'success',
+      ...(requestId ? { requestId } : {}),
+      occurredAt: new Date().toISOString(),
+    });
     return result;
   }
   async create(raw: unknown, context?: AuthContext) {
@@ -104,11 +155,12 @@ export class ProblemService {
     const input = validateCreate(raw);
     if (input.status === 'published' && input.visibility !== 'public')
       throw new Error('VALIDATION_ERROR');
+    const resolved = await this.resolveTags(input);
     const result = await this.repository.create({
-      ...input,
+      ...resolved,
       authorId: context.userId,
       visibility: input.visibility ?? 'private',
-    });
+    } as ProblemCreateInput);
     await this.audit?.record({
       actorUserId: context.userId,
       action: 'problem:create',
@@ -117,6 +169,14 @@ export class ProblemService {
       outcome: 'success',
       occurredAt: new Date().toISOString(),
     });
+    if (input.tagIds !== undefined) {
+      const details = (resolved as { tagDetails?: Problem['tagDetails'] })
+        .tagDetails;
+      if (details) {
+        result.tagDetails = details;
+        result.tags = details.map((tag) => tag.name);
+      }
+    }
     return result;
   }
   async update(key: string, raw: unknown, context?: AuthContext) {
@@ -132,7 +192,7 @@ export class ProblemService {
     )
       throw new Error('FORBIDDEN');
     await this.guardGuestMutation?.('update', context);
-    const patch = validateUpdate(raw);
+    const patch = await this.resolveTags(validateUpdate(raw));
     const result =
       current.status === 'published'
         ? await (async () => {

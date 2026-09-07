@@ -523,3 +523,15 @@ architecture, targeted lint, and diff check pass. PostgreSQL migration and clean
 dry-run remain NOT VERIFIED because DATABASE_URL is unavailable. Cleanup apply was
 not executed; manual UI acceptance remains pending user. See
 `Docs/reports/OJPLATFORM_PROBLEM_DELETE_FOUNDATION_CONSERVATIVE_INTEGRATION_V1_REPORT.md`.
+
+Main Integration Wave 3 Problem Tags V1 (2026-09-07): PARTIAL. Fresh candidate
+integrated Problem Tag Catalog & Metadata V1 on current main, renumbering the
+source `0023_problem_tag_catalog` migration to `0024_problem_tag_catalog` while
+preserving Team Core `0023`. Product PostgreSQL migration and idempotent seed
+qualified: 81 tags across 10 categories, second seed count unchanged, duplicate
+slugs zero. Real PostgreSQL API fixture passed catalog, create/edit `tagIds`,
+unknown/inactive rejection, list, and detail checks; 40 active Problems and 4
+tombstones remain, including P0011-P0014. Focused tests 28/28, typechecks,
+builds, changed-file lint, architecture, and diff check pass. Full lint retains
+8 pre-existing unrelated findings; manual browser acceptance remains pending.
+See `Docs/reports/OJPLATFORM_MAIN_INTEGRATION_WAVE3_PROBLEM_TAGS_V1_REPORT.md`.

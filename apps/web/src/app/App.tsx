@@ -72,6 +72,7 @@ import {
 } from './locale.js';
 import { ProductSubmissionAdapter } from '../services/submission-adapter.js';
 import { TeamPage } from '../features/team/TeamPage.js';
+import { TagSelector } from '../components/TagSelector.js';
 
 type Route = {
   name:
@@ -1177,10 +1178,17 @@ function ProblemList({
                   <div className="problem-main-line">
                     <h2>{p.title}</h2>
                     <div className="tag-row" aria-label="题目标签">
-                      {p.tags?.length ? (
-                        p.tags.map((item) => <span key={item}>{item}</span>)
+                      {p.tagDetails?.length || p.tags?.length ? (
+                        (p.tagDetails?.map((tag) => tag.name) ?? p.tags ?? [])
+                          .slice(0, 4)
+                          .map((item) => <span key={item}>{item}</span>)
                       ) : (
                         <span>暂无标签</span>
+                      )}
+                      {(p.tagDetails?.length ?? p.tags?.length ?? 0) > 4 && (
+                        <span>
+                          +{(p.tagDetails?.length ?? p.tags?.length ?? 0) - 4}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -1222,7 +1230,7 @@ type Draft = {
   outputDescription: string;
   constraints: string;
   notes: string;
-  tags: string[];
+  tagIds: number[];
   examples: { input: string; output: string; note?: string }[];
   timeLimitMs: number;
   memoryLimitBytes: number;
@@ -1240,7 +1248,7 @@ const emptyDraft: Draft = {
   outputDescription: '',
   constraints: '',
   notes: '',
-  tags: [],
+  tagIds: [],
   examples: [{ input: '', output: '', note: '' }],
   timeLimitMs: 1000,
   memoryLimitBytes: 256 * 1024 * 1024,
@@ -1265,7 +1273,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
           ...p,
           background: p.background ?? '',
           notes: p.notes ?? '',
-          tags: p.tags ?? [],
+          tagIds: p.tagDetails?.map((tag) => tag.id) ?? [],
           examples: p.examples.length ? p.examples : emptyDraft.examples,
         }),
       )
@@ -1312,7 +1320,7 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
         examples: form.examples,
         constraints: form.constraints,
         notes: form.notes,
-        tags: form.tags,
+        tagIds: form.tagIds,
         timeLimitMs: form.timeLimitMs,
         memoryLimitBytes: form.memoryLimitBytes,
         testdataVersion: form.testdataVersion ?? null,
@@ -1434,21 +1442,11 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
             />
           ))}
         </div>
-        <label>
-          标签（逗号分隔）
-          <input
-            value={form.tags.join(', ')}
-            onChange={(e) =>
-              update(
-                'tags',
-                e.target.value
-                  .split(',')
-                  .map((tag) => tag.trim())
-                  .filter(Boolean),
-              )
-            }
-          />
-        </label>
+        <TagSelector
+          api={api}
+          value={form.tagIds}
+          onChange={(ids) => update('tagIds', ids)}
+        />
         <div className="form-grid">
           <Field
             label="时间限制（毫秒）"
@@ -1714,8 +1712,12 @@ function ProblemDetail({
               <dt>标签</dt>
               <dd>
                 <span className="tag-row">
-                  {problem.tags?.length
-                    ? problem.tags.map((tag) => <span key={tag}>{tag}</span>)
+                  {(problem.tagDetails?.length ?? problem.tags?.length ?? 0) > 0
+                    ? (
+                        problem.tagDetails?.map((tag) => tag.name) ??
+                        problem.tags ??
+                        []
+                      ).map((tag) => <span key={tag}>{tag}</span>)
                     : '后端暂未提供'}
                 </span>
               </dd>

@@ -19,6 +19,7 @@ import {
 } from '../services/api.js';
 import './problem-editor.css';
 import { ProblemStatementRenderer } from './ProblemStatementRenderer.js';
+import { TagSelector } from './TagSelector.js';
 
 type Tab = 'statement' | 'data' | 'settings';
 type Props = {
@@ -289,7 +290,7 @@ export function ProblemEditor({
     notes: '',
     samples: [] as Array<{ ordinal: number; input: string; output: string }>,
     difficulty: null as ProblemDifficulty | null,
-    tags: [] as string[],
+    tagIds: [] as number[],
     visibility: 'private' as Problem['visibility'],
   });
 
@@ -327,7 +328,7 @@ export function ProblemEditor({
               output: sample.output,
             })),
           difficulty: p.difficulty ?? null,
-          tags: p.tags ?? [],
+          tagIds: p.tagDetails?.map((tag) => tag.id) ?? [],
           visibility: p.visibility,
         });
         setHasDraft(Boolean(d && Array.isArray(d.testcases) && d.defaults));
@@ -557,8 +558,15 @@ export function ProblemEditor({
   const deleteProblem = async () => {
     if (!problem || !canEdit || deleting) return;
     const label = `${problem.publicId || problem.slug} - ${problem.title}`;
-    if (!window.confirm(`Confirm delete ${label}? History remains; new submissions will be rejected.`)) return;
-    const reason = window.prompt('Short deletion reason', 'problem author request')?.trim();
+    if (
+      !window.confirm(
+        `Confirm delete ${label}? History remains; new submissions will be rejected.`,
+      )
+    )
+      return;
+    const reason = window
+      .prompt('Short deletion reason', 'problem author request')
+      ?.trim();
     if (!reason) return;
     setDeleting(true);
     try {
@@ -703,22 +711,12 @@ export function ProblemEditor({
                   <option value="专家">专家</option>
                 </select>
               </label>
-              <label>
-                标签（逗号分隔）
-                <input
-                  value={statement.tags.join(', ')}
-                  onChange={(e) =>
-                    updateStatement(
-                      'tags',
-                      e.target.value
-                        .split(',')
-                        .map((tag) => tag.trim())
-                        .filter(Boolean),
-                    )
-                  }
-                  disabled={!canEdit}
-                />
-              </label>
+              <TagSelector
+                api={api}
+                value={statement.tagIds}
+                onChange={(ids) => updateStatement('tagIds', ids)}
+                disabled={!canEdit}
+              />
               <label>
                 可见性
                 <select
@@ -873,8 +871,19 @@ export function ProblemEditor({
       {canEdit && (
         <section className="editor-panel danger-zone" aria-label="Danger zone">
           <div className="panel-heading">
-            <div><h2>Danger zone</h2><p>Deleted problems leave historical submissions and evaluations intact.</p></div>
-            <button type="button" className="danger-button" onClick={() => void deleteProblem()} disabled={deleting}>
+            <div>
+              <h2>Danger zone</h2>
+              <p>
+                Deleted problems leave historical submissions and evaluations
+                intact.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="danger-button"
+              onClick={() => void deleteProblem()}
+              disabled={deleting}
+            >
               {deleting ? 'Deleting...' : 'Delete problem'}
             </button>
           </div>
