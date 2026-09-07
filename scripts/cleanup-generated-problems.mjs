@@ -19,7 +19,7 @@ if (!databaseUrl) {
       (SELECT count(*) FROM problem_favorites x WHERE x.problem_id=p.id) AS favorites,
       (SELECT count(*) FROM problem_judge_configs x WHERE x.problem_id=p.id) AS judge_configs,
       (SELECT count(*) FROM problem_judge_drafts x WHERE x.problem_id=p.id) AS judge_drafts,
-      (SELECT count(*) FROM problem_judge_draft_testcases x JOIN problem_judge_drafts d ON d.id=x.draft_id WHERE d.problem_id=p.id) AS draft_testcases,
+      (SELECT count(*) FROM problem_judge_draft_testcases x WHERE x.problem_id=p.id) AS draft_testcases,
       (SELECT count(*) FROM editor_code_drafts x WHERE x.problem_id=p.id) AS editor_drafts,
       (SELECT count(*) FROM contest_problems x WHERE x.problem_id=p.id) AS contests,
       (SELECT count(*) FROM judge_data_versions x WHERE x.problem_id=p.id) AS judge_versions,
