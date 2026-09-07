@@ -7,10 +7,11 @@ Manual UI acceptance remains PENDING USER.
 ## Source
 
 - Main before: `8d0353f6b51618a46a6a7d4e44458fed90af0898`
+- Main after: `39b3d289990f3b7c8d41e242fe9973ba1303e5a7`
 - Team branch: `codex/team-core-v1`
 - Team head: `98141786d3887c21572d30d56b8792f0843f8d2f`
 - Candidate branch: `codex/team-core-integration-v1`
-- Candidate final: `226a0ad` (Team merge `3d1948b` plus integration evidence)
+- Candidate final: `be00baa` (Team merge `3d1948b` plus integration evidence)
 - Team delivery: VALID. Scope contains Team domain/API/Web/migration/tests, minimal registration, contract and status docs only.
 - Excluded: Problem Tags, Discussion, Homework, Assignment, Team Problem Collection, Launcher, Judge, Sandbox.
 
@@ -39,13 +40,13 @@ Manual UI acceptance remains PENDING USER.
 
 ## Runtime and safety
 
-- Runtime start/status on candidate: NOT RUN. Launcher requires canonical `D:\OJPlatform` main; post-merge validation is required on main.
+- Runtime start/status on main: PASS. `OJPlatform-Start.bat` rebuilt/restarted owned services; `OJPlatform-Status.bat` reported canonical root/product root `D:\OJPlatform`, branch `main`, product commit `39b3d289990f3b7c8d41e242fe9973ba1303e5a7`, all services running/reachable, and `MIXED SOURCE = False`.
 - Manual UI acceptance: PENDING USER.
 - User dirty files preserved: YES.
 - User untracked artifacts preserved: YES.
 - `git clean`: NOT USED.
 - `git reset --hard`: NOT USED.
-- `git stash`: NOT USED.
+- `git stash`: TEMPORARILY USED only to preserve pre-existing dirty `Docs/PROJECT_STATUS.md` across merge; stash remains available and user content was reapplied unchanged.
 
 ## Deferred
 
