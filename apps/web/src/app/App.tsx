@@ -71,6 +71,7 @@ import {
   zhCN,
 } from './locale.js';
 import { ProductSubmissionAdapter } from '../services/submission-adapter.js';
+import { TeamPage } from '../features/team/TeamPage.js';
 
 type Route = {
   name:
@@ -105,7 +106,10 @@ type Route = {
     | 'judge-node-detail'
     | 'forbidden'
     | 'error'
-    | 'not-found';
+    | 'not-found'
+    | 'teams'
+    | 'team-new'
+    | 'team-detail';
   id?: string;
 };
 function route(path = window.location.pathname): Route {
@@ -142,6 +146,13 @@ function route(path = window.location.pathname): Route {
   if (path === '/wrong-book') return { name: 'wrong-book' };
   if (path === '/notifications') return { name: 'notifications' };
   if (path === '/messages') return { name: 'messages' };
+  if (path === '/teams' || path === '/teams/') return { name: 'teams' };
+  if (path === '/teams/new') return { name: 'team-new' };
+  if (path.startsWith('/teams/'))
+    return {
+      name: 'team-detail',
+      id: decodeURIComponent(path.slice('/teams/'.length)),
+    };
   if (path === '/operations/sandbox') return { name: 'sandbox' };
   if (path === '/admin/judge/nodes') return { name: 'judge-nodes' };
   if (path.startsWith('/admin/judge/nodes/'))
@@ -271,6 +282,9 @@ function Breadcrumbs({ current }: { current: Route }) {
     forbidden: '无权访问',
     error: '页面加载失败',
     'not-found': '页面不存在',
+    teams: '团队',
+    'team-new': '创建团队',
+    'team-detail': current.id ?? '团队详情',
   };
   const currentItem = {
     label: leaf[current.name],
@@ -2932,6 +2946,17 @@ export function App() {
       <NotificationsRoute api={api} />
     ) : current.name === 'messages' ? (
       <MessagesRoute api={api} />
+    ) : current.name === 'teams' ? (
+      <TeamPage api={api} user={user} navigate={navigate} />
+    ) : current.name === 'team-new' ? (
+      <TeamPage api={api} user={user} navigate={navigate} create />
+    ) : current.name === 'team-detail' ? (
+      <TeamPage
+        api={api}
+        {...(current.id ? { slug: current.id } : {})}
+        user={user}
+        navigate={navigate}
+      />
     ) : current.name === 'submit' ? (
       <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
     ) : current.name === 'submissions' ? (
@@ -3063,6 +3088,12 @@ export function App() {
             className={current.name.includes('contest') ? 'active' : ''}
           >
             比赛
+          </Link>
+          <Link
+            to="/teams"
+            className={current.name.startsWith('team') ? 'active' : ''}
+          >
+            团队
           </Link>
           <Link
             to="/submissions"

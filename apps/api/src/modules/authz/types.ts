@@ -17,6 +17,7 @@ export type AuditRecord = {
   outcome: 'allowed' | 'denied';
   requestId: string;
   occurredAt: string;
+  metadata?: Readonly<Record<string, string>>;
 };
 export type AuditHook = { record(event: AuditRecord): Promise<void> | void };
 export type Role = { name: string; permissions: ReadonlySet<string> };
