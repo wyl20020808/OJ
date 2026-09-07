@@ -571,13 +571,13 @@ async function request<T>(
 }
 export type ApiClient = ReturnType<typeof createApiClient>;
 export type DiscussionPost = {
-  id: string; publicId: string; authorId: string; type: 'ARTICLE' | 'ANNOUNCEMENT'; status: 'DRAFT' | 'PUBLISHED' | 'DELETED';
+  id: string; publicId: string; type: 'ARTICLE' | 'ANNOUNCEMENT'; status: 'DRAFT' | 'PUBLISHED' | 'DELETED';
   title: string; summary: string | null; contentMarkdown: string; publishedAt: string | null; createdAt: string; updatedAt: string;
   viewCount: number; likeCount: number; commentCount: number;
   author?: DiscussionAuthor;
 };
-export type DiscussionAuthor = { id: string; username: string; displayName: string; avatarUrl?: string };
-export type DiscussionComment = { id: string; postId: string; authorId: string; contentMarkdown: string; status: 'VISIBLE' | 'DELETED'; createdAt: string; updatedAt: string; author?: DiscussionAuthor };
+export type DiscussionAuthor = { username: string; displayName: string; avatarUrl?: string };
+export type DiscussionComment = { id: string; postId: string; contentMarkdown: string; status: 'VISIBLE' | 'DELETED'; createdAt: string; updatedAt: string; author?: DiscussionAuthor };
 const defaultAuthMethods: AuthMethods = {
   registration: { email: false, phone: false },
   login: {

@@ -2,7 +2,7 @@ export type DiscussionPostType = 'ARTICLE' | 'ANNOUNCEMENT';
 export type DiscussionPostStatus = 'DRAFT' | 'PUBLISHED' | 'DELETED';
 export type DiscussionCommentStatus = 'VISIBLE' | 'DELETED';
 
-export type DiscussionAuthor = { id: string; username: string; displayName: string; avatarUrl?: string };
+export type DiscussionAuthor = { username: string; displayName: string; avatarUrl?: string };
 export type DiscussionPost = {
   id: string; publicId: string; authorId: string; type: DiscussionPostType;
   status: DiscussionPostStatus; title: string; summary: string | null;
