@@ -18,11 +18,12 @@ function Invoke-Git([string]$Root, [string[]]$Arguments) {
   return (($output -join "`n").Trim())
 }
 function Get-GitIdentity([string]$Root) {
-  if (-not (Test-Path (Join-Path $Root '.git'))) { throw "SOURCE_NOT_GIT_WORKTREE: $Root" }
+  try { $resolvedRoot = Invoke-Git $Root @('rev-parse','--show-toplevel') } catch { throw "SOURCE_NOT_GIT_WORKTREE: $Root" }
+  if (-not $resolvedRoot) { throw "SOURCE_NOT_GIT_WORKTREE: $Root" }
   $branch = Invoke-Git $Root @('branch','--show-current'); if (-not $branch) { $branch = 'DETACHED' }
   $commit = Invoke-Git $Root @('rev-parse','HEAD')
   if ($commit -notmatch '^[0-9a-fA-F]{40}$') { throw "SOURCE_HEAD_INVALID: $Root" }
-  return [pscustomobject]@{ root = [IO.Path]::GetFullPath($Root).TrimEnd('\'); branch = $branch; commit = $commit.ToLowerInvariant() }
+  return [pscustomobject]@{ root = [IO.Path]::GetFullPath($resolvedRoot).TrimEnd('\'); branch = $branch; commit = $commit.ToLowerInvariant() }
 }
 function Get-RegisteredWorktrees([string]$RepoRoot) {
   $lines = @((Invoke-Git $RepoRoot @('worktree','list','--porcelain')) -split "`r?`n")
@@ -49,6 +50,19 @@ function Resolve-MainWorktree([string]$RepoRoot) {
   if (-not $main) { throw "CANONICAL_MAIN_NOT_FOUND: $RepoRoot" }
   return (Get-GitIdentity $main.root)
 }
+function Resolve-CanonicalProductSource([string]$RepoRoot, [switch]$RequireCheckout) {
+  $identity = Get-GitIdentity $RepoRoot
+  try { $mainHead = Invoke-Git $RepoRoot @('rev-parse','--verify','refs/heads/main^{commit}') } catch { throw "CANONICAL_MAIN_REF_MISSING: $RepoRoot" }
+  if ($mainHead -notmatch '^[0-9a-fA-F]{40}$') { throw "CANONICAL_MAIN_REF_MISSING: $RepoRoot" }
+  $mainHead = $mainHead.ToLowerInvariant()
+  if ($RequireCheckout -and $identity.branch -ne 'main') {
+    throw "CANONICAL_ROOT_NOT_ON_MAIN: root=$($identity.root) currentBranch=$($identity.branch) currentHEAD=$($identity.commit) expectedBranch=main expectedHEAD=$mainHead"
+  }
+  if ($RequireCheckout -and $identity.commit -ne $mainHead) {
+    throw "CANONICAL_ROOT_HEAD_MISMATCH: root=$($identity.root) branch=main currentHEAD=$($identity.commit) expectedHEAD=$mainHead"
+  }
+  return [pscustomobject]@{ root = $identity.root; branch = 'main'; commit = $mainHead }
+}
 function Resolve-CanonicalPluginRepo {
   $candidates = @($env:OJPLATFORM_CANONICAL_PLUGIN_ROOT, 'D:\OJPlatformPlugins\OnlineCodeEditor', 'D:\OJPlatformPlugins\OnlineCodeEditor-remediation') | Where-Object { $_ -and (Test-Path $_) }
   foreach ($candidate in $candidates) {
@@ -61,16 +75,17 @@ function Resolve-CanonicalPluginRepo {
   }
   throw 'CANONICAL_PLUGIN_MAIN_NOT_FOUND'
 }
-$SourceSelectionRequired = $Command -in @('start','restart') -or $SourceRoot -or $PluginSourceRoot -or $UseCurrentCheckout
+$RuntimeTestMode = $env:OJPLATFORM_RUNTIME_TEST_MODE -eq '1'
+$SourceSelectionRequired = (-not $RuntimeTestMode) -and ($Command -in @('start','restart') -or $SourceRoot -or $PluginSourceRoot -or $UseCurrentCheckout)
 if ($SourceSelectionRequired) {
+  $CanonicalProductIdentity = Resolve-CanonicalProductSource $InvocationRoot -RequireCheckout:(-not ($UseCurrentCheckout -or [bool]$SourceRoot))
   $PluginRepoRoot = Resolve-CanonicalPluginRepo
-  $CanonicalProductIdentity = Resolve-MainWorktree $InvocationRoot
   $CanonicalPluginIdentity = Resolve-MainWorktree $PluginRepoRoot
   $ProductIdentity = if ($UseCurrentCheckout) { Resolve-RegisteredSource $InvocationRoot $InvocationRoot -RequireClean } elseif ($SourceRoot) { Resolve-RegisteredSource $SourceRoot $InvocationRoot -RequireClean } else { $CanonicalProductIdentity }
   $PluginIdentity = if ($PluginSourceRoot) { Resolve-RegisteredSource $PluginSourceRoot $PluginRepoRoot -RequireClean } else { $CanonicalPluginIdentity }
 } else {
   $PluginRepoRoot = $null
-  $CanonicalProductIdentity = [pscustomobject]@{ root = $InvocationRoot; branch = 'UNRESOLVED'; commit = 'UNRESOLVED' }
+  $CanonicalProductIdentity = if (-not $RuntimeTestMode -and $Command -eq 'status') { Resolve-CanonicalProductSource $InvocationRoot } else { [pscustomobject]@{ root = $InvocationRoot; branch = 'UNRESOLVED'; commit = 'UNRESOLVED' } }
   $CanonicalPluginIdentity = [pscustomobject]@{ root = ''; branch = 'UNRESOLVED'; commit = 'UNRESOLVED' }
   $ProductIdentity = $CanonicalProductIdentity
   $PluginIdentity = $CanonicalPluginIdentity
@@ -800,8 +815,13 @@ function Get-WorkerStatus {
 function Show-Status($state) {
   $displayProduct = if ($state.requestedSource) { [pscustomobject]$state.requestedSource } else { $ProductIdentity }
   $displayPlugin = if ($state.requestedPlugin) { [pscustomobject]$state.requestedPlugin } else { $PluginIdentity }
-  $productCanonical = if ($null -ne $displayProduct.canonical) { [bool]$displayProduct.canonical } else { $false }
+  $productCanonical = [bool]($displayProduct.root -and $displayProduct.branch -eq 'main' -and $displayProduct.commit -ieq $CanonicalProductIdentity.commit -and $displayProduct.root -ieq $CanonicalProductIdentity.root)
   $pluginCanonical = if ($null -ne $displayPlugin.canonical) { [bool]$displayPlugin.canonical } else { $false }
+  Write-Host 'CANONICAL SOURCE'
+  Write-Host "CANONICAL ROOT = $($CanonicalProductIdentity.root)"
+  Write-Host "CANONICAL BRANCH = main"
+  Write-Host "CANONICAL HEAD = $(Invoke-Git $InvocationRoot @('rev-parse','refs/heads/main'))"
+  Write-Host "CANONICAL CHECKOUT BRANCH = $(Get-GitIdentity $InvocationRoot | Select-Object -ExpandProperty branch)"
   Write-Host 'RUNTIME SOURCE'
   Write-Host "PRODUCT ROOT = $($displayProduct.root)"
   Write-Host "PRODUCT BRANCH = $($displayProduct.branch)"
@@ -831,7 +851,7 @@ function Show-Status($state) {
 function Show-StopRecovery($state) {
   Write-Host 'Manual recovery diagnostics:'
   foreach($item in @(@{service='Web';port=$Config.WebPort},@{service='API';port=$Config.ApiPort},@{service='Judge Service';port=$Config.JudgeServicePort},@{service='Host Agent';port=$Config.HostAgentPort},@{service='Supervisor';port=$Config.SupervisorPort})) {
-    $listener=Get-PortOwner ([int]$item.port)|Select-Object -First 1; if(-not $listener){continue}; $pidValue=[int]$listener.OwningProcess; $process=Get-ProcessInfo $pidValue; $name=$item.service.ToLower().Replace(' ','-'); $o=if($name -eq 'supervisor'){$null}else{Resolve-OJPlatformProcessOwnership $name ([int]$item.port) $state}; $classification=if($o -and $o.classification -eq 'PROVEN_OWNED'){'PROVEN_OJPLATFORM'}elseif($o -and $o.classification -eq 'EXTERNAL'){'EXTERNAL'}else{'UNKNOWN'}; Write-Host "SERVICE=$($item.service) PORT=$($item.port) PID=$pidValue PROCESS=$($process.Name) EXECUTABLE=$($process.ExecutablePath) COMMAND_LINE=$($process.CommandLine) OWNER=$classification"; Write-Host "Inspect: Get-CimInstance Win32_Process -Filter `"ProcessId = $pidValue`" | Select-Object ProcessId,ExecutablePath,CommandLine"; if($classification -eq 'PROVEN_OJPLATFORM'){Write-Host "Manual stop: Stop-Process -Id $pidValue -Force"}else{Write-Host 'MANUAL CONFIRMATION REQUIRED'}
+    $listener=Get-PortOwner ([int]$item.port)|Select-Object -First 1; if(-not $listener){continue}; $pidValue=[int]$listener.OwningProcess; $process=Get-ProcessInfo $pidValue; $name=$item.service.ToLower().Replace(' ','-'); $o=if($name -eq 'supervisor'){$null}else{Resolve-OJPlatformProcessOwnership $name ([int]$item.port) $state}; $classification=if($o -and $o.classification -eq 'PROVEN_OWNED'){'PROVEN_OJPLATFORM'}elseif($o -and $o.classification -eq 'EXTERNAL'){'EXTERNAL'}else{'UNKNOWN'}; Write-Host "SERVICE=$($item.service) PORT=$($item.port) PID=$pidValue PROCESS=$($process.Name) EXECUTABLE=$($process.ExecutablePath) COMMAND_LINE=$($process.CommandLine) OWNER=$classification"; Write-Host "Inspect: Get-CimInstance Win32_Process -Filter `"ProcessId = $pidValue`" | Select-Object ProcessId,ExecutablePath,CommandLine"; Write-Host "Manual kill command: Stop-Process -Id $pidValue -Force"; if($classification -ne 'PROVEN_OJPLATFORM'){Write-Host 'MANUAL CONFIRMATION REQUIRED'}
   }
 }
 function Show-Logs { Ensure-RuntimeFolders; Write-Host "Logs: $LogRoot"; foreach($file in (Get-ChildItem $LogRoot -Filter '*.log' -ErrorAction SilentlyContinue)){Write-Host "`n===== $($file.Name) =====";Get-Content $file.FullName -Tail 60} }
@@ -851,9 +871,9 @@ function Invoke-Doctor {
   $checks|Format-Table -AutoSize|Out-Host;$blocked=@($checks|Where-Object result -eq 'BLOCKED').Count;if($blocked -gt 0){Write-Host "DOCTOR BLOCKED ($blocked checks)";return 2};Write-Host 'DOCTOR READY';return 0
 }
 
-if ($env:OJPLATFORM_RUNTIME_TEST_MODE -eq '1') { return }
+if ($RuntimeTestMode) { return }
 $state=Read-State
-if (-not $SourceSelectionRequired) {
+if (-not $SourceSelectionRequired -and $Command -ne 'status') {
   if ($state.requestedSource) { $ProductIdentity = [pscustomobject]@{ root=[string]$state.requestedSource.root; branch=[string]$state.requestedSource.branch; commit=[string]$state.requestedSource.commit } }
   if ($state.requestedPlugin) { $PluginIdentity = [pscustomobject]@{ root=[string]$state.requestedPlugin.root; branch=[string]$state.requestedPlugin.branch; commit=[string]$state.requestedPlugin.commit } }
   if ($state.canonical_product_root) { $CanonicalProductIdentity = [pscustomobject]@{ root=[string]$state.canonical_product_root; branch='main'; commit=[string]$state.requestedSource.commit } }
