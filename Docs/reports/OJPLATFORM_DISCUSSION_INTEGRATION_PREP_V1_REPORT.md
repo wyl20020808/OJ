@@ -16,7 +16,7 @@ was modified. No migration was applied or renamed.
   `DISCUSSION_HEAD`; prep candidate was reconstructed from the observed main
   tree plus those exact files.
 - PREP_WORKTREE: `D:\OJPlatform-worktrees\discussion-integration-prep-v1`
-- PREP_CANDIDATE_HEAD: `90f331d1481e6ee3be38f38d3d8c3ecae5cde7e6`
+- PREP_CANDIDATE_HEAD: `1ad6055d7fba09c8c983775325a8bdec5353d35b`
 - MAIN_MERGED: NO
 
 ## Delivery Audit
@@ -245,7 +245,7 @@ CONFLICT FORECAST
 DELIVERY
 
 - PREP WORKTREE = `D:\OJPlatform-worktrees\discussion-integration-prep-v1`
-- PREP CANDIDATE HEAD = `90f331d1481e6ee3be38f38d3d8c3ecae5cde7e6`
+- PREP CANDIDATE HEAD = `1ad6055d7fba09c8c983775325a8bdec5353d35b`
 - MAIN MERGED = NO
 - CANONICAL ROOT WRITTEN = NO
 - READY FOR FINAL INTEGRATION = NO
