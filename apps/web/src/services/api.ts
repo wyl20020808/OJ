@@ -1248,11 +1248,18 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'PATCH', body: JSON.stringify(input) },
         fetcher,
       ),
-    deleteProblem: (idOrSlug: string, reason: string, expectedUpdatedAt: string) =>
+    deleteProblem: (
+      idOrSlug: string,
+      reason: string,
+      expectedUpdatedAt: string,
+    ) =>
       request<Problem>(
         baseUrl,
         `/api/problems/${encodeURIComponent(idOrSlug)}`,
-        { method: 'DELETE', body: JSON.stringify({ reason, expectedUpdatedAt }) },
+        {
+          method: 'DELETE',
+          body: JSON.stringify({ reason, expectedUpdatedAt }),
+        },
         fetcher,
       ),
     transitionProblem: (

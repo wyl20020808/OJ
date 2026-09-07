@@ -460,7 +460,9 @@ export async function buildApp(options: AppOptions = {}) {
             resource !== 'problem' ||
             !context?.userId ||
             !context.sessionId ||
-            !['read', 'create', 'update', 'transition', 'delete'].includes(action)
+            !['read', 'create', 'update', 'transition', 'delete'].includes(
+              action,
+            )
           )
             return false;
           if (action === 'create') return true;
@@ -571,7 +573,8 @@ export async function buildApp(options: AppOptions = {}) {
           throw new Error('RATE_LIMITED');
         }
       },
-      async (problemId) => Boolean((await problemRepository.get(problemId))?.deletedAt),
+      async (problemId) =>
+        Boolean((await problemRepository.get(problemId))?.deletedAt),
     );
     await registerProblemJudgeDataRoutes(app, {
       service: judgeData,
@@ -619,7 +622,10 @@ export async function buildApp(options: AppOptions = {}) {
     const problemResolver: ProblemRevisionResolver = {
       getRevision: async (problemId, revisionId) => {
         if ((await problemRepository.get(problemId))?.deletedAt)
-          throw Object.assign(new Error('PROBLEM_DELETED'), { code: 'PROBLEM_DELETED', status: 409 });
+          throw Object.assign(new Error('PROBLEM_DELETED'), {
+            code: 'PROBLEM_DELETED',
+            status: 409,
+          });
         const revisions = await problemRepository.revisions(problemId);
         const revision = revisions.find(
           (item) => item.revisionId === revisionId,
@@ -637,7 +643,8 @@ export async function buildApp(options: AppOptions = {}) {
       repository: submissionRepository,
       authorizationPolicy: {
         canSubmit: async (context, reference) => {
-          if ((await problemRepository.get(reference.problemId))?.deletedAt) return false;
+          if ((await problemRepository.get(reference.problemId))?.deletedAt)
+            return false;
           const revision = (
             await problemRepository.revisions(reference.problemId)
           ).find((item) => item.revisionId === reference.revisionId);
@@ -1176,7 +1183,9 @@ export async function buildApp(options: AppOptions = {}) {
             resource !== 'problem' ||
             !context?.userId ||
             !context.sessionId ||
-            !['read', 'create', 'update', 'transition', 'delete'].includes(action)
+            !['read', 'create', 'update', 'transition', 'delete'].includes(
+              action,
+            )
           )
             return false;
           if (action === 'create') return true;
@@ -1267,7 +1276,8 @@ export async function buildApp(options: AppOptions = {}) {
           action,
         );
       },
-      async (problemId) => Boolean((await problemRepository.get(problemId))?.deletedAt),
+      async (problemId) =>
+        Boolean((await problemRepository.get(problemId))?.deletedAt),
     );
     await registerProblemJudgeDataRoutes(app, {
       service: judgeData,
@@ -1287,7 +1297,8 @@ export async function buildApp(options: AppOptions = {}) {
       repository: submissionRepository,
       authorizationPolicy: {
         canSubmit: async (context, reference) => {
-          if ((await problemRepository.get(reference.problemId))?.deletedAt) return false;
+          if ((await problemRepository.get(reference.problemId))?.deletedAt)
+            return false;
           const revision = (
             await problemRepository.revisions(reference.problemId)
           ).find((item) => item.revisionId === reference.revisionId);
@@ -1332,7 +1343,10 @@ export async function buildApp(options: AppOptions = {}) {
       problemResolver: {
         getRevision: async (problemId, revisionId) => {
           if ((await problemRepository.get(problemId))?.deletedAt)
-            throw Object.assign(new Error('PROBLEM_DELETED'), { code: 'PROBLEM_DELETED', status: 409 });
+            throw Object.assign(new Error('PROBLEM_DELETED'), {
+              code: 'PROBLEM_DELETED',
+              status: 409,
+            });
           const revisions = await problemRepository.revisions(problemId);
           const revision = revisions.find(
             (item) => item.revisionId === revisionId,

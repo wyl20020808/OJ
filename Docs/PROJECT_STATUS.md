@@ -1,5 +1,14 @@
 # OJPlatform Project Status
 
+Main Integration Wave 2 - Team Core V1 (2026-09-07): PASS for conservative
+integration and local PostgreSQL qualification. Candidate was based on current
+main `8d0353f6b51618a46a6a7d4e44458fed90af0898` and merged the complete
+`codex/team-core-v1` history. Team migration `0023_team_core_v1` applied through
+the product runtime ledger; focused Team/API/Web tests, PostgreSQL repository
+smoke, typechecks, builds, targeted lint, architecture, and diff checks pass.
+Manual UI acceptance remains PENDING USER. See
+`Docs/reports/OJPLATFORM_MAIN_INTEGRATION_WAVE2_TEAM_CORE_V1_REPORT.md`.
+
 Team Core V1 Completion (2026-09-07): PARTIAL for runtime qualification. Team
 schema/migration, repository transactions and locks, API integration, audit
 hook wiring, dedicated member counts, cursor consistency, authorization, and
