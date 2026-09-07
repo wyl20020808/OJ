@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryDiscussionRepository } from '../apps/api/src/modules/discussion/repository.js';
 import { registerDiscussionModule } from '../apps/api/src/modules/discussion/routes.js';
 import { DiscussionRenderer } from '../apps/web/src/features/discussion/DiscussionRenderer.js';
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
+import { DiscussionPostPage } from '../apps/web/src/features/discussion/DiscussionExperience.js';
+import type { ApiClient } from '../apps/web/src/services/api.js';
 import type { DiscussionPost } from '../apps/api/src/modules/discussion/model.js';
 
 const csrf = { cookie: 'oj_csrf=t', 'x-csrf-token': 't' };
@@ -93,5 +95,57 @@ describe('Discussion Core V1', () => {
     actor = ctx('u1'); const ownerUpdate = await app.inject({ method: 'PATCH', url: `/api/discussion/comments/${comments.json().id}`, headers: csrf, payload: { contentMarkdown: 'updated' } }); expect(ownerUpdate.statusCode).toBe(200);
     await app.close();
     await deletedUserApp.close();
+  });
+
+  it('projects viewer capabilities without exposing identity', async () => {
+    const app = Fastify({ logger: false }); const repo = new InMemoryDiscussionRepository(); let actor = ctx('owner');
+    const permissions = new Map<string, Set<string>>([['moderator', new Set(['discussion:post:moderate', 'discussion:comment:moderate'])], ['publisher', new Set(['discussion:announcement:create'])]]);
+    await registerDiscussionModule(app, { repository: repo, getAuthContext: async () => actor, getAuthor: async id => ({ id, username: id, displayName: id }), hasCapability: async (id, capability) => permissions.get(id)?.has(capability) ?? false });
+    const post = await app.inject({ method: 'POST', url: '/api/discussion/posts', headers: csrf, payload: { title: 'owned', contentMarkdown: 'x', status: 'PUBLISHED' } });
+    expect(post.json().capabilities).toEqual({ canEdit: true, canDelete: true, canModerate: false });
+    const comment = await app.inject({ method: 'POST', url: `/api/discussion/posts/${post.json().id}/comments`, headers: csrf, payload: { contentMarkdown: 'owned comment' } });
+    expect(comment.json().capabilities).toEqual({ canEdit: true, canDelete: true, canModerate: false });
+    actor = ctx('other');
+    const otherPost = await app.inject({ method: 'GET', url: `/api/discussion/posts/${post.json().id}` });
+    expect(otherPost.json().capabilities).toEqual({ canEdit: false, canDelete: false, canModerate: false });
+    const otherComments = await app.inject({ method: 'GET', url: `/api/discussion/posts/${post.json().id}/comments` });
+    expect(otherComments.json().items[0].capabilities).toEqual({ canEdit: false, canDelete: false, canModerate: false });
+    actor = ctx('owner');
+    const draft = await app.inject({ method: 'POST', url: '/api/discussion/posts', headers: csrf, payload: { title: 'draft', contentMarkdown: 'x', status: 'DRAFT' } });
+    const draftView = await app.inject({ method: 'GET', url: `/api/discussion/posts/${draft.json().id}` });
+    expect(draftView.json().capabilities).toEqual({ canEdit: true, canDelete: true, canModerate: false });
+    actor = ctx('publisher');
+    const announcement = await app.inject({ method: 'POST', url: '/api/discussion/posts', headers: csrf, payload: { title: 'announcement', contentMarkdown: 'x', type: 'ANNOUNCEMENT', status: 'PUBLISHED' } });
+    expect(announcement.statusCode).toBe(201);
+    actor = ctx('owner');
+    const announcementAsOther = await app.inject({ method: 'GET', url: `/api/discussion/posts/${announcement.json().id}` });
+    expect(announcementAsOther.json().capabilities).toEqual({ canEdit: false, canDelete: false, canModerate: false });
+    actor = ctx('publisher');
+    const announcementAsOwner = await app.inject({ method: 'GET', url: `/api/discussion/posts/${announcement.json().id}` });
+    expect(announcementAsOwner.json().capabilities).toEqual({ canEdit: true, canDelete: true, canModerate: false });
+    actor = ctx('other');
+    const forged = await app.inject({ method: 'PATCH', url: `/api/discussion/posts/${post.json().id}`, headers: csrf, payload: { title: 'forged' } });
+    expect(forged.statusCode).toBe(403);
+    actor = ctx('moderator');
+    const moderatedPost = await app.inject({ method: 'GET', url: `/api/discussion/posts/${post.json().id}` });
+    expect(moderatedPost.json().capabilities).toEqual({ canEdit: true, canDelete: true, canModerate: true });
+    const moderatedComments = await app.inject({ method: 'GET', url: `/api/discussion/posts/${post.json().id}/comments` });
+    expect(moderatedComments.json().items[0].capabilities).toEqual({ canEdit: true, canDelete: true, canModerate: true });
+    actor = ctx('anonymous');
+    const anonymousApp = Fastify({ logger: false });
+    await registerDiscussionModule(anonymousApp, { repository: repo, getAuthContext: async () => undefined, getAuthor: async id => ({ id, username: id, displayName: id }) });
+    const anonymousPost = await anonymousApp.inject({ method: 'GET', url: `/api/discussion/posts/${post.json().id}` });
+    expect(anonymousPost.json().capabilities).toEqual({ canEdit: false, canDelete: false, canModerate: false });
+    await app.close(); await anonymousApp.close();
+  });
+
+  it('renders post and comment controls from server capabilities', async () => {
+    const post = { id: 'p1', publicId: 'post-p1', type: 'ARTICLE' as const, status: 'PUBLISHED' as const, title: 'Post', summary: null, contentMarkdown: 'body', publishedAt: '2026-01-01T00:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', viewCount: 1, likeCount: 0, commentCount: 1, capabilities: { canEdit: true, canDelete: true, canModerate: false }, author: { username: 'owner', displayName: 'Owner' } };
+    const comment = { id: 'c1', postId: 'p1', contentMarkdown: 'comment', status: 'VISIBLE' as const, createdAt: post.createdAt, updatedAt: post.updatedAt, capabilities: { canEdit: true, canDelete: true, canModerate: false }, author: { username: 'owner', displayName: 'Owner' } };
+    const api = { discussionPost: async () => post, discussionComments: async () => ({ items: [comment] }), likeDiscussionPost: async () => undefined, createDiscussionComment: async () => comment, updateDiscussionComment: async () => comment, deleteDiscussionComment: async () => comment, deleteDiscussionPost: async () => comment } as unknown as ApiClient;
+    const view = render(<DiscussionPostPage api={api} navigate={() => undefined} id="p1" user={null} />);
+    await waitFor(() => expect(view.getByRole('heading', { name: 'Post' })).toBeInTheDocument());
+    await waitFor(() => expect(view.getAllByRole('button', { name: '编辑' })).toHaveLength(2));
+    expect(view.getAllByRole('button', { name: '删除' })).toHaveLength(2);
   });
 });

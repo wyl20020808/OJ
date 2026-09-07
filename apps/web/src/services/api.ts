@@ -574,10 +574,11 @@ export type DiscussionPost = {
   id: string; publicId: string; type: 'ARTICLE' | 'ANNOUNCEMENT'; status: 'DRAFT' | 'PUBLISHED' | 'DELETED';
   title: string; summary: string | null; contentMarkdown: string; publishedAt: string | null; createdAt: string; updatedAt: string;
   viewCount: number; likeCount: number; commentCount: number;
-  author?: DiscussionAuthor;
+  author?: DiscussionAuthor; capabilities?: DiscussionViewerCapabilities;
 };
 export type DiscussionAuthor = { username: string; displayName: string; avatarUrl?: string };
-export type DiscussionComment = { id: string; postId: string; contentMarkdown: string; status: 'VISIBLE' | 'DELETED'; createdAt: string; updatedAt: string; author?: DiscussionAuthor };
+export type DiscussionViewerCapabilities = { canEdit: boolean; canDelete: boolean; canModerate: boolean };
+export type DiscussionComment = { id: string; postId: string; contentMarkdown: string; status: 'VISIBLE' | 'DELETED'; createdAt: string; updatedAt: string; author?: DiscussionAuthor; capabilities?: DiscussionViewerCapabilities };
 const defaultAuthMethods: AuthMethods = {
   registration: { email: false, phone: false },
   login: {
