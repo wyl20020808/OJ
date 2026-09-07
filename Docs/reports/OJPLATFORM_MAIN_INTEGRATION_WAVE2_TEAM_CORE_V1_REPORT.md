@@ -10,7 +10,7 @@ Manual UI acceptance remains PENDING USER.
 - Team branch: `codex/team-core-v1`
 - Team head: `98141786d3887c21572d30d56b8792f0843f8d2f`
 - Candidate branch: `codex/team-core-integration-v1`
-- Candidate merge: `3d1948b`
+- Candidate final: `226a0ad` (Team merge `3d1948b` plus integration evidence)
 - Team delivery: VALID. Scope contains Team domain/API/Web/migration/tests, minimal registration, contract and status docs only.
 - Excluded: Problem Tags, Discussion, Homework, Assignment, Team Problem Collection, Launcher, Judge, Sandbox.
 
