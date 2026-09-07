@@ -10,6 +10,10 @@ import {
   type Problem,
 } from './model.js';
 import {
+  InMemoryTagCatalogRepository,
+  type TagCatalogRepository,
+} from './catalog.js';
+import {
   InMemoryProblemRepository,
   type ProblemRepository,
 } from './repository.js';
@@ -29,6 +33,7 @@ export type ProblemModuleContext = {
   projectMetadata?: (
     problem: Problem,
   ) => Promise<Partial<Problem>> | Partial<Problem>;
+  tagCatalog?: TagCatalogRepository;
 };
 const error = (
   reply: FastifyReply,
@@ -68,9 +73,20 @@ export async function registerProblemModule(
     context.auditHook,
     context.guardGuestMutation,
     context.projectMetadata,
+    context.tagCatalog ?? new InMemoryTagCatalogRepository(),
   );
   const auth = async (request: FastifyRequest) =>
     context.getAuthContext ? await context.getAuthContext(request) : undefined;
+  app.get('/api/tags', async (request, reply) => {
+    const q = request.query as Record<string, unknown>;
+    const search = typeof q.q === 'string' ? q.q.trim() : undefined;
+    return reply.send(
+      await (context.tagCatalog ?? new InMemoryTagCatalogRepository()).list({
+        ...(search ? { search } : {}),
+        activeOnly: true,
+      }),
+    );
+  });
   app.get('/api/problems', async (request, reply) => {
     const q = request.query as Record<string, unknown>;
     const limit = Number(q.limit ?? 20);
@@ -200,6 +216,18 @@ export async function registerProblemModule(
           'FORBIDDEN',
           'Problem authoring is forbidden',
         );
+      if (
+        e instanceof Error &&
+        (e.message === 'INVALID_TAGS' ||
+          e.message === 'TAG_CATALOG_UNAVAILABLE')
+      )
+        return error(
+          reply,
+          request,
+          400,
+          'INVALID_TAG',
+          'Selected tags are unavailable or inactive',
+        );
       if (e instanceof Error && e.message === 'RATE_LIMITED')
         return error(
           reply,
@@ -249,6 +277,18 @@ export async function registerProblemModule(
           'FORBIDDEN',
           'Problem update is forbidden',
         );
+      if (
+        e instanceof Error &&
+        (e.message === 'INVALID_TAGS' ||
+          e.message === 'TAG_CATALOG_UNAVAILABLE')
+      )
+        return error(
+          reply,
+          request,
+          400,
+          'INVALID_TAG',
+          'Selected tags are unavailable or inactive',
+        );
       if (e instanceof Error && e.message === 'RATE_LIMITED')
         return error(
           reply,
@@ -261,15 +301,39 @@ export async function registerProblemModule(
     }
   });
   app.delete('/api/problems/:idOrSlug', async (request, reply) => {
-    if (!csrf(request)) return error(reply, request, 403, 'FORBIDDEN', 'CSRF validation failed');
+    if (!csrf(request))
+      return error(reply, request, 403, 'FORBIDDEN', 'CSRF validation failed');
     try {
       const key = (request.params as { idOrSlug: string }).idOrSlug;
-      return reply.send(await service.delete(key, request.body, await auth(request), request.id));
+      return reply.send(
+        await service.delete(
+          key,
+          request.body,
+          await auth(request),
+          request.id,
+        ),
+      );
     } catch (e) {
-      if (e instanceof ProblemNotFoundError) return error(reply, request, 404, 'NOT_FOUND', 'Problem not found');
-      if (e instanceof ProblemDeleteConflictError) return error(reply, request, 409, 'CONFLICT', e.message);
-      if (e instanceof Error && e.message === 'FORBIDDEN') return error(reply, request, 403, 'FORBIDDEN', 'Problem deletion is forbidden');
-      if (e instanceof Error && e.message === 'VALIDATION_ERROR') return error(reply, request, 400, 'VALIDATION_ERROR', 'Delete reason and expectedUpdatedAt required');
+      if (e instanceof ProblemNotFoundError)
+        return error(reply, request, 404, 'NOT_FOUND', 'Problem not found');
+      if (e instanceof ProblemDeleteConflictError)
+        return error(reply, request, 409, 'CONFLICT', e.message);
+      if (e instanceof Error && e.message === 'FORBIDDEN')
+        return error(
+          reply,
+          request,
+          403,
+          'FORBIDDEN',
+          'Problem deletion is forbidden',
+        );
+      if (e instanceof Error && e.message === 'VALIDATION_ERROR')
+        return error(
+          reply,
+          request,
+          400,
+          'VALIDATION_ERROR',
+          'Delete reason and expectedUpdatedAt required',
+        );
       throw e;
     }
   });

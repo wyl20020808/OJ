@@ -113,6 +113,14 @@ export type Problem = {
   currentRevisionId?: string;
   difficulty?: ProblemDifficulty | null;
   tags?: string[];
+  tagDetails?: Array<{
+    id: number;
+    slug: string;
+    name: string;
+    category: string;
+    displayOrder: number;
+    isActive: boolean;
+  }>;
   source?: string;
   statistics?: {
     submissionCount: number;
@@ -496,6 +504,7 @@ export type ProblemInput = Omit<
 > & {
   testdataVersion?: string | null;
   examples?: Example[];
+  tagIds?: number[];
 };
 import type {
   ContestProblem,
@@ -1209,6 +1218,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<Problem>(
         baseUrl,
         `/api/problems/${encodeURIComponent(idOrSlug)}`,
+        undefined,
+        fetcher,
+      ),
+    tags: () =>
+      request<NonNullable<Problem['tagDetails']>>(
+        baseUrl,
+        '/api/tags',
         undefined,
         fetcher,
       ),

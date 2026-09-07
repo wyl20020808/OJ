@@ -33,6 +33,11 @@ try {
     '0017_problem_authoring_v2',
     '0018_problem_public_metadata',
     '0019_editor_code_drafts',
+    '0020_judge_artifacts',
+    '0021_submission_dispatch',
+    '0022_problem_delete_provenance',
+    '0023_team_core_v1',
+    '0024_problem_tag_catalog',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {

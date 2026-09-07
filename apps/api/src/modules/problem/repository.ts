@@ -38,7 +38,11 @@ export interface ProblemRepository {
   get(idOrSlug: string): Promise<Problem | undefined>;
   list(query: ProblemListQuery): Promise<{ items: Problem[]; total: number }>;
   update(idOrSlug: string, input: ProblemUpdateInput): Promise<Problem>;
-  tombstone(idOrSlug: string, input: { reason: string; expectedUpdatedAt: string }, deletedBy: string): Promise<Problem>;
+  tombstone(
+    idOrSlug: string,
+    input: { reason: string; expectedUpdatedAt: string },
+    deletedBy: string,
+  ): Promise<Problem>;
   revisions(idOrSlug: string): Promise<ProblemRevision[]>;
   createRevision(
     idOrSlug: string,
@@ -65,6 +69,7 @@ export class InMemoryProblemRepository implements ProblemRepository {
       publicNumber: this.nextPublicNumber++,
       publicId: '',
       tags: input.tags ?? [],
+      tagDetails: (input as Problem).tagDetails ?? [],
       createdAt: timestamp,
       updatedAt: timestamp,
     } as Problem;
@@ -80,13 +85,24 @@ export class InMemoryProblemRepository implements ProblemRepository {
       (p) => p.id === key || p.slug === key || p.publicId === key,
     );
   }
-  async tombstone(key: string, input: { reason: string; expectedUpdatedAt: string }, deletedBy: string) {
+  async tombstone(
+    key: string,
+    input: { reason: string; expectedUpdatedAt: string },
+    deletedBy: string,
+  ) {
     const row = await this.get(key);
     if (!row) throw new Error('NOT_FOUND');
     if (row.deletedAt) return row;
-    if (row.updatedAt !== input.expectedUpdatedAt) throw new ProblemDeleteConflictError('Problem version is stale');
+    if (row.updatedAt !== input.expectedUpdatedAt)
+      throw new ProblemDeleteConflictError('Problem version is stale');
     const timestamp = now();
-    const updated = { ...row, deletedAt: timestamp, deletedBy, deleteReason: input.reason, updatedAt: timestamp };
+    const updated = {
+      ...row,
+      deletedAt: timestamp,
+      deletedBy,
+      deleteReason: input.reason,
+      updatedAt: timestamp,
+    };
     this.rows.set(row.id, updated);
     return updated;
   }
@@ -94,7 +110,8 @@ export class InMemoryProblemRepository implements ProblemRepository {
     const rows = [...this.rows.values()]
       .filter(
         (p) =>
-          (!p.deletedAt && (!query.publicOnly ||
+          !p.deletedAt &&
+          (!query.publicOnly ||
             (p.visibility === 'public' && p.status === 'published')) &&
           (!query.ownedOrPublicBy ||
             p.authorId === query.ownedOrPublicBy ||
@@ -105,7 +122,7 @@ export class InMemoryProblemRepository implements ProblemRepository {
           (!query.search ||
             `${p.slug} ${p.title}`
               .toLocaleLowerCase()
-              .includes(query.search.toLocaleLowerCase()))),
+              .includes(query.search.toLocaleLowerCase())),
       )
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     return {
@@ -240,8 +257,14 @@ export class PostgresProblemRepository implements ProblemRepository {
         ],
       );
       const problem = mapRow(result.rows[0]!);
-      await this.persistTags(executor, problem.id, input.tags ?? []);
-      problem.tags = input.tags ?? [];
+      await this.persistTags(
+        executor,
+        problem.id,
+        input.tags ?? [],
+        input.tagIds,
+      );
+      problem.tagDetails = await this.loadTags(executor, problem.id);
+      problem.tags = problem.tagDetails.map((tag) => tag.name);
       const revisionId = randomUUID();
       await executor.query(
         'INSERT INTO problem_revisions (id,problem_id,public_number,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)',
@@ -278,8 +301,10 @@ export class PostgresProblemRepository implements ProblemRepository {
   }
   async get(key: string) {
     const result = await this.pool.query(
-      `SELECT p.*, COALESCE((SELECT array_agg(t.display_name ORDER BY t.display_name)
-        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), ARRAY[]::text[]) AS tags
+      `SELECT p.*, COALESCE((SELECT array_agg(t.display_name ORDER BY t.display_order, t.id)
+        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), ARRAY[]::text[]) AS tags,
+        COALESCE((SELECT json_agg(json_build_object('id',t.id,'slug',t.slug,'name',t.name,'category',t.category,'displayOrder',t.display_order,'isActive',t.is_active) ORDER BY t.display_order,t.id)
+        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), '[]'::json) AS tag_details
        FROM problems p
        WHERE (p.id = $1 OR p.slug = $1)
           OR p.public_number = CASE WHEN $1 ~ '^P[0-9]+$' THEN substring($1 FROM 2)::bigint END
@@ -288,7 +313,11 @@ export class PostgresProblemRepository implements ProblemRepository {
     );
     return result.rows[0] ? mapRow(result.rows[0]) : undefined;
   }
-  async tombstone(key: string, input: { reason: string; expectedUpdatedAt: string }, deletedBy: string) {
+  async tombstone(
+    key: string,
+    input: { reason: string; expectedUpdatedAt: string },
+    deletedBy: string,
+  ) {
     const row = await this.get(key);
     if (!row) throw new Error('NOT_FOUND');
     if (row.deletedAt) return row;
@@ -297,12 +326,18 @@ export class PostgresProblemRepository implements ProblemRepository {
         'UPDATE problems SET deleted_at=now(), deleted_by=$1, delete_reason=$2, updated_at=now() WHERE id=$3 AND deleted_at IS NULL AND updated_at=$4 RETURNING *',
         [deletedBy, input.reason, row.id, input.expectedUpdatedAt],
       );
-      if (!result.rows[0]) throw new ProblemDeleteConflictError('Problem version is stale');
+      if (!result.rows[0])
+        throw new ProblemDeleteConflictError('Problem version is stale');
       return mapRow(result.rows[0]);
     });
   }
   async list(query: ProblemListQuery) {
-    const clauses = ['deleted_at IS NULL', ...(query.publicOnly ? ["visibility='public'", "status='published'"] : [])];
+    const clauses = [
+      'deleted_at IS NULL',
+      ...(query.publicOnly
+        ? ["visibility='public'", "status='published'"]
+        : []),
+    ];
     const params: unknown[] = [];
     if (query.ownedOrPublicBy) {
       params.push(query.ownedOrPublicBy);
@@ -335,8 +370,10 @@ export class PostgresProblemRepository implements ProblemRepository {
     );
     params.push(query.limit, query.offset ?? 0);
     const result = await this.pool.query(
-      `SELECT p.*, COALESCE((SELECT array_agg(t.display_name ORDER BY t.display_name)
-        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), ARRAY[]::text[]) AS tags
+      `SELECT p.*, COALESCE((SELECT array_agg(t.display_name ORDER BY t.display_order, t.id)
+        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), ARRAY[]::text[]) AS tags,
+        COALESCE((SELECT json_agg(json_build_object('id',t.id,'slug',t.slug,'name',t.name,'category',t.category,'displayOrder',t.display_order,'isActive',t.is_active) ORDER BY t.display_order,t.id)
+        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), '[]'::json) AS tag_details
        FROM problems p ${where} ORDER BY public_number ASC, id ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
@@ -350,11 +387,16 @@ export class PostgresProblemRepository implements ProblemRepository {
     if (!row) throw new Error('NOT_FOUND');
     if (row.deletedAt) throw new Error('PROBLEM_DELETED');
     const hasSamples = 'samples' in input || 'examples' in input;
-    const fields = (Object.keys(input) as (keyof ProblemUpdateInput)[]).filter(
-      (field) => field !== 'samples' && field !== 'tags',
+    const fields = Object.keys(input).filter(
+      (field) =>
+        field !== 'samples' &&
+        field !== 'tags' &&
+        field !== 'tagIds' &&
+        field !== 'tagDetails',
     );
     if (hasSamples && !fields.includes('examples')) fields.push('examples');
-    if (!fields.length && !('tags' in input)) return row;
+    if (!fields.length && !('tags' in input) && !('tagIds' in input))
+      return row;
     return this.transaction(async (executor) => {
       const columns: string[] = [];
       const params: unknown[] = [];
@@ -366,7 +408,7 @@ export class PostgresProblemRepository implements ProblemRepository {
         const value =
           field === 'examples'
             ? JSON.stringify(storedSamples(input.samples ?? row.samples))
-            : input[field];
+            : (input as Record<string, unknown>)[field];
         params.push(value);
         columns.push(`${column} = $${params.length}`);
       }
@@ -381,9 +423,15 @@ export class PostgresProblemRepository implements ProblemRepository {
             ).rows[0]!,
           )
         : { ...row, updatedAt: now() };
-      if ('tags' in input) {
-        await this.persistTags(executor, row.id, input.tags ?? []);
-        updated.tags = input.tags ?? [];
+      if ('tags' in input || 'tagIds' in input) {
+        await this.persistTags(
+          executor,
+          row.id,
+          input.tags ?? [],
+          input.tagIds,
+        );
+        updated.tagDetails = await this.loadTags(executor, row.id);
+        updated.tags = updated.tagDetails.map((tag) => tag.name);
       }
       if (
         updated.currentRevisionId &&
@@ -462,10 +510,19 @@ export class PostgresProblemRepository implements ProblemRepository {
     executor: QueryExecutor,
     problemId: string,
     values: string[],
+    tagIds?: number[],
   ) {
     await executor.query('DELETE FROM problem_tags WHERE problem_id=$1', [
       problemId,
     ]);
+    if (tagIds !== undefined) {
+      if (tagIds.length)
+        await executor.query(
+          'INSERT INTO problem_tags (problem_id, tag_id) SELECT $1, unnest($2::bigint[]) ON CONFLICT DO NOTHING',
+          [problemId, tagIds],
+        );
+      return;
+    }
     for (const value of values) {
       const displayName = value.trim().replace(/\s+/g, ' ');
       const normalizedKey = displayName.toLocaleLowerCase();
@@ -479,6 +536,20 @@ export class PostgresProblemRepository implements ProblemRepository {
         [problemId, normalizedKey],
       );
     }
+  }
+  private async loadTags(executor: QueryExecutor, problemId: string) {
+    const result = await executor.query(
+      'SELECT t.id, t.slug, t.name, t.category, t.display_order, t.is_active FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=$1 ORDER BY t.display_order, t.id',
+      [problemId],
+    );
+    return result.rows.map((row) => ({
+      id: Number(row.id),
+      slug: String(row.slug ?? row.normalized_key),
+      name: String(row.name ?? row.display_name),
+      category: String(row.category ?? '未分类'),
+      displayOrder: Number(row.display_order ?? 0),
+      isActive: Boolean(row.is_active ?? true),
+    }));
   }
 }
 function mapRow(row: Record<string, unknown>): Problem {
@@ -527,17 +598,28 @@ function mapRow(row: Record<string, unknown>): Problem {
       : row.author_id
         ? String(row.author_id)
         : null,
-    sourceType: String(row.source_type ?? 'CREATOR') as NonNullable<Problem['sourceType']>,
+    sourceType: String(row.source_type ?? 'CREATOR') as NonNullable<
+      Problem['sourceType']
+    >,
     tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
+    tagDetails:
+      ((typeof row.tag_details === 'string'
+        ? JSON.parse(row.tag_details)
+        : row.tag_details) as Problem['tagDetails']) ?? [],
     createdAt: new Date(String(row.created_at)).toISOString(),
     updatedAt: new Date(String(row.updated_at ?? row.created_at)).toISOString(),
     ...(row.current_revision_id
       ? { currentRevisionId: String(row.current_revision_id) }
       : {}),
-    deletedAt: row.deleted_at ? new Date(String(row.deleted_at)).toISOString() : null,
+    deletedAt: row.deleted_at
+      ? new Date(String(row.deleted_at)).toISOString()
+      : null,
     deletedBy: row.deleted_by == null ? null : String(row.deleted_by),
     deleteReason: row.delete_reason == null ? null : String(row.delete_reason),
-    provenance: row.provenance && typeof row.provenance === 'object' ? row.provenance as Record<string, unknown> : null,
+    provenance:
+      row.provenance && typeof row.provenance === 'object'
+        ? (row.provenance as Record<string, unknown>)
+        : null,
   };
 }
 

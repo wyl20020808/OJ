@@ -26,6 +26,7 @@ import { RedisFixedWindowLimiter } from './modules/social/rate-limiter.js';
 import {
   InMemoryProblemRepository,
   PostgresProblemRepository,
+  PostgresTagCatalogRepository,
   registerProblemModule,
 } from './modules/problem/index.js';
 import { createMemoryAuditHook } from './modules/authz/index.js';
@@ -452,6 +453,7 @@ export async function buildApp(options: AppOptions = {}) {
     };
     await registerProblemModule(app, {
       repository: problemRepository,
+      tagCatalog: new PostgresTagCatalogRepository(database.pool),
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       authorizationPolicy: {
