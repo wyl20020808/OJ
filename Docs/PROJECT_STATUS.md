@@ -494,3 +494,16 @@ architecture, targeted lint, and diff check pass. PostgreSQL migration and clean
 dry-run remain NOT VERIFIED because DATABASE_URL is unavailable. Cleanup apply was
 not executed; manual UI acceptance remains pending user. See
 `Docs/reports/OJPLATFORM_PROBLEM_DELETE_FOUNDATION_CONSERVATIVE_INTEGRATION_V1_REPORT.md`.
+
+Discussion Core V1 (2026-09-06): PARTIAL. Discussion domain, API routes,
+sanitized Markdown/LaTeX renderer, Web home/detail/editor, migration, focused
+tests, typechecks, builds, architecture check, and diff check added on isolated
+branch `codex/discussion-core-v1`. PostgreSQL runtime and manual UI acceptance
+remain NOT VERIFIED. See
+`Docs/reports/OJPLATFORM_DISCUSSION_CORE_V1_REPORT.md`.
+
+Discussion Core V1 closeout (2026-09-07): requested closeout items added:
+safe author projection/profile links with deleted-user fallback, shared
+Markdown toolbar, comment refresh/edit/delete interaction, and stale navigation
+test update. Focused/component tests, typecheck, builds, lint, and diff check
+pass. PostgreSQL runtime and manual UI acceptance remain NOT VERIFIED.

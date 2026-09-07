@@ -86,6 +86,7 @@ import {
   PostgresEditorDraftRepository,
   registerEditorDraftModule,
 } from './modules/editor-draft/index.js';
+import { InMemoryDiscussionRepository, PostgresDiscussionRepository, registerDiscussionModule } from './modules/discussion/index.js';
 
 const operatorUserIds = () =>
   new Set(
@@ -977,6 +978,16 @@ export async function buildApp(options: AppOptions = {}) {
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
     });
+    await registerDiscussionModule(app, {
+      repository: new PostgresDiscussionRepository(database.pool),
+      getAuthContext: async (request) => (await auth.getAuthContext(request)) ?? undefined,
+      hasCapability: (userId, capability) => hasPermissions(userId, [capability]),
+      getAuthor: async (userId) => {
+        const user = await auth.getUser(userId);
+        return user ? { id: user.id, username: user.username, displayName: user.displayName } : null;
+      },
+      audit: auditHook,
+    });
     await registerWorkerControlRoutes(app, {
       cache,
       ...(process.env.OJPLATFORM_WORKER_HEARTBEAT_PREFIX
@@ -1450,6 +1461,16 @@ export async function buildApp(options: AppOptions = {}) {
       operatorUserIds: configuredOperatorUserIds,
       operatorUsernames: configuredOperatorUsernames,
       resolveUserName: async (userId) => (await auth.getUser(userId))?.username,
+    });
+    await registerDiscussionModule(app, {
+      repository: new InMemoryDiscussionRepository(),
+      getAuthContext: async (request) => (await auth.getAuthContext(request)) ?? undefined,
+      hasCapability: async (userId, capability) => hasPermissions(userId, [capability]),
+      getAuthor: async (userId) => {
+        const user = await auth.getUser(userId);
+        return user ? { id: user.id, username: user.username, displayName: user.displayName } : null;
+      },
+      audit: auditHook,
     });
     app.addHook('onClose', async () => sandboxRuntime.close());
   }

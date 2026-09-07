@@ -570,6 +570,14 @@ async function request<T>(
   return (await response.json()) as T;
 }
 export type ApiClient = ReturnType<typeof createApiClient>;
+export type DiscussionPost = {
+  id: string; publicId: string; authorId: string; type: 'ARTICLE' | 'ANNOUNCEMENT'; status: 'DRAFT' | 'PUBLISHED' | 'DELETED';
+  title: string; summary: string | null; contentMarkdown: string; publishedAt: string | null; createdAt: string; updatedAt: string;
+  viewCount: number; likeCount: number; commentCount: number;
+  author?: DiscussionAuthor;
+};
+export type DiscussionAuthor = { id: string; username: string; displayName: string; avatarUrl?: string };
+export type DiscussionComment = { id: string; postId: string; authorId: string; contentMarkdown: string; status: 'VISIBLE' | 'DELETED'; createdAt: string; updatedAt: string; author?: DiscussionAuthor };
 const defaultAuthMethods: AuthMethods = {
   registration: { email: false, phone: false },
   login: {
@@ -588,6 +596,18 @@ const defaultAuthMethods: AuthMethods = {
 };
 export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
   return {
+    discussionPosts: (query = '') => request<{ items: DiscussionPost[]; nextCursor?: string }>(baseUrl, `/api/discussion/posts${query ? `?${query}` : ''}`, undefined, fetcher),
+    discussionPost: (id: string) => request<DiscussionPost>(baseUrl, `/api/discussion/posts/${encodeURIComponent(id)}`, undefined, fetcher),
+    createDiscussionPost: (input: { title: string; summary?: string; contentMarkdown: string; type?: 'ARTICLE' | 'ANNOUNCEMENT'; status?: 'DRAFT' | 'PUBLISHED' }) => request<DiscussionPost>(baseUrl, '/api/discussion/posts', { method: 'POST', body: JSON.stringify(input) }, fetcher),
+    updateDiscussionPost: (id: string, input: Partial<Pick<DiscussionPost, 'title' | 'summary' | 'contentMarkdown' | 'type'>>) => request<DiscussionPost>(baseUrl, `/api/discussion/posts/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) }, fetcher),
+    publishDiscussionPost: (id: string) => request<DiscussionPost>(baseUrl, `/api/discussion/posts/${encodeURIComponent(id)}/publish`, { method: 'POST', body: '{}' }, fetcher),
+    deleteDiscussionPost: (id: string) => request<DiscussionPost>(baseUrl, `/api/discussion/posts/${encodeURIComponent(id)}`, { method: 'DELETE', body: '{}' }, fetcher),
+    discussionComments: (id: string, query = '') => request<{ items: DiscussionComment[]; nextCursor?: string }>(baseUrl, `/api/discussion/posts/${encodeURIComponent(id)}/comments${query ? `?${query}` : ''}`, undefined, fetcher),
+    createDiscussionComment: (id: string, contentMarkdown: string) => request<DiscussionComment>(baseUrl, `/api/discussion/posts/${encodeURIComponent(id)}/comments`, { method: 'POST', body: JSON.stringify({ contentMarkdown }) }, fetcher),
+    updateDiscussionComment: (id: string, contentMarkdown: string) => request<DiscussionComment>(baseUrl, `/api/discussion/comments/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ contentMarkdown }) }, fetcher),
+    deleteDiscussionComment: (id: string) => request<DiscussionComment>(baseUrl, `/api/discussion/comments/${encodeURIComponent(id)}`, { method: 'DELETE', body: '{}' }, fetcher),
+    likeDiscussionPost: (id: string) => request<{ liked: boolean }>(baseUrl, `/api/discussion/posts/${encodeURIComponent(id)}/likes`, { method: 'POST', body: '{}' }, fetcher),
+    unlikeDiscussionPost: (id: string) => request<void>(baseUrl, `/api/discussion/posts/${encodeURIComponent(id)}/likes`, { method: 'DELETE', body: '{}' }, fetcher),
     me: () =>
       request<AuthenticatedUser>(baseUrl, '/api/auth/me', undefined, fetcher),
     judgeAdminCapabilities: () =>

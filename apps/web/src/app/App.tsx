@@ -71,10 +71,15 @@ import {
   zhCN,
 } from './locale.js';
 import { ProductSubmissionAdapter } from '../services/submission-adapter.js';
+import { DiscussionEditor, DiscussionHome, DiscussionPostPage } from '../features/discussion/DiscussionExperience.js';
 
 type Route = {
   name:
     | 'home'
+    | 'discussion'
+    | 'discussion-post'
+    | 'discussion-new'
+    | 'discussion-edit'
     | 'login'
     | 'register'
     | 'problems'
@@ -110,6 +115,10 @@ type Route = {
 };
 function route(path = window.location.pathname): Route {
   if (path === '/') return { name: 'home' };
+  if (path === '/discussion' || path === '/discussion/') return { name: 'discussion' };
+  if (path === '/discussion/new') return { name: 'discussion-new' };
+  if (path.startsWith('/discussion/') && path.endsWith('/edit')) return { name: 'discussion-edit', id: decodeURIComponent(path.slice(12, -5)) };
+  if (path.startsWith('/discussion/')) return { name: 'discussion-post', id: decodeURIComponent(path.slice(12)) };
   if (path === '/login') return { name: 'login' };
   if (path === '/register') return { name: 'register' };
   if (path === '/403' || path === '/forbidden') return { name: 'forbidden' };
@@ -240,6 +249,10 @@ const breadcrumbHistory = (): BreadcrumbItem[] => {
 function Breadcrumbs({ current }: { current: Route }) {
   const leaf: Record<Route['name'], string> = {
     home: '首页',
+    discussion: '讨论',
+    'discussion-post': current.id ?? '文章',
+    'discussion-new': '写文章',
+    'discussion-edit': '编辑文章',
     login: '登录',
     register: '注册',
     problems: '题库',
@@ -2863,6 +2876,14 @@ export function App() {
   const page =
     current.name === 'home' ? (
       <Home api={api} user={user} />
+    ) : current.name === 'discussion' ? (
+      <DiscussionHome api={api} navigate={navigate} user={user} />
+    ) : current.name === 'discussion-post' ? (
+      <DiscussionPostPage api={api} navigate={navigate} id={current.id ?? ''} user={user} />
+    ) : current.name === 'discussion-new' ? (
+      <DiscussionEditor api={api} navigate={navigate} user={user} />
+    ) : current.name === 'discussion-edit' ? (
+      <DiscussionEditor api={api} navigate={navigate} {...(current.id ? { id: current.id } : {})} user={user} />
     ) : current.name === 'login' || current.name === 'register' ? (
       <AuthExperience
         mode={current.name}
@@ -3058,6 +3079,7 @@ export function App() {
           >
             题库
           </Link>
+          <Link to="/discussion" className={current.name.startsWith('discussion') ? 'active' : ''}>讨论</Link>
           <Link
             to="/contests"
             className={current.name.includes('contest') ? 'active' : ''}

@@ -2515,3 +2515,23 @@ footer {
     gap: 0.35rem 0.55rem;
   }
 }
+.discussion-page { max-width: 980px; margin: 0 auto; }
+.discussion-list { display: grid; gap: 1rem; }
+.discussion-list-item { border-bottom: 1px solid var(--border, #d9dee8); padding: 1rem 0; }
+.discussion-list-item h2 { margin: .35rem 0; }
+.discussion-type { color: #2563eb; font-size: .8rem; font-weight: 700; }
+.discussion-type.announcement { color: #b45309; }
+.discussion-meta { color: #64748b; font-size: .9rem; }
+.discussion-renderer { line-height: 1.75; }
+.discussion-renderer pre { overflow-x: auto; padding: 1rem; background: #111827; color: #f8fafc; }
+.discussion-renderer img { max-width: 100%; }
+.discussion-actions { display: flex; gap: .6rem; margin: 1.25rem 0; }
+.discussion-author { display: inline-flex; gap: .35rem; align-items: center; color: inherit; text-decoration: none; font-size: .9rem; }
+.discussion-author small { color: #64748b; }
+.discussion-author-avatar { display: inline-grid; place-items: center; width: 1.65rem; height: 1.65rem; border-radius: 50%; background: #dbeafe; color: #1d4ed8; font-weight: 700; }
+.discussion-comments-heading { display: flex; justify-content: space-between; align-items: center; }
+.discussion-comment { border-top: 1px solid var(--border, #d9dee8); padding: 1rem 0; }
+.discussion-comments textarea, .discussion-editor textarea, .discussion-editor input { width: 100%; box-sizing: border-box; margin: .5rem 0; padding: .7rem; }
+.discussion-editor-split { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.discussion-preview { border: 1px solid var(--border, #d9dee8); padding: 1rem; min-height: 260px; overflow: auto; }
+@media (max-width: 720px) { .discussion-editor-split { grid-template-columns: 1fr; } }

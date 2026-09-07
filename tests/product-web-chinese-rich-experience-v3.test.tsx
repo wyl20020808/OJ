@@ -257,7 +257,6 @@ describe('Product Web Chinese Rich Experience V3', () => {
   it.each([
     ['WEB-V3-24', '比赛'],
     ['WEB-V3-25', '排名'],
-    ['WEB-V3-26', '讨论'],
   ])('%s optional capability is not fabricated', async (_id, value) => {
     renderApp();
     if (value === '比赛') {
