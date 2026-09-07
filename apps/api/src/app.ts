@@ -5,6 +5,7 @@ import type { IncomingMessage } from 'node:http';
 import { createHash } from 'node:crypto';
 import { Type } from '@sinclair/typebox';
 import type { TestcaseSetManifest } from '@ojplatform/judge-runtime';
+import type { JudgeJobCreateInput } from '@ojplatform/judge-runtime';
 import { createDatabase, checkDatabase } from '@ojplatform/database';
 import { createCache, checkCache } from '@ojplatform/cache';
 import { createRedisRateLimiter } from './modules/auth/rate-limiter.js';
@@ -86,6 +87,12 @@ import {
   PostgresEditorDraftRepository,
   registerEditorDraftModule,
 } from './modules/editor-draft/index.js';
+import {
+  InMemoryTeamRepository,
+  PostgresTeamRepository,
+  TeamService,
+  registerTeamModule,
+} from './modules/team/index.js';
 
 const operatorUserIds = () =>
   new Set(
@@ -230,14 +237,31 @@ export async function buildApp(options: AppOptions = {}) {
     const statusCode =
       typeof error === 'object' &&
       error !== null &&
-      'statusCode' in error &&
-      typeof error.statusCode === 'number' &&
-      error.statusCode >= 400
-        ? error.statusCode
+      ('statusCode' in error || 'status' in error) &&
+      typeof ('statusCode' in error ? error.statusCode : error.status) ===
+        'number' &&
+      (('statusCode' in error ? error.statusCode : error.status) as number) >=
+        400
+        ? (('statusCode' in error ? error.statusCode : error.status) as number)
         : 500;
     return reply.status(statusCode).send({
-      code: statusCode === 404 ? 'NOT_FOUND' : 'INTERNAL_ERROR',
-      message: statusCode === 404 ? 'Route not found' : 'Internal server error',
+      code:
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        typeof error.code === 'string'
+          ? error.code
+          : statusCode === 404
+            ? 'NOT_FOUND'
+            : 'INTERNAL_ERROR',
+      message:
+        statusCode === 404
+          ? 'Route not found'
+          : typeof error === 'object' && error !== null && 'code' in error
+            ? error instanceof Error
+              ? error.message
+              : 'Request failed'
+            : 'Internal server error',
       requestId: request.id,
     });
   });
@@ -436,7 +460,9 @@ export async function buildApp(options: AppOptions = {}) {
             resource !== 'problem' ||
             !context?.userId ||
             !context.sessionId ||
-            !['read', 'create', 'update', 'transition', 'delete'].includes(action)
+            !['read', 'create', 'update', 'transition', 'delete'].includes(
+              action,
+            )
           )
             return false;
           if (action === 'create') return true;
@@ -547,7 +573,8 @@ export async function buildApp(options: AppOptions = {}) {
           throw new Error('RATE_LIMITED');
         }
       },
-      async (problemId) => Boolean((await problemRepository.get(problemId))?.deletedAt),
+      async (problemId) =>
+        Boolean((await problemRepository.get(problemId))?.deletedAt),
     );
     await registerProblemJudgeDataRoutes(app, {
       service: judgeData,
@@ -595,7 +622,10 @@ export async function buildApp(options: AppOptions = {}) {
     const problemResolver: ProblemRevisionResolver = {
       getRevision: async (problemId, revisionId) => {
         if ((await problemRepository.get(problemId))?.deletedAt)
-          throw Object.assign(new Error('PROBLEM_DELETED'), { code: 'PROBLEM_DELETED', status: 409 });
+          throw Object.assign(new Error('PROBLEM_DELETED'), {
+            code: 'PROBLEM_DELETED',
+            status: 409,
+          });
         const revisions = await problemRepository.revisions(problemId);
         const revision = revisions.find(
           (item) => item.revisionId === revisionId,
@@ -613,7 +643,8 @@ export async function buildApp(options: AppOptions = {}) {
       repository: submissionRepository,
       authorizationPolicy: {
         canSubmit: async (context, reference) => {
-          if ((await problemRepository.get(reference.problemId))?.deletedAt) return false;
+          if ((await problemRepository.get(reference.problemId))?.deletedAt)
+            return false;
           const revision = (
             await problemRepository.revisions(reference.problemId)
           ).find((item) => item.revisionId === reference.revisionId);
@@ -977,6 +1008,14 @@ export async function buildApp(options: AppOptions = {}) {
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
     });
+    await registerTeamModule(app, {
+      service: new TeamService(
+        new PostgresTeamRepository(database.pool),
+        auditHook,
+      ),
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+    });
     await registerWorkerControlRoutes(app, {
       cache,
       ...(process.env.OJPLATFORM_WORKER_HEARTBEAT_PREFIX
@@ -1085,7 +1124,11 @@ export async function buildApp(options: AppOptions = {}) {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       submit: async (input) => {
-        const { clientRequestId, externalSubmissionId, ...job } = input as any;
+        const { clientRequestId, externalSubmissionId, ...job } =
+          input as unknown as JudgeJobCreateInput & {
+            clientRequestId: string;
+            externalSubmissionId: string;
+          };
         const result = await judgeRepository.enqueue({
           ...job,
           submissionId: externalSubmissionId,
@@ -1140,7 +1183,9 @@ export async function buildApp(options: AppOptions = {}) {
             resource !== 'problem' ||
             !context?.userId ||
             !context.sessionId ||
-            !['read', 'create', 'update', 'transition', 'delete'].includes(action)
+            !['read', 'create', 'update', 'transition', 'delete'].includes(
+              action,
+            )
           )
             return false;
           if (action === 'create') return true;
@@ -1231,7 +1276,8 @@ export async function buildApp(options: AppOptions = {}) {
           action,
         );
       },
-      async (problemId) => Boolean((await problemRepository.get(problemId))?.deletedAt),
+      async (problemId) =>
+        Boolean((await problemRepository.get(problemId))?.deletedAt),
     );
     await registerProblemJudgeDataRoutes(app, {
       service: judgeData,
@@ -1251,7 +1297,8 @@ export async function buildApp(options: AppOptions = {}) {
       repository: submissionRepository,
       authorizationPolicy: {
         canSubmit: async (context, reference) => {
-          if ((await problemRepository.get(reference.problemId))?.deletedAt) return false;
+          if ((await problemRepository.get(reference.problemId))?.deletedAt)
+            return false;
           const revision = (
             await problemRepository.revisions(reference.problemId)
           ).find((item) => item.revisionId === reference.revisionId);
@@ -1296,7 +1343,10 @@ export async function buildApp(options: AppOptions = {}) {
       problemResolver: {
         getRevision: async (problemId, revisionId) => {
           if ((await problemRepository.get(problemId))?.deletedAt)
-            throw Object.assign(new Error('PROBLEM_DELETED'), { code: 'PROBLEM_DELETED', status: 409 });
+            throw Object.assign(new Error('PROBLEM_DELETED'), {
+              code: 'PROBLEM_DELETED',
+              status: 409,
+            });
           const revisions = await problemRepository.revisions(problemId);
           const revision = revisions.find(
             (item) => item.revisionId === revisionId,
@@ -1432,6 +1482,11 @@ export async function buildApp(options: AppOptions = {}) {
             : {}),
         };
       },
+    });
+    await registerTeamModule(app, {
+      service: new TeamService(new InMemoryTeamRepository(), auditHook),
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
     });
     await registerWorkerControlRoutes(app, {
       getAuthContext: async (request) =>

@@ -570,6 +570,28 @@ async function request<T>(
   return (await response.json()) as T;
 }
 export type ApiClient = ReturnType<typeof createApiClient>;
+export type TeamSummary = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  avatarUrl: string | null;
+  visibility: 'PUBLIC' | 'PRIVATE';
+  joinPolicy: 'OPEN' | 'REQUEST' | 'INVITE_ONLY';
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+  role?: 'OWNER' | 'MANAGER' | 'MEMBER';
+  memberCount?: number;
+};
+export type TeamMember = {
+  teamId: string;
+  userId: string;
+  username: string;
+  displayName: string;
+  role: 'OWNER' | 'MANAGER' | 'MEMBER';
+  joinedAt: string;
+};
 const defaultAuthMethods: AuthMethods = {
   registration: { email: false, phone: false },
   login: {
@@ -666,6 +688,61 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
           return { guestLogin: { available: false } };
         throw error;
       }),
+    teams: (limit = 20, cursor?: string) =>
+      request<{ items: TeamSummary[]; nextCursor?: string }>(
+        baseUrl,
+        `/api/teams?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        undefined,
+        fetcher,
+      ),
+    myTeams: (limit = 20, cursor?: string) =>
+      request<{ items: TeamSummary[]; nextCursor?: string }>(
+        baseUrl,
+        `/api/teams/mine?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        undefined,
+        fetcher,
+      ),
+    team: (slug: string) =>
+      request<TeamSummary & { membershipState: string }>(
+        baseUrl,
+        `/api/teams/${encodeURIComponent(slug)}`,
+        undefined,
+        fetcher,
+      ),
+    createTeam: (input: {
+      name: string;
+      slug?: string;
+      description?: string;
+      visibility: 'PUBLIC' | 'PRIVATE';
+      joinPolicy: 'OPEN' | 'REQUEST' | 'INVITE_ONLY';
+    }) =>
+      request<TeamSummary>(
+        baseUrl,
+        '/api/teams',
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    joinTeam: (slug: string) =>
+      request<unknown>(
+        baseUrl,
+        `/api/teams/${encodeURIComponent(slug)}/join`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    leaveTeam: (slug: string) =>
+      request<unknown>(
+        baseUrl,
+        `/api/teams/${encodeURIComponent(slug)}/leave`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    teamMembers: (slug: string, limit = 50, cursor?: string) =>
+      request<{ items: TeamMember[]; nextCursor?: string }>(
+        baseUrl,
+        `/api/teams/${encodeURIComponent(slug)}/members?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+        undefined,
+        fetcher,
+      ),
     guestContinue: () =>
       request<AuthenticatedUser & { guest: true }>(
         baseUrl,
@@ -1171,11 +1248,18 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'PATCH', body: JSON.stringify(input) },
         fetcher,
       ),
-    deleteProblem: (idOrSlug: string, reason: string, expectedUpdatedAt: string) =>
+    deleteProblem: (
+      idOrSlug: string,
+      reason: string,
+      expectedUpdatedAt: string,
+    ) =>
       request<Problem>(
         baseUrl,
         `/api/problems/${encodeURIComponent(idOrSlug)}`,
-        { method: 'DELETE', body: JSON.stringify({ reason, expectedUpdatedAt }) },
+        {
+          method: 'DELETE',
+          body: JSON.stringify({ reason, expectedUpdatedAt }),
+        },
         fetcher,
       ),
     transitionProblem: (

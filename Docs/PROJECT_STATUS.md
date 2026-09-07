@@ -1,5 +1,25 @@
 # OJPlatform Project Status
 
+Main Integration Wave 2 - Team Core V1 (2026-09-07): PASS for conservative
+integration and local PostgreSQL qualification. Candidate was based on current
+main `8d0353f6b51618a46a6a7d4e44458fed90af0898` and merged the complete
+`codex/team-core-v1` history. Team migration `0023_team_core_v1` applied through
+the product runtime ledger; focused Team/API/Web tests, PostgreSQL repository
+smoke, typechecks, builds, targeted lint, architecture, and diff checks pass.
+Manual UI acceptance remains PENDING USER. See
+`Docs/reports/OJPLATFORM_MAIN_INTEGRATION_WAVE2_TEAM_CORE_V1_REPORT.md`.
+
+Team Core V1 Completion (2026-09-07): PARTIAL for runtime qualification. Team
+schema/migration, repository transactions and locks, API integration, audit
+hook wiring, dedicated member counts, cursor consistency, authorization, and
+concurrency regressions are implemented. Focused Team/API/Web tests (25), API
+and Web builds, typecheck, targeted lint, architecture, and diff checks pass.
+PostgreSQL migration apply is NOT VERIFIED because local `127.0.0.1:55432` is
+unavailable; manual UI acceptance remains PENDING USER. Ownership transfer,
+archive/delete, content collections, assignments, discussion, analytics, and
+tags remain deferred. See
+`reports/OJPLATFORM_TEAM_CORE_V1_REPORT.md`.
+
 Core Fix Wave 1 Conservative Integration V1 (2026-09-06): PASS for the
 conservative code/docs integration gate. Canonical main base
 `6719304fb436e1699e8b4a64dc8e82b97828be45` had no drift. Source A and B were
@@ -339,7 +359,16 @@ scope for the next approved Goal. Product E2E multi-language support, Contest,
 production HA, and production deployment are not qualified; Phase 2D is not
 started.
 
-Last Updated: 2026-09-05
+Last Updated: 2026-09-06
+
+Team Core V1 (2026-09-06): PARTIAL. Branch `codex/team-core-v1` starts from
+`f9da2e1ab2c48842f07d457d55f614efa8fb70b6`. Team schema, repository/service,
+backend authorization, open/request/invite-only membership, invitations, join
+requests, hashed invite codes, basic Web routes, and stable Team contract are
+implemented. Team service tests (3/3), repository-wide TypeScript typecheck,
+and Web build pass. PostgreSQL migration/API integration, full lint,
+architecture, runtime, and manual UI acceptance are not verified. See
+`Docs/reports/OJPLATFORM_TEAM_CORE_V1_REPORT.md`.
 
 Evaluation Detail UX V5 (2026-09-06): PASS for implemented/static Web scope.
 Result/code tabs, source copy feedback, right-side evaluation metadata,
