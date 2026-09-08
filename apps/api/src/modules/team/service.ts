@@ -47,6 +47,12 @@ export class TeamService {
   async listMine(userId: string, limit: number, cursor?: string) {
     return this.repository.listMine(userId, limit, cursor);
   }
+  async profileTeams(targetUserId: string, viewerUserId?: string) {
+    const result = await this.repository.listMine(targetUserId, 100);
+    return result.items.filter(
+      (team) => team.visibility === 'PUBLIC' || viewerUserId === targetUserId,
+    );
+  }
   private require(
     m: Awaited<ReturnType<TeamService['actor']>>['member'],
     min: TeamRole,

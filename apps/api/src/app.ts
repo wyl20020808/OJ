@@ -1010,16 +1010,18 @@ export async function buildApp(options: AppOptions = {}) {
       audit: auditHook,
       limiter: new RedisFixedWindowLimiter(cache),
     });
+    const teamService = new TeamService(
+      new PostgresTeamRepository(database.pool),
+      auditHook,
+    );
     await registerProfileModule(app, {
       pool: database.pool,
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
+      teamService,
     });
     await registerTeamModule(app, {
-      service: new TeamService(
-        new PostgresTeamRepository(database.pool),
-        auditHook,
-      ),
+      service: teamService,
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
     });
@@ -1508,8 +1510,9 @@ export async function buildApp(options: AppOptions = {}) {
         };
       },
     });
+    const teamService = new TeamService(new InMemoryTeamRepository(), auditHook);
     await registerTeamModule(app, {
-      service: new TeamService(new InMemoryTeamRepository(), auditHook),
+      service: teamService,
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
     });

@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { TeamService } from '../team/service.js';
 
 type Auth = { userId: string; strength?: string };
 type Row = Record<string, unknown>;
@@ -8,6 +9,7 @@ type Pool = { query(sql: string, values?: unknown[]): Promise<Query> };
 export type ProfileModuleOptions = {
   pool: Pool;
   getAuth(request: FastifyRequest): Promise<Auth | undefined>;
+  teamService?: TeamService;
 };
 
 const unavailable = (reason: string) => ({ available: false, reason });
@@ -82,7 +84,7 @@ export async function registerProfileModule(
           ),
     activity: { available: true },
     heatmap: { available: true },
-    teams: unavailable('PRODUCT_DOMAIN_NOT_IMPLEMENTED'),
+    teams: { available: Boolean(options.teamService) },
     homework: unavailable('PRODUCT_DOMAIN_NOT_IMPLEMENTED'),
     wrongbook: unavailable(
       'UPSTREAM_BLOCKED_BY_AUTHORITATIVE_SUBMISSION_OUTCOME',
@@ -110,7 +112,12 @@ export async function registerProfileModule(
       return undefined;
     }
     const auth = await options.getAuth(request);
-    return { auth, isSelf: auth?.userId === String(user.id), user };
+    const isSelf = auth?.userId === String(user.id);
+    const metadata = await options.pool.query(
+      'SELECT display_name,headline,bio,location,organization,website,github FROM user_profiles WHERE user_id=$1',
+      [String(user.id)],
+    );
+    return { auth, isSelf, user, metadata: metadata.rows[0] ?? {} };
   };
   const publicProblemFilter = (isSelf: boolean) =>
     isSelf
@@ -120,14 +127,95 @@ export async function registerProfileModule(
     const target = await profileTarget(request, reply);
     if (!target) return;
     const { auth, isSelf, user } = target;
+    const meta = target.metadata;
+    const teams = options.teamService
+      ? await options.teamService.profileTeams(String(user.id), auth?.userId)
+      : [];
     return reply.send({
       username: String(user.username),
-      displayName: String(user.display_name),
+      displayName: String(meta.display_name ?? user.display_name),
+      ...(meta.headline ? { headline: String(meta.headline) } : {}),
+      ...(meta.bio ? { bio: String(meta.bio) } : {}),
+      ...(meta.location ? { location: String(meta.location) } : {}),
+      ...(meta.organization ? { organization: String(meta.organization) } : {}),
+      ...(meta.website ? { website: String(meta.website) } : {}),
+      ...(meta.github ? { github: String(meta.github) } : {}),
       createdAt: new Date(String(user.created_at)).toISOString(),
       capabilities: profileCapabilities(auth, isSelf),
       isSelf,
       canCreateProblems: isSelf && auth?.strength === 'password',
+      teams: teams.map((team) => ({
+        name: team.name,
+        slug: team.slug,
+        role: team.role,
+        visibility: team.visibility,
+        ...(team.description ? { description: team.description } : {}),
+      })),
     });
+  });
+  app.get('/api/profile/me', async (request, reply) => {
+    const auth = await passwordUser(request, reply);
+    if (!auth) return;
+    const result = await options.pool.query(
+      `SELECT u.username,u.display_name,up.headline,up.bio,up.location,up.organization,up.website,up.github
+       FROM users u LEFT JOIN user_profiles up ON up.user_id=u.id WHERE u.id=$1 AND u.status='active'`,
+      [auth.userId],
+    );
+    const row = result.rows[0];
+    if (!row) return error(reply, request, 404, 'NOT_FOUND', 'Profile not found');
+    return reply.send({
+      username: String(row.username),
+      displayName: String(row.display_name),
+      headline: row.headline ? String(row.headline) : '',
+      bio: row.bio ? String(row.bio) : '',
+      location: row.location ? String(row.location) : '',
+      organization: row.organization ? String(row.organization) : '',
+      website: row.website ? String(row.website) : '',
+      github: row.github ? String(row.github) : '',
+    });
+  });
+  app.patch('/api/profile/me', async (request, reply) => {
+    const auth = await passwordUser(request, reply);
+    if (!auth) return;
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const fields = ['displayName', 'headline', 'bio', 'location', 'organization', 'website', 'github'];
+    if (Object.keys(body).some((key) => !fields.includes(key)))
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid profile data');
+    const value = (key: string, max: number) => {
+      const v = body[key] === undefined ? '' : body[key];
+      if (typeof v !== 'string' || v.length > max) return null;
+      return v.trim();
+    };
+    const displayName = value('displayName', 60);
+    const headline = value('headline', 100);
+    const bio = value('bio', 800);
+    const location = value('location', 100);
+    const organization = value('organization', 120);
+    const website = value('website', 300);
+    const github = value('github', 100);
+    if (!displayName || headline === null || bio === null || location === null || organization === null || website === null || github === null)
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid profile data');
+    if (website && !/^https?:\/\/[^\s]+$/i.test(website))
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Website must use http or https');
+    if (github && !/^(?:[A-Za-z0-9-]{1,39}|https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/?$)$/.test(github))
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid GitHub profile');
+    const client = (options.pool as Pool & { connect?: () => Promise<Pool & { release(): void }> }).connect
+      ? await (options.pool as Pool & { connect: () => Promise<Pool & { release(): void }> }).connect()
+      : options.pool;
+    try {
+      if ('release' in client) await client.query('BEGIN');
+      await client.query('UPDATE users SET display_name=$2,updated_at=now() WHERE id=$1 AND status=\'active\'', [auth.userId, displayName]);
+      await client.query(`INSERT INTO user_profiles(user_id,display_name,headline,bio,location,organization,website,github,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,now()) ON CONFLICT(user_id) DO UPDATE SET display_name=EXCLUDED.display_name,headline=EXCLUDED.headline,bio=EXCLUDED.bio,location=EXCLUDED.location,organization=EXCLUDED.organization,website=EXCLUDED.website,github=EXCLUDED.github,updated_at=now()`,
+      [auth.userId, displayName, headline, bio, location, organization, website, github]);
+      if ('release' in client) await client.query('COMMIT');
+    } catch (e) {
+      if ('release' in client) await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      if ('release' in client) (client as Pool & { release(): void }).release();
+    }
+    return reply.send({ username: (await options.pool.query('SELECT username FROM users WHERE id=$1', [auth.userId])).rows[0]?.username, displayName, headline, bio, location, organization, website, github });
   });
   app.get('/api/profiles/:username/activity', async (request, reply) => {
     const target = await profileTarget(request, reply);

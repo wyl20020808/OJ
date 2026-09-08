@@ -1831,19 +1831,20 @@ export function ProfileExperience({
     if (tab === '收藏') return renderFavorites();
     if (tab === '我的题目') return renderProblems();
     if (tab === '团队') {
-      const teamCapability = capability('teams');
-      return teamCapability && !teamCapability.available ? (
-        <ProfileCapabilityNotice
-          title="团队暂不可用"
-          capability={teamCapability}
-        />
-      ) : (
-        <CapabilityNotice
-          title="团队功能正在接入"
-          text="当前没有真实团队数据。"
-          request="TEAM-BACKEND-INTEGRATION-REQUEST"
-        />
-      );
+      const teams = publicProfile?.teams ?? [];
+      return teams.length ? (
+        <div className="profile-team-list">
+          {teams.map((team) => (
+            <PortalLink key={team.slug} to={`/teams/${encodeURIComponent(team.slug)}`} navigate={navigate}>
+              <article className="profile-team-card">
+                <strong>{team.name}</strong><span>@{team.slug}</span>
+                <small>{team.role} · {team.visibility === 'PUBLIC' ? '公开' : '私有'}</small>
+                {team.description && <p>{team.description}</p>}
+              </article>
+            </PortalLink>
+          ))}
+        </div>
+      ) : <p className="muted">{isPublic ? '暂无可展示团队' : '暂未加入公开团队'}</p>;
     }
     return null;
   };
@@ -1862,13 +1863,10 @@ export function ProfileExperience({
           <p>
             {displayUsername ? `@${displayUsername}` : '公开资料服务正在接入'}
           </p>
-          <p className="profile-bio">
-            {isPublic
-              ? `加入于 ${profileDate(publicProfile?.createdAt ?? '')}`
-              : user
-                ? '个人签名尚未提供。'
-                : '登录后可查看自己的真实账户资料。'}
-          </p>
+          {publicProfile?.headline && <p className="profile-headline">{publicProfile.headline}</p>}
+          <p className="profile-meta">{[publicProfile?.location, publicProfile?.organization].filter(Boolean).join(' · ')}</p>
+          {publicProfile?.bio && <p className="profile-bio">{publicProfile.bio}</p>}
+          <p className="profile-joined">{isPublic ? `加入于 ${profileDate(publicProfile?.createdAt ?? '')}` : user ? '公开资料' : '登录后可查看自己的真实账户资料。'}</p>
         </div>
         {!isPublic && user && (
           <div className="profile-actions">

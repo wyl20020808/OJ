@@ -7,6 +7,7 @@ import type {
   AuthProvider,
   ConnectedIdentity,
   Session,
+  EditableProfile,
 } from '../services/api.js';
 import { ApiError } from '../services/api.js';
 
@@ -34,6 +35,10 @@ export function AccountSettings({
   );
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [profile, setProfile] = useState<EditableProfile | null>(null);
+  const [profileDraft, setProfileDraft] = useState<EditableProfile | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMessage, setProfileMessage] = useState('');
   useEffect(() => {
     let active = true;
     setError('');
@@ -57,6 +62,10 @@ export function AccountSettings({
       active = false;
     };
   }, [api]);
+  useEffect(() => {
+    if (!user || typeof api.editableProfile !== 'function') return;
+    void api.editableProfile().then((value) => { setProfile(value); setProfileDraft(value); }).catch(() => setProfileMessage('公开资料加载失败，请稍后重试。'));
+  }, [api, user]);
   useEffect(() => {
     let active = true;
     if (
@@ -138,6 +147,7 @@ export function AccountSettings({
         </p>
       )}
       <div className="settings-grid">
+        {profileDraft && <ProfileEditor profile={profileDraft} setProfile={setProfileDraft} saving={profileSaving} message={profileMessage} onSave={async () => { setProfileSaving(true); setProfileMessage(''); try { const saved = await api.updateProfile(profileDraft); setProfile(saved); setProfileDraft(saved); setProfileMessage('资料已保存'); } catch { setProfileMessage('保存失败，请检查输入后重试。'); } finally { setProfileSaving(false); } }} onCancel={() => profile && setProfileDraft(profile)} />}
         <article className="settings-panel">
           <p className="panel-label">基本资料</p>
           <h2>{account.displayName}</h2>
@@ -302,4 +312,9 @@ export function AccountSettings({
       </div>
     </section>
   );
+}
+
+function ProfileEditor({ profile, setProfile, saving, message, onSave, onCancel }: { profile: EditableProfile; setProfile: (p: EditableProfile) => void; saving: boolean; message: string; onSave: () => Promise<void>; onCancel: () => void }) {
+  const field = (key: keyof Omit<EditableProfile, 'username'>, label: string, type: 'input' | 'textarea' = 'input') => type === 'textarea' ? <label className="profile-editor-field">{label}<textarea maxLength={800} value={profile[key]} onChange={(e) => setProfile({ ...profile, [key]: e.target.value })} /></label> : <label className="profile-editor-field">{label}<input maxLength={key === 'displayName' ? 60 : key === 'headline' ? 100 : key === 'organization' ? 120 : key === 'location' ? 100 : key === 'website' ? 300 : 100} value={profile[key]} onChange={(e) => setProfile({ ...profile, [key]: e.target.value })} /></label>;
+  return <article className="settings-panel settings-wide profile-editor"><div className="panel-row"><div><p className="panel-label">公开个人资料</p><h2>编辑个人资料</h2></div><span className="muted">这些信息会显示在你的公开主页。</span></div><div className="profile-editor-grid"><div>{field('displayName', '显示名称')}{field('headline', '一句话介绍')}{field('bio', `个人简介（${profile.bio.length}/800）`, 'textarea')}</div><div>{field('location', '地区')}{field('organization', '学校 / 组织')}{field('website', '个人网站')}{field('github', 'GitHub')}</div></div><div className="profile-editor-actions"><span className="muted">@{profile.username}</span><button type="button" className="secondary" onClick={onCancel} disabled={saving}>取消</button><button type="button" onClick={() => void onSave()} disabled={saving || !profile.displayName.trim()}>{saving ? '保存中…' : '保存资料'}</button></div>{message && <p role="status" className="muted">{message}</p>}</article>;
 }
