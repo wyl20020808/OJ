@@ -272,7 +272,7 @@ function Breadcrumbs({ current }: { current: Route }) {
   const leaf: Record<Route['name'], string> = {
     home: '首页',
     discussion: '讨论',
-    'discussion-post': current.id ?? '文章',
+    'discussion-post': '内容详情',
     'discussion-new': '写文章',
     'discussion-edit': '编辑文章',
     login: '登录',

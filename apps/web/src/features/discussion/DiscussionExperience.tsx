@@ -1,42 +1,49 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import type {
   ApiClient,
   AuthenticatedUser,
-  DiscussionAuthor,
-  DiscussionComment,
   DiscussionPost,
 } from '../../services/api.js';
 import { MarkdownToolbar } from '../../components/ProblemEditor.js';
+import { DiscussionComments } from './DiscussionComments.js';
+import {
+  DiscussionAuthorLink,
+  DiscussionFeedItem,
+  DiscussionFeedSkeleton,
+  DiscussionTypeBadge,
+  formatDiscussionDate,
+} from './DiscussionContent.js';
 import { DiscussionRenderer } from './DiscussionRenderer.js';
 import { useToast } from '../../components/Toast.js';
 
-function AuthorLink({
-  author,
-  navigate,
-}: {
-  author: DiscussionAuthor | undefined;
-  navigate: (path: string) => void;
-}) {
-  const safe = author ?? {
-    username: 'deleted-user',
-    displayName: 'Deleted User',
-  };
-  return (
-    <a
-      className="discussion-author"
-      href={`/profiles/${encodeURIComponent(safe.username)}`}
-      onClick={(event) => {
-        event.preventDefault();
-        navigate(`/profiles/${encodeURIComponent(safe.username)}`);
-      }}
-    >
-      <span className="discussion-author-avatar" aria-hidden="true">
-        {safe.displayName.slice(0, 1).toUpperCase()}
-      </span>
-      <span>{safe.displayName}</span>
-      <small>@{safe.username}</small>
-    </a>
-  );
+type DiscussionFilter = 'all' | 'article' | 'announcement';
+
+const discussionFilters: Array<{
+  value: DiscussionFilter;
+  label: string;
+}> = [
+  { value: 'all', label: '全部' },
+  { value: 'article', label: '文章' },
+  { value: 'announcement', label: '公告' },
+];
+
+function readDiscussionFilter(): DiscussionFilter {
+  const value = new URLSearchParams(window.location.search).get('type');
+  return value === 'article' || value === 'announcement' ? value : 'all';
+}
+
+function discussionHref(type: DiscussionFilter, search: string) {
+  const query = new URLSearchParams();
+  if (type !== 'all') query.set('type', type);
+  if (search) query.set('q', search);
+  const value = query.toString();
+  return `/discussion${value ? `?${value}` : ''}`;
 }
 
 export function DiscussionHome({
@@ -48,60 +55,135 @@ export function DiscussionHome({
   navigate: (path: string) => void;
   user: AuthenticatedUser | null;
 }) {
+  const filter = readDiscussionFilter();
+  const search =
+    new URLSearchParams(window.location.search).get('q')?.trim() ?? '';
   const [posts, setPosts] = useState<DiscussionPost[]>([]);
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [reload, setReload] = useState(0);
+
   useEffect(() => {
+    let active = true;
+    const query = new URLSearchParams({ limit: '20' });
+    if (filter === 'article') query.set('type', 'ARTICLE');
+    if (filter === 'announcement') query.set('type', 'ANNOUNCEMENT');
+    if (search) query.set('q', search);
+    setLoading(true);
+    setError(false);
     void api
-      .discussionPosts('limit=20')
-      .then((r) => setPosts(r.items))
-      .catch((e) => setError(e instanceof Error ? e.message : '加载失败'));
-  }, [api]);
+      .discussionPosts(query.toString())
+      .then((result) => {
+        if (active) setPosts(result.items);
+      })
+      .catch(() => {
+        if (active) setError(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, filter, reload, search]);
+
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = String(
+      new FormData(event.currentTarget).get('q') ?? '',
+    ).trim();
+    navigate(discussionHref(filter, value));
+  };
+  const emptyTitle =
+    filter === 'announcement' ? '暂时没有公告' : '这里还没有内容';
+  const emptyText = search
+    ? '没有找到匹配内容，换个关键词试试。'
+    : filter === 'announcement'
+      ? '新的站内公告会统一出现在这里。'
+      : '成为第一个分享文章的人。';
+
   return (
-    <section className="discussion-page">
-      <header className="page-heading">
+    <section className="discussion-page discussion-hub">
+      <header className="discussion-hub-header">
         <div>
-          <p className="eyebrow">Discussion / 讨论</p>
-          <h1>分享想法，记录学习</h1>
-          <p>文章、公告与社区讨论。</p>
+          <p className="discussion-kicker">CONTENT HUB</p>
+          <h1>讨论</h1>
+          <p>分享文章、查看公告，与社区交流。</p>
         </div>
         {user && (
           <button onClick={() => navigate('/discussion/new')}>写文章</button>
         )}
       </header>
-      {error && <p role="alert">{error}</p>}
-      <div className="discussion-list">
-        {posts.map((post) => (
-          <article className="discussion-list-item" key={post.id}>
-            <span
-              className={
-                post.type === 'ANNOUNCEMENT'
-                  ? 'discussion-type announcement'
-                  : 'discussion-type'
-              }
+
+      <nav className="discussion-tabs" aria-label="讨论内容分类">
+        {discussionFilters.map((item) => {
+          const href = discussionHref(item.value, search);
+          return (
+            <a
+              key={item.value}
+              href={href}
+              className={filter === item.value ? 'active' : ''}
+              aria-current={filter === item.value ? 'page' : undefined}
+              onClick={(event) => {
+                event.preventDefault();
+                navigate(href);
+              }}
             >
-              {post.type === 'ANNOUNCEMENT' ? '公告' : '文章'}
-            </span>
-            <h2>
-              <a
-                href={`/discussion/${post.publicId}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigate(`/discussion/${post.publicId}`);
-                }}
-              >
-                {post.title}
-              </a>
-            </h2>
-            <AuthorLink author={post.author} navigate={navigate} />
-            <p>{post.summary || post.contentMarkdown.slice(0, 160)}</p>
-            <small>
-              {post.viewCount} 浏览 · {post.likeCount} 点赞 ·{' '}
-              {post.commentCount} 评论
-            </small>
-          </article>
-        ))}
+              {item.label}
+            </a>
+          );
+        })}
+      </nav>
+
+      <div className="discussion-toolbar">
+        <p>
+          {loading
+            ? '正在获取最新内容'
+            : `本页 ${posts.length} 项 · 按发布时间排列`}
+        </p>
+        <form role="search" onSubmit={submitSearch}>
+          <label className="sr-only" htmlFor="discussion-search">
+            搜索讨论内容
+          </label>
+          <input
+            id="discussion-search"
+            key={search}
+            name="q"
+            type="search"
+            defaultValue={search}
+            placeholder="搜索标题"
+          />
+          <button className="secondary" type="submit">
+            搜索
+          </button>
+        </form>
       </div>
-      {!posts.length && !error && <p>暂无已发布内容。</p>}
+
+      {loading ? (
+        <DiscussionFeedSkeleton />
+      ) : error ? (
+        <div className="discussion-error-state" role="alert">
+          <div aria-hidden="true">!</div>
+          <h2>加载讨论内容失败</h2>
+          <p>暂时无法取得内容，请稍后重试。</p>
+          <button onClick={() => setReload((value) => value + 1)}>重试</button>
+        </div>
+      ) : posts.length ? (
+        <div className="discussion-feed" role="feed" aria-label="讨论内容">
+          {posts.map((post) => (
+            <DiscussionFeedItem key={post.id} post={post} navigate={navigate} />
+          ))}
+        </div>
+      ) : (
+        <div className="discussion-empty-state">
+          <div aria-hidden="true">文</div>
+          <h2>{emptyTitle}</h2>
+          <p>{emptyText}</p>
+          {user && filter !== 'announcement' && !search && (
+            <button onClick={() => navigate('/discussion/new')}>写文章</button>
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -118,179 +200,177 @@ export function DiscussionPostPage({
   user: AuthenticatedUser | null;
 }) {
   const [post, setPost] = useState<DiscussionPost | null>(null);
-  const [comments, setComments] = useState<DiscussionComment[]>([]);
-  const [comment, setComment] = useState('');
-  const [message, setMessage] = useState('');
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
-  const refreshComments = () => {
-    if (post)
-      void api
-        .discussionComments(post.id, 'limit=20')
-        .then((result) => setComments(result.items))
-        .catch((error) =>
-          setMessage(error instanceof Error ? error.message : '评论加载失败'),
-        );
-  };
-  const refreshPost = () => {
-    if (post)
-      void api
-        .discussionPost(post.id)
-        .then(setPost)
-        .catch((error) =>
-          setMessage(error instanceof Error ? error.message : '文章加载失败'),
-        );
-  };
-  useEffect(() => {
-    void api
-      .discussionPost(id)
-      .then(setPost)
-      .catch((e) => setMessage(e instanceof Error ? e.message : '加载失败'));
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [liked, setLiked] = useState(false);
+  const [actionMessage, setActionMessage] = useState('');
+  const toast = useToast();
+
+  const loadPost = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      setPost(await api.discussionPost(id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '文章加载失败');
+    } finally {
+      setLoading(false);
+    }
   }, [api, id]);
+
+  const refreshPost = useCallback(async () => {
+    if (!post) return;
+    try {
+      setPost(await api.discussionPost(post.id));
+    } catch (reason) {
+      setActionMessage(reason instanceof Error ? reason.message : '刷新失败');
+    }
+  }, [api, post]);
+
   useEffect(() => {
-    refreshComments();
-  }, [post?.id]);
+    setLiked(false);
+    void loadPost();
+  }, [loadPost]);
+
+  const toggleLike = async () => {
+    if (!post || !user) return;
+    try {
+      if (liked) await api.unlikeDiscussionPost(post.id);
+      else await api.likeDiscussionPost(post.id);
+      setLiked(!liked);
+      await refreshPost();
+    } catch (reason) {
+      setActionMessage(reason instanceof Error ? reason.message : '操作失败');
+    }
+  };
+
+  const copyLink = async () => {
+    try {
+      if (!navigator.clipboard?.writeText)
+        throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(window.location.href);
+      setActionMessage('');
+      toast({ kind: 'success', title: '链接已复制' });
+    } catch {
+      setActionMessage('复制失败，请手动复制地址栏链接');
+    }
+  };
+
+  const deletePost = async () => {
+    if (!post) return;
+    try {
+      await api.deleteDiscussionPost(post.id);
+      navigate('/discussion');
+    } catch (reason) {
+      setActionMessage(reason instanceof Error ? reason.message : '删除失败');
+    }
+  };
+
+  if (loading)
+    return (
+      <article className="discussion-page discussion-detail">
+        <div className="discussion-detail-skeleton" aria-label="正在加载内容">
+          <span />
+          <strong />
+          <p />
+          <div />
+        </div>
+      </article>
+    );
   if (!post)
     return (
-      <section className="discussion-page">
-        <p role="status">{message || '加载中…'}</p>
+      <section className="discussion-page discussion-detail-error" role="alert">
+        <h1>内容加载失败</h1>
+        <p>{error || '该内容不存在或暂时不可用。'}</p>
+        <button onClick={() => void loadPost()}>重试</button>
       </section>
     );
-  const submitComment = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!comment.trim()) return;
-    try {
-      await api.createDiscussionComment(post.id, comment);
-      setComment('');
-      setMessage('评论已发布');
-      refreshComments();
-      refreshPost();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : '评论失败');
-    }
-  };
-  const saveComment = async (commentId: string) => {
-    try {
-      await api.updateDiscussionComment(commentId, editValue);
-      setEditing(null);
-      setMessage('评论已更新');
-      refreshComments();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '更新失败');
-    }
-  };
-  const removeComment = async (commentId: string) => {
-    try {
-      await api.deleteDiscussionComment(commentId);
-      setMessage('评论已删除');
-      refreshComments();
-      refreshPost();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '删除失败');
-    }
-  };
+
+  const publishedAt = post.publishedAt ?? post.createdAt;
+  const showUpdatedAt = post.updatedAt !== publishedAt;
   return (
-    <article className="discussion-page discussion-detail">
-      <span
-        className={
-          post.type === 'ANNOUNCEMENT'
-            ? 'discussion-type announcement'
-            : 'discussion-type'
-        }
-      >
-        {post.type === 'ANNOUNCEMENT' ? '官方公告' : '文章'}
-      </span>
-      <h1>{post.title}</h1>
-      <AuthorLink author={post.author} navigate={navigate} />
-      <p className="discussion-meta">
-        发布于 {new Date(post.publishedAt ?? post.createdAt).toLocaleString()} ·
-        更新于 {new Date(post.updatedAt).toLocaleString()} · {post.viewCount}{' '}
-        浏览
-      </p>
-      <DiscussionRenderer content={post.contentMarkdown} />
-      <div className="discussion-actions">
-        <button
-          onClick={() =>
-            void api
-              .likeDiscussionPost(post.id)
-              .then(() => api.discussionPost(post.id))
-              .then(setPost)
-          }
-        >
-          点赞 ({post.likeCount})
-        </button>
-        {post.capabilities?.canEdit && (
-          <button onClick={() => navigate(`/discussion/${post.publicId}/edit`)}>
-            编辑
-          </button>
-        )}
-        {post.capabilities?.canDelete && (
-          <button
-            onClick={() =>
-              void api
-                .deleteDiscussionPost(post.id)
-                .then(() => navigate('/discussion'))
-            }
-          >
-            删除
-          </button>
-        )}
-      </div>
-      <section className="discussion-comments">
-        <div className="discussion-comments-heading">
-          <h2>评论 ({post.commentCount})</h2>
-          <button type="button" onClick={refreshComments}>
-            刷新评论
-          </button>
+    <article
+      className={`discussion-page discussion-detail${post.type === 'ANNOUNCEMENT' ? ' announcement' : ''}`}
+      data-content-template="discussion"
+    >
+      <header className="discussion-detail-header">
+        <div className="discussion-detail-heading">
+          <div>
+            <DiscussionTypeBadge type={post.type} />
+            <h1>{post.title}</h1>
+          </div>
+          {(post.capabilities?.canEdit || post.capabilities?.canDelete) && (
+            <div className="discussion-owner-actions" aria-label="内容管理">
+              {post.capabilities.canEdit && (
+                <button
+                  className="secondary"
+                  onClick={() => navigate(`/discussion/${post.publicId}/edit`)}
+                >
+                  编辑
+                </button>
+              )}
+              {post.capabilities.canDelete && (
+                <button
+                  className="discussion-delete-action"
+                  onClick={() => void deletePost()}
+                >
+                  删除
+                </button>
+              )}
+            </div>
+          )}
         </div>
-        {comments.map((item) => (
-          <article className="discussion-comment" key={item.id}>
-            <AuthorLink author={item.author} navigate={navigate} />
-            {editing === item.id ? (
-              <>
-                <textarea
-                  value={editValue}
-                  onChange={(event) => setEditValue(event.target.value)}
-                />
-                <button onClick={() => void saveComment(item.id)}>保存</button>
-                <button onClick={() => setEditing(null)}>取消</button>
-              </>
-            ) : (
-              <>
-                <DiscussionRenderer content={item.contentMarkdown} />
-                {item.capabilities?.canEdit && (
-                  <button
-                    onClick={() => {
-                      setEditing(item.id);
-                      setEditValue(item.contentMarkdown);
-                    }}
-                  >
-                    编辑
-                  </button>
-                )}
-                {item.capabilities?.canDelete && (
-                  <button onClick={() => void removeComment(item.id)}>
-                    删除
-                  </button>
-                )}
-              </>
-            )}
-          </article>
-        ))}
-        {user ? (
-          <form onSubmit={submitComment}>
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="写下你的评论"
-            />
-            <button type="submit">发布评论</button>
-          </form>
-        ) : (
-          <p>登录后参与评论。</p>
-        )}
-        {message && <p role="status">{message}</p>}
-      </section>
+        <div className="discussion-detail-meta">
+          <DiscussionAuthorLink author={post.author} navigate={navigate} />
+          <span aria-hidden="true">·</span>
+          <time dateTime={publishedAt}>
+            发布于 {formatDiscussionDate(publishedAt)}
+          </time>
+          {showUpdatedAt && (
+            <>
+              <span aria-hidden="true">·</span>
+              <time dateTime={post.updatedAt}>
+                更新于 {formatDiscussionDate(post.updatedAt)}
+              </time>
+            </>
+          )}
+          <span aria-hidden="true">·</span>
+          <span>{post.viewCount} 次浏览</span>
+        </div>
+      </header>
+
+      <div className="discussion-body-surface">
+        <DiscussionRenderer content={post.contentMarkdown} />
+      </div>
+
+      <div className="discussion-detail-actions" aria-label="内容操作">
+        <button
+          className={liked ? 'liked' : 'secondary'}
+          aria-pressed={liked}
+          disabled={!user}
+          title={user ? '点赞' : '登录后点赞'}
+          onClick={() => void toggleLike()}
+        >
+          {liked ? '♥' : '♡'} {post.likeCount}
+        </button>
+        <button className="secondary" onClick={() => void copyLink()}>
+          复制链接
+        </button>
+        <span>{post.commentCount} 条评论</span>
+      </div>
+      {actionMessage && (
+        <p className="discussion-action-message" role="status">
+          {actionMessage}
+        </p>
+      )}
+
+      <DiscussionComments
+        api={api}
+        navigate={navigate}
+        post={post}
+        user={user}
+        onCommentsChanged={() => void refreshPost()}
+      />
     </article>
   );
 }
