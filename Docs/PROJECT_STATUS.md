@@ -1,5 +1,7 @@
 # OJPlatform Project Status
 
+Problem Library Sticky Pagination Wave 3E (2026-09-08): PASS for implementation and automated validation on isolated branch `codex/problem-pagination-wave3`. Problem Library keeps its existing offset/page URL contract and now exposes a scoped `position: sticky; bottom: 0` pagination bar in normal document flow, with responsive compact layout, real disabled states, loading protection, and stale-response protection. Focused Web regression (100 tests), Web typecheck/build, changed-file lint, architecture, and diff checks pass. Manual UI acceptance remains PENDING USER; no runtime/browser control was performed. See `Docs/reports/OJPLATFORM_PROBLEM_LIBRARY_STICKY_PAGINATION_WAVE3_REPORT.md`.
+
 Profile Experience & Personalization Wave 2 Main Integration V1 (2026-09-08): PARTIAL. Worker D integrated into current main at `b34c2de`; migration renumbered to `0027_profile_experience`, profile/team/privacy APIs and UI preserved. Focused profile plus baseline regression 32/32, typecheck/build, architecture, and diff checks pass. Real schema apply and idempotent second run pass against local PostgreSQL; full migration runner remains blocked by pre-existing historical replay failure at `judge_artifacts`. Manual UI acceptance pending user. See `Docs/reports/OJPLATFORM_PROFILE_EXPERIENCE_WAVE2_MAIN_INTEGRATION_V1_REPORT.md`.
 
 Product Correctness Wave 2 Main Integration V1 (2026-09-08): PARTIAL. Fresh

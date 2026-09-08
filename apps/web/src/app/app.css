@@ -2161,6 +2161,23 @@ footer {
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
 }
+.problem-list-v4 > .problem-list-pagination {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  justify-content: space-between;
+  min-height: 4.25rem;
+  margin: var(--space-6) 0 0;
+  padding: 0.7rem 1rem;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 -2px 8px rgba(23, 32, 42, 0.05);
+}
+.problem-list-v4 > .problem-list-pagination .pagination-loading {
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
 .problem-detail-v4 {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(240px, 1fr);
@@ -2382,6 +2399,10 @@ footer {
     justify-content: space-between;
     gap: var(--space-2);
   }
+  .problem-list-v4 > .problem-list-pagination {
+    gap: var(--space-2);
+    padding-inline: 0.75rem;
+  }
   .pagination-pages {
     display: none;
   }
@@ -2393,6 +2414,9 @@ footer {
   .pagination .pagination-control {
     flex: 1 1 auto;
     max-width: 7rem;
+  }
+  .problem-list-v4 > .problem-list-pagination .pagination-loading {
+    display: none;
   }
 }
 
