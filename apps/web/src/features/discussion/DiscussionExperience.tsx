@@ -204,6 +204,7 @@ export function DiscussionPostPage({
   const [error, setError] = useState('');
   const [liked, setLiked] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
+  const toast = useToast();
 
   const loadPost = useCallback(async () => {
     setLoading(true);
@@ -248,7 +249,8 @@ export function DiscussionPostPage({
       if (!navigator.clipboard?.writeText)
         throw new Error('clipboard unavailable');
       await navigator.clipboard.writeText(window.location.href);
-      setActionMessage('链接已复制');
+      setActionMessage('');
+      toast({ kind: 'success', title: '链接已复制' });
     } catch {
       setActionMessage('复制失败，请手动复制地址栏链接');
     }

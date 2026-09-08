@@ -8,6 +8,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ToastProvider } from '../apps/web/src/components/Toast.js';
 import {
   DiscussionHome,
   DiscussionPostPage,
@@ -197,12 +198,14 @@ describe('Discussion Hub Experience Wave 2', () => {
       deleteDiscussionPost: vi.fn(),
     } as unknown as ApiClient;
     const view = render(
-      <DiscussionPostPage
-        api={api}
-        navigate={vi.fn()}
-        id="interval-dp"
-        user={user}
-      />,
+      <ToastProvider>
+        <DiscussionPostPage
+          api={api}
+          navigate={vi.fn()}
+          id="interval-dp"
+          user={user}
+        />
+      </ToastProvider>,
     );
 
     expect(
