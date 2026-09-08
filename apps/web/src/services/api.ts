@@ -420,6 +420,11 @@ export type Submission = {
   executionStage?: ExecutionStage;
   evaluation?: SubmissionEvaluation;
 };
+export type SubmissionSource = {
+  submissionId: string;
+  languageId: string;
+  source: string;
+};
 export type WorkerDiagnostics = {
   items: Array<{
     workerId: string;
@@ -1637,6 +1642,13 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<Submission>(
         baseUrl,
         `/api/submissions/${encodeURIComponent(id)}`,
+        undefined,
+        fetcher,
+      ),
+    submissionSource: (id: string) =>
+      request<SubmissionSource>(
+        baseUrl,
+        `/api/submissions/${encodeURIComponent(id)}/source`,
         undefined,
         fetcher,
       ),

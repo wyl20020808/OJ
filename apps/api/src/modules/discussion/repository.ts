@@ -97,6 +97,10 @@ const commentCursor = (items: DiscussionComment[]) => {
   const last = items.at(-1);
   return last ? enc({ sortAt: last.createdAt, id: last.id }) : undefined;
 };
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const postKeyPredicate = (key: string) =>
+  uuidPattern.test(key) ? 'id=$1' : 'public_id=$1';
 const publicPost = (r: any): DiscussionPost => ({
   id: String(r.id),
   publicId: String(r.public_id ?? r.publicId),
@@ -340,7 +344,7 @@ export class PostgresDiscussionRepository implements DiscussionRepository {
   }
   async get(key: string) {
     const r = await this.db.query(
-      "SELECT p.*, (SELECT count(*) FROM discussion_post_likes l WHERE l.post_id=p.id)::int like_count, (SELECT count(*) FROM discussion_comments c WHERE c.post_id=p.id AND c.status='VISIBLE')::int comment_count FROM discussion_posts p WHERE (p.id=$1 OR p.public_id=$1) LIMIT 1",
+      `SELECT p.*, (SELECT count(*) FROM discussion_post_likes l WHERE l.post_id=p.id)::int like_count, (SELECT count(*) FROM discussion_comments c WHERE c.post_id=p.id AND c.status='VISIBLE')::int comment_count FROM discussion_posts p WHERE p.${postKeyPredicate(key)} LIMIT 1`,
       [key],
     );
     return r.rows[0] ? publicPost(r.rows[0]) : null;
@@ -362,7 +366,7 @@ export class PostgresDiscussionRepository implements DiscussionRepository {
   }
   async update(id: string, i: any) {
     const r = await this.db.query(
-      "UPDATE discussion_posts SET title=COALESCE($2,title),summary=COALESCE($3,summary),content_markdown=COALESCE($4,content_markdown),type=COALESCE($5,type),updated_at=now() WHERE (id=$1 OR public_id=$1) AND status<>'DELETED' RETURNING *",
+      `UPDATE discussion_posts SET title=COALESCE($2,title),summary=COALESCE($3,summary),content_markdown=COALESCE($4,content_markdown),type=COALESCE($5,type),updated_at=now() WHERE ${postKeyPredicate(id)} AND status<>'DELETED' RETURNING *`,
       [
         id,
         i.title ?? null,
@@ -375,21 +379,21 @@ export class PostgresDiscussionRepository implements DiscussionRepository {
   }
   async publish(id: string) {
     const r = await this.db.query(
-      "UPDATE discussion_posts SET status='PUBLISHED',published_at=COALESCE(published_at,now()),updated_at=now() WHERE (id=$1 OR public_id=$1) AND status<>'DELETED' RETURNING *",
+      `UPDATE discussion_posts SET status='PUBLISHED',published_at=COALESCE(published_at,now()),updated_at=now() WHERE ${postKeyPredicate(id)} AND status<>'DELETED' RETURNING *`,
       [id],
     );
     return r.rows[0] ? publicPost(r.rows[0]) : null;
   }
   async tombstone(id: string, a: string) {
     const r = await this.db.query(
-      "UPDATE discussion_posts SET status='DELETED',deleted_at=now(),deleted_by=$2,updated_at=now() WHERE (id=$1 OR public_id=$1) AND status<>'DELETED' RETURNING *",
+      `UPDATE discussion_posts SET status='DELETED',deleted_at=now(),deleted_by=$2,updated_at=now() WHERE ${postKeyPredicate(id)} AND status<>'DELETED' RETURNING *`,
       [id, a],
     );
     return r.rows[0] ? publicPost(r.rows[0]) : null;
   }
   async incrementViews(id: string) {
     await this.db.query(
-      "UPDATE discussion_posts SET view_count=view_count+1 WHERE (id=$1 OR public_id=$1) AND status='PUBLISHED'",
+      `UPDATE discussion_posts SET view_count=view_count+1 WHERE ${postKeyPredicate(id)} AND status='PUBLISHED'`,
       [id],
     );
   }

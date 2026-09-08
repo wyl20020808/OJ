@@ -2155,21 +2155,33 @@ export function SubmissionDetail({
   const [selectedGeneration, setSelectedGeneration] = useState<number>();
   const [activeTab, setActiveTab] = useState<'result' | 'code'>('result');
   const [copyMessage, setCopyMessage] = useState('');
+  const [source, setSource] = useState<string | null>(null);
+  const [sourceError, setSourceError] = useState(false);
   const [evaluation, setEvaluation] = useState<
     (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null
   >(null);
   const [evaluationError, setEvaluationError] = useState(false);
-  const canViewSource = typeof submission?.source === 'string';
+  const canViewSource = source !== null;
   const requestVersion = useRef(0);
   const load = () => {
     const version = ++requestVersion.current;
     setError(null);
     setTransportError('');
+    setSource(null);
+    setSourceError(false);
     void api
       .submission(id)
       .then((value) => {
         if (version !== requestVersion.current) return;
         setSubmission(value);
+        void api
+          .submissionSource(id)
+          .then((result) => {
+            if (version === requestVersion.current) setSource(result.source);
+          })
+          .catch(() => {
+            if (version === requestVersion.current) setSourceError(true);
+          });
         setProblem(null);
         if (typeof api.problem === 'function') {
           void api
@@ -2345,11 +2357,11 @@ export function SubmissionDetail({
     : submission.problemId;
   const copySource = async () => {
     try {
-      if (typeof submission.source !== 'string')
+      if (source === null)
         throw new Error('source unavailable');
       if (!navigator.clipboard?.writeText)
         throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(submission.source);
+      await navigator.clipboard.writeText(source);
       setCopyMessage('已复制');
     } catch {
       setCopyMessage('复制失败');
@@ -2399,6 +2411,11 @@ export function SubmissionDetail({
               </button>
             ) : null}
           </nav>
+          {sourceError ? (
+            <p className="error" role="alert">
+              源代码暂不可用。
+            </p>
+          ) : null}
           {activeTab === 'code' && canViewSource ? (
             <Section title="源代码">
               <div className="source-heading">
@@ -2412,7 +2429,7 @@ export function SubmissionDetail({
                   {copyMessage || '复制代码'}
                 </button>
               </div>
-              <pre className="source">{submission.source}</pre>
+              <pre className="source">{source}</pre>
             </Section>
           ) : (
             <>

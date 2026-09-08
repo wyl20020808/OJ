@@ -354,6 +354,39 @@ export async function registerSubmissionModule(
       throw e;
     }
   });
+  app.get('/api/submissions/:id/source', async (request, reply) => {
+    try {
+      const submission = await service.detail(
+        (request.params as { id: string }).id,
+        await auth(request),
+      );
+      return reply.send({
+        submissionId: submission.id,
+        languageId: submission.languageId,
+        source: submission.source,
+      });
+    } catch (e) {
+      if (e instanceof SubmissionNotFoundError)
+        return error(reply, request, 404, 'NOT_FOUND', e.message);
+      if (e instanceof Error && e.message === 'UNAUTHENTICATED')
+        return error(
+          reply,
+          request,
+          401,
+          'UNAUTHENTICATED',
+          'Authentication required',
+        );
+      if (e instanceof Error && e.message === 'FORBIDDEN')
+        return error(
+          reply,
+          request,
+          403,
+          'FORBIDDEN',
+          'Submission source is forbidden',
+        );
+      throw e;
+    }
+  });
   app.post('/api/submissions/:id/rejudge', async (request, reply) => {
     try {
       const submission = await service.detail(

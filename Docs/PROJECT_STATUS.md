@@ -1,5 +1,17 @@
 # OJPlatform Project Status
 
+Product Correctness Wave 2 - Discussion Publish and Admin Submission Source
+(2026-09-08): PASS for implementation and isolated qualification. Discussion
+post lookup now chooses UUID `id` or text `public_id` predicates instead of
+binding one PostgreSQL parameter to both types. A temporary forward migration
+grants the existing `platform-root` role canonical `submission:view:any`, and a
+dedicated authorized source endpoint now supplies the Evaluation Web Code tab.
+Focused tests, transaction-rolled-back PostgreSQL qualification, typechecks,
+builds, changed-file lint, architecture, and diff checks pass. Managed runtime
+and manual browser smoke remain not verified; Runtime Manager and Judge were not
+changed. See
+`Docs/reports/OJPLATFORM_PRODUCT_CORRECTNESS_WAVE2_DISCUSSION_ADMIN_SOURCE_REPORT.md`.
+
 Runtime Stop Ownership Recovery Finalization V1 (2026-09-08): PARTIAL. Runtime
 Stop repair is formally persisted on main in `c0010a0c741ae4038e4e1db4e29fcee473ee24b5`.
 Committed-state ownership, orphan recovery, manual recovery, launcher, parser,
