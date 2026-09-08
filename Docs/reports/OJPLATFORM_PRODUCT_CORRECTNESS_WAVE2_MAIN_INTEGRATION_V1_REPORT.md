@@ -30,12 +30,13 @@ Semantic integration PASS. No whole-file ours/theirs resolution. Latest main, Ru
 - `git diff --check`: PASS.
 - PostgreSQL migration apply: **PASS**. Runtime Manager started Product PostgreSQL and applied `0026_submission_source_permission` once; migration history reports 29 product versions.
 - Real persisted `platform-root` `submission:view:any`: **YES** (read-only query after apply).
-- Real admin source matrix, `/api/auth/me` projection, runtime/browser smoke: **NOT VERIFIED**.
+- Runtime Manager product smoke: **PASS** (`/health`, Web `/`, Discussion list, Tags, Teams all HTTP 200).
+- Real admin source matrix and `/api/auth/me` session projection: **NOT VERIFIED** (no safe authenticated admin fixture established).
 - Prior feature transaction-scoped PostgreSQL qualification remains documented evidence; no real data mutated here.
 
 ## Merge Decision
 
-Code integration is safe and complete, and the migration/persisted role check passed. Final status remains PARTIAL because a real authenticated admin source matrix and `/api/auth/me` session projection were not executed; rerun those checks before claiming full PASS.
+Code integration is safe and complete, migration/persisted role check and product HTTP smoke passed. Final status remains PARTIAL because a real authenticated admin source matrix and `/api/auth/me` session projection were not executed; rerun those checks before claiming full PASS.
 
 ## Safety
 
