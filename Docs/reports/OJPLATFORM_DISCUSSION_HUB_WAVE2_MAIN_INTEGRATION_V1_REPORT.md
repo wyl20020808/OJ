@@ -71,5 +71,8 @@ qualification was sufficient and this Goal does not requalify Judge Runtime.
 
 - `git clean`, `git reset --hard`, history rewrite, directory copy, and force operations: NOT USED.
 - Manual UI acceptance: PENDING USER.
-- Main merge and main-side revalidation are required after this report commit.
-
+- Main merge commit: `e5113ee55695f68ead0be9aff1a6848654d29751`.
+- Actual `main` and `refs/heads/main` matched at the merge commit.
+- Main-side Discussion/authoring/core tests: PASS, 17/17.
+- Main-side Web typecheck, Web build, architecture, and integration diff check: PASS.
+- User `Docs/PROJECT_STATUS.md` changes were restored after merge. Original stash remains preserved; the temporary preservation stash was retained because stash deletion was prohibited.
