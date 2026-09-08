@@ -6,6 +6,7 @@ import {
   render,
   screen,
   within,
+  waitFor,
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../apps/web/src/app/App.js';
@@ -133,6 +134,41 @@ describe('Product Web Chinese Rich Experience V3', () => {
     expect(
       screen.getByRole('tab', { name: '邮箱/手机号' }),
     ).toBeInTheDocument();
+  });
+  it('supports an unchecked remember-me control and submits its state', async () => {
+    const api = authApi();
+    vi.mocked(api.authMethods).mockResolvedValue(methods);
+    vi.mocked(api.loginPassword).mockResolvedValue({
+      id: 'u1',
+      username: 'alice',
+      email: 'alice@example.com',
+      displayName: 'Alice',
+      status: 'active',
+    });
+    render(
+      <AuthExperience
+        mode="login"
+        api={api}
+        onUser={vi.fn()}
+        onNavigate={vi.fn()}
+      />,
+    );
+    const remember = await screen.findByLabelText('记住我');
+    expect(remember).not.toBeChecked();
+    fireEvent.click(remember);
+    expect(remember).toBeChecked();
+    fireEvent.change(screen.getByLabelText('邮箱/手机号'), {
+      target: { value: 'alice@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('密码'), {
+      target: { value: 'correct-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '登录' }));
+    await waitFor(() =>
+      expect(api.loginPassword).toHaveBeenCalledWith(
+        expect.objectContaining({ rememberMe: true }),
+      ),
+    );
   });
   it('WEB-V3-04 register zh-CN', () => {
     render(

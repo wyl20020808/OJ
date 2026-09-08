@@ -14,6 +14,135 @@ async function app() {
 }
 
 describe('auth foundation', () => {
+  it('uses session cookies by default and finite persistent cookies only when remembered', async () => {
+    const repository = createMemoryAuthRepository();
+    const server = Fastify({ logger: false });
+    await registerAuthModule(server, {
+      repository,
+      sessionTtlMs: 1_000,
+      rememberedSessionTtlMs: 10_000,
+    });
+    await server.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: {
+        username: 'remember-user',
+        email: 'remember@example.com',
+        displayName: 'Remember User',
+        password: 'correct-password',
+      },
+    });
+    const normal = await server.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { identity: 'remember-user', password: 'correct-password' },
+    });
+    expect(String(normal.headers['set-cookie']).split(',')[0]).not.toContain(
+      'Max-Age=',
+    );
+    const remembered = await server.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: {
+        identity: 'remember-user',
+        password: 'correct-password',
+        rememberMe: true,
+      },
+    });
+    expect(String(remembered.headers['set-cookie']).split(',')[0]).toContain(
+      'Max-Age=10',
+    );
+    const sessions = await repository.listSessions(
+      (await repository.findByIdentity('remember-user'))!.id,
+    );
+    expect(new Date(sessions[1]!.expiresAt).getTime()).toBeGreaterThan(
+      new Date(sessions[0]!.expiresAt).getTime(),
+    );
+    const rememberedCookie = String(remembered.headers['set-cookie'])
+      .split(',')[0]!
+      .split(';')[0]!;
+    expect(
+      (
+        await server.inject({
+          method: 'GET',
+          url: '/api/auth/me',
+          headers: { cookie: rememberedCookie },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await server.inject({
+          method: 'POST',
+          url: '/api/auth/logout',
+          headers: { cookie: rememberedCookie },
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect(
+      (
+        await server.inject({
+          method: 'GET',
+          url: '/api/auth/me',
+          headers: { cookie: rememberedCookie },
+        })
+      ).statusCode,
+    ).toBe(401);
+    const malformed = await server.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: {
+        identity: 'remember-user',
+        password: 'correct-password',
+        rememberMe: 'true',
+      },
+    });
+    expect(malformed.statusCode).toBe(400);
+    const v2Remembered = await server.inject({
+      method: 'POST',
+      url: '/api/auth/login/password',
+      payload: {
+        identifierType: 'EMAIL',
+        identifier: 'remember@example.com',
+        password: 'correct-password',
+        rememberMe: true,
+      },
+    });
+    expect(v2Remembered.statusCode).toBe(200);
+    expect(String(v2Remembered.headers['set-cookie']).split(',')[0]).toContain(
+      'Max-Age=10',
+    );
+    const malformedV2 = await server.inject({
+      method: 'POST',
+      url: '/api/auth/login/password',
+      payload: {
+        identifierType: 'EMAIL',
+        identifier: 'remember@example.com',
+        password: 'correct-password',
+        rememberMe: 1,
+      },
+    });
+    expect(malformedV2.statusCode).toBe(400);
+    const wrong = await server.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: {
+        identity: 'remember-user',
+        password: 'wrong-password',
+        rememberMe: true,
+      },
+    });
+    expect(wrong.statusCode).toBe(401);
+    expect(
+      (
+        await repository.listSessions(
+          (await repository.findByIdentity('remember-user'))!.id,
+        )
+      ).length,
+    ).toBe(3);
+    await server.close();
+  });
+
   it('registers, logs in, reads me, and logs out without exposing password', async () => {
     const server = await app();
     const registration = await server.inject({
