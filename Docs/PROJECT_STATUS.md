@@ -631,3 +631,13 @@ Static home announcements remain version-controlled and domain-specific; no
 schema or API repository change was needed. Manual UI acceptance remains
 PENDING USER. See
 `Docs/reports/OJPLATFORM_DISCUSSION_HUB_EXPERIENCE_WAVE2_REPORT.md`.
+
+Discussion Hub Experience Wave 2 Main Integration V1 (2026-09-08): PASS on
+candidate branch. Latest-main Worker A correctness and Worker B authoring were
+preserved while Worker C Hub, feed, detail, comments, URL filters, responsive
+styles, and global Copy Link Toast were integrated semantically. Focused tests
+20/20, PostgreSQL correctness 1/1, Web/API/root typechecks, builds, changed-file
+lint, architecture, and diff checks pass. One Profile fixture failure reproduces
+on pre-integration main and is not a new regression. Manual UI acceptance is
+PENDING USER. See
+`Docs/reports/OJPLATFORM_DISCUSSION_HUB_WAVE2_MAIN_INTEGRATION_V1_REPORT.md`.
