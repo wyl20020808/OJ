@@ -199,6 +199,16 @@ describe('Product UX Repair Wave 1', () => {
     expect(screen.getByText('@owner')).toBeInTheDocument();
   });
 
+  it('renders public team detail for anonymous viewers without protected member API', async () => {
+    const api = {
+      team: vi.fn().mockResolvedValue({ ...team, membershipState: 'NOT_MEMBER' }),
+    } as unknown as ApiClient;
+    render(<TeamPage api={api} slug="alpha-team" user={null} navigate={vi.fn()} />);
+    expect(await screen.findByRole('heading', { name: team.name })).toBeInTheDocument();
+    expect(screen.getByText('18 人')).toBeInTheDocument();
+    expect(api.team).toHaveBeenCalledWith('alpha-team');
+  });
+
   it('keeps Discussion active on nested routes and preserves Problem and Team nav', async () => {
     vi.stubGlobal(
       'fetch',

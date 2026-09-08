@@ -133,12 +133,19 @@ export function TeamPage({
         live = false;
       };
     }
-    void Promise.all([api.team(slug), api.teamMembers(slug)])
-      .then(([detail, memberPage]) => {
-        if (live) {
-          setTeam(detail);
-          setMembers(memberPage.items);
-        }
+    void api
+      .team(slug)
+      .then((detail) => {
+        if (!live) return;
+        setTeam(detail);
+        setLoading(false);
+        // Public detail is available to anonymous/non-member viewers. Member
+        // listing remains a protected capability and must not hide the detail.
+        if (!user) return;
+        void api
+          .teamMembers(slug)
+          .then((memberPage) => live && setMembers(memberPage.items))
+          .catch(() => live && setMembers([]));
       })
       .catch(() => live && setError('团队不存在或当前不可见'))
       .finally(() => live && setLoading(false));

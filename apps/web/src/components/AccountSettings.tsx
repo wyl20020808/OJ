@@ -178,7 +178,7 @@ export function AccountSettings({
             </div>
           </dl>
           <div className="unavailable-note">
-            当前公开接口暂不支持编辑资料和修改密码。
+            用户名、邮箱和密码属于账户安全信息，需通过对应安全流程修改。
           </div>
         </article>
         <article className="settings-panel">
@@ -330,6 +330,18 @@ export function AccountSettings({
 }
 
 function ProfileEditor({ profile, setProfile, saving, message, onSave, onCancel }: { profile: EditableProfile; setProfile: (p: EditableProfile) => void; saving: boolean; message: string; onSave: () => Promise<void>; onCancel: () => void }) {
-  const field = (key: keyof Omit<EditableProfile, 'username'>, label: string, type: 'input' | 'textarea' = 'input') => type === 'textarea' ? <label className="profile-editor-field">{label}<textarea maxLength={800} value={profile[key]} onChange={(e) => setProfile({ ...profile, [key]: e.target.value })} /></label> : <label className="profile-editor-field">{label}<input maxLength={key === 'displayName' ? 60 : key === 'headline' ? 100 : key === 'organization' ? 120 : key === 'location' ? 100 : key === 'website' ? 300 : 100} value={profile[key]} onChange={(e) => setProfile({ ...profile, [key]: e.target.value })} /></label>;
-  return <article className="settings-panel settings-wide profile-editor"><div className="panel-row"><div><p className="panel-label">公开个人资料</p><h2>编辑个人资料</h2></div><span className="muted">这些信息会显示在你的公开主页。</span></div><div className="profile-editor-grid"><div>{field('displayName', '显示名称')}{field('headline', '一句话介绍')}{field('bio', `个人简介（${profile.bio.length}/800）`, 'textarea')}</div><div>{field('location', '地区')}{field('organization', '学校 / 组织')}{field('website', '个人网站')}{field('github', 'GitHub')}</div></div><div className="profile-editor-actions"><span className="muted">@{profile.username}</span><button type="button" className="secondary" onClick={onCancel} disabled={saving}>取消</button><button type="button" onClick={() => void onSave()} disabled={saving || !profile.displayName.trim()}>{saving ? '保存中…' : '保存资料'}</button></div>{message && <p role="status" className="muted">{message}</p>}</article>;
+  const errors = {
+    displayName: profile.displayName.trim() ? '' : '请输入显示名称。',
+    website: profile.website && !/^https?:\/\/[^\s]+$/i.test(profile.website) ? '网站需使用 http 或 https 地址。' : '',
+    github: profile.github && !/^(?:[A-Za-z0-9-]{1,39}|https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/?$)/.test(profile.github) ? '请输入 GitHub 用户名或 GitHub 主页地址。' : '',
+  };
+  const invalid = Object.values(errors).some(Boolean);
+  const field = (key: keyof Omit<EditableProfile, 'username'>, label: string, type: 'input' | 'textarea' = 'input') => {
+    const error = errors[key as keyof typeof errors] ?? '';
+    const control = type === 'textarea'
+      ? <textarea maxLength={800} value={profile[key]} aria-invalid={Boolean(error)} onChange={(e) => setProfile({ ...profile, [key]: e.target.value })} />
+      : <input maxLength={key === 'displayName' ? 60 : key === 'headline' ? 100 : key === 'organization' ? 120 : key === 'location' ? 100 : key === 'website' ? 300 : 100} value={profile[key]} aria-invalid={Boolean(error)} onChange={(e) => setProfile({ ...profile, [key]: e.target.value })} />;
+    return <label className="profile-editor-field">{label}{control}{error && <span className="field-error" role="alert">{error}</span>}</label>;
+  };
+  return <article className="settings-panel settings-wide profile-editor"><div className="panel-row"><div><p className="panel-label">公开个人资料</p><h2>编辑个人资料</h2></div><span className="muted">这些信息会显示在你的公开主页。</span></div><div className="profile-editor-grid"><div>{field('displayName', '显示名称')}{field('headline', '一句话介绍')}{field('bio', `个人简介（${profile.bio.length}/800）`, 'textarea')}</div><div>{field('location', '地区')}{field('organization', '学校 / 组织')}{field('website', '个人网站')}{field('github', 'GitHub')}</div></div><div className="profile-editor-actions"><span className="muted">@{profile.username}</span><button type="button" className="secondary" onClick={onCancel} disabled={saving}>取消</button><button type="button" onClick={() => void onSave()} disabled={saving || invalid}>{saving ? '保存中…' : '保存资料'}</button></div>{message && <p role="status" className="muted">{message}</p>}</article>;
 }

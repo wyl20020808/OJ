@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App, presentJudgeStatus } from '../apps/web/src/app/App.js';
 import { AccountSettings } from '../apps/web/src/components/AccountSettings.js';
@@ -214,6 +214,18 @@ describe('PRODUCT WEB EXPERIENCE FOUNDATION V1', () => {
     expect(
       await screen.findByRole('heading', { name: '账户设置' }),
     ).toBeInTheDocument();
+  });
+  it('canonical self profile edit entry reaches personalized editor', async () => {
+    vi.stubGlobal('fetch', appFetch({ me: user }));
+    window.history.pushState({}, '', '/profile');
+    render(<App />);
+    const edit = await screen.findByRole('button', { name: '编辑资料' });
+    fireEvent.click(edit);
+    expect(await screen.findByRole('heading', { name: '账户设置' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '编辑个人资料' })).toBeInTheDocument();
+    expect(screen.getByLabelText('显示名称')).toHaveValue('Ada');
+    expect(screen.getByLabelText('GitHub')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('当前公开接口暂不支持编辑资料和修改密码。')).not.toBeInTheDocument());
   });
   it('WEB-PROD-17 missing account backend is honest', async () => {
     render(
