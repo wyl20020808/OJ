@@ -55,6 +55,11 @@ describe('team core service', () => {
     expect(created.statusCode).toBe(201);
     const listed = await app.inject({ method: 'GET', url: '/api/teams' });
     expect(listed.statusCode).toBe(200);
+    expect(
+      listed
+        .json()
+        .items.filter((item: { id: string }) => item.id === created.json().id),
+    ).toHaveLength(1);
     expect(listed.json().items).toEqual(
       expect.arrayContaining([expect.objectContaining({ slug: 'route-team' })]),
     );
@@ -82,6 +87,8 @@ describe('team core service', () => {
       joinPolicy: 'OPEN',
       ownerId: 'u1',
     });
+    expect(repo.teams.size).toBe(1);
+    expect(repo.membersMap.size).toBe(1);
     expect(
       (await repo.member((await repo.getTeam('alpha'))!.id, 'u1'))?.role,
     ).toBe('OWNER');

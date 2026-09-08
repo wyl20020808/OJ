@@ -146,7 +146,7 @@ function markdownReplacement(action: ToolbarAction, selected: string) {
   }
 }
 
-function MarkdownToolbar({
+export function MarkdownToolbar({
   textareaRef,
   value,
   onChange,

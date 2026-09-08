@@ -535,3 +535,16 @@ tombstones remain, including P0011-P0014. Focused tests 28/28, typechecks,
 builds, changed-file lint, architecture, and diff check pass. Full lint retains
 8 pre-existing unrelated findings; manual browser acceptance remains pending.
 See `Docs/reports/OJPLATFORM_MAIN_INTEGRATION_WAVE3_PROBLEM_TAGS_V1_REPORT.md`.
+
+Discussion Core V1 (2026-09-06): PARTIAL. Discussion domain, API routes,
+sanitized Markdown/LaTeX renderer, Web home/detail/editor, migration, focused
+tests, typechecks, builds, architecture check, and diff check added on isolated
+branch `codex/discussion-core-v1`. PostgreSQL runtime and manual UI acceptance
+remain NOT VERIFIED. See
+`Docs/reports/OJPLATFORM_DISCUSSION_CORE_V1_REPORT.md`.
+
+Discussion Core V1 closeout (2026-09-07): requested closeout items added:
+safe author projection/profile links with deleted-user fallback, shared
+Markdown toolbar, comment refresh/edit/delete interaction, and stale navigation
+test update. Focused/component tests, typecheck, builds, lint, and diff check
+pass. PostgreSQL runtime and manual UI acceptance remain NOT VERIFIED.

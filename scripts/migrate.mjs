@@ -38,6 +38,7 @@ try {
     '0022_problem_delete_provenance',
     '0023_team_core_v1',
     '0024_problem_tag_catalog',
+    '0025_discussion_core',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ApiClient, Problem } from '../services/api.js';
 
 type Tag = NonNullable<Problem['tagDetails']>[number];
@@ -16,6 +16,11 @@ export function TagSelector({
 }) {
   const [catalog, setCatalog] = useState<Tag[]>([]);
   const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const rootRef = useRef<HTMLFieldSetElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const popoverId = useId();
   useEffect(() => {
     const loader = api.tags?.();
     if (loader)
@@ -23,6 +28,35 @@ export function TagSelector({
         .then((tags) => setCatalog(Array.isArray(tags) ? tags : []))
         .catch(() => setCatalog([]));
   }, [api]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutside = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+        setPinned(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        setPinned(false);
+      }
+    };
+    document.addEventListener('mousedown', closeOnOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
   const visible = useMemo(() => {
     const q = query.trim().toLocaleLowerCase();
     return catalog.filter(
@@ -38,51 +72,110 @@ export function TagSelector({
     (groups[tag.category] ??= []).push(tag);
     return groups;
   }, {});
+  const cancelClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  const show = () => {
+    cancelClose();
+    setOpen(true);
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    if (!pinned) closeTimer.current = setTimeout(() => setOpen(false), 180);
+  };
   return (
-    <fieldset className="tag-selector" disabled={disabled}>
-      <legend>标签</legend>
-      <input
-        aria-label="搜索标签"
-        placeholder="搜索标签..."
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
-      <div className="tag-selector-selected" aria-label="已选择标签">
-        {value
-          .map((id) => catalog.find((tag) => tag.id === id))
-          .filter(Boolean)
-          .map((tag) => (
-            <button
-              type="button"
-              key={tag!.id}
-              onClick={() => onChange(value.filter((item) => item !== tag!.id))}
-            >
-              {tag!.name} ×
-            </button>
-          ))}
-      </div>
-      {Object.entries(grouped).map(([category, tags]) => (
-        <div key={category} className="tag-selector-group">
-          <strong>{category}</strong>
-          {tags.map((tag) => (
-            <label key={tag.id}>
-              <input
-                type="checkbox"
-                checked={selected.has(tag.id)}
-                onChange={() =>
-                  onChange(
-                    selected.has(tag.id)
-                      ? value.filter((id) => id !== tag.id)
-                      : [...value, tag.id],
-                  )
-                }
-              />
-              {tag.name}
-            </label>
-          ))}
+    <fieldset className="tag-selector" disabled={disabled} ref={rootRef}>
+      <legend>题目标签</legend>
+      <div className="tag-selector-row">
+        <div className="tag-selector-selected" aria-label="已选择标签">
+          {value
+            .map((id) => catalog.find((tag) => tag.id === id))
+            .filter((tag): tag is Tag => Boolean(tag))
+            .map((tag) => (
+              <button
+                type="button"
+                className="tag-selected-chip"
+                key={tag.id}
+                aria-label={`移除标签 ${tag.name}`}
+                onClick={() => onChange(value.filter((id) => id !== tag.id))}
+              >
+                {tag.name} <span aria-hidden="true">×</span>
+              </button>
+            ))}
         </div>
-      ))}
-      {!visible.length && <p className="field-help">暂无匹配标签。</p>}
+        <button
+          type="button"
+          className="tag-selector-trigger"
+          aria-expanded={open}
+          aria-controls={popoverId}
+          onMouseEnter={show}
+          onMouseLeave={scheduleClose}
+          onFocus={show}
+          onClick={() => {
+            cancelClose();
+            if (pinned) {
+              setOpen(false);
+              setPinned(false);
+            } else {
+              setOpen(true);
+              setPinned(true);
+            }
+          }}
+        >
+          <span aria-hidden="true">+</span> 选择标签
+        </button>
+      </div>
+      {open && (
+        <section
+          id={popoverId}
+          className="tag-selector-popover"
+          aria-label="选择标签"
+          role="dialog"
+          onMouseEnter={show}
+          onMouseLeave={scheduleClose}
+        >
+          <header>
+            <strong>选择标签</strong>
+            <span>已选 {value.length}</span>
+          </header>
+          <input
+            aria-label="搜索标签"
+            placeholder="搜索标签..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <div className="tag-selector-catalog">
+            {Object.entries(grouped).map(([category, tags]) => (
+              <section key={category} className="tag-selector-group">
+                <h3>{category}</h3>
+                <div className="tag-selector-matrix">
+                  {tags.map((tag) => (
+                    <button
+                      type="button"
+                      key={tag.id}
+                      className={selected.has(tag.id) ? 'selected' : ''}
+                      aria-pressed={selected.has(tag.id)}
+                      onClick={() =>
+                        onChange(
+                          selected.has(tag.id)
+                            ? value.filter((id) => id !== tag.id)
+                            : [...value, tag.id],
+                        )
+                      }
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+            {!visible.length && (
+              <p className="tag-selector-empty">暂无匹配标签。</p>
+            )}
+          </div>
+        </section>
+      )}
     </fieldset>
   );
 }
