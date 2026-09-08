@@ -108,6 +108,7 @@ describe('Web V4 R2 problem library and guest contracts', () => {
       'aria-current',
       'page',
     );
+    expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '第 9 页' })).toBeInTheDocument();
     expect(screen.getByText('…')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '第 2 页' }));
@@ -122,6 +123,65 @@ describe('Web V4 R2 problem library and guest contracts', () => {
       'aria-current',
       'page',
     );
+  });
+
+  it('keeps problem pagination in the list flow and blocks duplicate page loads', async () => {
+    window.history.replaceState({}, '', '/problems');
+    const requests: string[] = [];
+    let resolveNextPage!: (value: ReturnType<typeof response>) => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.endsWith('/api/auth/me')) return response(401, {});
+        if (url.endsWith('/ready')) return response(200, { status: 'ok' });
+        if (url.includes('/api/problems?')) {
+          const offset = Number(
+            new URL(url, window.location.origin).searchParams.get('offset'),
+          );
+          if (offset === 20) {
+            return new Promise((resolve) => {
+              resolveNextPage = resolve;
+            });
+          }
+          return response(200, {
+            items: [{ ...problem, id: `p-${offset}` }],
+            page: { total: 40, offset, limit: 20 },
+          });
+        }
+        return response(404, {});
+      }),
+    );
+    render(<App />);
+    const pagination = await screen.findByRole('navigation', { name: '分页' });
+    expect(pagination).toHaveClass('pagination', 'problem-list-pagination');
+    expect(pagination.previousElementSibling).toHaveClass(
+      'problem-list-modern',
+    );
+    expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+    await waitFor(() =>
+      expect(requests.filter((url) => url.includes('offset=20'))).toHaveLength(
+        1,
+      ),
+    );
+    expect(pagination).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+    expect(requests.filter((url) => url.includes('offset=20'))).toHaveLength(1);
+
+    resolveNextPage(
+      response(200, {
+        items: [{ ...problem, id: 'p-20' }],
+        page: { total: 40, offset: 20, limit: 20 },
+      }),
+    );
+    await waitFor(() =>
+      expect(pagination).toHaveAttribute('aria-busy', 'false'),
+    );
+    expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled();
   });
 
   it('keeps guest login truthful when capability is unavailable', async () => {

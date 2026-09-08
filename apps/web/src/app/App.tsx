@@ -842,18 +842,25 @@ function Pagination({
   current,
   total,
   onChange,
+  loading = false,
 }: {
   current: number;
   total: number;
   onChange: (page: number) => void;
+  loading?: boolean;
 }) {
   const items = paginationItems(current, total);
   return (
-    <nav className="pagination" aria-label="分页">
+    <nav
+      className="pagination problem-list-pagination"
+      aria-label="分页"
+      aria-busy={loading}
+      data-loading={loading ? 'true' : 'false'}
+    >
       <button
         type="button"
         className="pagination-control"
-        disabled={current <= 1 || total === 0}
+        disabled={loading || current <= 1 || total === 0}
         onClick={() => onChange(current - 1)}
       >
         上一页
@@ -875,6 +882,7 @@ function Pagination({
               className="pagination-page"
               aria-current={item === current ? 'page' : undefined}
               aria-label={`第 ${item} 页`}
+              disabled={loading}
               onClick={() => onChange(item)}
             >
               {item}
@@ -885,10 +893,11 @@ function Pagination({
       <span className="pagination-mobile-status" aria-live="polite">
         {total > 0 ? `${current} / ${total}` : '暂无页码'}
       </span>
+      {loading && <span className="pagination-loading">加载中…</span>}
       <button
         type="button"
         className="pagination-control"
-        disabled={current >= total || total === 0}
+        disabled={loading || current >= total || total === 0}
         onClick={() => onChange(current + 1)}
       >
         下一页
@@ -910,6 +919,8 @@ function ProblemList({
     page: { total: number; offset: number; limit: number };
   } | null>(null);
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const requestId = useRef(0);
   const initialState = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const parsedPage = Number(params.get('page') ?? 1);
@@ -949,7 +960,8 @@ function ProblemList({
   const currentFilters = () => ({ q: query, difficulty, tag, source });
   const changePage = (nextPage: number) => {
     const totalPages = data ? Math.ceil(data.page.total / data.page.limit) : 0;
-    if (!totalPages || nextPage < 1 || nextPage > totalPages) return;
+    if (loading || !totalPages || nextPage < 1 || nextPage > totalPages) return;
+    setLoading(true);
     setPage(nextPage);
     syncUrl(currentFilters(), nextPage);
   };
@@ -966,11 +978,20 @@ function ProblemList({
     syncUrl(next, 1, true);
   };
   const load = () => {
+    const activeRequest = ++requestId.current;
     setError(false);
+    setLoading(true);
     void api
       .problems(offset, pageSize, query.trim() ? { search: query.trim() } : {})
-      .then(setData)
-      .catch(() => setError(true));
+      .then((nextData) => {
+        if (activeRequest === requestId.current) setData(nextData);
+      })
+      .catch(() => {
+        if (activeRequest === requestId.current) setError(true);
+      })
+      .finally(() => {
+        if (activeRequest === requestId.current) setLoading(false);
+      });
   };
   useEffect(load, [api, offset, query]);
   useEffect(() => {
@@ -1225,7 +1246,12 @@ function ProblemList({
           ))}
         </div>
       )}
-      <Pagination current={page} total={totalPages} onChange={changePage} />
+      <Pagination
+        current={page}
+        total={totalPages}
+        loading={loading}
+        onChange={changePage}
+      />
     </section>
   );
 }
