@@ -620,3 +620,14 @@ diff checks pass. One unrelated Profile baseline test failure reproduces on
 pre-integration main. Manual UI acceptance remains PENDING USER; runtime smoke
 was not run. See
 `Docs/reports/OJPLATFORM_AUTHORING_UX_WAVE2_MAIN_INTEGRATION_V1_REPORT.md`.
+
+Discussion Hub Experience Wave 2 (2026-09-08): IMPLEMENTED and automated Web
+scope tested on isolated branch `codex/discussion-hub-wave2`. `/discussion` is
+now the unified ARTICLE/ANNOUNCEMENT content hub with URL-backed tabs and title
+search, editorial feed rows, compact loading/error/empty states, one shared
+content presentation system, reading-focused detail, capability-driven owner
+and comment controls, responsive layout, and renderer regression coverage.
+Static home announcements remain version-controlled and domain-specific; no
+schema or API repository change was needed. Manual UI acceptance remains
+PENDING USER. See
+`Docs/reports/OJPLATFORM_DISCUSSION_HUB_EXPERIENCE_WAVE2_REPORT.md`.
