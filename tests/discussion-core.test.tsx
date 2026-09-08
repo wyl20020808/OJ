@@ -208,6 +208,50 @@ describe('Discussion Core V1', () => {
     expect(third.nextCursor).toBeUndefined();
   });
 
+  it('keeps comment replies scoped to their post and comment likes durable', async () => {
+    const repo = new InMemoryDiscussionRepository();
+    const post = await repo.create({
+      authorId: 'u1',
+      type: 'ARTICLE',
+      title: 'Threads',
+      contentMarkdown: 'x',
+      status: 'PUBLISHED',
+    });
+    const other = await repo.create({
+      authorId: 'u1',
+      type: 'ARTICLE',
+      title: 'Other',
+      contentMarkdown: 'x',
+      status: 'PUBLISHED',
+    });
+    const parent = await repo.createComment({
+      postId: post.id,
+      authorId: 'u1',
+      contentMarkdown: 'parent',
+    });
+    const reply = await repo.createComment({
+      postId: post.id,
+      authorId: 'u2',
+      contentMarkdown: 'reply',
+      parentCommentId: parent.id,
+    });
+    expect(reply.parentCommentId).toBe(parent.id);
+    await expect(
+      repo.createComment({
+        postId: other.id,
+        authorId: 'u2',
+        contentMarkdown: 'invalid',
+        parentCommentId: parent.id,
+      }),
+    ).rejects.toThrow('Parent comment not found');
+    expect(await repo.likeComment(reply.id, 'u3')).toBe(true);
+    expect(await repo.likeComment(reply.id, 'u3')).toBe(false);
+    expect((await repo.getComment(reply.id, 'u3'))?.likeCount).toBe(1);
+    expect((await repo.getComment(reply.id, 'u3'))?.viewerLiked).toBe(true);
+    expect(await repo.unlikeComment(reply.id, 'u3')).toBe(true);
+    expect((await repo.getComment(reply.id, 'u3'))?.viewerLiked).toBe(false);
+  });
+
   it('enforces authentication, CSRF, ownership and announcement capability at API boundary', async () => {
     const app = Fastify({ logger: false });
     const repo = new InMemoryDiscussionRepository();

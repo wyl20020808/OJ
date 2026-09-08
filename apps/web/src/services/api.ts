@@ -664,6 +664,9 @@ export type DiscussionComment = {
   status: 'VISIBLE' | 'DELETED';
   createdAt: string;
   updatedAt: string;
+  parentCommentId?: string | null;
+  likeCount?: number;
+  viewerLiked?: boolean;
   author?: DiscussionAuthor;
   capabilities?: DiscussionViewerCapabilities;
 };
@@ -745,11 +748,18 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
-    createDiscussionComment: (id: string, contentMarkdown: string) =>
+    createDiscussionComment: (
+      id: string,
+      contentMarkdown: string,
+      parentCommentId?: string | null,
+    ) =>
       request<DiscussionComment>(
         baseUrl,
         `/api/discussion/posts/${encodeURIComponent(id)}/comments`,
-        { method: 'POST', body: JSON.stringify({ contentMarkdown }) },
+        {
+          method: 'POST',
+          body: JSON.stringify({ contentMarkdown, parentCommentId }),
+        },
         fetcher,
       ),
     updateDiscussionComment: (id: string, contentMarkdown: string) =>
@@ -763,6 +773,20 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       request<DiscussionComment>(
         baseUrl,
         `/api/discussion/comments/${encodeURIComponent(id)}`,
+        { method: 'DELETE', body: '{}' },
+        fetcher,
+      ),
+    likeDiscussionComment: (id: string) =>
+      request<{ liked: boolean; likeCount: number }>(
+        baseUrl,
+        `/api/discussion/comments/${encodeURIComponent(id)}/likes`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    unlikeDiscussionComment: (id: string) =>
+      request<{ liked: boolean; likeCount: number }>(
+        baseUrl,
+        `/api/discussion/comments/${encodeURIComponent(id)}/likes`,
         { method: 'DELETE', body: '{}' },
         fetcher,
       ),

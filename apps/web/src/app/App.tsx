@@ -24,6 +24,7 @@ import {
   type SubmissionEvaluation,
   type SubmissionEvaluationDetail,
   type SubmissionStatus,
+  type DiscussionPost,
 } from '../services/api.js';
 import './app.css';
 import { JudgeMachinesPage } from '../components/JudgeMachinesPage.js';
@@ -589,6 +590,9 @@ function Home({
     recentEnded: BackendContest[];
   }>();
   const [contestError, setContestError] = useState(false);
+  const [discussionAnnouncements, setDiscussionAnnouncements] = useState<
+    DiscussionPost[]
+  >([]);
   const [fortuneVisible, setFortuneVisible] = useState(false);
   const fortune = useMemo(() => {
     const seed =
@@ -627,6 +631,10 @@ function Home({
         setContestSummary(summary);
       })
       .catch(() => setContestError(true));
+    void api
+      .discussionPosts('limit=3&type=ANNOUNCEMENT')
+      .then((result) => setDiscussionAnnouncements(result.items))
+      .catch(() => setDiscussionAnnouncements([]));
   }, [api]);
   const dailyProblem = chooseDailyProblem(recentProblems ?? []);
   const contestGroups: Array<[string, BackendContest[]]> = contestSummary
@@ -648,14 +656,25 @@ function Home({
               </div>
             </div>
             <ul className="announcement-list">
+              {discussionAnnouncements.map((item) => (
+                <li key={item.id}>
+                  <span className="announcement-meta">
+                    公告 · {formatDate(item.publishedAt ?? item.createdAt)}
+                  </span>
+                  <strong>
+                    <Link to={`/discussion/${item.publicId}`}>
+                      {item.title}
+                    </Link>
+                  </strong>
+                  {item.summary && <p>{item.summary}</p>}
+                </li>
+              ))}
               {staticAnnouncements.map((item) => (
                 <li key={item.id}>
                   <span className="announcement-meta">
                     {item.importance} · {item.date}
                   </span>
-                  <strong>
-                    <Link to={item.href}>{item.title}</Link>
-                  </strong>
+                  <strong>{item.title}</strong>
                   <p>{item.text}</p>
                 </li>
               ))}
@@ -2383,8 +2402,7 @@ export function SubmissionDetail({
     : submission.problemId;
   const copySource = async () => {
     try {
-      if (source === null)
-        throw new Error('source unavailable');
+      if (source === null) throw new Error('source unavailable');
       if (!navigator.clipboard?.writeText)
         throw new Error('clipboard unavailable');
       await navigator.clipboard.writeText(source);
