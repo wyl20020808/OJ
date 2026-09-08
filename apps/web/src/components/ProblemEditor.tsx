@@ -20,6 +20,7 @@ import {
 import './problem-editor.css';
 import { ProblemStatementRenderer } from './ProblemStatementRenderer.js';
 import { TagSelector } from './TagSelector.js';
+import { useToast } from './Toast.js';
 
 type Tab = 'statement' | 'data' | 'settings';
 type Props = {
@@ -92,20 +93,21 @@ const toolbarActions: Array<{
   action: ToolbarAction;
   label: string;
   title: string;
+  group: 'text' | 'insert' | 'code' | 'block' | 'math';
 }> = [
-  { action: 'bold', label: 'B', title: 'Bold' },
-  { action: 'italic', label: 'I', title: 'Italic' },
-  { action: 'heading', label: 'H', title: 'Heading' },
-  { action: 'quote', label: '❝', title: 'Quote' },
-  { action: 'inline-code', label: '</>', title: 'Inline Code' },
-  { action: 'code-block', label: '{ }', title: 'Code Block' },
-  { action: 'link', label: 'Link', title: 'Link' },
-  { action: 'image', label: 'Image', title: 'Image URL' },
-  { action: 'bullet-list', label: '• List', title: 'Bullet List' },
-  { action: 'ordered-list', label: '1. List', title: 'Ordered List' },
-  { action: 'table', label: 'Table', title: 'Table' },
-  { action: 'inline-math', label: '$x$', title: 'Inline Math' },
-  { action: 'block-math', label: '$$', title: 'Block Math' },
+  { action: 'heading', label: 'H', title: '标题', group: 'text' },
+  { action: 'bold', label: 'B', title: '粗体 Ctrl+B', group: 'text' },
+  { action: 'italic', label: 'I', title: '斜体 Ctrl+I', group: 'text' },
+  { action: 'link', label: '🔗', title: '插入链接', group: 'insert' },
+  { action: 'image', label: '▧', title: '插入图片', group: 'insert' },
+  { action: 'inline-code', label: '`', title: '行内代码', group: 'code' },
+  { action: 'code-block', label: '</>', title: '代码块', group: 'code' },
+  { action: 'quote', label: '”', title: '引用', group: 'block' },
+  { action: 'bullet-list', label: '•', title: '无序列表', group: 'block' },
+  { action: 'ordered-list', label: '1.', title: '有序列表', group: 'block' },
+  { action: 'table', label: '▦', title: '表格', group: 'block' },
+  { action: 'inline-math', label: '∑', title: '行内公式', group: 'math' },
+  { action: 'block-math', label: '$$', title: '块级公式', group: 'math' },
 ];
 
 function markdownReplacement(action: ToolbarAction, selected: string) {
@@ -180,19 +182,47 @@ export function MarkdownToolbar({
   };
   return (
     <div className="markdown-toolbar" aria-label="Markdown formatting toolbar">
-      {toolbarActions.map(({ action, label, title }) => (
-        <button
-          key={action}
-          type="button"
-          className="markdown-tool"
-          aria-label={title}
-          title={title}
-          disabled={disabled}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => apply(action)}
+      {(['text', 'insert', 'code', 'block', 'math'] as const).map((group) => (
+        <div
+          className="markdown-tool-group"
+          role="group"
+          aria-label={group}
+          key={group}
         >
-          {label}
-        </button>
+          {toolbarActions
+            .filter((item) => item.group === group)
+            .map(({ action, label, title }) => (
+              <button
+                key={action}
+                type="button"
+                className="markdown-tool"
+                data-action={action}
+                aria-label={
+                  {
+                    bold: 'Bold',
+                    italic: 'Italic',
+                    heading: 'Heading',
+                    quote: 'Quote',
+                    'inline-code': 'Inline Code',
+                    'code-block': 'Code Block',
+                    link: 'Link',
+                    image: 'Image URL',
+                    'bullet-list': 'Bullet List',
+                    'ordered-list': 'Ordered List',
+                    table: 'Table',
+                    'inline-math': 'Inline Math',
+                    'block-math': 'Block Math',
+                  }[action]
+                }
+                title={title}
+                disabled={disabled}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => apply(action)}
+              >
+                {label}
+              </button>
+            ))}
+        </div>
       ))}
     </div>
   );
@@ -243,6 +273,23 @@ export function MarkdownFieldSection({
             aria-label={label}
             onChange={(event) => onChange(event.target.value)}
             disabled={disabled}
+            placeholder={`开始编写${label}……`}
+            onKeyDown={(event) => {
+              if (!(event.ctrlKey || event.metaKey)) return;
+              const action =
+                event.key.toLowerCase() === 'b'
+                  ? 'bold'
+                  : event.key.toLowerCase() === 'i'
+                    ? 'italic'
+                    : null;
+              if (!action) return;
+              event.preventDefault();
+              const button =
+                event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
+                  `[data-action="${action}"]`,
+                );
+              button?.click();
+            }}
           />
         </div>
         <aside
@@ -263,6 +310,7 @@ export function ProblemEditor({
   canManage = true,
   canPublish = true,
 }: Props) {
+  const toast = useToast();
   const [tab, setTab] = useState<Tab>('statement');
   const [problem, setProblem] = useState<Problem | null>(null);
   const [draft, setDraft] = useState<JudgeDraft | null>(null);
@@ -451,7 +499,13 @@ export function ProblemEditor({
       setProblem(p);
       setDirty(false);
       setNotice('题面草稿已保存。');
+      toast({
+        kind: 'success',
+        title: '保存成功',
+        description: '题面内容已更新',
+      });
     } catch (e) {
+      toast({ kind: 'error', title: '保存失败', description: errorText(e) });
       setNotice(errorText(e));
     } finally {
       setSaving(false);
@@ -624,26 +678,9 @@ export function ProblemEditor({
   };
   return (
     <section className="problem-editor authoring-workspace">
-      <header className="problem-editor-header">
-        <div>
-          <p className="eyebrow">
-            出题工作台 / Problem{' '}
-            {problem.publicId || problem.slug || problem.id}
-          </p>
-          <h1>编辑题目：{statement.title || '未命名题目'}</h1>
-          <a
-            className="editor-back-link"
-            href={`/problems/${encodeURIComponent(problem.slug || problem.id)}`}
-          >
-            ← 返回题目
-          </a>
-          <p className="editor-meta">
-            <span className="draft-badge">DRAFT</span> 最后更新{' '}
-            {new Date(draft.updatedAt).toLocaleString('zh-CN')}
-          </p>
-        </div>
-      </header>
       <nav className="editor-tabs" aria-label="题目编辑分区">
+        <h1 className="sr-only">编辑题目：{statement.title || '未命名题目'}</h1>
+        <span className="sr-only">DRAFT</span>
         {(
           [
             ['statement', '题面'],
@@ -672,11 +709,16 @@ export function ProblemEditor({
               <h2>题面内容</h2>
               <p>支持 Markdown 文本；保存前离开页面会提示未保存更改。</p>
             </div>
-            <div className="panel-actions">
-              <button type="button">编辑</button>
-              <button type="button">预览</button>
-              <button disabled={!canEdit || saving}>
-                {saving ? '保存中…' : '保存题面'}
+            <div
+              className="authoring-view-switch"
+              role="group"
+              aria-label="编辑视图"
+            >
+              <button type="button" className="active">
+                编辑
+              </button>
+              <button type="button" className="secondary">
+                预览
               </button>
             </div>
           </div>
@@ -865,6 +907,17 @@ export function ProblemEditor({
                 添加样例
               </button>
             </fieldset>
+            <div className="authoring-action-bar">
+              <a
+                className="editor-back-link"
+                href={`/problems/${encodeURIComponent(problem.slug || problem.id)}`}
+              >
+                ← 返回题目
+              </a>
+              <button disabled={!canEdit || saving}>
+                {saving ? '保存中…' : '保存题面'}
+              </button>
+            </div>
           </div>
         </form>
       )}
