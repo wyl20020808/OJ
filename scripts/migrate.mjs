@@ -39,6 +39,8 @@ try {
     '0023_team_core_v1',
     '0024_problem_tag_catalog',
     '0025_discussion_core',
+    '0026_submission_source_permission',
+    '0027_profile_experience',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {

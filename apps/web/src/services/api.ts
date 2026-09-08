@@ -235,10 +235,34 @@ export type ProfileCapabilities = {
 export type PublicProfile = {
   username: string;
   displayName: string;
+  headline?: string;
+  bio?: string;
+  location?: string;
+  organization?: string;
+  website?: string;
+  github?: string;
   createdAt: string;
   capabilities: ProfileCapabilities;
   isSelf: boolean;
   canCreateProblems: boolean;
+  teams: ProfileTeam[];
+};
+export type EditableProfile = {
+  username: string;
+  displayName: string;
+  headline: string;
+  bio: string;
+  location: string;
+  organization: string;
+  website: string;
+  github: string;
+};
+export type ProfileTeam = {
+  name: string;
+  slug: string;
+  role: 'OWNER' | 'MANAGER' | 'MEMBER';
+  visibility: 'PUBLIC' | 'PRIVATE';
+  description?: string;
 };
 export type ProfileActivity = {
   timezone: 'UTC';
@@ -1010,6 +1034,15 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         baseUrl,
         `/api/profiles/${encodeURIComponent(username)}`,
         undefined,
+        fetcher,
+      ),
+    editableProfile: () =>
+      request<EditableProfile>(baseUrl, '/api/profile/me', undefined, fetcher),
+    updateProfile: (profile: Omit<EditableProfile, 'username'>) =>
+      request<EditableProfile>(
+        baseUrl,
+        '/api/profile/me',
+        { method: 'PATCH', body: JSON.stringify(profile) },
         fetcher,
       ),
     profileActivity: (username: string) =>

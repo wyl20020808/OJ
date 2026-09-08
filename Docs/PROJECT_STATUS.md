@@ -23,6 +23,13 @@ and manual browser smoke remain not verified; Runtime Manager and Judge were not
 changed. See
 `Docs/reports/OJPLATFORM_PRODUCT_CORRECTNESS_WAVE2_DISCUSSION_ADMIN_SOURCE_REPORT.md`.
 
+Profile Experience & Personalization Wave 2 (2026-09-08): PARTIAL. Added bounded
+public profile metadata, own-profile API, Team Core-backed profile projections
+with private-team filtering, redesigned profile presentation, and grouped
+profile editor. Focused profile tests and API/Web typechecks pass; isolated
+PostgreSQL migration qualification and manual UI acceptance remain pending.
+ See `Docs/reports/OJPLATFORM_PROFILE_EXPERIENCE_PERSONALIZATION_WAVE2_REPORT.md`.
+
 Runtime Stop Ownership Recovery Finalization V1 (2026-09-08): PARTIAL. Runtime
 Stop repair is formally persisted on main in `c0010a0c741ae4038e4e1db4e29fcee473ee24b5`.
 Committed-state ownership, orphan recovery, manual recovery, launcher, parser,
