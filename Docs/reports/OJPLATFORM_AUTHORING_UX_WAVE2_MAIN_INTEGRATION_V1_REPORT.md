@@ -11,7 +11,8 @@ PASS for semantic integration and automated validation. Manual UI acceptance rem
 - Feature commit integrated as: `5b0ab46`
 - Integration worktree: `D:\OJPlatform-worktrees\authoring-ux-integration-v1`
 - Integration branch: `codex/authoring-ux-integration-v1`
-- Integration candidate head: recorded after this report commit
+- Integration candidate head: `9dbff9e08c9447912fb55154abd1cd76f784c8ab`
+- Main merge commit: `346b1bcac5fa7238aa0be52cc3dfbe7ef2ea8cc8`
 
 ## Diff inventory and semantic review
 
@@ -50,7 +51,8 @@ Latest main runtime fixes from `87e5ddd` remain intact. Existing Router/ErrorBou
 
 ## Runtime and manual status
 
-- Runtime start/status/HTTP smoke: NOT RUN; no runtime code changed and no browser control used.
+- Runtime status: `D:\OJPlatform\scripts\dev-runtime.ps1 status` completed. All services were DOWN, canonical checkout was `main` at `346b1bc`, and `MIXED SOURCE = False`.
+- Runtime start/HTTP smoke: NOT RUN because runtime was not healthy and no runtime code changed; no browser control used.
 - Manual UI acceptance: PENDING USER.
 
 ## Parallel worktree safety
