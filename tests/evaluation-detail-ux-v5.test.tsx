@@ -55,6 +55,11 @@ function makeApi(
 ) {
   return {
     submission: vi.fn().mockResolvedValue(submission),
+    submissionSource: vi.fn().mockResolvedValue({
+      submissionId: submission.id,
+      languageId: submission.languageId,
+      source: submission.source,
+    }),
     submissionEvaluations: vi
       .fn()
       .mockResolvedValue({ items: [submission.evaluation] }),
@@ -116,6 +121,26 @@ describe('Evaluation Detail UX V5', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       submission.source,
     );
+  });
+
+  it('reports unavailable source when canonical endpoint denies access', async () => {
+    const api = makeApi();
+    Object.assign(api as object, {
+      submissionSource: vi.fn().mockRejectedValue(new Error('FORBIDDEN')),
+    });
+    render(
+      <SubmissionDetail
+        api={api}
+        id={submission.id}
+        user={{ ...user, id: 'other-user' }}
+      />,
+    );
+    await screen.findByRole('tab', { name: '评测结果' });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '源代码暂不可用。',
+    );
+    expect(screen.queryByRole('tab', { name: '代码' })).not.toBeInTheDocument();
+    expect(screen.queryByText(submission.source)).not.toBeInTheDocument();
   });
 
   it('keeps testcase facts inside square cards', async () => {

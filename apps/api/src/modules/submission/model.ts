@@ -115,6 +115,10 @@ export type Submission = {
   synthetic?: boolean;
 };
 
+export type SubmissionSource = Pick<Submission, 'languageId' | 'source'> & {
+  submissionId: string;
+};
+
 export type SubmissionCreateInput = {
   problemId: string;
   problemRevisionId: string;

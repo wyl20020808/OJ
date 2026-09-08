@@ -2,7 +2,10 @@
 import '@testing-library/jest-dom/vitest';
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
-import { InMemoryDiscussionRepository } from '../apps/api/src/modules/discussion/repository.js';
+import {
+  InMemoryDiscussionRepository,
+  PostgresDiscussionRepository,
+} from '../apps/api/src/modules/discussion/repository.js';
 import { registerDiscussionModule } from '../apps/api/src/modules/discussion/routes.js';
 import { DiscussionRenderer } from '../apps/web/src/features/discussion/DiscussionRenderer.js';
 import { render, waitFor } from '@testing-library/react';
@@ -18,6 +21,41 @@ const ctx = (userId: string) => ({
 });
 
 describe('Discussion Core V1', () => {
+  it('keeps UUID and public text post lookup parameters type-compatible', async () => {
+    const queries: string[] = [];
+    const row = {
+      id: '01234567-89ab-4def-8123-456789abcdef',
+      public_id: 'post-public',
+      author_id: '11234567-89ab-4def-8123-456789abcdef',
+      type: 'ARTICLE',
+      status: 'DRAFT',
+      title: 'Draft',
+      summary: null,
+      content_markdown: 'body',
+      published_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      deleted_at: null,
+      deleted_by: null,
+      view_count: 0,
+    };
+    const repository = new PostgresDiscussionRepository({
+      query: async (sql: string) => {
+        queries.push(sql);
+        return { rows: [row], rowCount: 1 };
+      },
+    });
+    await repository.get(row.id);
+    await repository.get(row.public_id);
+    await repository.publish(row.id);
+    await repository.publish(row.public_id);
+    expect(queries[0]).toContain('WHERE p.id=$1');
+    expect(queries[1]).toContain('WHERE p.public_id=$1');
+    expect(queries[2]).toContain('WHERE id=$1');
+    expect(queries[3]).toContain('WHERE public_id=$1');
+    expect(queries.every((sql) => !sql.includes('id=$1 OR'))).toBe(true);
+  });
+
   it('sanitizes Discussion Markdown while preserving math', async () => {
     const { container } = render(
       <DiscussionRenderer
@@ -205,6 +243,39 @@ describe('Discussion Core V1', () => {
     });
     expect(created.json().author.id).toBeUndefined();
     expect(created.json().authorId).toBeUndefined();
+    const draft = await app.inject({
+      method: 'POST',
+      url: '/api/discussion/posts',
+      headers: csrf,
+      payload: { title: 'draft', contentMarkdown: 'draft body' },
+    });
+    expect(draft.statusCode).toBe(201);
+    expect(draft.json().status).toBe('DRAFT');
+    const published = await app.inject({
+      method: 'POST',
+      url: `/api/discussion/posts/${draft.json().publicId}/publish`,
+      headers: csrf,
+    });
+    expect(published.statusCode).toBe(200);
+    expect(published.json()).toMatchObject({ status: 'PUBLISHED' });
+    expect(published.json().publishedAt).toEqual(expect.any(String));
+    const publishedList = await app.inject({
+      method: 'GET',
+      url: '/api/discussion/posts',
+    });
+    expect(
+      publishedList
+        .json()
+        .items.some((item: { id: string }) => item.id === draft.json().id),
+    ).toBe(true);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/discussion/posts/${draft.json().publicId}`,
+        })
+      ).statusCode,
+    ).toBe(200);
     const comments = await app.inject({
       method: 'POST',
       url: `/api/discussion/posts/${created.json().id}/comments`,

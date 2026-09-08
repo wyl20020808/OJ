@@ -52,6 +52,11 @@ function apiFor(evaluations: Record<number, Record<string, unknown>>) {
   return {
     api: {
       submission: vi.fn().mockResolvedValue(submission),
+      submissionSource: vi.fn().mockResolvedValue({
+        submissionId: submission.id,
+        languageId: submission.languageId,
+        source: submission.source,
+      }),
       submissionEvaluations: vi.fn().mockResolvedValue({
         items: [
           {

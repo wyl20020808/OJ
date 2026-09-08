@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import { buildApp } from '../apps/api/src/app.js';
 import {
@@ -6,8 +6,37 @@ import {
   registerSubmissionModule,
 } from '../apps/api/src/modules/submission/index.js';
 import { createSubmissionAuthorizationPolicy } from '../apps/api/src/modules/authz/index.js';
+import { createApiClient } from '../apps/web/src/services/api.js';
+
+const source = `#include <iostream>
+using namespace std;
+
+int main() {
+    cout << "admin-source-test";
+}`;
 
 describe('admin cross-owner submission source access V2', () => {
+  it('uses the canonical source endpoint from Web client', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          submissionId: 'submission/id',
+          languageId: 'cpp20',
+          source,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const result = await createApiClient('', fetcher).submissionSource(
+      'submission/id',
+    );
+    expect(fetcher).toHaveBeenCalledWith(
+      '/api/submissions/submission%2Fid/source',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+    expect(result.source).toBe(source);
+  });
+
   it('allows owner and explicit capability, denies other and anonymous', async () => {
     const permissions = new Map<string, ReadonlySet<string>>([
       ['admin', new Set(['submission:view:any'])],
@@ -66,31 +95,29 @@ describe('admin cross-owner submission source access V2', () => {
         problemRevisionId: 'revision',
         testdataVersionRef: 'data-v1',
         languageId: 'cpp20',
-        source: 'int main() { return 0; }',
+        source,
       });
+      const ownerSource = await app.inject({
+        method: 'GET',
+        url: `/api/submissions/${submission.id}/source`,
+        headers: { 'x-user-id': 'owner' },
+      });
+      expect(ownerSource.statusCode).toBe(200);
+      expect(ownerSource.json().source).toBe(source);
       expect(
         (
           await app.inject({
             method: 'GET',
-            url: `/api/submissions/${submission.id}`,
-            headers: { 'x-user-id': 'owner' },
-          })
-        ).statusCode,
-      ).toBe(200);
-      expect(
-        (
-          await app.inject({
-            method: 'GET',
-            url: `/api/submissions/${submission.id}`,
+            url: `/api/submissions/${submission.id}/source`,
             headers: { 'x-user-id': 'admin' },
           })
         ).json().source,
-      ).toBe('int main() { return 0; }');
+      ).toBe(source);
       expect(
         (
           await app.inject({
             method: 'GET',
-            url: `/api/submissions/${submission.id}`,
+            url: `/api/submissions/${submission.id}/source`,
             headers: { 'x-user-id': 'other' },
           })
         ).statusCode,
@@ -99,7 +126,7 @@ describe('admin cross-owner submission source access V2', () => {
         (
           await app.inject({
             method: 'GET',
-            url: `/api/submissions/${submission.id}`,
+            url: `/api/submissions/${submission.id}/source`,
           })
         ).statusCode,
       ).toBe(401);
@@ -253,7 +280,7 @@ describe('admin cross-owner submission source access V2', () => {
           problemId,
           problemRevisionId: revisionId,
           languageId: 'cpp20',
-          source: 'int main() { return 0; }',
+          source,
         },
       });
       expect(createdSubmission.statusCode).toBe(201);
@@ -269,11 +296,15 @@ describe('admin cross-owner submission source access V2', () => {
       ).toEqual({ canViewAnySubmission: true });
       const adminDetail = await app.inject({
         method: 'GET',
-        url: `/api/submissions/${submissionId}`,
+        url: `/api/submissions/${submissionId}/source`,
         headers: headers(admin),
       });
       expect(adminDetail.statusCode).toBe(200);
-      expect(adminDetail.json().source).toBe('int main() { return 0; }');
+      expect(adminDetail.json()).toEqual({
+        submissionId,
+        languageId: 'cpp20',
+        source,
+      });
     } finally {
       await app.close();
     }
