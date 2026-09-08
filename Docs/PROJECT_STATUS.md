@@ -1,5 +1,24 @@
 # OJPlatform Project Status
 
+Product UX Repair Wave 1 - Tags / Team / Discussion Navigation (2026-09-08):
+PASS for implementation, automated validation, and runtime qualification.
+Problem authoring now uses one compact, searchable TagSelector popover for
+create/edit. Team list duplication was traced to Web concatenation of
+membership and public query results; those result sets now have separate views,
+with public results excluding current memberships and ID-safe pagination.
+Team list, detail, empty, and create surfaces were redesigned, including
+validation, live preview, responsive layouts, and synchronous double-submit
+protection. Discussion Core, found absent from current main despite the task
+premise, was integrated from its existing qualified branch with migration
+renumbered to `0025`, and the Chinese primary navigation now links to
+`/discussion` with nested-route active state. Focused tests 48/48 and selected
+regression tests 69/69 pass; API/Web typechecks and builds, changed-file lint,
+architecture, and diff checks pass. Runtime created exactly one Team row and one
+OWNER membership from one POST; each API list contained it once, and the fixture
+was removed. Full lint retains the known 8 unrelated baseline errors. Manual UI
+acceptance remains PENDING USER. See
+`Docs/reports/OJPLATFORM_PRODUCT_UX_REPAIR_WAVE1_REPORT.md`.
+
 Main Integration Wave 2 - Team Core V1 (2026-09-07): PASS for conservative
 integration and local PostgreSQL qualification. Candidate was based on current
 main `8d0353f6b51618a46a6a7d4e44458fed90af0898` and merged the complete
