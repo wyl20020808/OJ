@@ -22,6 +22,7 @@ function Get-PortOwner { @($script:testListener) }
 function Get-ProcessStartTime { $script:testStart }
 function Get-ProcessInfo { @{ ProcessId=42;CommandLine=$script:testCommand;Name='node.exe';ExecutablePath='C:\Program Files\nodejs\node.exe' } }
 function Get-KnownOJPlatformRoots { @('D:\OJPlatform-worktrees\old') }
+function Test-TcpPort { [bool]$script:testListener }
 
 $state = @{ processes=@{ 'host-agent'=@{pid=42;port=3180;processStartTime=$script:testStart;ownerCheckout='D:\OJPlatform-worktrees\old'} } }
 Assert-Equal (Resolve-OJPlatformProcessOwnership 'host-agent' 3180 $state).classification 'PROVEN_OWNED' 'shared ownership'
@@ -34,7 +35,7 @@ Assert-Equal (Resolve-OJPlatformProcessOwnership 'host-agent' 3180 $state).class
 function Get-LegacyProcessRecords { @() }
 function Get-KnownOJPlatformRoots { @('D:\OJPlatform-worktrees\old') }
 $state = @{ processes=@{} }
-Assert-Equal (Resolve-OJPlatformProcessOwnership 'host-agent' 3180 $state).classification 'PROVEN_OWNED' 'registered worktree command ownership'
+Assert-Equal (Resolve-OJPlatformProcessOwnership 'host-agent' 3180 $state).classification 'ORPHANED_OJPLATFORM_PROCESS' 'registered worktree orphan ownership'
 
 $script:testCommand = 'node C:\unrelated\server.js'
 Assert-Equal (Resolve-OJPlatformProcessOwnership 'host-agent' 3180 $state).classification 'EXTERNAL' 'external ownership'
@@ -78,6 +79,8 @@ Assert-Equal $script:stopped $true 'legacy stop'
 $script:startCalled = $false
 function Test-HttpOk { $true }
 function Start-ProcessDetached { $script:startCalled=$true }
+function Test-VersionCompatible { $true }
+function Test-PluginVersionCompatible { $true }
 $startState=@{processes=@{}}
 Start-Managed 'web' 'pnpm.cmd' @() @{} 5173 'http://127.0.0.1:5173/' '@ojplatform/web' $startState
 Start-Managed 'web' 'pnpm.cmd' @() @{} 5173 'http://127.0.0.1:5173/' '@ojplatform/web' $startState

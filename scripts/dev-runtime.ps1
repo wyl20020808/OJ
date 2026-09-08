@@ -240,6 +240,15 @@ function Get-ServiceCommandPattern([string]$Name) {
     default { '(?!)' }
   }
 }
+function Get-ServiceLaunchContractPattern([string]$Name) {
+  $entry = switch ($Name) {
+    'api' { 'apps[\\/]api[\\/]src[\\/]server\.ts' }
+    'judge-service' { 'apps[\\/]judge-service[\\/]src[\\/]server\.ts' }
+    'host-agent' { 'apps[\\/]judge-host-agent[\\/]src[\\/]server\.ts' }
+    default { return '(?!)' }
+  }
+  return '^\s*(?:"[^"]*[\\/]node(?:\.exe)?"|node(?:\.exe)?)\s+--import\s+tsx\s+' + $entry + '\s*$'
+}
 function Test-ServiceProcessIdentity($Process, [string]$Name, [string]$Root = '') {
   if (-not $Process -or -not $Process.CommandLine -or $Process.Name -notin @('node','node.exe')) { return $false }
   if ($Process.CommandLine -notmatch (Get-ServiceCommandPattern $Name)) { return $false }
@@ -248,29 +257,65 @@ function Test-ServiceProcessIdentity($Process, [string]$Name, [string]$Root = ''
 function Get-ServicePort([string]$Name) { switch($Name){'web'{$Config.WebPort};'api'{$Config.ApiPort};'judge-service'{$Config.JudgeServicePort};'host-agent'{$Config.HostAgentPort};'supervisor'{$Config.SupervisorPort}} }
 function Get-ServiceSignature([string]$Name) { switch($Name){'web'{'@ojplatform/web'};'api'{'apps/api/src/server.ts'};'judge-service'{'apps/judge-service/src/server.ts'};'host-agent'{'apps/judge-host-agent/src/server.ts'};'supervisor'{$Config.SupervisorLinuxBinary}} }
 function Get-ServiceHealthUrl([string]$Name) { switch($Name){'web'{"$($Config.WebOrigin)/"};'api'{"$($Config.ApiOrigin)/health"};'judge-service'{"$($Config.JudgeOrigin)/health"};'host-agent'{"$($Config.HostOrigin)/health"};'supervisor'{"$($Config.SupervisorOrigin)/v1/health"}} }
-function Resolve-OJPlatformProcessOwnership([string]$Name, [int]$Port, $state) {
+function Get-ProcessEvidence([string]$Name, [int]$Port, $state) {
   $listener = Get-PortOwner $Port | Select-Object -First 1
-  $shared = if ($state -and $state.processes) { $state.processes[$Name] } else { $null }
-  if (-not $listener) { return @{ classification=if($shared){'STALE_RECORD'}else{'NOT_RUNNING'}; pid=$null; ownerCheckout=''; evidence='no listener'; record=$shared } }
-  $pidValue = [int]$listener.OwningProcess
-  $processStartTime = Get-ProcessStartTime $pidValue
-  if ($shared -and [int]$shared.pid -eq $pidValue -and [int]$shared.port -eq $Port -and $shared.processStartTime -and $processStartTime -eq [string]$shared.processStartTime) {
-    return @{ classification='PROVEN_OWNED'; pid=$pidValue; ownerCheckout=if($shared.ownerCheckout){$shared.ownerCheckout}else{$shared.cwd}; evidence='shared PID + port + process start time'; record=$shared }
+  $record = if ($state -and $state.processes) { $state.processes[$Name] } else { $null }
+  if (-not $listener) {
+    return [pscustomobject]@{ service=$Name; port=$Port; pid=$null; processName=$null; executablePath=$null; commandLine=$null; parentPid=$null; processStartTime=$null; registryIdentity=$record; process=$null }
   }
+  $pidValue = [int]$listener.OwningProcess
   $process = Get-ProcessInfo $pidValue
+  return [pscustomobject]@{
+    service=$Name; port=$Port; pid=$pidValue
+    processName=if($process){[string]$process.Name}else{$null}
+    executablePath=if($process){[string]$process.ExecutablePath}else{$null}
+    commandLine=if($process){[string]$process.CommandLine}else{$null}
+    parentPid=if($process -and $null -ne $process.ParentProcessId){[int]$process.ParentProcessId}else{$null}
+    processStartTime=Get-ProcessStartTime $pidValue
+    registryIdentity=$record; process=$process
+  }
+}
+function Test-OJPlatformProcessIdentity($Evidence) {
+  if (-not $Evidence -or -not $Evidence.process -or -not $Evidence.commandLine) { return @{ verified=$false; reason='process identity unavailable'; ownerCheckout='' } }
+  if ($Evidence.processName -notin @('node','node.exe')) { return @{ verified=$false; reason='executable is not Node.js'; ownerCheckout='' } }
+  foreach ($root in Get-KnownOJPlatformRoots) {
+    if (Test-ServiceProcessIdentity $Evidence.process $Evidence.service $root) {
+      return @{ verified=$true; reason='known OJPlatform root + service command identity'; ownerCheckout=$root }
+    }
+  }
+  $nodeExecutable = Get-Command node -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  $nodePathMatches = $false
+  if ($nodeExecutable -and $Evidence.executablePath) {
+    try { $nodePathMatches = [IO.Path]::GetFullPath([string]$Evidence.executablePath) -ieq [IO.Path]::GetFullPath([string]$nodeExecutable.Source) } catch {}
+  }
+  if ($Evidence.service -in @('api','judge-service','host-agent') -and
+      $Evidence.commandLine -match (Get-ServiceLaunchContractPattern $Evidence.service) -and
+      $nodePathMatches) {
+    return @{ verified=$true; reason='exact Runtime Manager service launch contract + configured Node executable'; ownerCheckout=$ProjectRoot }
+  }
+  return @{ verified=$false; reason='command does not match a known root or exact Runtime Manager service launch contract'; ownerCheckout='' }
+}
+function Resolve-OJPlatformProcessOwnership([string]$Name, [int]$Port, $state) {
+  $inspection = Get-ProcessEvidence $Name $Port $state
+  $shared = $inspection.registryIdentity
+  if (-not $inspection.pid) { return @{ classification=if($shared){'STALE_RECORD'}else{'NOT_RUNNING'}; pid=$null; ownerCheckout=''; evidence='no listener'; record=$shared; inspection=$inspection } }
+  $pidValue = [int]$inspection.pid
+  $processStartTime = $inspection.processStartTime
+  if ($shared -and [int]$shared.pid -eq $pidValue -and [int]$shared.port -eq $Port -and $shared.processStartTime -and $processStartTime -eq [string]$shared.processStartTime) {
+    return @{ classification='PROVEN_OWNED'; pid=$pidValue; ownerCheckout=if($shared.ownerCheckout){$shared.ownerCheckout}else{$shared.cwd}; evidence='shared PID + port + process start time'; record=$shared; inspection=$inspection }
+  }
   foreach ($legacyEntry in Get-LegacyProcessRecords $Name) {
     $root=$legacyEntry.root;$record=$legacyEntry.record
-    if ($record -and [int]$record.pid -eq $pidValue -and [int]$record.port -eq $Port -and $record.processStartTime -and $processStartTime -eq [string]$record.processStartTime -and (Test-ServiceProcessIdentity $process $Name)) {
-      return @{ classification='PROVEN_OWNED'; pid=$pidValue; ownerCheckout=$root; evidence='legacy PID + port + process start time'; record=$record }
+    if ($record -and [int]$record.pid -eq $pidValue -and [int]$record.port -eq $Port -and $record.processStartTime -and $processStartTime -eq [string]$record.processStartTime -and (Test-ServiceProcessIdentity $inspection.process $Name)) {
+      return @{ classification='PROVEN_OWNED'; pid=$pidValue; ownerCheckout=$root; evidence='legacy PID + port + process start time'; record=$record; inspection=$inspection }
     }
   }
-  if (-not $process -or -not $process.CommandLine) { return @{ classification='UNKNOWN'; pid=$pidValue; ownerCheckout=''; evidence='process identity unavailable'; record=$null } }
-  foreach ($root in Get-KnownOJPlatformRoots) {
-    if (Test-ServiceProcessIdentity $process $Name $root) {
-      return @{ classification='PROVEN_OWNED'; pid=$pidValue; ownerCheckout=$root; evidence='registered worktree + service command identity'; record=$null }
-    }
+  if (-not $inspection.process -or -not $inspection.commandLine) { return @{ classification='UNKNOWN'; pid=$pidValue; ownerCheckout=''; evidence='process identity unavailable'; record=$null; inspection=$inspection } }
+  $identity = Test-OJPlatformProcessIdentity $inspection
+  if ($identity.verified) {
+    return @{ classification='ORPHANED_OJPLATFORM_PROCESS'; pid=$pidValue; ownerCheckout=$identity.ownerCheckout; evidence=$identity.reason; record=$null; inspection=$inspection }
   }
-  return @{ classification='EXTERNAL'; pid=$pidValue; ownerCheckout=''; evidence='listener command is not a known OJPlatform service'; record=$null }
+  return @{ classification='EXTERNAL'; pid=$pidValue; ownerCheckout=''; evidence=$identity.reason; record=$null; inspection=$inspection }
 }
 function Test-RecordedPortOwnership($record) {
   if (-not $record -or -not $record.pid -or -not $record.port -or -not $record.processStartTime) { return $false }
@@ -412,14 +457,52 @@ function Find-ProcessBySignature([string]$Signature, [int]$Port) {
   if ($candidates.Count -gt 0) { return $candidates[0] }
   return $null
 }
+function Invoke-TaskkillTree([int]$ProcessId) {
+  if ($ProcessId -le 4) { return $false }
+  try {
+    & taskkill.exe /PID $ProcessId /T /F 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { return $true }
+  } catch {}
+  try { Stop-Process -Id $ProcessId -Force -ErrorAction Stop; return $true } catch { return $false }
+}
+function Wait-PortReleased([int]$Port, [int]$TimeoutSec = 5) {
+  Write-Host "Waiting for port $Port release..."
+  $deadline=(Get-Date).AddSeconds($TimeoutSec)
+  do {
+    if (-not (Get-PortOwner $Port | Select-Object -First 1)) { Write-Host "PORT $Port RELEASED"; return $true }
+    Start-Sleep -Milliseconds 100
+  } while ((Get-Date)-lt $deadline)
+  return $false
+}
 function Stop-ProvenProcess($record) {
   $targets = @([int]$record.pid)
   $listener = Get-PortOwner ([int]$record.port) | Select-Object -First 1
   if ($listener) { $targets += [int]$listener.OwningProcess }
-  foreach ($target in @($targets | Select-Object -Unique)) { try { Stop-Process -Id $target -Force -ErrorAction Stop } catch {} }
+  foreach ($target in @($targets | Where-Object { $_ -gt 4 } | Select-Object -Unique)) { Invoke-TaskkillTree $target | Out-Null }
   if (-not $record.port) { return $true }
-  $deadline=(Get-Date).AddSeconds(5); do { if (-not (Get-PortOwner ([int]$record.port) | Select-Object -First 1)) { return $true }; Start-Sleep -Milliseconds 100 } while ((Get-Date)-lt $deadline)
-  return $false
+  return Wait-PortReleased ([int]$record.port)
+}
+function Write-StopProcessDiagnostic([string]$Name, [int]$Port, $Ownership, $state) {
+  $inspection = if ($Ownership -and $Ownership.inspection) { $Ownership.inspection } else { Get-ProcessEvidence $Name $Port $state }
+  $identity = if ($Ownership -and $Ownership.classification -in @('PROVEN_OWNED','ORPHANED_OJPLATFORM_PROCESS')) { 'VERIFIED_OJPLATFORM' } else { 'UNVERIFIED_EXTERNAL' }
+  $verified = $identity -eq 'VERIFIED_OJPLATFORM'
+  $registry = if ($inspection.registryIdentity) { "PID=$($inspection.registryIdentity.pid), PORT=$($inspection.registryIdentity.port)" } else { 'NONE' }
+  Write-Host 'STOP REFUSED'
+  Write-Host "Service: $Name"
+  Write-Host "Port: $Port"
+  Write-Host "PID: $($inspection.pid)"
+  Write-Host "Process Name: $($inspection.processName)"
+  Write-Host "Executable Path: $($inspection.executablePath)"
+  Write-Host "Command Line: $($inspection.commandLine)"
+  Write-Host "Parent PID: $($inspection.parentPid)"
+  Write-Host "Expected Service Role: $Name"
+  Write-Host "Runtime Registry Identity: $registry"
+  Write-Host "Identity: $identity"
+  Write-Host $(if($verified){'Reason: verified OJPlatform process termination did not release the listening port.'}else{'Reason: process is not owned by current runtime registry and OJPlatform identity could not be proven.'})
+  Write-Host $(if($verified){'Automatic termination did not complete.'}else{'Automatic termination refused for safety.'})
+  Write-Host "PowerShell: Stop-Process -Id $($inspection.pid) -Force"
+  Write-Host "CMD: taskkill /PID $($inspection.pid) /T /F"
+  Write-Host 'Only run this after confirming the process belongs to OJPlatform.'
 }
 function Stop-Managed([string]$Name, $state) {
   $record = $state.processes[$Name]
@@ -429,7 +512,17 @@ function Stop-Managed([string]$Name, $state) {
     $servicePort=[int](Get-ServicePort $Name)
     $ownership = Resolve-OJPlatformProcessOwnership $Name $servicePort $state
     if ($ownership.classification -eq 'PROVEN_OWNED') { $record=New-PortProcessRecord $Name $servicePort (Get-ServiceHealthUrl $Name) (Get-ServiceSignature $Name) $ownership.ownerCheckout;$state.processes[$Name]=$record;Save-State $state }
-    elseif (@('EXTERNAL','UNKNOWN') -contains $ownership.classification) { Write-Warning "$Name STOP REFUSED: port owner is $($ownership.classification), PID $($ownership.pid).";return }
+    elseif ($ownership.classification -eq 'ORPHANED_OJPLATFORM_PROCESS') {
+      Write-Host "$Name ORPHAN DETECTED"
+      Write-Host "PID = $($ownership.pid)"
+      Write-Host "PORT = $servicePort"
+      Write-Host 'IDENTITY = VERIFIED_OJPLATFORM'
+      Write-Host 'ACTION = TERMINATE'
+      $record=New-PortProcessRecord $Name $servicePort (Get-ServiceHealthUrl $Name) (Get-ServiceSignature $Name) $ownership.ownerCheckout
+      $state.processes[$Name]=$record
+      Save-State $state
+    }
+    elseif (@('EXTERNAL','UNKNOWN') -contains $ownership.classification) { Write-StopProcessDiagnostic $Name $servicePort $ownership $state;return }
     elseif ($record) { $state.processes.Remove($Name);Save-State $state;return }
   }
   if ($record -and -not (Test-OwnedProcess $record) -and (Test-RecordServiceAtPort $record)) { $record=New-PortProcessRecord $Name ([int]$record.port) $record.health $record.signature $record.ownerCheckout; $state.processes[$Name]=$record; Save-State $state }
@@ -445,8 +538,8 @@ function Stop-Managed([string]$Name, $state) {
     }
   }
   if ($Name -eq 'supervisor') { $stopped = -not (Get-HttpJson "$($Config.SupervisorOrigin)/v1/health") }
-  if ($record -and $stopped) { $state.processes.Remove($Name); Save-State $state; Write-Host "$Name STOP" }
-  elseif ($record) { Write-Warning "$Name STOP did not complete; shared state retained." }
+  if ($record -and $stopped) { $state.processes.Remove($Name); Save-State $state; Write-Host $(if($ownership -and $ownership.classification -eq 'ORPHANED_OJPLATFORM_PROCESS'){"$Name STOP (orphan recovered)"}else{"$Name STOP"}) }
+  elseif ($record) { Write-Warning "$Name STOP did not complete; shared state retained."; if($Name -ne 'supervisor'){Write-StopProcessDiagnostic $Name ([int]$record.port) $ownership $state} }
 }
 function Invoke-Wsl([string[]]$Arguments, [int]$TimeoutMs = 30000) { return ((Invoke-ProcessCommand 'wsl.exe' $Arguments @{} $TimeoutMs) -replace "`0", '') }
 function Get-ComposePath { return '/mnt/' + ($ProjectRoot.Substring(0,1).ToLower()) + $ProjectRoot.Substring(2).Replace('\','/') + '/deploy/docker/compose.yml' }
@@ -773,7 +866,16 @@ function Stop-Infrastructure($state) {
   Save-State $state
   Write-Host 'Infrastructure STOP/CLEANUP'
 }
-function Assert-ApplicationPortsReleased { $activePorts=@($Config.WebPort,$Config.ApiPort,$Config.JudgeServicePort,$Config.HostAgentPort,$Config.SupervisorPort|Where-Object{Test-TcpPort $_});if($activePorts.Count -gt 0){throw "APPLICATION_PORT_REMAINS_OCCUPIED: $($activePorts -join ', ')."} }
+function Assert-ApplicationPortsReleased($state = $null) {
+  $activePorts=@($Config.WebPort,$Config.ApiPort,$Config.JudgeServicePort,$Config.HostAgentPort,$Config.SupervisorPort|Where-Object{Test-TcpPort $_})
+  if($activePorts.Count -gt 0){
+    foreach($name in @('web','api','judge-service','host-agent','supervisor')) {
+      $port=[int](Get-ServicePort $name)
+      if($activePorts -contains $port){Write-StopProcessDiagnostic $name $port (Resolve-OJPlatformProcessOwnership $name $port $state) $state}
+    }
+    throw "APPLICATION_PORT_REMAINS_OCCUPIED: $($activePorts -join ', ')."
+  }
+}
 function Test-HttpOk([string]$Url) { try { return ([int](Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3).StatusCode) -eq 200 } catch { return $false } }
 function Test-DatabaseConnection([string]$Url) { if (-not $Url) { return $false }; try { $probe = "import pg from 'pg'; const c=new pg.Client({connectionString:process.env.RUNTIME_DATABASE_URL,connectionTimeoutMillis:3000}); await c.connect(); await c.query('select 1'); await c.end();"; Invoke-ProcessCommand 'node' @('--input-type=module','-e',$probe) @{ RUNTIME_DATABASE_URL = $Url } 10000 | Out-Null; return $true } catch { return $false } }
 function Test-SupervisorUnit { try { return (Invoke-Wsl @('-d',$Config.WslDistro,'--user','oj-sandbox','--','env','XDG_RUNTIME_DIR=/run/user/1000','DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus','systemctl','--user','is-active',$Config.SupervisorSystemdUnit) 10000).Trim() -eq 'active' } catch { return $false } }
@@ -881,4 +983,4 @@ if (-not $SourceSelectionRequired -and $Command -ne 'status') {
 }
 $script:Secrets=Get-Secrets
 if ($Command -ne 'status' -and $Command -ne 'logs') { Write-Host "Runtime Manager: $Command" }
-try { if($Command -eq 'status'){Show-Status $state;exit 0};if($Command -eq 'logs'){Show-Logs;exit 0};Acquire-RuntimeLock;if($Command -eq 'doctor'){$code=Invoke-Doctor;exit $code};if($Command -eq 'start' -or $Command -eq 'restart'){$script:Secrets=Get-Secrets -Create;Reconcile-RequestedRuntime $state;if($Command -eq 'restart'){Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased;if($All){Stop-Infrastructure $state}};$total=Get-Date;Ensure-Infrastructure $state;Ensure-JudgeDatabase;Invoke-Migrations $state;Ensure-SupervisorBinaries;Ensure-WorkerBinary;Start-Supervisor $state;Start-JudgeService $state;Start-Api $state;Wait-Http "$($Config.JudgeOrigin)/ready" 60|Out-Null;Start-HostAgent $state;Wait-Http "$($Config.HostOrigin)/health" 60 -Headers @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken}|Out-Null;Wait-Http "$($Config.ApiOrigin)/ready" 60|Out-Null;Ensure-Worker $state;Start-Web $state;Wait-HttpStatus $Config.WebOrigin 60;$state.timings.total=[int]((Get-Date)-$total).TotalMilliseconds;Save-State $state;Write-Host "OJPlatform $Command PASS: $($Config.WebOrigin)";if($Config.AutoOpenBrowser){Start-Process $Config.WebOrigin};if($Verify){Invoke-Doctor|Out-Null}}elseif($Command -eq 'stop'){$script:Secrets=Get-Secrets;$active=Get-ActiveJudgeJobs;if($active -ne 0){if($active -lt 0){Write-Host 'STOP = BLOCKED';Write-Host 'Reason: Judge active-job state could not be determined.';Show-StopRecovery  }else{Write-Host "STOP = BLOCKED`nACTIVE JUDGE JOBS = $active";Show-StopRecovery $state};exit 2};Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased;if($All){Stop-Infrastructure $state};Write-Host 'OJPlatform STOP PASS'}} finally {Release-RuntimeLock}
+try { if($Command -eq 'status'){Show-Status $state;exit 0};if($Command -eq 'logs'){Show-Logs;exit 0};Acquire-RuntimeLock;if($Command -eq 'doctor'){$code=Invoke-Doctor;exit $code};if($Command -eq 'start' -or $Command -eq 'restart'){$script:Secrets=Get-Secrets -Create;Reconcile-RequestedRuntime $state;if($Command -eq 'restart'){Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased $state;if($All){Stop-Infrastructure $state}};$total=Get-Date;Ensure-Infrastructure $state;Ensure-JudgeDatabase;Invoke-Migrations $state;Ensure-SupervisorBinaries;Ensure-WorkerBinary;Start-Supervisor $state;Start-JudgeService $state;Start-Api $state;Wait-Http "$($Config.JudgeOrigin)/ready" 60|Out-Null;Start-HostAgent $state;Wait-Http "$($Config.HostOrigin)/health" 60 -Headers @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken}|Out-Null;Wait-Http "$($Config.ApiOrigin)/ready" 60|Out-Null;Ensure-Worker $state;Start-Web $state;Wait-HttpStatus $Config.WebOrigin 60;$state.timings.total=[int]((Get-Date)-$total).TotalMilliseconds;Save-State $state;Write-Host "OJPlatform $Command PASS: $($Config.WebOrigin)";if($Config.AutoOpenBrowser){Start-Process $Config.WebOrigin};if($Verify){Invoke-Doctor|Out-Null}}elseif($Command -eq 'stop'){$script:Secrets=Get-Secrets;$active=Get-ActiveJudgeJobs;if($active -ne 0){if($active -lt 0){Write-Host 'STOP = BLOCKED';Write-Host 'Reason: Judge active-job state could not be determined.';Show-StopRecovery  }else{Write-Host "STOP = BLOCKED`nACTIVE JUDGE JOBS = $active";Show-StopRecovery $state};exit 2};Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased $state;if($All){Stop-Infrastructure $state};Write-Host 'OJPlatform STOP PASS'}} finally {Release-RuntimeLock}
