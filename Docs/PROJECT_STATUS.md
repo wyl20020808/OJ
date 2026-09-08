@@ -5,9 +5,10 @@ candidate based on canonical main `52b9dc9744f30c05b1f8ccbc18bee4efe5c75bee`
 integrated Feature A at `5fde1fa` with no conflicts, preserving Runtime
 Recovery and Worker B authoring. Focused Wave 2 plus authoring/auth regressions
 passed (40 tests), root/API/Web typechecks and builds, changed-file lint,
-architecture, and diff checks passed. PostgreSQL was DOWN during integration,
-so migration apply, persisted `platform-root` permission, real admin source
-matrix, and runtime smoke are NOT VERIFIED. See
+architecture, and diff checks passed. Runtime Manager then started Product
+PostgreSQL and applied `0026` exactly once; read-only role check confirms
+persisted `platform-root` includes `submission:view:any`. Real admin source
+matrix and `/api/auth/me` session projection remain NOT VERIFIED. See
 `Docs/reports/OJPLATFORM_PRODUCT_CORRECTNESS_WAVE2_MAIN_INTEGRATION_V1_REPORT.md`.
 
 Product Correctness Wave 2 - Discussion Publish and Admin Submission Source

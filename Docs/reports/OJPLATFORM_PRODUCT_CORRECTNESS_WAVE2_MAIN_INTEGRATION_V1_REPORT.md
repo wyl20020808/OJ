@@ -28,14 +28,14 @@ Semantic integration PASS. No whole-file ours/theirs resolution. Latest main, Ru
 - Changed-file ESLint: PASS.
 - Architecture gate: PASS.
 - `git diff --check`: PASS.
-- PostgreSQL: **NOT VERIFIED**. Runtime Manager status reported Product PostgreSQL DOWN; migration was not applied.
-- Real persisted `platform-root` `submission:view:any`: **NOT VERIFIED**.
+- PostgreSQL migration apply: **PASS**. Runtime Manager started Product PostgreSQL and applied `0026_submission_source_permission` once; migration history reports 29 product versions.
+- Real persisted `platform-root` `submission:view:any`: **YES** (read-only query after apply).
 - Real admin source matrix, `/api/auth/me` projection, runtime/browser smoke: **NOT VERIFIED**.
 - Prior feature transaction-scoped PostgreSQL qualification remains documented evidence; no real data mutated here.
 
 ## Merge Decision
 
-Code integration is safe and complete, but final status is PARTIAL because the required real migration apply and persisted-role verification could not run with PostgreSQL unavailable. Merge is permitted under the task's explicit external-DB exception; follow-up must apply `0026` and rerun role/source matrix before claiming PASS.
+Code integration is safe and complete, and the migration/persisted role check passed. Final status remains PARTIAL because a real authenticated admin source matrix and `/api/auth/me` session projection were not executed; rerun those checks before claiming full PASS.
 
 ## Safety
 
