@@ -1,5 +1,15 @@
 # OJPlatform Project Status
 
+Runtime Stop Ownership Recovery Finalization V1 (2026-09-08): PARTIAL. Runtime
+Stop repair is formally persisted on main in `c0010a0c741ae4038e4e1db4e29fcee473ee24b5`.
+Committed-state ownership, orphan recovery, manual recovery, launcher, parser,
+and diff checks pass. Prior real 3180 orphan recovery remains qualified. A new
+real lifecycle attempt was blocked by existing Judge Worker binary locks and an
+unauthorized Judge admin probe; Runtime Manager correctly failed closed, and no
+Judge code or process was changed manually. See
+`Docs/reports/OJPLATFORM_RUNTIME_STOP_OWNERSHIP_RECOVERY_FINALIZE_V1_REPORT.md`
+and `Docs/reports/OJPLATFORM_RUNTIME_STOP_OWNERSHIP_RECOVERY_REPAIR_V1_REPORT.md`.
+
 Product UX Repair Wave 1 - Tags / Team / Discussion Navigation (2026-09-08):
 PASS for implementation, automated validation, and runtime qualification.
 Problem authoring now uses one compact, searchable TagSelector popover for
