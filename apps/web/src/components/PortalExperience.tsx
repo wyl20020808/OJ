@@ -1441,7 +1441,7 @@ export function ProfileExperience({
       typeof api.profileActivity !== 'function'
     )
       return;
-    if (!capabilities.activity.available) return;
+    if (!capabilities.activity?.available) return;
     let active = true;
     setProfileActivityLoading(true);
     setProfileActivityError('');

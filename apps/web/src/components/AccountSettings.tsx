@@ -64,7 +64,20 @@ export function AccountSettings({
   }, [api]);
   useEffect(() => {
     if (!user || typeof api.editableProfile !== 'function') return;
-    void api.editableProfile().then((value) => { setProfile(value); setProfileDraft(value); }).catch(() => setProfileMessage('公开资料加载失败，请稍后重试。'));
+    void api.editableProfile().then((value) => {
+      const normalized: EditableProfile = {
+        username: value.username ?? user.username,
+        displayName: value.displayName ?? user.displayName,
+        headline: value.headline ?? '',
+        bio: value.bio ?? '',
+        location: value.location ?? '',
+        organization: value.organization ?? '',
+        website: value.website ?? '',
+        github: value.github ?? '',
+      };
+      setProfile(normalized);
+      setProfileDraft(normalized);
+    }).catch(() => setProfileMessage('公开资料加载失败，请稍后重试。'));
   }, [api, user]);
   useEffect(() => {
     let active = true;
