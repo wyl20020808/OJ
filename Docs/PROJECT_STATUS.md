@@ -1,5 +1,7 @@
 # OJPlatform Project Status
 
+Profile Experience & Personalization Wave 2 Main Integration V1 (2026-09-08): PARTIAL. Worker D integrated into current main at `b34c2de`; migration renumbered to `0027_profile_experience`, profile/team/privacy APIs and UI preserved. Focused profile plus baseline regression 32/32, typecheck/build, architecture, and diff checks pass. Real schema apply and idempotent second run pass against local PostgreSQL; full migration runner remains blocked by pre-existing historical replay failure at `judge_artifacts`. Manual UI acceptance pending user. See `Docs/reports/OJPLATFORM_PROFILE_EXPERIENCE_WAVE2_MAIN_INTEGRATION_V1_REPORT.md`.
+
 Product Correctness Wave 2 Main Integration V1 (2026-09-08): PARTIAL. Fresh
 candidate based on canonical main `52b9dc9744f30c05b1f8ccbc18bee4efe5c75bee`
 integrated Feature A at `5fde1fa` with no conflicts, preserving Runtime
@@ -7,8 +9,9 @@ Recovery and Worker B authoring. Focused Wave 2 plus authoring/auth regressions
 passed (40 tests), root/API/Web typechecks and builds, changed-file lint,
 architecture, and diff checks passed. Runtime Manager then started Product
 PostgreSQL and applied `0026` exactly once; read-only role check confirms
-persisted `platform-root` includes `submission:view:any`. Real admin source
-matrix and `/api/auth/me` session projection remain NOT VERIFIED. See
+persisted `platform-root` includes `submission:view:any`. Product HTTP smoke
+passed; real admin source matrix and `/api/auth/me` session projection remain
+NOT VERIFIED. See
 `Docs/reports/OJPLATFORM_PRODUCT_CORRECTNESS_WAVE2_MAIN_INTEGRATION_V1_REPORT.md`.
 
 Product Correctness Wave 2 - Discussion Publish and Admin Submission Source
@@ -78,6 +81,42 @@ unavailable; manual UI acceptance remains PENDING USER. Ownership transfer,
 archive/delete, content collections, assignments, discussion, analytics, and
 tags remain deferred. See
 `reports/OJPLATFORM_TEAM_CORE_V1_REPORT.md`.
+Canonical Main Launcher Finalize & Integration V1 (2026-09-07): PASS. Main
+is on `8d0353f6b51618a46a6a7d4e44458fed90af0898`, including the committed
+canonical launcher repair `6c10b841ce377ece6090214a2d34616a3861a27e`. The
+canonical root is `D:\OJPlatform` on branch `main`; Status and a real
+`OJPlatform-Start.bat` smoke both report the same root/branch/HEAD, with
+`SOURCE MATCH = YES`, `VERSION MATCH = YES`, and `MIXED SOURCE = False`.
+User dirty and untracked content was preserved; no clean, hard reset, or
+stash was used. See
+`Docs/reports/OJPLATFORM_CANONICAL_MAIN_LAUNCHER_FINALIZE_INTEGRATION_V1_REPORT.md`.
+
+Main Integration Wave 1 Launcher + Maintenance (2026-09-07): PASS. Main
+was updated normally from candidate `codex/main-integration-wave1` at
+`8d0353f6b51618a46a6a7d4e44458fed90af0898`, integrating canonical launcher
+repair plus generated-fixture maintenance. Launcher focused test, PowerShell
+syntax validation, cleanup script syntax, 31 focused tests, canonical status,
+and operational start smoke passed. Read-only DB verification confirmed 44
+total / 40 active / four tombstoned. User dirty status and
+untracked artifacts were preserved. See
+`Docs/reports/OJPLATFORM_MAIN_INTEGRATION_WAVE1_LAUNCHER_MAINTENANCE_REPORT.md`.
+
+Canonical Main Launcher Repair V1 (2026-09-07): IMPLEMENTED. Runtime Manager
+now treats `D:\OJPlatform` as authoritative canonical source, verifies local
+`refs/heads/main`, reports canonical identity while runtime is down, and fails
+closed when the canonical checkout is not on `main`. Default resolution no
+longer scans registered worktrees. Focused canonical-source tests and
+PowerShell runtime smoke passed; full runtime start was not run because current
+checkout is a feature branch and must not be switched automatically. See
+`Docs/reports/OJPLATFORM_CANONICAL_MAIN_LAUNCHER_REPAIR_V1_REPORT.md`.
+
+Problem Data & Tags Read-Only Audit V1 (2026-09-06): PARTIAL. Current tags
+use PostgreSQL `tags` + `problem_tags` relations but expose free-form
+`string[]`; catalog fields and API are not yet normalized. Read-only local DB
+inventory found 4 definitely generated SQL fixtures, 40 UNKNOWN, and no
+definitely manual rows. Hard-delete recommendation is 0; soft-delete design
+proposal is ready. No product code or DB data changed. See
+`Docs/reports/OJPLATFORM_PROBLEM_DATA_TAGS_READ_ONLY_AUDIT_V1_REPORT.md`.
 
 Core Fix Wave 1 Conservative Integration V1 (2026-09-06): PASS for the
 conservative code/docs integration gate. Canonical main base
@@ -566,23 +605,6 @@ on pristine `main`. A published-save revision-pointer regression found during
 audit was fixed and covered; DB/API runtime was unavailable. Main merge and
 post-merge checks are recorded in
 `Docs/reports/OJPLATFORM_FINAL_CODE_ONLY_SAFE_MERGE_V1_REPORT.md`.
-Problem Delete & Generated Fixture Cleanup V1 (2026-09-06): PARTIAL. Implemented
-soft-delete/tombstone schema and API with optimistic concurrency, backend delete
-authorization, active projection filtering, submission/JudgeData mutation guards,
-provenance foundation, Web Danger Zone confirmation, and exact-allowlist cleanup
-maintenance command. Focused tests 54/54, typecheck, Web/API builds, and diff check
-pass. PostgreSQL cleanup not executed because DATABASE_URL is unavailable; unknown
-rows were not touched by code. See
-`Docs/reports/OJPLATFORM_PROBLEM_DELETE_GENERATED_FIXTURE_CLEANUP_V1_REPORT.md`.
-
-Problem Delete Foundation Conservative Integration V1 (2026-09-06): PARTIAL.
-Feature merged cleanly into latest main with no main drift. Delete-focused tests
-2/2 and API/Web regression subset 16/16 pass; API/Web typechecks, builds,
-architecture, targeted lint, and diff check pass. PostgreSQL migration and cleanup
-dry-run remain NOT VERIFIED because DATABASE_URL is unavailable. Cleanup apply was
-not executed; manual UI acceptance remains pending user. See
-`Docs/reports/OJPLATFORM_PROBLEM_DELETE_FOUNDATION_CONSERVATIVE_INTEGRATION_V1_REPORT.md`.
-
 Main Integration Wave 3 Problem Tags V1 (2026-09-07): PARTIAL. Fresh candidate
 integrated Problem Tag Catalog & Metadata V1 on current main, renumbering the
 source `0023_problem_tag_catalog` migration to `0024_problem_tag_catalog` while

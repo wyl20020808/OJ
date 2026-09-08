@@ -10,6 +10,7 @@ import type {
   EditableProfile,
 } from '../services/api.js';
 import { ApiError } from '../services/api.js';
+import { useToast } from './Toast.js';
 
 function safeDate(value: string) {
   const date = new Date(value);
@@ -39,6 +40,7 @@ export function AccountSettings({
   const [profileDraft, setProfileDraft] = useState<EditableProfile | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
+  const toast = useToast();
   useEffect(() => {
     let active = true;
     setError('');
@@ -160,7 +162,7 @@ export function AccountSettings({
         </p>
       )}
       <div className="settings-grid">
-        {profileDraft && <ProfileEditor profile={profileDraft} setProfile={setProfileDraft} saving={profileSaving} message={profileMessage} onSave={async () => { setProfileSaving(true); setProfileMessage(''); try { const saved = await api.updateProfile(profileDraft); setProfile(saved); setProfileDraft(saved); setProfileMessage('资料已保存'); } catch { setProfileMessage('保存失败，请检查输入后重试。'); } finally { setProfileSaving(false); } }} onCancel={() => profile && setProfileDraft(profile)} />}
+        {profileDraft && <ProfileEditor profile={profileDraft} setProfile={setProfileDraft} saving={profileSaving} message={profileMessage} onSave={async () => { setProfileSaving(true); setProfileMessage(''); try { const saved = await api.updateProfile(profileDraft); setProfile(saved); setProfileDraft(saved); toast({ kind: 'success', title: '资料已保存' }); } catch { toast({ kind: 'error', title: '资料保存失败', description: '请检查输入后重试。' }); } finally { setProfileSaving(false); } }} onCancel={() => profile && setProfileDraft(profile)} />}
         <article className="settings-panel">
           <p className="panel-label">基本资料</p>
           <h2>{account.displayName}</h2>
