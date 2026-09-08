@@ -174,7 +174,15 @@ function Import-LegacyRuntimeState {
   if ((Test-Path $legacySecrets) -and -not (Test-Path (Join-Path $RuntimeRoot 'secrets.json'))) { Copy-Item -LiteralPath $legacySecrets -Destination (Join-Path $RuntimeRoot 'secrets.json') }
   Write-Host "Shared runtime registry IMPORTED ($($candidate.root))"
 }
-function Read-State { Import-LegacyRuntimeState; if (-not (Test-Path $StateFile)) { return @{ version = 2; runtimeInstanceId = $Config.ComposeProjectName; ownerCheckout = $ProjectRoot; processes = @{}; infrastructure = @{ managed = $false }; timings = @{} } }; try { return Convert-ToHashtable (Get-Content -Raw $StateFile | ConvertFrom-Json) } catch { throw "Shared runtime state is unreadable: $StateFile" } }
+function Read-State {
+  Import-LegacyRuntimeState
+  if (-not (Test-Path $StateFile)) { return @{ version = 2; runtimeInstanceId = $Config.ComposeProjectName; ownerCheckout = $ProjectRoot; processes = @{}; infrastructure = @{ managed = $false }; timings = @{} } }
+  try { $state = Convert-ToHashtable (Get-Content -Raw $StateFile | ConvertFrom-Json) } catch { throw "Shared runtime state is unreadable: $StateFile" }
+  if (-not $state.processes) { $state.processes = @{} }
+  if (-not $state.infrastructure) { $state.infrastructure = @{ managed = $false } }
+  if (-not $state.timings) { $state.timings = @{} }
+  return $state
+}
 function Save-State($state) { Ensure-RuntimeFolders; $state.version=3; $state.runtimeInstanceId=$Config.ComposeProjectName; $state.requestedSource=@{ root=$ProductIdentity.root; branch=$ProductIdentity.branch; commit=$ProductIdentity.commit; canonical=($ProductIdentity.root -ieq $CanonicalProductIdentity.root -and $ProductIdentity.commit -ieq $CanonicalProductIdentity.commit) }; $state.requestedPlugin=@{ root=$PluginIdentity.root; branch=$PluginIdentity.branch; commit=$PluginIdentity.commit; canonical=($PluginIdentity.root -ieq $CanonicalPluginIdentity.root -and $PluginIdentity.commit -ieq $CanonicalPluginIdentity.commit) }; $state.canonical_product_root=$CanonicalProductIdentity.root; $state.canonical_plugin_root=$CanonicalPluginIdentity.root; if (-not $state.ownerCheckout) { $state.ownerCheckout=$ProjectRoot }; $contract=@{ canonical_product_root=$CanonicalProductIdentity.root; canonical_plugin_root=$CanonicalPluginIdentity.root; runtime_instance_id=$Config.ComposeProjectName; requested_product_root=$ProductIdentity.root; requested_product_commit=$ProductIdentity.commit; requested_plugin_root=$PluginIdentity.root; requested_plugin_commit=$PluginIdentity.commit; updated_at=(Get-Date).ToUniversalTime().ToString('o') }; $contract | ConvertTo-Json | Set-Content -Encoding UTF8 $ContractFile; $temporary="$StateFile.$PID.tmp"; $state | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 $temporary; Move-Item -LiteralPath $temporary -Destination $StateFile -Force }
 function Acquire-RuntimeLock {
   Ensure-RuntimeFolders
@@ -352,8 +360,15 @@ function Get-ActiveJudgeJobs([switch]$FailClosed) {
         if ($Command -eq 'stop' -and -not $state.processes['judge-service'] -and -not (Test-TcpPort $Config.JudgeServicePort)) { return 0 }
         if ($FailClosed) { return -1 }; return 0
       }
-      return [int](@($nodes.body.items | Measure-Object -Property activeJobs -Sum).Sum)
+      $active=0; foreach($node in @($nodes.body.items)){ $active += [int]$node.activeJobs }; return $active
     } catch { if ($FailClosed) { return -1 }; return 0 }
+}
+function Get-JudgeAdminHeaders { return @{'x-judge-service-token'=$script:Secrets.judgeServiceToken} }
+function Assert-JudgeAdminAuthorization {
+  if (-not (Test-TcpPort $Config.JudgeServicePort)) { return }
+  if (-not (Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" (Get-JudgeAdminHeaders) 1)) {
+    throw 'JUDGE_ADMIN_AUTH_MISMATCH: live Judge Service rejected the persisted Runtime Manager token; active-job state is unknown.'
+  }
 }
 function Test-RecordServiceAtPort($record) {
   if (-not $record -or -not $record.port) { return $false }
@@ -420,6 +435,7 @@ function Start-Managed([string]$Name, [string]$FilePath, [string[]]$Arguments, [
     $versionMatch = (Test-VersionCompatible $record) -and ($Name -ne 'web' -or (Test-PluginVersionCompatible $record))
     if (-not $versionMatch) {
       $active = Get-ActiveJudgeJobs -FailClosed
+      if ($active -lt 0) { throw "RUNNING_VERSION_MISMATCH_ACTIVE_JOBS_UNKNOWN: $Name current=$([string](Get-RecordSourceIdentity $record).commit) requested=$($ProductIdentity.commit) owner=$($ownership.ownerCheckout)" }
       if ($active -gt 0) { throw "RUNNING_VERSION_MISMATCH_ACTIVE_JOBS: $Name activeJobs=$active current=$([string](Get-RecordSourceIdentity $record).commit) requested=$($ProductIdentity.commit) owner=$($ownership.ownerCheckout)" }
       $currentIdentity = Get-RecordSourceIdentity $record
       Write-Host "$Name RUNNING_VERSION_MISMATCH (current $([string]$currentIdentity.commit), requested $($ProductIdentity.commit)); stopping old owned runtime"
@@ -700,13 +716,76 @@ function Ensure-WorkerBinary {
   $identity = Get-SourceIdentity $sourceRoot @('*.go','go.mod')
   $metadata = $null
   if (Test-Path $Config.WorkerBuildMetadata) { try { $metadata = Convert-ToHashtable (Get-Content -Raw $Config.WorkerBuildMetadata | ConvertFrom-Json) } catch {} }
-  if ((Test-Path $Config.WorkerBinary) -and $metadata -and $metadata.sourceIdentity -eq $identity -and $metadata.gitCommit -eq $ProductIdentity.commit -and $metadata.binaryHash -eq (Get-FileSha256 $Config.WorkerBinary)) { Write-Host "worker binary REUSE ($($Config.WorkerBinary))"; return }
+  if ((Test-Path $Config.WorkerBinary) -and $metadata -and $metadata.sourceIdentity -eq $identity -and $metadata.binaryHash -eq (Get-FileSha256 $Config.WorkerBinary)) {
+    if ($metadata.gitCommit -ne $ProductIdentity.commit) {
+      $metadata.gitCommit=$ProductIdentity.commit; $metadata.sourceRoot=$ProductIdentity.root; $metadata.branch=$ProductIdentity.branch
+      $metadata | ConvertTo-Json | Set-Content -Encoding UTF8 $Config.WorkerBuildMetadata
+    }
+    Write-Host "worker binary REUSE ($($Config.WorkerBinary))"; return
+  }
   Ensure-RuntimeFolders
   Write-Host "worker binary BUILD (source $identity)"
   $workerDir = Join-Path $ProjectRoot 'apps/judge-worker'
   Invoke-ProcessCommand 'go' @('build','-trimpath','-o',$Config.WorkerBinary,'./cmd/judge-worker') @{} 120000 $workerDir | Out-Null
   if (-not (Test-Path $Config.WorkerBinary)) { throw "Worker build did not produce $($Config.WorkerBinary)." }
   @{ schema = 2; sourceIdentity = $identity; sourceRoot = $ProductIdentity.root; branch = $ProductIdentity.branch; gitCommit = $ProductIdentity.commit; binaryPath = $Config.WorkerBinary; binaryHash = (Get-FileSha256 $Config.WorkerBinary); builtAt = (Get-Date).ToUniversalTime().ToString('o'); command = 'go build -trimpath -o .runtime/bin/judge-worker.exe ./cmd/judge-worker' } | ConvertTo-Json | Set-Content -Encoding UTF8 $Config.WorkerBuildMetadata
+}
+function Get-WorkerProcessStartTime([int]$ProcessId) {
+  try { return (Get-Process -Id $ProcessId -ErrorAction Stop).StartTime.ToUniversalTime() } catch { return $null }
+}
+function Test-WorkerParentAlive([int]$ParentProcessId) {
+  if ($ParentProcessId -le 4) { return $false }
+  return [bool](Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue)
+}
+function Resolve-WorkerRecoveryIdentity($process, $record, $node) {
+  if (-not $record) { return @{ classification='EXTERNAL_OR_UNKNOWN'; reason='PID is absent from Host Agent ownership registry' } }
+  if (-not $process -or [int]$process.ProcessId -ne [int]$record.pid) { return @{ classification='UNKNOWN'; reason='process identity is unavailable' } }
+  if ([string]$process.Name -ine 'judge-worker.exe') { return @{ classification='EXTERNAL_OR_UNKNOWN'; reason='process name does not match Judge Worker' } }
+  $actualPath = if ($process.ExecutablePath) { [IO.Path]::GetFullPath([string]$process.ExecutablePath) } else { '' }
+  $recordedPath = if ($record.executable) { [IO.Path]::GetFullPath([string]$record.executable) } else { '' }
+  if (-not $actualPath -or -not $recordedPath -or $actualPath -ine $recordedPath -or $actualPath -ine ([IO.Path]::GetFullPath($Config.WorkerBinary))) {
+    return @{ classification='EXTERNAL_OR_UNKNOWN'; reason='executable path does not match canonical registered Worker binary' }
+  }
+  $actualStart = Get-WorkerProcessStartTime ([int]$process.ProcessId)
+  try { $recordedStart = [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$record.startedAt).UtcDateTime } catch { $recordedStart = $null }
+  if (-not $actualStart -or -not $recordedStart -or [Math]::Abs(($actualStart - $recordedStart).TotalSeconds) -gt 5) {
+    return @{ classification='UNKNOWN'; reason='PID start time does not match Host Agent ownership record' }
+  }
+  if (-not $node) { return @{ classification='UNKNOWN'; reason='Worker-specific Judge node state is unavailable' } }
+  if ([int]$node.activeJobs -gt 0) { return @{ classification='ACTIVE_JOB_OWNER'; reason="Judge node reports activeJobs=$([int]$node.activeJobs)" } }
+  if (Test-WorkerParentAlive ([int]$process.ParentProcessId)) { return @{ classification='REGISTERED_CURRENT'; reason='registered Worker parent process is still alive' } }
+  return @{ classification='REGISTERED_STALE'; reason='Host Agent-owned Worker has no live parent and reports zero active jobs' }
+}
+function Recover-StaleWorkers {
+  $nodesResponse = Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" (Get-JudgeAdminHeaders) 1
+  if (-not $nodesResponse) { throw 'STALE_WORKER_RECOVERY_BLOCKED: Judge active-job state is unavailable.' }
+  $nodes = @($nodesResponse.body.items)
+  $active=0; foreach($node in $nodes){ $active += [int]$node.activeJobs }
+  if ($active -gt 0) { throw "STALE_WORKER_RECOVERY_BLOCKED: ACTIVE JUDGE JOBS = $active" }
+  $hostStatePath = Join-Path $RuntimeRoot 'host-agent-state.json'
+  $hostState = if (Test-Path $hostStatePath) { Convert-ToHashtable (Get-Content -Raw $hostStatePath | ConvertFrom-Json) } else { @{version=1;owned=@()} }
+  $owned = @($hostState.owned)
+  $remaining = @($owned)
+  foreach ($process in @(Get-CimInstance Win32_Process -Filter "Name='judge-worker.exe'" -ErrorAction SilentlyContinue)) {
+    $record = @($owned | Where-Object { [int]$_.pid -eq [int]$process.ProcessId } | Select-Object -First 1)[0]
+    $node = if ($record) { @($nodes | Where-Object { $_.nodeId -eq $record.nodeId } | Select-Object -First 1)[0] } else { $null }
+    $identity = Resolve-WorkerRecoveryIdentity $process $record $node
+    Write-Host "WORKER PID=$($process.ProcessId) IDENTITY=$($identity.classification) REASON=$($identity.reason)"
+    if ($identity.classification -eq 'ACTIVE_JOB_OWNER') { throw "STALE_WORKER_RECOVERY_BLOCKED: PID $($process.ProcessId) owns active Judge work." }
+    if ($identity.classification -ne 'REGISTERED_STALE') { continue }
+    if (-not (Invoke-TaskkillTree ([int]$process.ProcessId))) { throw "STALE_WORKER_RECOVERY_FAILED: PID $($process.ProcessId) termination failed." }
+    $deadline=(Get-Date).AddSeconds(5)
+    do { if (-not (Get-Process -Id ([int]$process.ProcessId) -ErrorAction SilentlyContinue)) { break }; Start-Sleep -Milliseconds 100 } while ((Get-Date)-lt $deadline)
+    if (Get-Process -Id ([int]$process.ProcessId) -ErrorAction SilentlyContinue) { throw "STALE_WORKER_RECOVERY_FAILED: PID $($process.ProcessId) remains alive." }
+    $remaining = @($remaining | Where-Object { [int]$_.pid -ne [int]$process.ProcessId })
+    Write-Host "WORKER PID=$($process.ProcessId) RECOVERED"
+  }
+  if ($remaining.Count -ne $owned.Count) {
+    $json = ConvertTo-Json -InputObject @{version=1;owned=$remaining} -Depth 10
+    $temporary = "$hostStatePath.$PID.tmp"
+    [IO.File]::WriteAllText($temporary, $json, [Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temporary -Destination $hostStatePath -Force
+  }
 }
 function Repair-SupervisorUserManager {
   $failed = Invoke-Wsl @('-d',$Config.WslDistro,'--user','oj-sandbox','--','env','XDG_RUNTIME_DIR=/run/user/1000','DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus','systemctl','--user','--failed','--no-legend','--plain') 10000
@@ -833,7 +912,7 @@ function Start-Supervisor($state) {
   $state.timings.supervisor=[int]((Get-Date)-$started).TotalMilliseconds; Save-State $state
 }
 function Start-HostAgent($state) { $template=@{templateId='cpp20-gcc-13-v1';displayName='Local C++20 GCC 13 (trusted)';executable=$Config.WorkerBinary;args=@();env=@{REDIS_URL=$Config.RedisUrl;QUEUE_PREFIX=$Config.JudgeRedisPrefix;REAL_SUBMISSION_EXECUTION='true';JUDGE_SERVICE_URL=$Config.JudgeOrigin;JUDGE_NODE_TOKEN=$script:Secrets.judgeNodeToken;OJPLATFORM_SANDBOX_SUPERVISOR_URL=$Config.SupervisorOrigin;OJPLATFORM_SOURCE_ROOT=$ProductIdentity.root;OJPLATFORM_SOURCE_BRANCH=$ProductIdentity.branch;OJPLATFORM_SOURCE_COMMIT=$ProductIdentity.commit;OJPLATFORM_WORKER_BINARY_HASH=(Get-FileSha256 $Config.WorkerBinary);MAX_CONCURRENCY=[string]$Config.WorkerMaxConcurrency;HEALTH_ADDR="127.0.0.1:$($Config.WorkerHealthPort)"};maxConcurrentJobs=[int]$Config.WorkerMaxConcurrency;cpuUnits=[double]$Config.HostCpuUnits;memoryMb=[double]$Config.HostMemoryMb;enabled=$true}; $templatesJson = ConvertTo-Json -InputObject @($template) -Compress; $env=@{JUDGE_HOST_AGENT_TOKEN=$script:Secrets.hostAgentToken;JUDGE_HOST_AGENT_PORT=[string]$Config.HostAgentPort;JUDGE_HOST_AGENT_STATE_PATH=(Join-Path $RuntimeRoot 'host-agent-state.json');JUDGE_HOST_AGENT_TEMPLATES_JSON=$templatesJson;JUDGE_HOST_CPU_UNITS=[string]$Config.HostCpuUnits;JUDGE_HOST_MEMORY_MB=[string]$Config.HostMemoryMb}; Start-Managed 'host-agent' 'node' @('--import','tsx','apps/judge-host-agent/src/server.ts') $env $Config.HostAgentPort "$($Config.HostOrigin)/health" 'apps/judge-host-agent/src/server.ts' $state @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken} }
-function Start-JudgeService($state) { $env=@{JUDGE_SERVICE_HOST='127.0.0.1';JUDGE_SERVICE_PORT=[string]$Config.JudgeServicePort;JUDGE_DATABASE_URL=(Get-JudgeDatabaseUrl);JUDGE_REDIS_URL=$Config.RedisUrl;JUDGE_REDIS_PREFIX=$Config.JudgeRedisPrefix;JUDGE_SERVICE_TOKEN=$script:Secrets.judgeServiceToken;JUDGE_NODE_TOKEN=$script:Secrets.judgeNodeToken;JUDGE_HOST_AGENT_URL=$Config.HostOrigin;JUDGE_HOST_AGENT_TOKEN=$script:Secrets.hostAgentToken;JUDGE_AUTOSCALER_INTERVAL_MS='5000'}; Start-Managed 'judge-service' 'node' @('--import','tsx','apps/judge-service/src/server.ts') $env $Config.JudgeServicePort "$($Config.JudgeOrigin)/health" 'apps/judge-service/src/server.ts' $state }
+function Start-JudgeService($state) { Assert-JudgeAdminAuthorization; $env=@{JUDGE_SERVICE_HOST='127.0.0.1';JUDGE_SERVICE_PORT=[string]$Config.JudgeServicePort;JUDGE_DATABASE_URL=(Get-JudgeDatabaseUrl);JUDGE_REDIS_URL=$Config.RedisUrl;JUDGE_REDIS_PREFIX=$Config.JudgeRedisPrefix;JUDGE_SERVICE_TOKEN=$script:Secrets.judgeServiceToken;JUDGE_NODE_TOKEN=$script:Secrets.judgeNodeToken;JUDGE_HOST_AGENT_URL=$Config.HostOrigin;JUDGE_HOST_AGENT_TOKEN=$script:Secrets.hostAgentToken;JUDGE_AUTOSCALER_INTERVAL_MS='5000'}; Start-Managed 'judge-service' 'node' @('--import','tsx','apps/judge-service/src/server.ts') $env $Config.JudgeServicePort "$($Config.JudgeOrigin)/v1/admin/nodes" 'apps/judge-service/src/server.ts' $state (Get-JudgeAdminHeaders) }
 function Ensure-Worker($state) { $started=Get-Date; $headers=@{'x-judge-service-token'=$script:Secrets.judgeServiceToken}; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers; if(-not $nodes){throw 'Judge Service node registry is unavailable.'}; $compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.capabilities.artifactContractVersion -eq $Config.SupervisorArtifactContractVersion -and $_.heartbeatAgeMs -lt 15000}); if($compatible.Count -gt 0){Write-Host "worker REUSE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;return}; $candidate=@($nodes.body.items|Where-Object{$_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.capabilities.artifactContractVersion -eq $Config.SupervisorArtifactContractVersion -and $_.desiredState -ne 'ONLINE'}|Sort-Object heartbeatAgeMs|Select-Object -First 1); if($candidate){ try { $body=@{templateId='cpp20-gcc-13-v1'}|ConvertTo-Json; Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes/$([uri]::EscapeDataString($candidate.nodeId))/start" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -UseBasicParsing -TimeoutSec 15|Out-Null; Write-Host "worker START ($($candidate.nodeId))"; $nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers } catch { Write-Warning "Worker recovery start was rejected: $($_.Exception.Message)" } }; $compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.capabilities.artifactContractVersion -eq $Config.SupervisorArtifactContractVersion -and $_.heartbeatAgeMs -lt 15000}); if($compatible.Count -gt 0){Write-Host "worker REUSE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;return}; $body=@{templateId='cpp20-gcc-13-v1';count=1}|ConvertTo-Json; Invoke-WebRequest -Uri "$($Config.JudgeOrigin)/v1/admin/nodes" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -UseBasicParsing -TimeoutSec 10|Out-Null; $deadline=(Get-Date).AddSeconds(60); do{Start-Sleep -Milliseconds 500;$nodes=Get-HttpJson "$($Config.JudgeOrigin)/v1/admin/nodes" $headers;$compatible=@($nodes.body.items|Where-Object{$_.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $_.observedState -and $_.capabilities.languageProfiles -contains 'cpp20-gcc-13-v1' -and $_.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION' -and $_.capabilities.artifactContractVersion -eq $Config.SupervisorArtifactContractVersion -and $_.heartbeatAgeMs -lt 15000});if($compatible.Count -gt 0){Write-Host "worker ONLINE ($($compatible[0].nodeId))";$state.timings.worker=[int]((Get-Date)-$started).TotalMilliseconds;Save-State $state;return}}while((Get-Date)-lt $deadline);throw 'No healthy REAL_SANDBOXED_EXECUTION worker became ONLINE within 60 seconds.' }
 function Start-Api($state) { $env=@{PORT=[string]$Config.ApiPort;HOST='127.0.0.1';OJPLATFORM_INFRA='true';REAL_SUBMISSION_EXECUTION='true';OJPLATFORM_CORS_ORIGINS=$Config.WebOrigin;DATABASE_URL=$Config.ProductDatabaseUrl;REDIS_URL=$Config.RedisUrl;S3_ENDPOINT=$Config.MinioEndpoint;S3_REGION='us-east-1';S3_ACCESS_KEY='ojplatform';S3_SECRET_KEY='ojplatform_dev_secret';S3_BUCKET='ojplatform-dev';JUDGE_SERVICE_URL=$Config.JudgeOrigin;JUDGE_SERVICE_TOKEN=$script:Secrets.judgeServiceToken;OJPLATFORM_SANDBOX_SUPERVISOR_URL=$Config.SupervisorOrigin};Start-Managed 'api' 'node' @('--import','tsx','apps/api/src/server.ts') $env $Config.ApiPort "$($Config.ApiOrigin)/health" 'apps/api/src/server.ts' $state }
 function Start-Web($state) { Start-Managed 'web' 'pnpm.cmd' @('--filter','@ojplatform/web','dev','--host','127.0.0.1','--port',[string]$Config.WebPort) @{OJPLATFORM_API_PORT=[string]$Config.ApiPort;OJPLATFORM_ONLINE_CODE_EDITOR_ROOT=$PluginIdentity.root;OJPLATFORM_PLUGIN_COMMIT=$PluginIdentity.commit} $Config.WebPort "$($Config.WebOrigin)/" '@ojplatform/web' $state }
@@ -843,6 +922,7 @@ function Reconcile-RequestedRuntime($state) {
   if ($previous -and $previous -ne $ProductIdentity.commit) {
     if (-not (Test-TcpPort $Config.JudgeServicePort)) { return }
     $active = Get-ActiveJudgeJobs -FailClosed
+    if ($active -lt 0) { throw "RUNNING_VERSION_MISMATCH_ACTIVE_JOBS_UNKNOWN: current=$previous requested=$($ProductIdentity.commit) owner=$($state.ownerCheckout)" }
     if ($active -gt 0) { throw "RUNNING_VERSION_MISMATCH_ACTIVE_JOBS: current=$previous requested=$($ProductIdentity.commit) activeJobs=$active owner=$($state.ownerCheckout)" }
     Stop-WorkerThroughControlPlane $state
   }
@@ -983,4 +1063,4 @@ if (-not $SourceSelectionRequired -and $Command -ne 'status') {
 }
 $script:Secrets=Get-Secrets
 if ($Command -ne 'status' -and $Command -ne 'logs') { Write-Host "Runtime Manager: $Command" }
-try { if($Command -eq 'status'){Show-Status $state;exit 0};if($Command -eq 'logs'){Show-Logs;exit 0};Acquire-RuntimeLock;if($Command -eq 'doctor'){$code=Invoke-Doctor;exit $code};if($Command -eq 'start' -or $Command -eq 'restart'){$script:Secrets=Get-Secrets -Create;Reconcile-RequestedRuntime $state;if($Command -eq 'restart'){Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased $state;if($All){Stop-Infrastructure $state}};$total=Get-Date;Ensure-Infrastructure $state;Ensure-JudgeDatabase;Invoke-Migrations $state;Ensure-SupervisorBinaries;Ensure-WorkerBinary;Start-Supervisor $state;Start-JudgeService $state;Start-Api $state;Wait-Http "$($Config.JudgeOrigin)/ready" 60|Out-Null;Start-HostAgent $state;Wait-Http "$($Config.HostOrigin)/health" 60 -Headers @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken}|Out-Null;Wait-Http "$($Config.ApiOrigin)/ready" 60|Out-Null;Ensure-Worker $state;Start-Web $state;Wait-HttpStatus $Config.WebOrigin 60;$state.timings.total=[int]((Get-Date)-$total).TotalMilliseconds;Save-State $state;Write-Host "OJPlatform $Command PASS: $($Config.WebOrigin)";if($Config.AutoOpenBrowser){Start-Process $Config.WebOrigin};if($Verify){Invoke-Doctor|Out-Null}}elseif($Command -eq 'stop'){$script:Secrets=Get-Secrets;$active=Get-ActiveJudgeJobs;if($active -ne 0){if($active -lt 0){Write-Host 'STOP = BLOCKED';Write-Host 'Reason: Judge active-job state could not be determined.';Show-StopRecovery  }else{Write-Host "STOP = BLOCKED`nACTIVE JUDGE JOBS = $active";Show-StopRecovery $state};exit 2};Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased $state;if($All){Stop-Infrastructure $state};Write-Host 'OJPlatform STOP PASS'}} finally {Release-RuntimeLock}
+try { if($Command -eq 'status'){Show-Status $state;exit 0};if($Command -eq 'logs'){Show-Logs;exit 0};Acquire-RuntimeLock;if($Command -eq 'doctor'){$code=Invoke-Doctor;exit $code};if($Command -eq 'start' -or $Command -eq 'restart'){$script:Secrets=Get-Secrets -Create;Reconcile-RequestedRuntime $state;if($Command -eq 'restart'){Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased $state;if($All){Stop-Infrastructure $state}};$total=Get-Date;Ensure-Infrastructure $state;Ensure-JudgeDatabase;Invoke-Migrations $state;Ensure-SupervisorBinaries;Start-Supervisor $state;Start-JudgeService $state;Wait-Http "$($Config.JudgeOrigin)/ready" 60|Out-Null;Recover-StaleWorkers;Ensure-WorkerBinary;Start-Api $state;Start-HostAgent $state;Wait-Http "$($Config.HostOrigin)/health" 60 -Headers @{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken}|Out-Null;Wait-Http "$($Config.ApiOrigin)/ready" 60|Out-Null;Ensure-Worker $state;Start-Web $state;Wait-HttpStatus $Config.WebOrigin 60;$state.timings.total=[int]((Get-Date)-$total).TotalMilliseconds;Save-State $state;Write-Host "OJPlatform $Command PASS: $($Config.WebOrigin)";if($Config.AutoOpenBrowser){Start-Process $Config.WebOrigin};if($Verify){Invoke-Doctor|Out-Null}}elseif($Command -eq 'stop'){$script:Secrets=Get-Secrets;$active=Get-ActiveJudgeJobs;if($active -ne 0){if($active -lt 0){Write-Host 'STOP = BLOCKED';Write-Host 'Reason: Judge active-job state could not be determined.';Show-StopRecovery  }else{Write-Host "STOP = BLOCKED`nACTIVE JUDGE JOBS = $active";Show-StopRecovery $state};exit 2};Stop-WorkerThroughControlPlane $state;foreach($name in @('web','api','host-agent','judge-service','supervisor')){Stop-Managed $name $state};Assert-ApplicationPortsReleased $state;if($All){Stop-Infrastructure $state};Write-Host 'OJPlatform STOP PASS'}} finally {Release-RuntimeLock}

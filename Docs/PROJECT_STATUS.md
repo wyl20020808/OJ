@@ -577,3 +577,12 @@ safe author projection/profile links with deleted-user fallback, shared
 Markdown toolbar, comment refresh/edit/delete interaction, and stale navigation
 test update. Focused/component tests, typecheck, builds, lint, and diff check
 pass. PostgreSQL runtime and manual UI acceptance remain NOT VERIFIED.
+Judge Runtime Stale Worker & Admin Auth Recovery V1 (2026-09-08): PASS. Current
+main runtime was recovered from a stale Judge Service/token generation and a
+verified orphan Worker. Admin active-job query returned authorized 200 with
+active jobs 0; wrong token returned 401. Scoped Worker recovery released the
+canonical binary lock and reconciled Host Agent state. Two Start/Status/Stop
+lifecycle runs passed with `MIXED SOURCE = False`, followed by clean shutdown.
+Runtime focused tests, Judge/Host Agent tests, Go Worker tests, typecheck,
+build, architecture, parser, and diff checks passed. See
+`reports/OJPLATFORM_JUDGE_RUNTIME_STALE_WORKER_ADMIN_AUTH_RECOVERY_V1_REPORT.md`.
