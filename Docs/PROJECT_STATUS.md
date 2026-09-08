@@ -588,3 +588,12 @@ build, architecture, parser, and diff checks passed. See
 `reports/OJPLATFORM_JUDGE_RUNTIME_STALE_WORKER_ADMIN_AUTH_RECOVERY_V1_REPORT.md`.
 
 Authoring UX Wave 2B (2026-09-08): PARTIAL. Unified authoring toolbar/editor surfaces, global ToastProvider, Problem header/action cleanup, JudgeData card layout, and Article authoring redesign implemented in isolated worktree. Focused tests 42/42, web typecheck/build, architecture check pass. Manual UI acceptance and runtime remain pending. See `Docs/reports/OJPLATFORM_AUTHORING_UX_WAVE2_REPORT.md`.
+
+Authoring UX Wave 2B Main Integration V1 (2026-09-08): PASS for semantic
+integration and automated validation. Feature commit `f4397550` was integrated
+on current main without whole-file conflict resolution. Focused suite 42/42,
+Web/API/root typechecks, Web/API builds, changed-file lint, architecture, and
+diff checks pass. One unrelated Profile baseline test failure reproduces on
+pre-integration main. Manual UI acceptance remains PENDING USER; runtime smoke
+was not run. See
+`Docs/reports/OJPLATFORM_AUTHORING_UX_WAVE2_MAIN_INTEGRATION_V1_REPORT.md`.
