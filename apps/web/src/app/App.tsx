@@ -42,7 +42,6 @@ import type { ProblemSolveEditorContext } from '@ojplatform/plugin-sdk';
 import { ProblemStatementRenderer } from '../components/ProblemStatementRenderer.js';
 import {
   ContestExperience,
-  HomeworkPage,
   MessagesExperience,
   NotificationBell,
   NotificationsPage,
@@ -73,6 +72,7 @@ import {
 } from './locale.js';
 import { ProductSubmissionAdapter } from '../services/submission-adapter.js';
 import { TeamPage } from '../features/team/TeamPage.js';
+import { AssignmentPage } from '../features/assignment/AssignmentPage.js';
 import { TagSelector } from '../components/TagSelector.js';
 import {
   DiscussionEditor,
@@ -120,7 +120,9 @@ type Route = {
     | 'not-found'
     | 'teams'
     | 'team-new'
-    | 'team-detail';
+    | 'team-detail'
+    | 'team-assignments'
+    | 'team-assignment-new';
   id?: string;
 };
 function route(path = window.location.pathname): Route {
@@ -169,11 +171,15 @@ function route(path = window.location.pathname): Route {
   if (path === '/messages') return { name: 'messages' };
   if (path === '/teams' || path === '/teams/') return { name: 'teams' };
   if (path === '/teams/new') return { name: 'team-new' };
-  if (path.startsWith('/teams/'))
-    return {
-      name: 'team-detail',
-      id: decodeURIComponent(path.slice('/teams/'.length)),
-    };
+  if (path.startsWith('/teams/')) {
+    const parts = path.split('/').filter(Boolean);
+    const slug = decodeURIComponent(parts[1] ?? '');
+    if (parts[2] === 'assignments' && parts[3] === 'new')
+      return { name: 'team-assignment-new', id: slug };
+    if (parts[2] === 'assignments')
+      return { name: 'team-assignments', id: slug };
+    return { name: 'team-detail', id: slug };
+  }
   if (path === '/operations/sandbox') return { name: 'sandbox' };
   if (path === '/admin/judge/nodes') return { name: 'judge-nodes' };
   if (path.startsWith('/admin/judge/nodes/'))
@@ -310,6 +316,8 @@ function Breadcrumbs({ current }: { current: Route }) {
     teams: '团队',
     'team-new': '创建团队',
     'team-detail': current.id ?? '团队详情',
+    'team-assignments': '团队作业',
+    'team-assignment-new': '创建作业',
   };
   const currentItem = {
     label: leaf[current.name],
@@ -3043,7 +3051,12 @@ export function App() {
         api={api}
       />
     ) : current.name === 'homework' || current.name === 'homework-detail' ? (
-      <HomeworkPage navigate={navigate} />
+      <AssignmentPage
+        api={api}
+        navigate={navigate}
+        user={user}
+        {...(current.id ? { detailId: current.id } : {})}
+      />
     ) : current.name === 'wrong-book' ? (
       <WrongBookPage navigate={navigate} />
     ) : current.name === 'notifications' ? (
@@ -3060,6 +3073,15 @@ export function App() {
         {...(current.id ? { slug: current.id } : {})}
         user={user}
         navigate={navigate}
+      />
+    ) : current.name === 'team-assignments' ||
+      current.name === 'team-assignment-new' ? (
+      <AssignmentPage
+        api={api}
+        navigate={navigate}
+        user={user}
+        {...(current.id ? { teamSlug: current.id } : {})}
+        create={current.name === 'team-assignment-new'}
       />
     ) : current.name === 'submit' ? (
       <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />

@@ -366,6 +366,15 @@ export function TeamPage({
       <nav className="team-section-nav" aria-label="团队内容">
         <a href="#overview">概览</a>
         <a href="#members">成员</a>
+        <a
+          href={`/teams/${encodeURIComponent(team.slug)}/assignments`}
+          onClick={(event) => {
+            event.preventDefault();
+            navigate(`/teams/${encodeURIComponent(team.slug)}/assignments`);
+          }}
+        >
+          作业
+        </a>
       </nav>
       <div className="team-detail-grid">
         <section id="overview" className="team-panel">

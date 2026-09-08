@@ -630,6 +630,32 @@ export type TeamMember = {
   role: 'OWNER' | 'MANAGER' | 'MEMBER';
   joinedAt: string;
 };
+export type AssignmentProblem = {
+  publicId: string;
+  title: string;
+  problemId: string;
+  displayOrder: number;
+  completed: boolean;
+};
+export type Assignment = {
+  id: string;
+  publicId: string;
+  team: { slug: string; name: string };
+  title: string;
+  description: string;
+  status: 'DRAFT' | 'PUBLISHED' | 'CLOSED';
+  startsAt: string | null;
+  dueAt: string | null;
+  problemCount: number;
+  completedCount: number;
+  capabilities: {
+    canView: boolean;
+    canEdit: boolean;
+    canPublish: boolean;
+    canClose: boolean;
+  };
+  problems: AssignmentProblem[];
+};
 export type DiscussionPost = {
   id: string;
   publicId: string;
@@ -938,6 +964,74 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         baseUrl,
         `/api/teams/${encodeURIComponent(slug)}/members?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
         undefined,
+        fetcher,
+      ),
+    teamAssignments: (slug: string) =>
+      request<{ items: Assignment[] }>(
+        baseUrl,
+        `/api/teams/${encodeURIComponent(slug)}/assignments`,
+        undefined,
+        fetcher,
+      ),
+    myAssignments: () =>
+      request<{ items: Assignment[] }>(
+        baseUrl,
+        '/api/assignments/mine',
+        undefined,
+        fetcher,
+      ),
+    assignment: (publicId: string) =>
+      request<Assignment>(
+        baseUrl,
+        `/api/assignments/${encodeURIComponent(publicId)}`,
+        undefined,
+        fetcher,
+      ),
+    createAssignment: (
+      slug: string,
+      input: {
+        title: string;
+        description?: string;
+        startsAt?: string | null;
+        dueAt?: string | null;
+        problemIds: string[];
+        status?: 'DRAFT' | 'PUBLISHED';
+      },
+    ) =>
+      request<Assignment>(
+        baseUrl,
+        `/api/teams/${encodeURIComponent(slug)}/assignments`,
+        { method: 'POST', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    updateAssignment: (
+      publicId: string,
+      input: Partial<{
+        title: string;
+        description: string;
+        startsAt: string | null;
+        dueAt: string | null;
+        problemIds: string[];
+      }>,
+    ) =>
+      request<Assignment>(
+        baseUrl,
+        `/api/assignments/${encodeURIComponent(publicId)}`,
+        { method: 'PATCH', body: JSON.stringify(input) },
+        fetcher,
+      ),
+    publishAssignment: (publicId: string) =>
+      request<Assignment>(
+        baseUrl,
+        `/api/assignments/${encodeURIComponent(publicId)}/publish`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
+    closeAssignment: (publicId: string) =>
+      request<Assignment>(
+        baseUrl,
+        `/api/assignments/${encodeURIComponent(publicId)}/close`,
+        { method: 'POST', body: '{}' },
         fetcher,
       ),
     guestContinue: () =>

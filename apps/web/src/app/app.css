@@ -3910,3 +3910,23 @@ footer {
     display: none;
   }
 }
+
+.assignment-page { display: grid; gap: var(--space-5); }
+.assignment-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: var(--space-4); }
+.assignment-card { display: grid; gap: var(--space-4); min-width: 0; padding: var(--space-5); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.assignment-card h2 { margin: .55rem 0 .25rem; font-size: 1.1rem; overflow-wrap: anywhere; }
+.assignment-card p { margin: 0; color: var(--muted); }
+.assignment-status { display: inline-block; padding: .18rem .45rem; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font-size: .72rem; }
+.assignment-card-meta, .assignment-detail-facts { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); color: var(--muted); font-size: .82rem; }
+.assignment-card button { justify-self: end; }
+.assignment-empty { display: grid; place-items: center; min-height: 16rem; padding: var(--space-6); border: 1px dashed var(--line); color: var(--muted); text-align: center; }
+.assignment-empty h2 { margin: 0; color: var(--ink); font-size: 1.1rem; }
+.assignment-form { display: grid; gap: var(--space-4); max-width: 760px; }
+.assignment-form label { display: grid; gap: .4rem; font-weight: 700; }
+.assignment-form input, .assignment-form textarea { width: 100%; box-sizing: border-box; padding: .7rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font: inherit; }
+.assignment-form-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.assignment-problem-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.assignment-problem-list li { display: flex; justify-content: space-between; gap: var(--space-3); padding: .85rem 0; border-bottom: 1px solid var(--line); }
+.assignment-problem-list a { min-width: 0; overflow-wrap: anywhere; }
+.assignment-problem-list span { color: var(--muted); white-space: nowrap; }
+@media (max-width: 680px) { .assignment-card button { justify-self: stretch; } .assignment-problem-list li { align-items: flex-start; flex-direction: column; } }
