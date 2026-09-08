@@ -8,6 +8,7 @@ import type {
 } from '../../services/api.js';
 import { MarkdownToolbar } from '../../components/ProblemEditor.js';
 import { DiscussionRenderer } from './DiscussionRenderer.js';
+import { useToast } from '../../components/Toast.js';
 
 function AuthorLink({
   author,
@@ -309,7 +310,9 @@ export function DiscussionEditor({
   const [summary, setSummary] = useState('');
   const [content, setContent] = useState('');
   const [message, setMessage] = useState('');
+  const [type, setType] = useState<'ARTICLE' | 'ANNOUNCEMENT'>('ARTICLE');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const toast = useToast();
   useEffect(() => {
     if (id)
       void api
@@ -318,6 +321,7 @@ export function DiscussionEditor({
           setTitle(p.title);
           setSummary(p.summary ?? '');
           setContent(p.contentMarkdown);
+          setType(p.type);
         })
         .catch(() => setMessage('文章加载失败'));
   }, [api, id]);
@@ -328,46 +332,85 @@ export function DiscussionEditor({
             title,
             summary,
             contentMarkdown: content,
+            type,
           })
         : await api.createDiscussionPost({
             title,
             summary,
             contentMarkdown: content,
+            type,
             status,
           });
       if (status === 'PUBLISHED' && id) await api.publishDiscussionPost(p.id);
-      setMessage(status === 'PUBLISHED' ? '已发布' : '草稿已保存');
+      toast({
+        kind: 'success',
+        title: status === 'PUBLISHED' ? '发布成功' : '草稿已保存',
+      });
       if (status === 'PUBLISHED') navigate(`/discussion/${p.publicId}`);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : '保存失败');
+      toast({
+        kind: 'error',
+        title: status === 'PUBLISHED' ? '发布失败' : '保存失败',
+        description: e instanceof Error ? e.message : '请稍后重试',
+      });
     }
   };
   if (!user) return <p>请先登录。</p>;
   return (
-    <section className="discussion-page discussion-editor">
-      <h1>{id ? '编辑文章' : '写文章'}</h1>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="标题"
-      />
-      <input
-        value={summary}
-        onChange={(e) => setSummary(e.target.value)}
-        placeholder="摘要（可选）"
-      />
+    <section className="discussion-page discussion-editor authoring-workspace">
+      <header className="article-authoring-header">
+        <div>
+          <p className="eyebrow">Discussion / 内容</p>
+          <h1>{id ? '编辑文章' : '写文章'}</h1>
+          <p>把想法整理成清晰、可阅读的内容。</p>
+        </div>
+        <span className="authoring-status">草稿</span>
+      </header>
+      <label className="article-title-field">
+        <span className="sr-only">文章标题</span>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="输入文章标题…"
+          required
+        />
+      </label>
+      <label className="article-summary-field">
+        摘要 <span>用于列表预览</span>
+        <input
+          value={summary}
+          onChange={(e) => setSummary(e.target.value)}
+          placeholder="补充一段简短摘要（可选）"
+        />
+      </label>
+      <div className="article-type-switch" role="group" aria-label="内容类型">
+        <button
+          type="button"
+          className={type === 'ARTICLE' ? 'active' : 'secondary'}
+          onClick={() => setType('ARTICLE')}
+        >
+          文章
+        </button>
+        <button
+          type="button"
+          className={type === 'ANNOUNCEMENT' ? 'active' : 'secondary'}
+          onClick={() => setType('ANNOUNCEMENT')}
+        >
+          公告
+        </button>
+      </div>
       <MarkdownToolbar
         textareaRef={textareaRef}
         value={content}
         onChange={setContent}
         disabled={false}
       />
-      <div className="discussion-editor-split">
+      <div className="discussion-editor-split authoring-editor-split">
         <textarea
           ref={textareaRef}
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="Markdown 内容"
+          placeholder="写下你的文章内容……"
         />
         <div className="discussion-preview">
           <DiscussionRenderer content={content || '*预览*'} />
@@ -377,7 +420,11 @@ export function DiscussionEditor({
         <button onClick={() => void save('DRAFT')}>保存草稿</button>
         <button onClick={() => void save('PUBLISHED')}>发布</button>
       </div>
-      {message && <p role="status">{message}</p>}
+      {message && (
+        <p className="editor-inline-message" role="status">
+          {message}
+        </p>
+      )}
     </section>
   );
 }
