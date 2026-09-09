@@ -11,7 +11,7 @@ describe.skipIf(!databaseUrl)('Discussion Wave 3 PostgreSQL qualification', () =
     const client = await database.pool.connect();
     await client.query('BEGIN');
     try {
-      const users = [randomUUID(), randomUUID(), randomUUID()];
+      const users = [randomUUID(), randomUUID(), randomUUID()] as const;
       for (const [n, id] of users.entries()) {
         await client.query(
           "INSERT INTO users(id,username,email,display_name,status) VALUES($1,$2,$3,$2,'active')",
