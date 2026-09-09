@@ -1,5 +1,7 @@
 # OJPlatform Project Status
 
+Product Experience Wave 4E Team/Homework/Join Request V2 Main Integration (2026-09-09): PARTIAL. Fresh candidate `codex/wave4-team-homework-integration-v1` cherry-picked feature code and passed focused 18/18 tests, typecheck, builds, lint, architecture, and diff checks. Formal merge is blocked because Product PostgreSQL Windows TCP `127.0.0.1:55432` refused connections and Node migration returned `ECONNREFUSED`; real DB authorization/mutation qualification remains not verified. Main unchanged. See `Docs/reports/OJPLATFORM_WAVE4_TEAM_HOMEWORK_JOIN_REQUEST_V2_MAIN_INTEGRATION_REPORT.md`.
+
 Product Experience Wave 4A Login Credential UX V2 Main Integration (2026-09-09): PASS. Normal Web password login omits legacy `rememberMe` from request payload; server backward compatibility remains. Main merge `44462e7ff7a18783d9a4f4fb46b0dc321d0132bd` preserves logout revocation, cookie clearing, CSRF, session security, stable autofill fields, password visibility, and password-storage prohibition. Canonical main focused rich-login/auth tests pass 66/66; API/Web builds, root typecheck, changed-file lint, architecture, and diff checks pass. One auth V2 phone fixture failure reproduces on pre-integration main and remains a known baseline. Runtime and manual Password Manager acceptance remain pending user. See `Docs/reports/OJPLATFORM_WAVE4_LOGIN_CREDENTIAL_UX_V2_MAIN_INTEGRATION_REPORT.md`.
 
 Product Experience Wave 4A Login Credential UX V2 (2026-09-09): PASS for the
