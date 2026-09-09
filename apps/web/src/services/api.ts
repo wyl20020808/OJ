@@ -630,6 +630,14 @@ export type TeamMember = {
   role: 'OWNER' | 'MANAGER' | 'MEMBER';
   joinedAt: string;
 };
+export type TeamJoinRequest = {
+  id: string;
+  teamId: string;
+  userId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  message: string | null;
+  createdAt: string;
+};
 export type AssignmentProblem = {
   publicId: string;
   title: string;
@@ -926,12 +934,18 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         fetcher,
       ),
     team: (slug: string) =>
-      request<TeamSummary & { membershipState: string }>(
+      request<TeamSummary & { membershipState: string; joinRequestStatus: TeamJoinRequest['status'] | null }>(
         baseUrl,
         `/api/teams/${encodeURIComponent(slug)}`,
         undefined,
         fetcher,
       ),
+    teamJoinRequests: (slug: string) =>
+      request<{ items: TeamJoinRequest[] }>(baseUrl, `/api/teams/${encodeURIComponent(slug)}/join-requests`, undefined, fetcher),
+    approveJoinRequest: (slug: string, id: string) =>
+      request<TeamJoinRequest>(baseUrl, `/api/teams/${encodeURIComponent(slug)}/join-requests/${encodeURIComponent(id)}/approve`, { method: 'POST', body: '{}' }, fetcher),
+    rejectJoinRequest: (slug: string, id: string) =>
+      request<TeamJoinRequest>(baseUrl, `/api/teams/${encodeURIComponent(slug)}/join-requests/${encodeURIComponent(id)}/reject`, { method: 'POST', body: '{}' }, fetcher),
     createTeam: (input: {
       name: string;
       slug?: string;

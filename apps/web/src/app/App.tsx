@@ -3226,6 +3226,12 @@ export function App() {
             团队
           </Link>
           <Link
+            to="/homework"
+            className={current.name === 'homework' || current.name === 'homework-detail' ? 'active' : ''}
+          >
+            作业
+          </Link>
+          <Link
             to="/discussion"
             className={current.name.startsWith('discussion') ? 'active' : ''}
           >

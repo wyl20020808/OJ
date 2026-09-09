@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import type { ApiClient, TeamMember, TeamSummary } from '../../services/api.js';
+import type { ApiClient, TeamJoinRequest, TeamMember, TeamSummary } from '../../services/api.js';
 
 type TeamView = 'mine' | 'joined' | 'discoverable';
 type TeamPolicy = TeamSummary['joinPolicy'];
@@ -104,6 +104,9 @@ export function TeamPage({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [joinRequestStatus, setJoinRequestStatus] = useState<TeamJoinRequest['status'] | null>(null);
+  const [requests, setRequests] = useState<TeamJoinRequest[]>([]);
+  const [requestError, setRequestError] = useState('');
 
   useEffect(() => {
     let live = true;
@@ -138,6 +141,7 @@ export function TeamPage({
       .then((detail) => {
         if (!live) return;
         setTeam(detail);
+        setJoinRequestStatus(detail.joinRequestStatus ?? null);
         setLoading(false);
         // Public detail is available to anonymous/non-member viewers. Member
         // listing remains a protected capability and must not hide the detail.
@@ -146,6 +150,11 @@ export function TeamPage({
           .teamMembers(slug)
           .then((memberPage) => live && setMembers(memberPage.items))
           .catch(() => live && setMembers([]));
+        if ((detail.membershipState === 'OWNER' || detail.membershipState === 'MANAGER') && typeof api.teamJoinRequests === 'function') {
+          void api.teamJoinRequests(slug)
+            .then((page) => live && setRequests(page.items))
+            .catch(() => live && setRequestError('暂时无法加载待处理申请'));
+        }
       })
       .catch(() => live && setError('团队不存在或当前不可见'))
       .finally(() => live && setLoading(false));
@@ -303,9 +312,9 @@ export function TeamPage({
       </section>
     );
   const isMember = team.membershipState !== 'NOT_MEMBER';
-  const canJoin = Boolean(
-    user && !isMember && team.joinPolicy !== 'INVITE_ONLY',
-  );
+  const canJoin = Boolean(user && !isMember && team.joinPolicy !== 'INVITE_ONLY');
+  const canReview = team.membershipState === 'OWNER' || team.membershipState === 'MANAGER';
+  const pending = joinRequestStatus === 'PENDING';
   return (
     <section className="team-page">
       <header className="team-detail-header">
@@ -326,22 +335,21 @@ export function TeamPage({
         <div className="team-detail-actions">
           {canJoin && (
             <button
-              disabled={busy}
+              disabled={busy || pending}
               onClick={() => {
                 if (busy) return;
                 setBusy(true);
                 void api
                   .joinTeam(team.slug)
-                  .then(() => window.location.reload())
-                  .catch(() => setError('加入失败'))
+                  .then((result) => {
+                    if ((result as { status?: string }).status === 'REQUESTED') setJoinRequestStatus('PENDING');
+                    else window.location.reload();
+                  })
+                  .catch(() => setError('申请失败，请稍后重试'))
                   .finally(() => setBusy(false));
               }}
             >
-              {busy
-                ? '处理中...'
-                : team.joinPolicy === 'REQUEST'
-                  ? '申请加入'
-                  : '加入团队'}
+              {pending ? '申请中' : busy ? '提交中...' : team.joinPolicy === 'REQUEST' ? '申请加入' : '加入团队'}
             </button>
           )}
           {isMember && team.membershipState !== 'OWNER' && (
@@ -364,7 +372,7 @@ export function TeamPage({
         </div>
       </header>
       <nav className="team-section-nav" aria-label="团队内容">
-        <a href="#overview">概览</a>
+        <a href="#overview" aria-current="page">概览</a>
         <a href="#members">成员</a>
         <a
           href={`/teams/${encodeURIComponent(team.slug)}/assignments`}
@@ -375,6 +383,7 @@ export function TeamPage({
         >
           作业
         </a>
+        {(team.membershipState === 'OWNER' || team.membershipState === 'MANAGER') && <a href="#requests">申请</a>}
       </nav>
       <div className="team-detail-grid">
         <section id="overview" className="team-panel">
@@ -424,6 +433,27 @@ export function TeamPage({
             ))}
           </ul>
         </section>
+        {canReview && (
+          <section id="requests" className="team-panel team-requests-panel">
+            <header><h2>加入申请</h2><span>{requests.length} 条待处理</span></header>
+            {requestError ? <p className="team-error" role="alert">{requestError}</p> : requests.length ? (
+              <ul className="team-member-list">
+                {requests.map((request) => (
+                  <li key={request.id}>
+                    <span className="member-avatar" aria-hidden="true">申</span>
+                    <span><strong>用户 {request.userId}</strong><small>{new Date(request.createdAt).toLocaleString()}</small></span>
+                    <button type="button" onClick={() => {
+                      void api.approveJoinRequest(team.slug, request.id).then(() => setRequests((items) => items.filter((item) => item.id !== request.id))).catch(() => setRequestError('同意申请失败，请重试'));
+                    }}>同意</button>
+                    <button type="button" className="secondary" onClick={() => {
+                      void api.rejectJoinRequest(team.slug, request.id).then(() => setRequests((items) => items.filter((item) => item.id !== request.id))).catch(() => setRequestError('拒绝申请失败，请重试'));
+                    }}>拒绝</button>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="team-list-status">暂无待处理申请</p>}
+          </section>
+        )}
       </div>
     </section>
   );
