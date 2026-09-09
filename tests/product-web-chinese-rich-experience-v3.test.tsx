@@ -135,7 +135,7 @@ describe('Product Web Chinese Rich Experience V3', () => {
       screen.getByRole('tab', { name: '邮箱/手机号' }),
     ).toBeInTheDocument();
   });
-  it('supports an unchecked remember-me control and submits its state', async () => {
+  it('supports browser credential intent without requesting a persistent session', async () => {
     const api = authApi();
     vi.mocked(api.authMethods).mockResolvedValue(methods);
     vi.mocked(api.loginPassword).mockResolvedValue({
@@ -153,7 +153,7 @@ describe('Product Web Chinese Rich Experience V3', () => {
         onNavigate={vi.fn()}
       />,
     );
-    const remember = await screen.findByLabelText('记住我');
+    const remember = await screen.findByLabelText('记住登录信息');
     expect(remember).not.toBeChecked();
     fireEvent.click(remember);
     expect(remember).toBeChecked();
@@ -165,9 +165,11 @@ describe('Product Web Chinese Rich Experience V3', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: '登录' }));
     await waitFor(() =>
-      expect(api.loginPassword).toHaveBeenCalledWith(
-        expect.objectContaining({ rememberMe: true }),
-      ),
+      expect(api.loginPassword).toHaveBeenCalledWith({
+        identifierType: 'EMAIL',
+        identifier: 'alice@example.com',
+        password: 'correct-password',
+      }),
     );
   });
   it('WEB-V3-04 register zh-CN', () => {

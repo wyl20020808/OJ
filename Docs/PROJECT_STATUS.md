@@ -1,5 +1,22 @@
 # OJPlatform Project Status
 
+Product Experience Wave 4A Login Credential UX V2 Main Integration (2026-09-09): PASS for candidate integration and focused validation. `记住登录信息` is browser credential autofill intent; normal Web password login omits legacy `rememberMe` from request payload, while server backward compatibility remains. Candidate preserves logout revocation, cookie clearing, CSRF, session security, stable autofill form fields, password visibility, and password-storage prohibition. Rich login tests pass 61/61; API/Web builds, root typecheck, changed-file lint, architecture, and diff checks pass. One auth V2 phone fixture failure reproduces on pre-integration main and remains a known baseline. Runtime and manual Password Manager acceptance remain pending user. See `Docs/reports/OJPLATFORM_WAVE4_LOGIN_CREDENTIAL_UX_V2_MAIN_INTEGRATION_REPORT.md`.
+
+Product Experience Wave 4A Login Credential UX V2 (2026-09-09): PASS for the
+implemented Web credential UX and focused rich-login regression (61/61).
+`记住登录信息` now expresses browser Password Manager intent only; Web no
+longer sends legacy `rememberMe`, while server backward compatibility remains.
+Stable username/password names and `autocomplete="username"` /
+`autocomplete="current-password"`, password visibility control, helper copy,
+focus/autofill styling, password-mode-only checkbox, and existing logout/session
+security contracts are preserved. No password is stored by the app and no
+schema migration is needed. Typecheck, builds, lint, architecture, broader
+regression, and manual Password Manager acceptance remain NOT VERIFIED/PENDING
+USER. Root typecheck/build and architecture checks pass; changed-file ESLint
+passes (CSS ignored by config), while broader regression and manual Password
+Manager acceptance remain pending. See
+`Docs/reports/OJPLATFORM_WAVE4_LOGIN_CREDENTIAL_UX_V2_REPORT.md`.
+
 Discussion Experience Wave 3C Main Integration V1 (2026-09-09): PASS for required integration scope. Product PostgreSQL Windows connectivity recovered; current-state `0028_discussion_comment_likes` forward/schema/second-run qualification passed, and real PostgreSQL reply/like fixture passed with rollback. Full historical replay remains blocked by pre-existing non-idempotent `0020 judge_artifacts`; runtime smoke remains `BLOCKED_BY_EXISTING_PLUGIN_RUNTIME`. See `Docs/reports/OJPLATFORM_DISCUSSION_EXPERIENCE_WAVE3_MAIN_INTEGRATION_REPORT.md`.
 
 # Auth Remember Me Wave 3 Main Integration V1 (2026-09-09): PASS for implementation and automated integration scope. Fresh candidate from live `main` (`2749d13`) integrated Worker A (`09c4a85`) with no conflicts, preserving Worker E sticky pagination and Worker D Team/Profile correctness. Login contracts now support optional `rememberMe`; normal sessions retain finite 7-day server TTL with browser-session cookies, remembered sessions use finite 30-day configured TTL with matching persistent cookies. Opaque server sessions, `oj_session`, CSRF, `/api/auth/me`, logout, revocation, password-change revocation, invalid-login behavior, and no-Web-Storage credential policy remain intact. Accessible unchecked `记住我` UI is present only for password login. Focused UI/Team/Profile/pagination regression 74/74, API/Web/root typechecks, API/Web builds, changed-file lint, architecture, and diff checks pass. Auth selection is 22/23 because the pre-existing phone verified registration/password-login baseline still returns 400 instead of 200. Runtime HTTP smoke and manual UI remain not verified. See `Docs/reports/OJPLATFORM_AUTH_REMEMBER_ME_WAVE3_MAIN_INTEGRATION_REPORT.md`.
