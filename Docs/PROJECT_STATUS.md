@@ -714,3 +714,4 @@ on pre-integration main and is not a new regression. Manual UI acceptance is
 PENDING USER. See
 `Docs/reports/OJPLATFORM_DISCUSSION_HUB_WAVE2_MAIN_INTEGRATION_V1_REPORT.md`.
 Authoring UX Wave 4C Problem Presentation V2 (2026-09-09): PARTIAL. Detail now uses one content surface with canonical statement/input/output/sample/constraints/notes order; duplicate notes composition removed at render contract; Create/Edit authoring order and grouped sample editing aligned; focused renderer/editor/UI tests 35/35 and root typecheck pass. Manual UI, API/Web builds, changed-file lint, and architecture checks remain pending. See `Docs/reports/OJPLATFORM_WAVE4_PROBLEM_PRESENTATION_UX_V2_REPORT.md`.
+Wave4F Profile Media & Save V2: formally qualified and integrated candidate ready for main merge (2026-09-09). PostgreSQL/MinIO qualification PASS; current-state migration 0031 PASS. Next: full user manual acceptance.

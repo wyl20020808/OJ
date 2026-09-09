@@ -1,7 +1,7 @@
 # Wave 4F Profile Media & Save V2 Main Integration
 
 Date: 2026-09-09
-Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
+Status: PASS
 
 ## Source and integration
 
@@ -35,6 +35,23 @@ Status: PARTIAL / BLOCKED_BY_ENVIRONMENT
 - Product PostgreSQL/MinIO startup was attempted with `scripts/infra.mjs`; health briefly reported, then containers exited externally.
 - `pg_isready`, container/Windows/Node `SELECT 1`, profile DB fixture, and real MinIO storage fixture: NOT VERIFIED / BLOCKED_BY_ENVIRONMENT.
 - No real user data or persistent volume was deleted or reset. Qualification services were not left running.
+
+## Final qualification (2026-09-09)
+
+- Environment root cause: `scripts/infra.mjs` launched Compose through WSL, then WSL exited when the detached command returned. Docker sent SIGTERM to PostgreSQL, Redis, and MinIO; this was `INFRA_SCRIPT_CLEANUP`, not a service crash.
+- Minimal fix: keep `Ubuntu-24.04` alive with a detached keeper during `up`; stop keeper during explicit `down`. No compose or volume changes.
+- PostgreSQL stable: PASS. `pg_isready`, container `SELECT 1`, Windows TCP `127.0.0.1:55432`, and Windows Node `SELECT 1`: PASS.
+- Migration `0031_profile_media_save_v2`: current-state apply PASS; schema columns `avatar_object_key` and `background_object_key` verified; second run PASS. Full historical replay remains the pre-existing `0020_judge_artifacts` relation duplication blocker; `0020` unchanged.
+- MinIO stable: PASS. Product storage integration test 6/6 PASS; bucket ensure and PUT/GET/DELETE PASS; API readiness reports storage `ok`.
+- Focused Wave4F tests: 11/11 PASS. Root typecheck, build, architecture, and changed-file lint PASS.
+- Full historical Vitest run has 13 unrelated pre-existing failures outside Wave4F; no new Wave4F regression identified.
+
+MAIN INTEGRATION = PASS
+POSTGRESQL QUALIFICATION = PASS
+MINIO QUALIFICATION = PASS
+MANUAL UI ACCEPTANCE = PENDING USER
+FULL HISTORICAL REPLAY = PRE-EXISTING_BLOCKER
+0020 MODIFIED = NO
 
 ## Gate
 
