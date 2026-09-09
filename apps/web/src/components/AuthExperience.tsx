@@ -499,7 +499,8 @@ function LoginExperience({
   const [authMode, setAuthMode] = useState<'password' | 'code'>('password');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberLoginDetails, setRememberLoginDetails] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [challenge, setChallenge] = useState<VerificationChallenge | null>(
     null,
   );
@@ -577,7 +578,6 @@ function LoginExperience({
               ? normalizePhone(identifier)
               : identifier.trim(),
           password,
-          rememberMe,
         }),
       );
       onNavigate('/problems');
@@ -673,6 +673,8 @@ function LoginExperience({
               邮箱/手机号
               <input
                 type="text"
+                id="login-identifier"
+                name="username"
                 value={identifier}
                 onChange={(event) => {
                   setIdentifier(event.target.value);
@@ -687,13 +689,26 @@ function LoginExperience({
             {authMode === 'password' ? (
               <label>
                 密码
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="current-password"
-                  required
-                />
+                <span className="auth-password-field">
+                  <input
+                    id="login-password"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="auth-password-toggle"
+                    aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((value) => !value)}
+                  >
+                    {showPassword ? '隐藏' : '显示'}
+                  </button>
+                </span>
               </label>
             ) : !challenge ? (
               <button
@@ -723,11 +738,19 @@ function LoginExperience({
             {authMode === 'password' && (
               <label className="auth-remember-me">
                 <input
+                  id="remember-login-details"
+                  name="rememberLoginDetails"
                   type="checkbox"
-                  checked={rememberMe}
-                  onChange={(event) => setRememberMe(event.target.checked)}
+                  aria-label="记住登录信息"
+                  checked={rememberLoginDetails}
+                  onChange={(event) =>
+                    setRememberLoginDetails(event.target.checked)
+                  }
                 />
-                <span>记住我</span>
+                <span>
+                  <strong>记住登录信息</strong>
+                  <small>由浏览器安全保存，退出登录后仍可快速填充</small>
+                </span>
               </label>
             )}
             {authMode === 'password' && (
