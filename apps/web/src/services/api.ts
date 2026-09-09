@@ -1083,10 +1083,15 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         '/api/auth/login/password',
         {
           method: 'POST',
-          body: JSON.stringify({
-            ...input,
-            rememberMe: input.rememberMe ?? false,
-          }),
+          body: JSON.stringify(
+            input.rememberMe === undefined
+              ? {
+                  identifierType: input.identifierType,
+                  identifier: input.identifier,
+                  password: input.password,
+                }
+              : input,
+          ),
         },
         fetcher,
       ),

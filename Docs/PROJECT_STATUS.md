@@ -1,5 +1,7 @@
 # OJPlatform Project Status
 
+Product Experience Wave 4A Login Credential UX V2 Main Integration (2026-09-09): PASS for candidate integration and focused validation. `记住登录信息` is browser credential autofill intent; normal Web password login omits legacy `rememberMe` from request payload, while server backward compatibility remains. Candidate preserves logout revocation, cookie clearing, CSRF, session security, stable autofill form fields, password visibility, and password-storage prohibition. Rich login tests pass 61/61; API/Web builds, root typecheck, changed-file lint, architecture, and diff checks pass. One auth V2 phone fixture failure reproduces on pre-integration main and remains a known baseline. Runtime and manual Password Manager acceptance remain pending user. See `Docs/reports/OJPLATFORM_WAVE4_LOGIN_CREDENTIAL_UX_V2_MAIN_INTEGRATION_REPORT.md`.
+
 Product Experience Wave 4A Login Credential UX V2 (2026-09-09): PASS for the
 implemented Web credential UX and focused rich-login regression (61/61).
 `记住登录信息` now expresses browser Password Manager intent only; Web no
