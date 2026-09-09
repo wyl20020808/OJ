@@ -60,6 +60,13 @@ export class AssignmentService {
     }
     return values;
   }
+  private async loadProblems(ids: string[]) {
+    if (!ids.length) return [];
+    if (this.problems.getMany) return this.problems.getMany(ids);
+    return Promise.all(ids.map((id) => this.problems.get(id))).then((rows) =>
+      rows.filter((row): row is Problem => Boolean(row)),
+    );
+  }
   async create(
     slug: string,
     actor: Actor,
@@ -81,10 +88,13 @@ export class AssignmentService {
     const dueAt = input.dueAt ?? null;
     this.validateTimes(startsAt, dueAt);
     const status = input.status ?? 'DRAFT';
+    if (status !== 'DRAFT' && status !== 'PUBLISHED')
+      throw error('ASSIGNMENT_INVALID_STATE', 400);
     if (status === 'PUBLISHED' && !input.problemIds.length)
       throw error('ASSIGNMENT_REQUIRES_PROBLEM', 400);
-    if (input.problemIds.length)
-      await this.resolveProblems(input.problemIds, actor.userId);
+    const resolvedProblems = input.problemIds.length
+      ? await this.resolveProblems(input.problemIds, actor.userId)
+      : [];
     const assignment = await this.repository.create({
       teamId: team.id,
       title,
@@ -94,7 +104,10 @@ export class AssignmentService {
       status,
       createdBy: actor.userId,
     });
-    await this.repository.replaceProblems(assignment.id, input.problemIds);
+    await this.repository.replaceProblems(
+      assignment.id,
+      resolvedProblems.map((problem) => problem.id),
+    );
     return this.detailFor(assignment, actor.userId);
   }
   async listTeam(slug: string, userId: string) {
@@ -153,7 +166,11 @@ export class AssignmentService {
       patch.startsAt === undefined ? row.startsAt : patch.startsAt;
     const dueAt = patch.dueAt === undefined ? row.dueAt : patch.dueAt;
     this.validateTimes(startsAt, dueAt);
-    if (patch.problemIds) await this.resolveProblems(patch.problemIds, userId);
+    if (patch.title !== undefined && !patch.title.trim())
+      throw error('INVALID_ASSIGNMENT_TITLE', 400);
+    const resolvedProblems = patch.problemIds
+      ? await this.resolveProblems(patch.problemIds, userId)
+      : undefined;
     await this.repository.update(row.id, {
       ...(patch.title === undefined ? {} : { title: patch.title.trim() }),
       ...(patch.description === undefined
@@ -162,8 +179,11 @@ export class AssignmentService {
       startsAt,
       dueAt,
     });
-    if (patch.problemIds)
-      await this.repository.replaceProblems(row.id, patch.problemIds);
+    if (resolvedProblems)
+      await this.repository.replaceProblems(
+        row.id,
+        resolvedProblems.map((problem) => problem.id),
+      );
     return this.get(publicId, userId);
   }
   async setStatus(
@@ -177,6 +197,10 @@ export class AssignmentService {
     if (!team) throw error('ASSIGNMENT_NOT_FOUND', 404);
     const { member } = await this.teamActor(team.slug, userId);
     this.requireManager(member.role);
+    if (status === 'PUBLISHED' && row.status !== 'DRAFT')
+      throw error('ASSIGNMENT_INVALID_STATE', 409);
+    if (status === 'CLOSED' && row.status !== 'PUBLISHED')
+      throw error('ASSIGNMENT_INVALID_STATE', 409);
     if (status === 'PUBLISHED') {
       const relations = await this.repository.problems(row.id);
       await this.resolveProblems(
@@ -184,8 +208,6 @@ export class AssignmentService {
         userId,
       );
     }
-    if (status === 'CLOSED' && row.status !== 'PUBLISHED')
-      throw error('ASSIGNMENT_INVALID_STATE', 409);
     await this.repository.setStatus(row.id, status);
     return this.get(publicId, userId);
   }
@@ -216,18 +238,20 @@ export class AssignmentService {
       (relations.length
         ? await this.acceptedProblems(userId)
         : new Set<string>());
-    const problemItems = [];
-    for (const relation of relations) {
-      const problem = await this.problems.get(relation.problemId);
-      if (problem)
-        problemItems.push({
-          publicId: problem.publicId,
-          title: problem.title,
-          problemId: problem.id,
-          displayOrder: relation.displayOrder,
-          completed: accepted.has(problem.id),
-        });
-    }
+    const loaded = await this.loadProblems(relations.map((item) => item.problemId));
+    const byId = new Map(loaded.map((problem) => [problem.id, problem]));
+    const problemItems = relations.flatMap((relation) => {
+      const problem = byId.get(relation.problemId);
+      return problem
+        ? [{
+            publicId: problem.publicId,
+            title: problem.title,
+            problemId: problem.id,
+            displayOrder: relation.displayOrder,
+            completed: accepted.has(problem.id),
+          }]
+        : [];
+    });
     const completedCount = problemItems.filter((item) => item.completed).length;
     return {
       ...row,

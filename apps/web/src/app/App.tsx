@@ -641,7 +641,11 @@ function Home({
       .catch(() => setContestError(true));
     void api
       .discussionPosts('limit=3&type=ANNOUNCEMENT')
-      .then((result) => setDiscussionAnnouncements(result.items))
+      .then((result) =>
+        setDiscussionAnnouncements(
+          Array.isArray(result?.items) ? result.items : [],
+        ),
+      )
       .catch(() => setDiscussionAnnouncements([]));
   }, [api]);
   const dailyProblem = chooseDailyProblem(recentProblems ?? []);
