@@ -96,12 +96,14 @@ export async function registerAssignmentModule(
   });
   app.get('/api/teams/:slug/assignments', async (request, reply) =>
     run(request, reply, async () =>
-      project(
-        await options.service.listTeam(
-          params(request).slug!,
-          (await auth(request)).userId,
+      ({
+        items: project(
+          await options.service.listTeam(
+            params(request).slug!,
+            (await auth(request)).userId,
+          ),
         ),
-      ),
+      }),
     ),
   );
   app.get('/api/assignments/mine', async (request, reply) =>

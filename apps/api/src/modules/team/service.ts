@@ -111,6 +111,9 @@ export class TeamService {
     return {
       ...team,
       membershipState: member?.role ?? 'NOT_MEMBER',
+      joinRequestStatus: userId
+        ? (await this.repository.pendingJoinRequest(team.id, userId))?.status ?? null
+        : null,
       memberCount: await this.repository.countMembers(team.id),
     };
   }
@@ -163,11 +166,7 @@ export class TeamService {
     }
     if (team.joinPolicy === 'REQUEST') {
       const pending = await this.repository.pendingJoinRequest(team.id, userId);
-      if (pending)
-        throw Object.assign(new Error('JOIN_REQUEST_PENDING'), {
-          code: 'JOIN_REQUEST_PENDING',
-          status: 409,
-        });
+      if (pending) return { status: 'REQUESTED' as const, request: pending };
       const result = {
         status: 'REQUESTED',
         request: await this.repository.createJoinRequest({
@@ -212,6 +211,11 @@ export class TeamService {
     const { team, member } = await this.actor(slug, userId);
     this.require(member, 'MEMBER');
     return this.repository.members(team.id, limit, cursor);
+  }
+  async listJoinRequests(slug: string, actorId: string) {
+    const { team, member } = await this.actor(slug, actorId);
+    this.require(member, 'MANAGER');
+    return this.repository.listJoinRequests(team.id, 'PENDING');
   }
   async changeRole(
     slug: string,

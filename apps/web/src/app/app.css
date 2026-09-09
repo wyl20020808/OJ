@@ -3715,6 +3715,7 @@ footer {
 }
 .team-section-nav {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-4);
   border-bottom: 1px solid var(--line);
 }
@@ -3723,6 +3724,12 @@ footer {
   color: var(--muted);
   font-weight: 700;
   text-decoration: none;
+}
+.team-section-nav a:hover,
+.team-section-nav a:focus-visible,
+.team-section-nav a[aria-current='page'] {
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .team-section-nav a:first-child {
   color: var(--ink);
@@ -3795,6 +3802,9 @@ footer {
   color: var(--muted);
   font-size: 0.72rem;
 }
+.team-member-list small { display: block; color: var(--muted); }
+.team-requests-panel { grid-column: 1 / -1; }
+.team-requests-panel .team-member-list li { grid-template-columns: auto minmax(0, 1fr) auto auto; }
 .team-create-page > header {
   padding-bottom: var(--space-5);
   border-bottom: 1px solid var(--line);
@@ -3966,6 +3976,8 @@ footer {
   .team-member-list time {
     display: none;
   }
+  .team-requests-panel .team-member-list li { grid-template-columns: auto minmax(0, 1fr); }
+  .team-requests-panel .team-member-list button { width: 100%; }
 }
 
 .assignment-page { display: grid; gap: var(--space-5); }

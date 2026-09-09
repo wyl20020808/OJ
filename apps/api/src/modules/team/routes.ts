@@ -175,6 +175,22 @@ export async function registerTeamModule(
       q(r).cursor,
     );
   });
+  app.get('/api/teams/:slug/join-requests', async (r, reply) => {
+    try {
+      return reply.send({
+        items: await options.service.listJoinRequests(
+          p(r).slug,
+          (await auth(r)).userId,
+        ),
+      });
+    } catch (e) {
+      return reply.status((e as any).status ?? 403).send({
+        code: (e as any).code ?? 'TEAM_ERROR',
+        message: (e as Error).message,
+        requestId: r.id,
+      });
+    }
+  });
   app.patch('/api/teams/:slug/members/:userId', async (r, reply) => {
     try {
       requireCsrf(r);

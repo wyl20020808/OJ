@@ -1,5 +1,7 @@
 # OJPlatform Project Status
 
+Product Experience Wave 4E Team/Homework/Join Request V2 Main Integration (2026-09-09): PASS for automated and real-DB integration scope; manual UI remains pending user. Candidate passed focused 18/18 tests, typecheck, builds, lint, architecture, diff checks, Windows TCP/Node DB connectivity, and clean Team/Join/Homework fixture qualification. Full migration replay still hits pre-existing non-idempotent `judge_artifacts`; no Wave4E migration added. See `Docs/reports/OJPLATFORM_WAVE4_TEAM_HOMEWORK_JOIN_REQUEST_V2_MAIN_INTEGRATION_REPORT.md`.
+
 Product Experience Wave 4A Login Credential UX V2 Main Integration (2026-09-09): PASS. Normal Web password login omits legacy `rememberMe` from request payload; server backward compatibility remains. Main merge `44462e7ff7a18783d9a4f4fb46b0dc321d0132bd` preserves logout revocation, cookie clearing, CSRF, session security, stable autofill fields, password visibility, and password-storage prohibition. Canonical main focused rich-login/auth tests pass 66/66; API/Web builds, root typecheck, changed-file lint, architecture, and diff checks pass. One auth V2 phone fixture failure reproduces on pre-integration main and remains a known baseline. Runtime and manual Password Manager acceptance remain pending user. See `Docs/reports/OJPLATFORM_WAVE4_LOGIN_CREDENTIAL_UX_V2_MAIN_INTEGRATION_REPORT.md`.
 
 Product Experience Wave 4A Login Credential UX V2 (2026-09-09): PASS for the
@@ -16,6 +18,7 @@ USER. Root typecheck/build and architecture checks pass; changed-file ESLint
 passes (CSS ignored by config), while broader regression and manual Password
 Manager acceptance remain pending. See
 `Docs/reports/OJPLATFORM_WAVE4_LOGIN_CREDENTIAL_UX_V2_REPORT.md`.
+ Product Experience Wave 4E Team/Homework/Join Request V2 (2026-09-09): PASS for implemented and automated scope. Fixed Team Assignment response-shape crash, added global Homework navigation, idempotent pending join CTA state, and owner/manager request review list/actions using existing `TeamJoinRequest`. Focused Team/Assignment/Web tests 18/18, typecheck, API/Web builds, changed-file lint, architecture, and diff checks pass. PostgreSQL, runtime, and manual UI remain pending user. See `Docs/reports/OJPLATFORM_WAVE4_TEAM_HOMEWORK_JOIN_REQUEST_V2_REPORT.md`.
 
 Discussion Experience Wave 3C Main Integration V1 (2026-09-09): PASS for required integration scope. Product PostgreSQL Windows connectivity recovered; current-state `0028_discussion_comment_likes` forward/schema/second-run qualification passed, and real PostgreSQL reply/like fixture passed with rollback. Full historical replay remains blocked by pre-existing non-idempotent `0020 judge_artifacts`; runtime smoke remains `BLOCKED_BY_EXISTING_PLUGIN_RUNTIME`. See `Docs/reports/OJPLATFORM_DISCUSSION_EXPERIENCE_WAVE3_MAIN_INTEGRATION_REPORT.md`.
 
