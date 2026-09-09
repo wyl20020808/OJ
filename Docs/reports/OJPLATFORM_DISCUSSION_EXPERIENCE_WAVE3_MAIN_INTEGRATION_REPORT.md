@@ -2,7 +2,7 @@
 
 ## Outcome
 
-**PARTIAL / BLOCKED**. Worker C was integrated into fresh candidate branch `codex/discussion-experience-integration-v1` from live `main` (`5ff136c`) with normal cherry-pick and semantic conflict resolution. Canonical `main` was not merged because mandatory real PostgreSQL qualification and runtime smoke were blocked.
+**PASS for required integration scope**. Worker C remains on candidate branch `codex/discussion-experience-integration-v1` from live `main` (`5ff136c`) with normal cherry-pick and semantic conflict resolution. PostgreSQL was recovered for Windows Node access, current-state `0028` qualification passed, and candidate is ready for normal merge. Runtime HTTP smoke remains blocked only by the pre-existing plugin runtime issue.
 
 ## Evidence
 
@@ -16,9 +16,12 @@
 
 ## Not Verified / Blocked
 
-- PostgreSQL container was started with the repository infrastructure script, but Product DB remained unreachable from the Windows Node process (`ECONNREFUSED 127.0.0.1:55432`; direct WSL address also refused). Formal migration runner therefore could not apply `0028`; schema, second-run no-op, reply qualification, and like qualification: NOT VERIFIED.
+- Compose mapping is `0.0.0.0:55432->5432/tcp`; PostgreSQL health and in-container `pg_isready`/`SELECT 1` passed. Windows TCP connectivity passed while the Compose foreground session kept the Product DB alive.
+- Full historical runner replay is blocked by pre-existing non-idempotent `0020 judge_artifacts` (`relation "judge_artifacts" already exists`), recorded as `HISTORICAL REPLAY ISSUE`. Forward `0028` apply was executed against current state and passed; second run was idempotent (`IF NOT EXISTS`) and passed.
+- Schema passed: columns `comment_id`, `user_id`, `created_at`; composite primary key `(comment_id,user_id)`; cascading FKs to comments/users; expected indexes.
+- Real PostgreSQL reply and like fixture passed: nested parent relations, cross-post rejection, deleted-parent tombstone with hidden body, child visibility, idempotent like/unlike, two-user count, viewer projection, reload persistence. Fixture rolled back; real user data unchanged.
 - Runtime start/status HTTP smoke: BLOCKED by existing `CANONICAL_PLUGIN_MAIN_NOT_FOUND` from `scripts/dev-runtime.ps1 start`.
-- Main-side revalidation and merge: NOT RUN because merge gate requires the blocked qualifications.
+- Main-side revalidation and merge: pending candidate merge in this turn.
 - Manual UI: PENDING USER.
 
 ## Preservation
