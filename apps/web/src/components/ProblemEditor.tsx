@@ -812,22 +812,6 @@ export function ProblemEditor({
                   updateStatement('outputDescription', value)
                 }
               />
-              <MarkdownFieldSection
-                fieldKey="constraints"
-                label="数据范围"
-                value={statement.constraints}
-                rows={4}
-                disabled={!canEdit}
-                onChange={(value) => updateStatement('constraints', value)}
-              />
-              <MarkdownFieldSection
-                fieldKey="notes"
-                label="说明与提示"
-                value={statement.notes}
-                rows={4}
-                disabled={!canEdit}
-                onChange={(value) => updateStatement('notes', value)}
-              />
             </div>
             <fieldset>
               <legend>样例</legend>
@@ -907,6 +891,24 @@ export function ProblemEditor({
                 添加样例
               </button>
             </fieldset>
+            <div className="markdown-fields">
+              <MarkdownFieldSection
+                fieldKey="constraints"
+                label="数据范围"
+                value={statement.constraints}
+                rows={4}
+                disabled={!canEdit}
+                onChange={(value) => updateStatement('constraints', value)}
+              />
+              <MarkdownFieldSection
+                fieldKey="notes"
+                label="说明与提示"
+                value={statement.notes}
+                rows={4}
+                disabled={!canEdit}
+                onChange={(value) => updateStatement('notes', value)}
+              />
+            </div>
             <div className="authoring-action-bar">
               <a
                 className="editor-back-link"
