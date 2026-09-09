@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS assignments (
 CREATE INDEX IF NOT EXISTS assignments_team_idx ON assignments(team_id,status,created_at DESC);
 CREATE TABLE IF NOT EXISTS assignment_problems (
   assignment_id uuid NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
-  problem_id uuid NOT NULL REFERENCES problems(id),
+  problem_id text NOT NULL REFERENCES problems(id),
   display_order integer NOT NULL CHECK (display_order >= 0),
   PRIMARY KEY (assignment_id, problem_id),
   UNIQUE (assignment_id, display_order)
