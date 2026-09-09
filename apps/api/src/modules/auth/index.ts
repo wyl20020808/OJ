@@ -31,6 +31,7 @@ export type AuthModuleOptions = {
   repository: AuthRepository;
   production?: boolean;
   sessionTtlMs?: number;
+  rememberedSessionTtlMs?: number;
   auditHook?: AuditHook;
   verificationTtlMs?: number;
   verificationResendMs?: number;
@@ -53,6 +54,7 @@ type AuthBody = {
   displayName?: unknown;
   password?: unknown;
   identity?: unknown;
+  rememberMe?: unknown;
 };
 type ProfileBody = { displayName?: unknown };
 type PasswordBody = { currentPassword?: unknown; newPassword?: unknown };
@@ -96,20 +98,48 @@ const duplicateIdentity = (value: unknown) =>
   value !== null &&
   'code' in value &&
   value.code === '23505';
+const configuredTtl = (
+  option: number | undefined,
+  env: string | undefined,
+  fallback: number,
+  name: string,
+) => {
+  const value = option ?? (env === undefined ? fallback : Number(env));
+  if (!Number.isFinite(value) || value <= 0)
+    throw new Error(`${name} must be a positive finite number`);
+  return value;
+};
 export async function registerAuthModule(
   app: FastifyInstance,
   options: AuthModuleOptions,
 ) {
-  const ttl = options.sessionTtlMs ?? 7 * 24 * 60 * 60 * 1000;
+  const ttl = configuredTtl(
+    options.sessionTtlMs,
+    process.env.OJPLATFORM_AUTH_SESSION_TTL_MS,
+    7 * 24 * 60 * 60 * 1000,
+    'session TTL',
+  );
+  const rememberedTtl = configuredTtl(
+    options.rememberedSessionTtlMs,
+    process.env.OJPLATFORM_AUTH_REMEMBERED_SESSION_TTL_MS,
+    30 * 24 * 60 * 60 * 1000,
+    'remembered session TTL',
+  );
+  if (rememberedTtl <= ttl)
+    throw new Error('remembered session TTL must exceed session TTL');
   // Guest identity credentials outlive auth sessions, while remaining bounded.
   const guestTtl = options.guestResumeTtlMs ?? 365 * 24 * 60 * 60 * 1000;
   const guestAvailable = Boolean(
     options.guestStore && options.guestRateLimiter,
   );
-  const setSessionCookie = (reply: FastifyReply, token: string) =>
+  const setSessionCookie = (
+    reply: FastifyReply,
+    token: string,
+    rememberMe: boolean,
+  ) =>
     reply.header(
       'set-cookie',
-      `oj_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${options.production ? '; Secure' : ''}; Max-Age=${Math.floor(ttl / 1000)}`,
+      `oj_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${options.production ? '; Secure' : ''}${rememberMe ? `; Max-Age=${Math.floor(rememberedTtl / 1000)}` : ''}`,
     );
   const setGuestResumeCookie = (reply: FastifyReply, token: string) =>
     reply.header(
@@ -224,7 +254,7 @@ export async function registerAuthModule(
         : null;
       if (result) resumed = true;
       else result = await options.guestStore.createGuest(input);
-      setSessionCookie(reply, session);
+      setSessionCookie(reply, session, false);
       setGuestResumeCookie(reply, resumed && oldToken ? oldToken : resume);
       setCsrfCookie(reply);
       await audit(
@@ -306,10 +336,12 @@ export async function registerAuthModule(
   });
   app.post('/api/auth/login', async (request, reply) => {
     const body = request.body as AuthBody;
+    const rememberMe = body?.rememberMe === undefined ? false : body.rememberMe;
     if (
       !body ||
       typeof body.identity !== 'string' ||
-      typeof body.password !== 'string'
+      typeof body.password !== 'string' ||
+      typeof rememberMe !== 'boolean'
     )
       return error(reply, 400, 'VALIDATION_ERROR', 'Invalid credentials');
     const found = await options.repository.findByIdentity(
@@ -327,7 +359,7 @@ export async function registerAuthModule(
     await options.repository.createSession({
       userId: found.id,
       tokenHash: tokenHash(token),
-      expiresAt: new Date(Date.now() + ttl),
+      expiresAt: new Date(Date.now() + (rememberMe ? rememberedTtl : ttl)),
     });
     await audit(
       { userId: found.id, sessionId: 'new', strength: 'password' },
@@ -336,7 +368,7 @@ export async function registerAuthModule(
       request.id,
       found.id,
     );
-    setSessionCookie(reply, token);
+    setSessionCookie(reply, token, rememberMe);
     setCsrfCookie(reply);
     return projectUser(found);
   });
@@ -591,6 +623,7 @@ export async function registerAuthModule(
       ? {}
       : { production: options.production }),
     sessionTtlMs: ttl,
+    rememberedSessionTtlMs: rememberedTtl,
     guestLoginAvailable: guestAvailable,
     projectUser,
     ...(options.verificationTtlMs === undefined

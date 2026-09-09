@@ -789,11 +789,14 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
-    login: (identity: string, password: string) =>
+    login: (identity: string, password: string, rememberMe = false) =>
       request<AuthenticatedUser>(
         baseUrl,
         '/api/auth/login',
-        { method: 'POST', body: JSON.stringify({ identity, password }) },
+        {
+          method: 'POST',
+          body: JSON.stringify({ identity, password, rememberMe }),
+        },
         fetcher,
       ),
     register: (
@@ -955,11 +958,18 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       identifierType: 'EMAIL' | 'PHONE';
       identifier: string;
       password: string;
+      rememberMe?: boolean;
     }) =>
       request<AuthenticatedUser>(
         baseUrl,
         '/api/auth/login/password',
-        { method: 'POST', body: JSON.stringify(input) },
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            ...input,
+            rememberMe: input.rememberMe ?? false,
+          }),
+        },
         fetcher,
       ),
     loginCode: (input: { grantId: string }) =>

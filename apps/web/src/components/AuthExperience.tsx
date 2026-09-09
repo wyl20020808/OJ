@@ -499,6 +499,7 @@ function LoginExperience({
   const [authMode, setAuthMode] = useState<'password' | 'code'>('password');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [challenge, setChallenge] = useState<VerificationChallenge | null>(
     null,
   );
@@ -576,6 +577,7 @@ function LoginExperience({
               ? normalizePhone(identifier)
               : identifier.trim(),
           password,
+          rememberMe,
         }),
       );
       onNavigate('/problems');
@@ -717,6 +719,16 @@ function LoginExperience({
               <p className="error" role="alert">
                 {error}
               </p>
+            )}
+            {authMode === 'password' && (
+              <label className="auth-remember-me">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                />
+                <span>记住我</span>
+              </label>
             )}
             {authMode === 'password' && (
               <button type="submit" disabled={busy || !passwordEnabled}>

@@ -45,6 +45,7 @@ type V2Options = {
   getAuthContext: (request: FastifyRequest) => Promise<AuthContext | null>;
   production?: boolean;
   sessionTtlMs: number;
+  rememberedSessionTtlMs: number;
   verificationTtlMs?: number;
   verificationResendMs?: number;
   verificationMaxAttempts?: number;
@@ -321,16 +322,20 @@ export async function registerAuthV2Routes(
     userId: string,
     reply: FastifyReply,
     strength: 'password' = 'password',
+    rememberMe = false,
   ) => {
     const token = sessionToken();
     await options.repository.createSession({
       userId,
       tokenHash: tokenHash(token),
-      expiresAt: new Date(Date.now() + options.sessionTtlMs),
+      expiresAt: new Date(
+        Date.now() +
+          (rememberMe ? options.rememberedSessionTtlMs : options.sessionTtlMs),
+      ),
     });
     reply.header(
       'set-cookie',
-      `oj_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${options.production ? '; Secure' : ''}; Max-Age=${Math.floor(options.sessionTtlMs / 1000)}`,
+      `oj_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${options.production ? '; Secure' : ''}${rememberMe ? `; Max-Age=${Math.floor(options.rememberedSessionTtlMs / 1000)}` : ''}`,
     );
     return strength;
   };
@@ -943,11 +948,15 @@ export async function registerAuthV2Routes(
     const password = stringValue(body?.password);
     if (
       !body ||
-      !keysOnly(body, new Set(['identifierType', 'identifier', 'password'])) ||
+      !keysOnly(
+        body,
+        new Set(['identifierType', 'identifier', 'password', 'rememberMe']),
+      ) ||
       !type ||
       !(['EMAIL', 'PHONE'] as const).includes(type) ||
       !rawIdentifier ||
-      !password
+      !password ||
+      (body.rememberMe !== undefined && typeof body.rememberMe !== 'boolean')
     )
       return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid credentials');
     const identifier =
@@ -1013,7 +1022,7 @@ export async function registerAuthV2Routes(
       // last-used timestamps are intentionally not exposed; login remains server-authoritative.
       void identity;
     }
-    await issueSession(found.id, reply);
+    await issueSession(found.id, reply, 'password', body.rememberMe === true);
     await audit(
       { userId: found.id, sessionId: 'new', strength: 'password' },
       'identity:password_login',
