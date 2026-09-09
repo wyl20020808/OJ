@@ -29,3 +29,10 @@ Status: PARTIAL
 ## Architecture / Security
 
 No new Discussion model, reply relation, renderer, or like mechanism added. Authorization remains server capability based; no username hack. No Judge or sandbox code changed.
+
+## Main Integration Clarification
+
+- Feature implementation: COMPLETE for the committed Wave4D scope.
+- Integration qualification: completed in `OJPLATFORM_WAVE4_DISCUSSION_ANNOUNCEMENT_EXPERIENCE_V4_MAIN_INTEGRATION_REPORT.md`.
+- Manual UI acceptance: PENDING USER.
+- The original automated test and build facts above are historical feature-branch evidence; this clarification does not rewrite them.
