@@ -14,6 +14,7 @@ Date: 2026-09-09
 - Feature commits integrated, in order: `eb93217`, `a151c94`
 - Candidate: `D:\OJPlatform-worktrees\wave4-problem-presentation-integration-v1`
 - Candidate code HEAD: `dc2273082678309bc14dab8bf9e7ee741d2d8bbc`
+- Candidate final HEAD (report/docs): `13bf2d1`
 
 ## Integration
 
@@ -54,3 +55,10 @@ Problem Detail, Create, and Edit UI acceptance: `PENDING USER`. Browser automati
 ## Merge Decision
 
 Candidate satisfies Wave4C merge gates and is ready for normal `--no-ff` merge to main.
+
+## Main Result
+
+- Merge commit: `e91a704f85b2bc76c2da1ec216df890fa4344213`
+- Main final HEAD: this report's finalization commit; resolve from `refs/heads/main`.
+- `HEAD == refs/heads/main`: YES at verification time.
+- Wave4C formally in main: YES.
