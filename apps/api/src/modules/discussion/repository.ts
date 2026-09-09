@@ -114,7 +114,8 @@ const publicPost = (r: any): DiscussionPost => ({
   status: r.status,
   title: r.title,
   summary: r.summary ?? null,
-  contentMarkdown: r.content_markdown ?? r.contentMarkdown,
+  contentMarkdown:
+    r.status === 'DELETED' ? '' : (r.content_markdown ?? r.contentMarkdown),
   publishedAt: r.published_at ? new Date(r.published_at).toISOString() : null,
   createdAt: new Date(r.created_at ?? r.createdAt).toISOString(),
   updatedAt: new Date(r.updated_at ?? r.updatedAt).toISOString(),
@@ -131,7 +132,8 @@ const publicComment = (r: any): DiscussionComment => ({
   parentCommentId: r.parent_comment_id
     ? String(r.parent_comment_id)
     : (r.parentCommentId ?? null),
-  contentMarkdown: r.content_markdown ?? r.contentMarkdown,
+  contentMarkdown:
+    r.status === 'DELETED' ? '' : (r.content_markdown ?? r.contentMarkdown),
   status: r.status,
   createdAt: new Date(r.created_at ?? r.createdAt).toISOString(),
   updatedAt: new Date(r.updated_at ?? r.updatedAt).toISOString(),
