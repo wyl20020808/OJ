@@ -1,7 +1,7 @@
 # Wave 4F Profile Media & Save V2 Main Integration
 
 Date: 2026-09-09
-Status: PASS
+Status: PARTIAL / REAL_FIXTURE_NOT_VERIFIED
 
 ## Source and integration
 
@@ -46,10 +46,12 @@ Status: PASS
 - Focused Wave4F tests: 11/11 PASS. Root typecheck, build, architecture, and changed-file lint PASS.
 - Full historical Vitest run has 13 unrelated pre-existing failures outside Wave4F; no new Wave4F regression identified.
 
-MAIN INTEGRATION = PASS
+MAIN INTEGRATION = PARTIAL
 POSTGRESQL QUALIFICATION = PASS
 MINIO QUALIFICATION = PASS
 MANUAL UI ACCEPTANCE = PENDING USER
+REAL PROFILE DB FIXTURE = NOT VERIFIED (qualification harness quoting error)
+AVATAR/BACKGROUND REAL API FIXTURE = NOT VERIFIED
 FULL HISTORICAL REPLAY = PRE-EXISTING_BLOCKER
 0020 MODIFIED = NO
 
