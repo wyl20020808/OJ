@@ -29,7 +29,7 @@ Preflight: main `04c78bd08f0ca6b15bd5cbd894f0406fe94ea3f5`; feature source/code 
 ## Not Verified / Blocked
 
 - Product PostgreSQL migration apply, schema inspection, second-run qualification, real authorization/visibility/leave-team matrix, and real AC progress fixture: NOT VERIFIED in this candidate.
-- Runtime HTTP smoke: NOT RUN; existing Plugin Runtime blocker remains out of scope.
+- Runtime HTTP smoke: `BLOCKED_BY_EXISTING_PLUGIN_RUNTIME`; no runtime code was modified.
 - Manual UI acceptance: PENDING USER.
 
 ## Safety
