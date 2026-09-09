@@ -10,10 +10,7 @@ import {
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../apps/web/src/app/App.js';
-import {
-  getDailyFortune,
-  staticAnnouncements,
-} from '../apps/web/src/app/homeContent.js';
+import { getDailyFortune } from '../apps/web/src/app/homeContent.js';
 import { AuthExperience } from '../apps/web/src/components/AuthExperience.js';
 import type { ApiClient, AuthMethods } from '../apps/web/src/services/api.js';
 const problem = {
@@ -279,8 +276,8 @@ describe('Product Web Chinese Rich Experience V3', () => {
     expect(
       await screen.findByRole('heading', { name: '公告' }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/版本控制的真实静态公告/)).toBeInTheDocument();
-    expect(staticAnnouncements).toHaveLength(2);
+    expect(screen.getByText('暂无公告')).toBeInTheDocument();
+    expect(screen.queryByText(/版本控制的真实静态公告/)).not.toBeInTheDocument();
   });
   it.each(['WEB-V3-22', 'WEB-V3-23'])(
     '%s personal activity does not invent stats',

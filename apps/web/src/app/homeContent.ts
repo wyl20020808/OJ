@@ -1,11 +1,5 @@
 import type { Problem } from '../services/api.js';
 
-// Kept for import compatibility; Home renders only API-backed announcements.
-export const staticAnnouncements = [
-  { id: 'legacy-1', title: '', date: '', importance: '', text: '', href: '' },
-  { id: 'legacy-2', title: '', date: '', importance: '', text: '', href: '' },
-] as const;
-
 const fortuneStates = [
   '手感正热',
   '适合复盘',
