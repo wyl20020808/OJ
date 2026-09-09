@@ -44,6 +44,7 @@ try {
     '0028_discussion_comment_likes',
     '0029_team_assignment_v1',
     '0030_discussion_announcement_capability',
+    '0031_profile_media_save_v2',
   ];
   const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
   for (const name of ordered) {
