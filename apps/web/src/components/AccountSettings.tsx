@@ -76,6 +76,8 @@ export function AccountSettings({
         organization: value.organization ?? '',
         website: value.website ?? '',
         github: value.github ?? '',
+        avatarUrl: value.avatarUrl ?? '',
+        backgroundUrl: value.backgroundUrl ?? '',
       };
       setProfile(normalized);
       setProfileDraft(normalized);
@@ -162,7 +164,7 @@ export function AccountSettings({
         </p>
       )}
       <div className="settings-grid">
-        {profileDraft && <ProfileEditor profile={profileDraft} setProfile={setProfileDraft} saving={profileSaving} message={profileMessage} onSave={async () => { setProfileSaving(true); setProfileMessage(''); try { const saved = await api.updateProfile(profileDraft); setProfile(saved); setProfileDraft(saved); toast({ kind: 'success', title: '资料已保存' }); } catch { toast({ kind: 'error', title: '资料保存失败', description: '请检查输入后重试。' }); } finally { setProfileSaving(false); } }} onCancel={() => profile && setProfileDraft(profile)} />}
+        {profileDraft && <ProfileEditor profile={profileDraft} setProfile={setProfileDraft} saving={profileSaving} message={profileMessage} onSave={async () => { setProfileSaving(true); setProfileMessage(''); try { const { avatarUrl = '', backgroundUrl = '', ...fields } = profileDraft; const saved = await api.updateProfile(fields); setProfile({ ...saved, avatarUrl, backgroundUrl }); setProfileDraft({ ...saved, avatarUrl, backgroundUrl }); toast({ kind: 'success', title: '资料已保存' }); } catch (reason) { const detail = reason instanceof ApiError && reason.details && typeof reason.details === 'object' ? Object.values(reason.details as Record<string, string>).join(' ') : ''; toast({ kind: 'error', title: '资料保存失败', description: detail || '请稍后重试。' }); } finally { setProfileSaving(false); } }} onCancel={() => profile && setProfileDraft(profile)} api={api} />}
         <article className="settings-panel">
           <p className="panel-label">基本资料</p>
           <h2>{account.displayName}</h2>
@@ -329,9 +331,19 @@ export function AccountSettings({
   );
 }
 
-function ProfileEditor({ profile, setProfile, saving, message, onSave, onCancel }: { profile: EditableProfile; setProfile: (p: EditableProfile) => void; saving: boolean; message: string; onSave: () => Promise<void>; onCancel: () => void }) {
+function ProfileEditor({ profile, setProfile, saving, message, onSave, onCancel, api }: { profile: EditableProfile; setProfile: (p: EditableProfile) => void; saving: boolean; message: string; onSave: () => Promise<void>; onCancel: () => void; api: ApiClient }) {
+  const [mediaBusy, setMediaBusy] = useState<'avatar' | 'background' | null>(null);
+  const [mediaError, setMediaError] = useState('');
+  const selectMedia = async (kind: 'avatar' | 'background', file?: File) => { if (!file) return; setMediaBusy(kind); setMediaError(''); try { const result = await api.uploadProfileMedia(kind, file); setProfile({ ...profile, ...(kind === 'avatar' ? { avatarUrl: result.url } : { backgroundUrl: result.url }) }); } catch { setMediaError('上传失败，请稍后重试。'); } finally { setMediaBusy(null); } };
+  const removeMedia = async (kind: 'avatar' | 'background') => { setMediaBusy(kind); setMediaError(''); try { await api.removeProfileMedia(kind); setProfile({ ...profile, ...(kind === 'avatar' ? { avatarUrl: '' } : { backgroundUrl: '' }) }); } catch { setMediaError('移除失败，请稍后重试。'); } finally { setMediaBusy(null); } };
   const errors = {
     displayName: profile.displayName.trim() ? '' : '请输入显示名称。',
+    headline: profile.headline.length > 100 ? '个性标题过长。' : '',
+    bio: profile.bio.length > 800 ? '个人简介过长。' : '',
+    location: profile.location.length > 100 ? '地区过长。' : '',
+    organization: profile.organization.length > 120 ? '组织名称过长。' : '',
+    websiteLength: profile.website.length > 300 ? '个人网站过长。' : '',
+    githubLength: profile.github.length > 100 ? 'GitHub 信息过长。' : '',
     website: profile.website && !/^https?:\/\/[^\s]+$/i.test(profile.website) ? '网站需使用 http 或 https 地址。' : '',
     github: profile.github && !/^(?:[A-Za-z0-9-]{1,39}|https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/?$)/.test(profile.github) ? '请输入 GitHub 用户名或 GitHub 主页地址。' : '',
   };
@@ -343,5 +355,5 @@ function ProfileEditor({ profile, setProfile, saving, message, onSave, onCancel 
       : <input maxLength={key === 'displayName' ? 60 : key === 'headline' ? 100 : key === 'organization' ? 120 : key === 'location' ? 100 : key === 'website' ? 300 : 100} value={profile[key]} aria-invalid={Boolean(error)} onChange={(e) => setProfile({ ...profile, [key]: e.target.value })} />;
     return <label className="profile-editor-field">{label}{control}{error && <span className="field-error" role="alert">{error}</span>}</label>;
   };
-  return <article className="settings-panel settings-wide profile-editor"><div className="panel-row"><div><p className="panel-label">公开个人资料</p><h2>编辑个人资料</h2></div><span className="muted">这些信息会显示在你的公开主页。</span></div><div className="profile-editor-grid"><div>{field('displayName', '显示名称')}{field('headline', '一句话介绍')}{field('bio', `个人简介（${profile.bio.length}/800）`, 'textarea')}</div><div>{field('location', '地区')}{field('organization', '学校 / 组织')}{field('website', '个人网站')}{field('github', 'GitHub')}</div></div><div className="profile-editor-actions"><span className="muted">@{profile.username}</span><button type="button" className="secondary" onClick={onCancel} disabled={saving}>取消</button><button type="button" onClick={() => void onSave()} disabled={saving || invalid}>{saving ? '保存中…' : '保存资料'}</button></div>{message && <p role="status" className="muted">{message}</p>}</article>;
+  return <article className="settings-panel settings-wide profile-editor"><div className="panel-row"><div><p className="panel-label">公开个人资料</p><h2>编辑个人资料</h2></div><span className="muted">这些信息会显示在你的公开主页。</span></div><div className="profile-media-edit"><div className="media-edit-item"><img src={profile.avatarUrl || undefined} alt="头像预览" className="profile-editor-avatar" /> <div><label className="secondary">更换头像<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => void selectMedia('avatar', e.target.files?.[0])} /></label>{profile.avatarUrl && <button type="button" className="secondary" onClick={() => void removeMedia('avatar')}>移除头像</button>}</div></div><div className="media-edit-item"><div className="profile-editor-banner" style={profile.backgroundUrl ? { backgroundImage: `url(${profile.backgroundUrl})` } : undefined} aria-label="背景图片预览" /><div><label className="secondary">更换背景<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => void selectMedia('background', e.target.files?.[0])} /></label>{profile.backgroundUrl && <button type="button" className="secondary" onClick={() => void removeMedia('background')}>移除背景</button>}</div></div></div>{mediaBusy && <p role="status" className="muted">上传中…</p>}{mediaError && <p role="alert" className="field-error">{mediaError}</p>}<div className="profile-editor-grid"><div>{field('displayName', '显示名称')}{field('headline', '一句话介绍')}{field('bio', `个人简介（${profile.bio.length}/800）`, 'textarea')}</div><div>{field('location', '地区')}{field('organization', '学校 / 组织')}{field('website', '个人网站')}{field('github', 'GitHub')}</div></div><div className="profile-editor-actions"><span className="muted">@{profile.username}</span><button type="button" className="secondary" onClick={onCancel} disabled={saving || Boolean(mediaBusy)}>取消</button><button type="button" onClick={() => void onSave()} disabled={saving || invalid || Boolean(mediaBusy)}>{saving ? '保存中…' : '保存资料'}</button></div>{message && <p role="status" className="muted">{message}</p>}</article>;
 }

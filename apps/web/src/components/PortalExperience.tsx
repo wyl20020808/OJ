@@ -1852,13 +1852,12 @@ export function ProfileExperience({
   return (
     <section className="profile-v4">
       <div className="profile-cover" aria-label="OJPlatform 默认个人主页封面">
+        {publicProfile?.backgroundUrl && <img src={publicProfile.backgroundUrl} alt="个人主页背景" />}
         <span>OJPlatform</span>
       </div>
       <div className="profile-identity">
         <div className="profile-identity-main">
-          <div className="profile-avatar" aria-label="默认头像">
-            {displayName?.slice(0, 1).toUpperCase() ?? 'OJ'}
-          </div>
+          {publicProfile?.avatarUrl ? <img className="profile-avatar" src={publicProfile.avatarUrl} alt="头像" /> : <div className="profile-avatar" aria-label="默认头像">{displayName?.slice(0, 1).toUpperCase() ?? 'OJ'}</div>}
           <h1>{displayName ?? '个人主页'}</h1>
           <p>
             {displayUsername ? `@${displayUsername}` : '公开资料服务正在接入'}
