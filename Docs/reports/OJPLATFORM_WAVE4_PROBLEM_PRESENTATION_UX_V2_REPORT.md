@@ -1,6 +1,6 @@
 # OJPlatform Wave 4C Problem Presentation UX V2
 
-Status: PARTIAL
+Status: PASS for automated qualification. Manual UI acceptance remains PENDING USER.
 
 ## Source
 
