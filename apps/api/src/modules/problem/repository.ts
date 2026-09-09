@@ -321,7 +321,7 @@ export class PostgresProblemRepository implements ProblemRepository {
   async getMany(ids: string[]) {
     if (!ids.length) return [];
     const result = await this.pool.query(
-      'SELECT * FROM problems WHERE id = ANY($1::uuid[])',
+      'SELECT * FROM problems WHERE id = ANY($1::text[])',
       [ids],
     );
     return result.rows.map(mapRow);

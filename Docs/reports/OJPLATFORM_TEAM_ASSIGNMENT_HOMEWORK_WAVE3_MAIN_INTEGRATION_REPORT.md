@@ -1,6 +1,6 @@
 # OJPlatform Team Assignment & Homework Wave 3F Main Integration V1
 
-Status: PARTIAL
+Status: PASS for qualification and candidate merge gate; runtime/manual UI remain pending.
 
 Preflight: main `04c78bd08f0ca6b15bd5cbd894f0406fe94ea3f5`; feature source/code `9ec96ec038d6e6021751588bcc547b13e63d1095`; candidate `0f412495610a8709de274cb99b01c1bd765be3c5`.
 
@@ -19,7 +19,12 @@ Preflight: main `04c78bd08f0ca6b15bd5cbd894f0406fe94ea3f5`; feature source/code 
 - API typecheck: PASS.
 - Web typecheck: PASS.
 - `git diff --check`: PASS.
-- Migration runner: BLOCKED, PostgreSQL connection refused at `127.0.0.1:55432`.
+- Formal full-history runner reaches the pre-existing `0020 judge_artifacts` duplicate-table failure; `0028` was present and current-state `0029` forward apply passed.
+- `0029` second run passed. Schema inspection passed for tables, PK/FK, unique constraints, indexes, status check, team FK, public ID sequence, and normalized problem relation.
+- PostgreSQL fixture matrix passed: owner/manager create and edit allowed; member/nonmember/anonymous denied; public-team nonmember denied; draft member denied; publish/close and invalid rollback enforced.
+- Read-time membership passed: member sees Homework, leave removes My Homework and direct detail access; cleanup left zero fixture rows.
+- Real submission progress passed: `0/3`, first AC `1/3`, WA remains `1/3`, second AC `2/3`, pending remains `2/3`.
+- Windows TCP and Node PostgreSQL connectivity passed. Fixture cleanup passed; real user data mutated: NO.
 
 ## Not Verified / Blocked
 
@@ -35,4 +40,4 @@ Preflight: main `04c78bd08f0ca6b15bd5cbd894f0406fe94ea3f5`; feature source/code 
 
 ## Merge Gate
 
-Candidate is not eligible for main merge until PostgreSQL/domain qualification and required regression/build evidence pass.
+Candidate is eligible for normal main merge after final candidate-side checks. Full historical replay remains blocked only by pre-existing `0020`; no historical migration was changed.
