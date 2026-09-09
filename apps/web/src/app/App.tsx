@@ -1507,8 +1507,6 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
               ['statement', '题面', 6],
               ['inputDescription', '输入说明', 4],
               ['outputDescription', '输出说明', 4],
-              ['constraints', '数据范围', 4],
-              ['notes', '补充说明', 3],
             ] as const
           ).map(([fieldKey, label, rows]) => (
             <MarkdownFieldSection
@@ -1521,6 +1519,97 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
               onChange={(value) => update(fieldKey, value)}
             />
           ))}
+        </div>
+        <fieldset>
+          <legend>样例</legend>
+          <div className="authoring-sample-list">
+            {form.examples.map((sample, index) => (
+              <div className="authoring-sample" key={index}>
+                <div className="sample-heading">
+                  <strong>样例 {index + 1}</strong>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() =>
+                      update(
+                        'examples',
+                        form.examples.filter((_, item) => item !== index),
+                      )
+                    }
+                    disabled={form.examples.length === 1}
+                  >
+                    删除
+                  </button>
+                </div>
+                <div className="form-grid">
+                  <label>
+                    样例输入
+                    <textarea
+                      value={sample.input}
+                      onChange={(e) =>
+                        update(
+                          'examples',
+                          form.examples.map((item, current) =>
+                            current === index
+                              ? { ...item, input: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      rows={3}
+                    />
+                  </label>
+                  <label>
+                    样例输出
+                    <textarea
+                      value={sample.output}
+                      onChange={(e) =>
+                        update(
+                          'examples',
+                          form.examples.map((item, current) =>
+                            current === index
+                              ? { ...item, output: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      rows={3}
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() =>
+              update('examples', [
+                ...form.examples,
+                { input: '', output: '', note: '' },
+              ])
+            }
+          >
+            添加样例
+          </button>
+        </fieldset>
+        <div className="markdown-fields authoring-markdown-fields authoring-tail-fields">
+          <MarkdownFieldSection
+            fieldKey="constraints"
+            label="数据范围"
+            value={form.constraints}
+            rows={4}
+            disabled={false}
+            onChange={(value) => update('constraints', value)}
+          />
+          <MarkdownFieldSection
+            fieldKey="notes"
+            label="说明与提示"
+            value={form.notes}
+            rows={3}
+            disabled={false}
+            onChange={(value) => update('notes', value)}
+          />
         </div>
         <TagSelector
           api={api}
@@ -1545,43 +1634,6 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
             required
           />
         </div>
-        <fieldset>
-          <legend>样例</legend>
-          <div className="form-grid">
-            <label>
-              输入
-              <textarea
-                value={form.examples[0]?.input ?? ''}
-                onChange={(e) =>
-                  update('examples', [
-                    {
-                      ...form.examples[0],
-                      input: e.target.value,
-                      output: form.examples[0]?.output ?? '',
-                    },
-                  ])
-                }
-                rows={3}
-              />
-            </label>
-            <label>
-              输出
-              <textarea
-                value={form.examples[0]?.output ?? ''}
-                onChange={(e) =>
-                  update('examples', [
-                    {
-                      ...form.examples[0],
-                      output: e.target.value,
-                      input: form.examples[0]?.input ?? '',
-                    },
-                  ])
-                }
-                rows={3}
-              />
-            </label>
-          </div>
-        </fieldset>
         <label className="checkbox">
           <input
             type="checkbox"
@@ -1726,61 +1778,26 @@ function ProblemDetail({
             </p>
           </header>
           <section className="problem-content-surface">
-            <ProblemStatementRenderer content={problem} showTitle={false} />
+            <ProblemStatementRenderer
+              content={problem}
+              showTitle={false}
+              onCopySample={(input) => {
+                if (!navigator.clipboard) {
+                  setCopyMessage('当前浏览器不支持复制样例。');
+                  return;
+                }
+                void navigator.clipboard.writeText(input).then(
+                  () => setCopyMessage('样例输入已复制。'),
+                  () => setCopyMessage('复制失败，请手动选择样例输入。'),
+                );
+              }}
+            />
+            {copyMessage && (
+              <p className="sample-copy-status" role="status">
+                {copyMessage}
+              </p>
+            )}
           </section>
-          {problem.examples.length > 0 && (
-            <Section title="样例">
-              {problem.examples.map((example, index) => (
-                <div className="sample-block" key={index}>
-                  <div className="sample-heading section-heading-inline">
-                    <h3>样例 {index + 1}</h3>
-                    <button
-                      type="button"
-                      className="secondary sample-copy"
-                      onClick={() => {
-                        if (!navigator.clipboard) {
-                          setCopyMessage('当前浏览器不支持复制样例。');
-                          return;
-                        }
-                        void navigator.clipboard
-                          .writeText(example.input)
-                          .then(() => setCopyMessage('样例输入已复制。'))
-                          .catch(() =>
-                            setCopyMessage('复制失败，请手动选择样例输入。'),
-                          );
-                      }}
-                    >
-                      复制样例
-                    </button>
-                  </div>
-                  <div className="sample-grid">
-                    <div>
-                      <h4>输入</h4>
-                      <pre
-                        className="sample-code sample-input"
-                        aria-label={`样例 ${index + 1} 输入`}
-                      >
-                        {example.input}
-                      </pre>
-                    </div>
-                    <div>
-                      <h4>输出</h4>
-                      <pre
-                        className="sample-code sample-output"
-                        aria-label={`样例 ${index + 1} 输出`}
-                      >
-                        {example.output}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {copyMessage && <p role="status">{copyMessage}</p>}
-            </Section>
-          )}
-          {problem.notes && (
-            <Section title="说明与提示">{problem.notes}</Section>
-          )}
         </div>
         <aside className="problem-aside" aria-label="题目信息">
           <dl className="problem-facts">
