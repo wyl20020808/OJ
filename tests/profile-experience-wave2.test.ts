@@ -28,7 +28,7 @@ describe('Profile Experience Wave 2', () => {
   it('rejects unsafe website and keeps public DTO free of private fields', async () => {
     const app = Fastify();
     await registerProfileModule(app, { pool: pool(), getAuth: async () => ({ userId: 'u1', strength: 'password' }) });
-    const unsafe = await app.inject({ method: 'PATCH', url: '/api/profile/me', payload: { displayName: 'Ada', website: 'javascript:alert(1)' } });
+    const unsafe = await app.inject({ method: 'PATCH', url: '/api/profile/me', headers: { cookie: 'oj_csrf=t', 'x-csrf-token': 't' }, payload: { displayName: 'Ada', website: 'javascript:alert(1)' } });
     expect(unsafe.statusCode).toBe(400);
     const publicResponse = await app.inject('/api/profiles/ada');
     expect(publicResponse.statusCode).toBe(200);

@@ -1025,6 +1025,7 @@ export async function buildApp(options: AppOptions = {}) {
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       teamService,
+      storage: { client: storage.client, bucket: storage.bucket },
     });
     await registerTeamModule(app, {
       service: teamService,

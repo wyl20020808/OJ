@@ -241,6 +241,8 @@ export type PublicProfile = {
   organization?: string;
   website?: string;
   github?: string;
+  avatarUrl?: string;
+  backgroundUrl?: string;
   createdAt: string;
   capabilities: ProfileCapabilities;
   isSelf: boolean;
@@ -256,6 +258,8 @@ export type EditableProfile = {
   organization: string;
   website: string;
   github: string;
+  avatarUrl?: string;
+  backgroundUrl?: string;
 };
 export type ProfileTeam = {
   name: string;
@@ -1186,13 +1190,19 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       ),
     editableProfile: () =>
       request<EditableProfile>(baseUrl, '/api/profile/me', undefined, fetcher),
-    updateProfile: (profile: Omit<EditableProfile, 'username'>) =>
+    updateProfile: (profile: Omit<EditableProfile, 'username' | 'avatarUrl' | 'backgroundUrl'>) =>
       request<EditableProfile>(
         baseUrl,
         '/api/profile/me',
         { method: 'PATCH', body: JSON.stringify(profile) },
         fetcher,
       ),
+    uploadProfileMedia: (kind: 'avatar' | 'background', file: File) => {
+      const form = new FormData(); form.append('file', file);
+      return request<{ url: string }>(baseUrl, `/api/profile/me/${kind}`, { method: 'POST', body: form }, fetcher);
+    },
+    removeProfileMedia: (kind: 'avatar' | 'background') =>
+      request<void>(baseUrl, `/api/profile/me/${kind}`, { method: 'DELETE' }, fetcher),
     profileActivity: (username: string) =>
       request<ProfileActivity>(
         baseUrl,
