@@ -16,7 +16,7 @@
 
 ## Not Verified / Blocked
 
-- PostgreSQL migration, schema inspection, second-run no-op, reply qualification, and like qualification: NOT VERIFIED; PostgreSQL was DOWN.
+- PostgreSQL container was started with the repository infrastructure script, but Product DB remained unreachable from the Windows Node process (`ECONNREFUSED 127.0.0.1:55432`; direct WSL address also refused). Formal migration runner therefore could not apply `0028`; schema, second-run no-op, reply qualification, and like qualification: NOT VERIFIED.
 - Runtime start/status HTTP smoke: BLOCKED by existing `CANONICAL_PLUGIN_MAIN_NOT_FOUND` from `scripts/dev-runtime.ps1 start`.
 - Main-side revalidation and merge: NOT RUN because merge gate requires the blocked qualifications.
 - Manual UI: PENDING USER.
