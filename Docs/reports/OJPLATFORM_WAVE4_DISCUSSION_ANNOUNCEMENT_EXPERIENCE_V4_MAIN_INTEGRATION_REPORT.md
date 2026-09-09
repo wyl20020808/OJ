@@ -13,7 +13,7 @@ Manual UI acceptance: PENDING USER
 - Candidate: `D:\OJPlatform-worktrees\wave4-discussion-integration-v1` / `codex/wave4-discussion-integration-v1`.
 - Candidate head: `51e5441`.
 - Normal main merge: `9389d4e` (`merge: integrate wave4d discussion announcement experience`).
-- Main after merge: `9389d4e`; final main after report recording: `fa811df`; `HEAD == refs/heads/main`: YES.
+- Main merge commit: `9389d4e`; `HEAD == refs/heads/main` during main-side validation: YES.
 - Cherry-pick had one `Docs/PROJECT_STATUS.md` content conflict. Resolution retained current main Wave4A/Wave4C/Wave4E history and added Wave4D integration evidence; no whole-file ours/theirs resolution used.
 - No Wave4F, OnlineCodeEditor, Judge, Sandbox, Runtime, or Plugin changes included.
 
