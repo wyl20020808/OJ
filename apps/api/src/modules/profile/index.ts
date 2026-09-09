@@ -50,6 +50,10 @@ export async function registerProfileModule(
     code: string,
     message: string,
   ) => reply.status(status).send({ code, message, requestId: request.id });
+  const csrf = (request: FastifyRequest) => {
+    const token = request.headers['x-csrf-token'];
+    return typeof token === 'string' && request.headers.cookie?.split(';').some((item) => item.trim() === `oj_csrf=${token}`);
+  };
   const passwordUser = async (request: FastifyRequest, reply: FastifyReply) => {
     const auth = await options.getAuth(request);
     if (!auth) {
@@ -187,6 +191,7 @@ export async function registerProfileModule(
   app.patch('/api/profile/me', async (request, reply) => {
     const auth = await passwordUser(request, reply);
     if (!auth) return;
+    if (!csrf(request)) return error(reply, request, 403, 'CSRF_INVALID', 'CSRF validation failed');
     const body = (request.body ?? {}) as Record<string, unknown>;
     const fields = ['displayName', 'headline', 'bio', 'location', 'organization', 'website', 'github'];
     if (Object.keys(body).some((key) => !fields.includes(key)))
@@ -262,6 +267,7 @@ export async function registerProfileModule(
   });
   const upload = async (request: FastifyRequest, reply: FastifyReply, kind: 'avatar' | 'background') => {
     const auth = await passwordUser(request, reply); if (!auth) return;
+    if (!csrf(request)) return error(reply, request, 403, 'CSRF_INVALID', 'CSRF validation failed');
     if (!options.storage) return error(reply, request, 503, 'STORAGE_UNAVAILABLE', 'Media storage unavailable');
     const file = parseUpload(request.body, String(request.headers['content-type'] ?? ''));
     const max = kind === 'avatar' ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
@@ -279,6 +285,7 @@ export async function registerProfileModule(
   app.post('/api/profile/me/background', (request, reply) => upload(request, reply, 'background'));
   const removeMedia = async (request: FastifyRequest, reply: FastifyReply, kind: 'avatar' | 'background') => {
     const auth = await passwordUser(request, reply); if (!auth) return;
+    if (!csrf(request)) return error(reply, request, 403, 'CSRF_INVALID', 'CSRF validation failed');
     const column = kind === 'avatar' ? 'avatar_object_key' : 'background_object_key';
     const result = await options.pool.query(`SELECT ${column} AS key FROM user_profiles WHERE user_id=$1`, [auth.userId]);
     const key = result.rows[0]?.key;
