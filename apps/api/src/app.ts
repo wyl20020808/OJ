@@ -99,6 +99,12 @@ import {
   PostgresDiscussionRepository,
   registerDiscussionModule,
 } from './modules/discussion/index.js';
+import {
+  InMemoryAssignmentRepository,
+  PostgresAssignmentRepository,
+  AssignmentService,
+  registerAssignmentModule,
+} from './modules/assignment/index.js';
 
 const operatorUserIds = () =>
   new Set(
@@ -1025,6 +1031,16 @@ export async function buildApp(options: AppOptions = {}) {
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
     });
+    await registerAssignmentModule(app, {
+      service: new AssignmentService(
+        new PostgresAssignmentRepository(database.pool),
+        teamService,
+        problemRepository,
+        submissionRepository,
+      ),
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+    });
     await registerDiscussionModule(app, {
       repository: new PostgresDiscussionRepository(database.pool),
       getAuthContext: async (request) =>
@@ -1510,9 +1526,22 @@ export async function buildApp(options: AppOptions = {}) {
         };
       },
     });
-    const teamService = new TeamService(new InMemoryTeamRepository(), auditHook);
+    const teamService = new TeamService(
+      new InMemoryTeamRepository(),
+      auditHook,
+    );
     await registerTeamModule(app, {
       service: teamService,
+      getAuth: async (request) =>
+        (await auth.getAuthContext(request)) ?? undefined,
+    });
+    await registerAssignmentModule(app, {
+      service: new AssignmentService(
+        new InMemoryAssignmentRepository(),
+        teamService,
+        problemRepository,
+        submissionRepository,
+      ),
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
     });

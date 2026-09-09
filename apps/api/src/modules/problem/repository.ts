@@ -36,6 +36,7 @@ export type ProblemListQuery = {
 export interface ProblemRepository {
   create(input: ProblemCreateInput): Promise<Problem>;
   get(idOrSlug: string): Promise<Problem | undefined>;
+  getMany?(ids: string[]): Promise<Problem[]>;
   list(query: ProblemListQuery): Promise<{ items: Problem[]; total: number }>;
   update(idOrSlug: string, input: ProblemUpdateInput): Promise<Problem>;
   tombstone(
@@ -84,6 +85,10 @@ export class InMemoryProblemRepository implements ProblemRepository {
     return [...this.rows.values()].find(
       (p) => p.id === key || p.slug === key || p.publicId === key,
     );
+  }
+  async getMany(ids: string[]) {
+    const wanted = new Set(ids);
+    return [...this.rows.values()].filter((problem) => wanted.has(problem.id));
   }
   async tombstone(
     key: string,
@@ -312,6 +317,14 @@ export class PostgresProblemRepository implements ProblemRepository {
       [key],
     );
     return result.rows[0] ? mapRow(result.rows[0]) : undefined;
+  }
+  async getMany(ids: string[]) {
+    if (!ids.length) return [];
+    const result = await this.pool.query(
+      'SELECT * FROM problems WHERE id = ANY($1::text[])',
+      [ids],
+    );
+    return result.rows.map(mapRow);
   }
   async tombstone(
     key: string,

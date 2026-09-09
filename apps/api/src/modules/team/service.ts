@@ -41,6 +41,13 @@ export class TeamService {
     const m = await this.repository.member(t.id, userId);
     return { team: t, member: m };
   }
+  /** Public cross-module membership projection. */
+  async assignmentActor(slug: string, userId: string) {
+    return this.actor(slug, userId);
+  }
+  async teamById(id: string) {
+    return this.repository.getTeamById(id);
+  }
   async listPublic(limit: number, cursor?: string) {
     return this.repository.listPublic(limit, cursor);
   }
