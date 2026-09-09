@@ -32,7 +32,7 @@ Deleted parents remain visible as tombstones when they have visible children. De
 
 ### Comment likes
 
-Added temporary migration `00XX_discussion_comment_likes.sql` and down migration. Data model uses `(comment_id,user_id)` composite primary key with cascading foreign keys. Repository supports idempotent like/unlike and projects `likeCount` plus `viewerLiked`. API endpoints:
+Added canonical migration `0028_discussion_comment_likes.sql` and down migration. Data model uses `(comment_id,user_id)` composite primary key with cascading foreign keys. Repository supports idempotent like/unlike and projects `likeCount` plus `viewerLiked`. API endpoints:
 
 - `POST /api/discussion/comments/:id/likes`
 - `DELETE /api/discussion/comments/:id/likes`
