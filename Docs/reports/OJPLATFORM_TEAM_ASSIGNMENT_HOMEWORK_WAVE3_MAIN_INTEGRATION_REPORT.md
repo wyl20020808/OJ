@@ -2,6 +2,8 @@
 
 Status: PARTIAL
 
+Preflight: main `04c78bd08f0ca6b15bd5cbd894f0406fe94ea3f5`; feature source/code `9ec96ec038d6e6021751588bcc547b13e63d1095`; candidate `0f412495610a8709de274cb99b01c1bd765be3c5`.
+
 ## Implemented
 
 - Integrated Worker F from `9ec96ec038d6e6021751588bcc547b13e63d1095` into a fresh worktree based on main `04c78bd08f0ca6b15bd5cbd894f0406fe94ea3f5`.
@@ -17,6 +19,7 @@ Status: PARTIAL
 - API typecheck: PASS.
 - Web typecheck: PASS.
 - `git diff --check`: PASS.
+- Migration runner: BLOCKED, PostgreSQL connection refused at `127.0.0.1:55432`.
 
 ## Not Verified / Blocked
 
