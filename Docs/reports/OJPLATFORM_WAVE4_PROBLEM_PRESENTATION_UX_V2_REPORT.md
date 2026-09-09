@@ -41,7 +41,7 @@ Duplicate category: `F` / renderer composition.
 - Root typecheck: PASS.
 - Diff check: PASS.
 - Manual UI: PENDING USER.
-- API/Web builds, changed-file lint, architecture check: NOT RUN in this worker turn.
+- API build: PASS. Web build: PASS. Architecture check: PASS. Changed-file lint: PASS with CSS ignored warning (no matching configuration). Diff check: PASS.
 
 ## Delivery
 
