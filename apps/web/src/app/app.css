@@ -2767,7 +2767,9 @@ footer {
 }
 .discussion-feed {
   background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  padding: 0 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 .discussion-feed-item {
   position: relative;
@@ -2775,7 +2777,7 @@ footer {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-6);
   min-height: 8.2rem;
-  padding: 1.25rem 0;
+  padding: 1.35rem 0;
   border-top: 1px solid var(--line);
 }
 .discussion-feed-item.announcement {
@@ -2953,14 +2955,38 @@ footer {
   color: var(--muted);
 }
 .discussion-detail {
-  max-width: 860px;
+  max-width: 900px;
+  padding: 0 1.25rem 4rem;
 }
 .discussion-detail.announcement {
   border-top: 3px solid #b7791f;
 }
 .discussion-detail-header {
-  padding: 0.5rem 0 var(--space-6);
+  padding: 2rem 0 1.5rem;
   border-bottom: 1px solid var(--line);
+}
+.discussion-detail-heading h1 { font-size: clamp(2rem, 4vw, 2.65rem); line-height: 1.15; letter-spacing: 0; max-width: 42rem; }
+.discussion-body-surface { margin: 2rem 0; padding: 0 0.5rem; border: 0; background: transparent; }
+.discussion-renderer { line-height: 1.8; font-size: 1.02rem; }
+.discussion-renderer h1, .discussion-renderer h2, .discussion-renderer h3 { line-height: 1.3; margin-top: 2.2em; margin-bottom: 0.7em; }
+.discussion-comments { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--line); }
+.discussion-comment { padding: 1.25rem 0; border-top: 1px solid var(--line); }
+.discussion-comment-reply { margin-left: 1.5rem; padding-left: 1rem; border-left: 2px solid var(--accent-soft); }
+.discussion-reply-target { margin: 0.25rem 0; color: var(--accent-dark); font-size: 0.82rem; font-weight: 700; }
+.discussion-editor-tabs { display: flex; gap: 0.35rem; margin: 0.5rem 0; }
+.discussion-editor-tabs button { padding: 0.35rem 0.7rem; }
+.discussion-comment-preview { min-height: 5rem; padding: 0.8rem; border: 1px solid var(--line); background: var(--surface-subtle, #fafafa); color: var(--muted); }
+.discussion-inline-reply { margin: 0.75rem 0 0 1.5rem; padding: 1rem; border-left: 2px solid var(--accent); background: var(--surface-subtle, #fafafa); }
+.discussion-text-action.liked { color: var(--accent-dark); font-weight: 800; }
+.announcement-empty { padding: 1.25rem 0; color: var(--muted); text-align: center; }
+@media (max-width: 640px) {
+  .discussion-page { padding-left: 1rem; padding-right: 1rem; }
+  .discussion-feed { padding: 0 1rem; }
+  .discussion-feed-footer { align-items: flex-start; flex-direction: column; }
+  .discussion-feed-counts { justify-content: flex-start; }
+  .discussion-detail-heading { flex-direction: column; }
+  .discussion-detail-controls { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+  .discussion-detail-heading h1 { font-size: 2rem; }
 }
 .discussion-detail-heading {
   display: flex;

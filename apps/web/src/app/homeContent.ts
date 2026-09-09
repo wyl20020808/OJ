@@ -1,24 +1,5 @@
 import type { Problem } from '../services/api.js';
 
-export const staticAnnouncements = [
-  {
-    id: 'web-v3',
-    title: 'Web V3 中文体验上线',
-    date: '2026-08-31',
-    importance: '重要',
-    text: '首页、题库与提交工作流已更新为简体中文界面。',
-    href: '/',
-  },
-  {
-    id: 'truthful-status',
-    title: '评测状态保持原始事实',
-    date: '2026-08-31',
-    importance: '说明',
-    text: '在 Verdict Engine 接入前，页面不会把基础设施状态解释为 AC/WA。',
-    href: '/submissions',
-  },
-] as const;
-
 const fortuneStates = [
   '手感正热',
   '适合复盘',
