@@ -33,4 +33,8 @@ Password login UI includes an accessible, default-unchecked `记住我` checkbox
 
 `git clean`, `git reset --hard`, force overwrite, history rewrite, and stash deletion were not used. Existing user untracked artifacts and stashes were preserved.
 
-Candidate required dirty files: none. Candidate head before main merge: recorded by Git after documentation commit.
+Candidate required dirty files: none. Candidate head: `38a14e9`. Normal merge commit on main: `e2f77d8fe4b341b8ba973399f80a0bc8dab8818f`.
+
+## Main-side revalidation
+
+Canonical checkout remains `main` with `HEAD == refs/heads/main` at `e2f77d8`. Main-side focused auth result is unchanged (`22/23`, same pre-existing phone baseline); UI regression is `74/74`; typecheck, API/Web builds, changed-file lint, architecture, and diff checks pass. Runtime Manager status is clean and DOWN, so HTTP auth smoke was not run.
