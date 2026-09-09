@@ -21,7 +21,7 @@
 - Schema passed: columns `comment_id`, `user_id`, `created_at`; composite primary key `(comment_id,user_id)`; cascading FKs to comments/users; expected indexes.
 - Real PostgreSQL reply and like fixture passed: nested parent relations, cross-post rejection, deleted-parent tombstone with hidden body, child visibility, idempotent like/unlike, two-user count, viewer projection, reload persistence. Fixture rolled back; real user data unchanged.
 - Runtime start/status HTTP smoke: BLOCKED by existing `CANONICAL_PLUGIN_MAIN_NOT_FOUND` from `scripts/dev-runtime.ps1 start`.
-- Main-side revalidation and merge: pending candidate merge in this turn.
+- Normal merge completed as `be822941dd23d65e67d756fbce7a403a46a12ec1`. Main-side focused Discussion tests, root typecheck, API/Web builds, architecture, and diff check passed.
 - Manual UI: PENDING USER.
 
 ## Preservation
@@ -30,4 +30,10 @@ Worker A Remember Me, Worker D Team/Profile correctness, and Worker E sticky pag
 
 ## Gate
 
-`BLOCKED_BY_ENVIRONMENT`: do not merge until PostgreSQL is available and runtime manager plugin source is repaired or made available, then rerun required qualification and main-side regression.
+## Final State
+
+- Main branch: `main`; HEAD matches `refs/heads/main` at `be822941dd23d65e67d756fbce7a403a46a12ec1`.
+- Final migration chain tail: `0025_discussion_core`, `0026_submission_source_permission`, `0027_profile_experience`, `0028_discussion_comment_likes`.
+- `00XX_discussion_comment_likes`: absent; duplicate migration ID: none.
+- Runtime HTTP smoke: `BLOCKED_BY_EXISTING_PLUGIN_RUNTIME`; no Runtime/Plugin/Judge code changed.
+- Manual UI: pending user.
