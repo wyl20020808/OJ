@@ -61,7 +61,6 @@ import type {
 import {
   chooseDailyProblem,
   getDailyFortune,
-  staticAnnouncements,
 } from './homeContent.js';
 import {
   formatDate,
@@ -681,19 +680,10 @@ function Home({
                   {item.summary && <p>{item.summary}</p>}
                 </li>
               ))}
-              {staticAnnouncements.map((item) => (
-                <li key={item.id}>
-                  <span className="announcement-meta">
-                    {item.importance} · {item.date}
-                  </span>
-                  <strong>{item.title}</strong>
-                  <p>{item.text}</p>
-                </li>
-              ))}
+              {!discussionAnnouncements.length && (
+                <li className="announcement-empty">暂无公告</li>
+              )}
             </ul>
-            <p className="field-help">
-              当前为 Web 版本控制的真实静态公告；公告后端尚未接入。
-            </p>
           </section>
           <section className="home-section homework-panel">
             <div className="section-heading-inline">

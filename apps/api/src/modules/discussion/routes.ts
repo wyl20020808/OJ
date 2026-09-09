@@ -156,6 +156,18 @@ export async function registerDiscussionModule(
           ...(getAuthor
             ? { author: safeAuthor(await getAuthor(item.authorId)) }
             : {}),
+          ...(item.parentCommentId && getAuthor
+            ? {
+                replyTarget: safeAuthor(
+                  await (async () => {
+                    const parent = await o.repository.getCommentAny(
+                      item.parentCommentId,
+                    );
+                    return parent ? await getAuthor(parent.authorId) : null;
+                  })(),
+                ),
+              }
+            : {}),
           capabilities: await commentCapabilities(ctx, item),
         };
       }),

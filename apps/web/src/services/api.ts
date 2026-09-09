@@ -702,6 +702,7 @@ export type DiscussionComment = {
   likeCount?: number;
   viewerLiked?: boolean;
   author?: DiscussionAuthor;
+  replyTarget?: DiscussionAuthor;
   capabilities?: DiscussionViewerCapabilities;
 };
 const defaultAuthMethods: AuthMethods = {

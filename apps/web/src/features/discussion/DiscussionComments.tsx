@@ -40,6 +40,7 @@ export function DiscussionComments({
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [previewMode, setPreviewMode] = useState<'edit' | 'preview'>('edit');
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const loadComments = useCallback(async () => {
@@ -93,8 +94,20 @@ export function DiscussionComments({
   };
   const toggleLike = async (item: DiscussionComment) => {
     if (!user) return;
+    const previous = Boolean(item.viewerLiked);
+    setComments((items) =>
+      items.map((c) =>
+        c.id === item.id
+          ? {
+              ...c,
+              viewerLiked: !previous,
+              likeCount: Math.max(0, (c.likeCount ?? 0) + (previous ? -1 : 1)),
+            }
+          : c,
+      ),
+    );
     try {
-      const result = item.viewerLiked
+      const result = previous
         ? await api.unlikeDiscussionComment(item.id)
         : await api.likeDiscussionComment(item.id);
       setComments((items) =>
@@ -105,6 +118,19 @@ export function DiscussionComments({
         ),
       );
     } catch (reason) {
+      setComments((items) =>
+        items.map((c) =>
+          c.id === item.id
+            ? {
+                ...c,
+                viewerLiked: previous,
+                ...(item.likeCount === undefined
+                  ? {}
+                  : { likeCount: item.likeCount }),
+              }
+            : c,
+        ),
+      );
       setMessage(reason instanceof Error ? reason.message : '点赞失败');
     }
   };
@@ -143,7 +169,12 @@ export function DiscussionComments({
         </header>
         {target && (
           <p className="discussion-reply-target">
-            @{target.author?.username ?? 'user'}
+            回复 @
+            {item.replyTarget?.displayName ??
+              item.replyTarget?.username ??
+              target.author?.displayName ??
+              target.author?.username ??
+              '用户'}
           </p>
         )}
         {item.status === 'DELETED' ? (
@@ -153,19 +184,49 @@ export function DiscussionComments({
             <label className="sr-only" htmlFor={`comment-${item.id}`}>
               编辑评论
             </label>
-            <MarkdownToolbar
-              textareaRef={editTextareaRef}
-              value={editValue}
-              onChange={setEditValue}
-              disabled={false}
-            />
-            <textarea
-              ref={editTextareaRef}
-              id={`comment-${item.id}`}
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              rows={5}
-            />
+            <div className="discussion-editor-tabs">
+              <button
+                type="button"
+                aria-label="编辑模式"
+                className={previewMode === 'edit' ? 'active' : 'secondary'}
+                onClick={() => setPreviewMode('edit')}
+              >
+                编辑
+              </button>
+              <button
+                type="button"
+                aria-label="预览模式"
+                className={previewMode === 'preview' ? 'active' : 'secondary'}
+                onClick={() => setPreviewMode('preview')}
+              >
+                预览
+              </button>
+            </div>
+            {previewMode === 'edit' ? (
+              <>
+                <MarkdownToolbar
+                  textareaRef={editTextareaRef}
+                  value={editValue}
+                  onChange={setEditValue}
+                  disabled={false}
+                />
+                <textarea
+                  ref={editTextareaRef}
+                  id={`comment-${item.id}`}
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  rows={5}
+                />
+              </>
+            ) : (
+              <div className="discussion-comment-preview">
+                {editValue.trim() ? (
+                  <DiscussionRenderer content={editValue} />
+                ) : (
+                  <span>暂无可预览内容</span>
+                )}
+              </div>
+            )}
             <div className="discussion-comment-actions">
               <button onClick={() => void saveComment(item.id)}>保存</button>
               <button className="secondary" onClick={() => setEditing(null)}>
@@ -221,6 +282,70 @@ export function DiscussionComments({
         )}
         {depth === 0 &&
           replies(item.id).map((reply) => renderComment(reply, 1))}
+        {replyTo === item.id && user && (
+          <form className="discussion-inline-reply" onSubmit={submitComment}>
+            <strong>
+              回复 @
+              {item.author?.displayName ?? item.author?.username ?? '用户'}
+            </strong>
+            <div className="discussion-editor-tabs">
+              <button
+                type="button"
+                aria-label="编辑模式"
+                className={previewMode === 'edit' ? 'active' : 'secondary'}
+                onClick={() => setPreviewMode('edit')}
+              >
+                编辑
+              </button>
+              <button
+                type="button"
+                aria-label="预览模式"
+                className={previewMode === 'preview' ? 'active' : 'secondary'}
+                onClick={() => setPreviewMode('preview')}
+              >
+                预览
+              </button>
+            </div>
+            {previewMode === 'edit' ? (
+              <>
+                <MarkdownToolbar
+                  textareaRef={composerRef}
+                  value={comment}
+                  onChange={setComment}
+                  disabled={false}
+                />
+                <textarea
+                  ref={composerRef}
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="写下回复"
+                  rows={4}
+                />
+              </>
+            ) : (
+              <div className="discussion-comment-preview">
+                {comment.trim() ? (
+                  <DiscussionRenderer content={comment} />
+                ) : (
+                  <span>暂无可预览内容</span>
+                )}
+              </div>
+            )}
+            <div className="discussion-comment-actions">
+              <button type="submit">回复</button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setReplyTo(null);
+                  setComment('');
+                }}
+              >
+                取消
+              </button>
+            </div>
+          </form>
+        )}
       </article>
     );
   };
@@ -255,32 +380,51 @@ export function DiscussionComments({
       )}
       {user ? (
         <form className="discussion-comment-form" onSubmit={submitComment}>
-          <label htmlFor="new-comment">
-            {replyTo ? '回复评论' : '参与评论'}
-          </label>
-          {replyTo && (
+          <label htmlFor="new-comment">参与评论</label>
+          <div className="discussion-editor-tabs">
             <button
               type="button"
-              className="discussion-text-action"
-              onClick={() => setReplyTo(null)}
+              aria-label="编辑模式"
+              className={previewMode === 'edit' ? 'active' : 'secondary'}
+              onClick={() => setPreviewMode('edit')}
             >
-              取消回复
+              编辑
             </button>
+            <button
+              type="button"
+              aria-label="预览模式"
+              className={previewMode === 'preview' ? 'active' : 'secondary'}
+              onClick={() => setPreviewMode('preview')}
+            >
+              预览
+            </button>
+          </div>
+          {previewMode === 'edit' ? (
+            <>
+              <MarkdownToolbar
+                textareaRef={composerRef}
+                value={comment}
+                onChange={setComment}
+                disabled={false}
+              />
+              <textarea
+                ref={composerRef}
+                id="new-comment"
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="写下你的评论"
+                rows={5}
+              />
+            </>
+          ) : (
+            <div className="discussion-comment-preview">
+              {comment.trim() ? (
+                <DiscussionRenderer content={comment} />
+              ) : (
+                <span>暂无可预览内容</span>
+              )}
+            </div>
           )}
-          <MarkdownToolbar
-            textareaRef={composerRef}
-            value={comment}
-            onChange={setComment}
-            disabled={false}
-          />
-          <textarea
-            ref={composerRef}
-            id="new-comment"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="写下你的评论"
-            rows={5}
-          />
           <div>
             <button type="submit">发布评论</button>
           </div>
