@@ -11,9 +11,7 @@ export type DiscussionModuleOptions = {
   repository: DiscussionRepository;
   getAuthContext: (request: FastifyRequest) => Promise<AuthContext | undefined>;
   hasCapability?: (userId: string, capability: string) => Promise<boolean>;
-  getAuthor?: (
-    userId: string,
-  ) => Promise<{
+  getAuthor?: (userId: string) => Promise<{
     id: string;
     username: string;
     displayName: string;
@@ -148,7 +146,10 @@ export async function registerDiscussionModule(
   const projectComments = async (items: any[], ctx?: AuthContext) =>
     Promise.all(
       items.map(async (item) => {
-        const publicComment = { ...item };
+        const publicComment = {
+          ...item,
+          ...(item.status === 'DELETED' ? { contentMarkdown: '' } : {}),
+        };
         delete publicComment.authorId;
         return {
           ...publicComment,
@@ -356,6 +357,7 @@ export async function registerDiscussionModule(
         post.id,
         typeof q.cursor === 'string' ? q.cursor : undefined,
         limit,
+        ctx?.userId,
       );
       return reply.send({
         ...result,
@@ -385,12 +387,24 @@ export async function registerDiscussionModule(
         'VALIDATION_ERROR',
         'Invalid comment content',
       );
+    if (
+      b.parentCommentId !== undefined &&
+      b.parentCommentId !== null &&
+      (typeof b.parentCommentId !== 'string' || !b.parentCommentId.trim())
+    )
+      return error(reply, r, 400, 'VALIDATION_ERROR', 'Invalid parent comment');
+    const parentCommentId =
+      typeof b.parentCommentId === 'string' ? b.parentCommentId : null;
+    if (parentCommentId) {
+      const parent = await o.repository.getCommentAny(parentCommentId);
+      if (!parent || parent.postId !== post.id)
+        return error(reply, r, 404, 'NOT_FOUND', 'Parent comment not found');
+    }
     const c = await o.repository.createComment({
       postId: post.id,
       authorId: ctx.userId,
       contentMarkdown: b.contentMarkdown,
-      parentCommentId:
-        typeof b.parentCommentId === 'string' ? b.parentCommentId : null,
+      parentCommentId,
     });
     await audit(ctx, 'COMMENT_CREATED', c.id, r);
     return reply.status(201).send((await projectComments([c], ctx))[0]);
@@ -417,7 +431,11 @@ export async function registerDiscussionModule(
       !(await can(ctx, 'discussion:comment:moderate'))
     )
       return error(reply, r, 403, 'FORBIDDEN', 'Comment ownership required');
-    const updated = await o.repository.updateComment(c.id, b.contentMarkdown);
+    const updated = await o.repository.updateComment(
+      c.id,
+      b.contentMarkdown,
+      ctx.userId,
+    );
     return updated
       ? reply.send((await projectComments([updated], ctx))[0])
       : error(reply, r, 404, 'NOT_FOUND', 'Comment not found');
@@ -440,6 +458,43 @@ export async function registerDiscussionModule(
     return deleted
       ? reply.send((await projectComments([deleted], ctx))[0])
       : error(reply, r, 404, 'NOT_FOUND', 'Comment not found');
+  });
+  app.post('/api/discussion/comments/:id/likes', async (r, reply) => {
+    const ctx = await auth(r);
+    if (!ctx)
+      return error(reply, r, 401, 'UNAUTHENTICATED', 'Authentication required');
+    if (!csrf(r))
+      return error(reply, r, 403, 'CSRF_INVALID', 'CSRF validation failed');
+    const comment = await o.repository.getComment((r.params as any).id);
+    if (!comment) return error(reply, r, 404, 'NOT_FOUND', 'Comment not found');
+    const post = await o.repository.get(comment.postId);
+    if (!post || post.status !== 'PUBLISHED')
+      return error(reply, r, 404, 'NOT_FOUND', 'Comment not found');
+    const created = await o.repository.likeComment(comment.id, ctx.userId);
+    const updated = await o.repository.getComment(comment.id, ctx.userId);
+    return reply.status(created ? 201 : 200).send({
+      liked: true,
+      created,
+      likeCount: updated?.likeCount ?? comment.likeCount,
+    });
+  });
+  app.delete('/api/discussion/comments/:id/likes', async (r, reply) => {
+    const ctx = await auth(r);
+    if (!ctx)
+      return error(reply, r, 401, 'UNAUTHENTICATED', 'Authentication required');
+    if (!csrf(r))
+      return error(reply, r, 403, 'CSRF_INVALID', 'CSRF validation failed');
+    const comment = await o.repository.getComment((r.params as any).id);
+    if (!comment) return error(reply, r, 404, 'NOT_FOUND', 'Comment not found');
+    const post = await o.repository.get(comment.postId);
+    if (!post || post.status !== 'PUBLISHED')
+      return error(reply, r, 404, 'NOT_FOUND', 'Comment not found');
+    await o.repository.unlikeComment(comment.id, ctx.userId);
+    const updated = await o.repository.getComment(comment.id, ctx.userId);
+    return reply.send({
+      liked: false,
+      likeCount: updated?.likeCount ?? 0,
+    });
   });
   app.post('/api/discussion/posts/:id/likes', async (r, reply) => {
     const ctx = await auth(r);

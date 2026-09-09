@@ -74,31 +74,37 @@ export function DiscussionFeedItem({
       data-content-template="discussion"
     >
       <div className="discussion-feed-content">
-        <DiscussionTypeBadge type={post.type} />
-        <h2>
-          <a
-            href={href}
-            onClick={(event) => {
-              event.preventDefault();
-              navigate(href);
-            }}
-          >
-            {post.title}
-          </a>
-        </h2>
-        {post.summary && <p className="discussion-summary">{post.summary}</p>}
-        <div className="discussion-feed-meta">
-          <DiscussionAuthorLink author={post.author} navigate={navigate} />
-          <time dateTime={post.publishedAt ?? post.createdAt}>
-            {formatDiscussionDate(post.publishedAt ?? post.createdAt)}
-          </time>
+        <div className="discussion-feed-heading">
+          <h2>
+            <a
+              href={href}
+              onClick={(event) => {
+                event.preventDefault();
+                navigate(href);
+              }}
+            >
+              {post.title}
+            </a>
+          </h2>
+          <DiscussionTypeBadge type={post.type} />
         </div>
-      </div>
-      <div className="discussion-feed-counts" aria-label="内容数据">
-        <span aria-label={`${post.commentCount} 条评论`}>
-          评论 {post.commentCount}
-        </span>
-        <span aria-label={`${post.likeCount} 个赞`}>♡ {post.likeCount}</span>
+        {post.summary && <p className="discussion-summary">{post.summary}</p>}
+        <div className="discussion-feed-footer">
+          <div className="discussion-feed-meta">
+            <DiscussionAuthorLink author={post.author} navigate={navigate} />
+            <time dateTime={post.publishedAt ?? post.createdAt}>
+              {formatDiscussionDate(post.publishedAt ?? post.createdAt)}
+            </time>
+          </div>
+          <div className="discussion-feed-counts" aria-label="内容数据">
+            <span aria-label={`${post.likeCount} 个赞`}>
+              ♡ {post.likeCount}
+            </span>
+            <span aria-label={`${post.commentCount} 条评论`}>
+              评论 {post.commentCount}
+            </span>
+          </div>
+        </div>
       </div>
     </article>
   );

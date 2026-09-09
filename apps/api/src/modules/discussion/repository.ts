@@ -49,8 +49,10 @@ export type DiscussionRepository = {
     postId: string,
     cursor?: string,
     limit?: number,
+    viewerId?: string,
   ): Promise<{ items: DiscussionComment[]; nextCursor?: string }>;
-  getComment(id: string): Promise<DiscussionComment | null>;
+  getComment(id: string, viewerId?: string): Promise<DiscussionComment | null>;
+  getCommentAny(id: string): Promise<DiscussionComment | null>;
   createComment(input: {
     postId: string;
     authorId: string;
@@ -60,10 +62,13 @@ export type DiscussionRepository = {
   updateComment(
     id: string,
     contentMarkdown: string,
+    viewerId?: string,
   ): Promise<DiscussionComment | null>;
   tombstoneComment(id: string): Promise<DiscussionComment | null>;
   like(postId: string, userId: string): Promise<boolean>;
   unlike(postId: string, userId: string): Promise<boolean>;
+  likeComment(commentId: string, userId: string): Promise<boolean>;
+  unlikeComment(commentId: string, userId: string): Promise<boolean>;
 };
 const enc = (v: unknown) =>
   Buffer.from(JSON.stringify(v)).toString('base64url');
@@ -109,7 +114,8 @@ const publicPost = (r: any): DiscussionPost => ({
   status: r.status,
   title: r.title,
   summary: r.summary ?? null,
-  contentMarkdown: r.content_markdown ?? r.contentMarkdown,
+  contentMarkdown:
+    r.status === 'DELETED' ? '' : (r.content_markdown ?? r.contentMarkdown),
   publishedAt: r.published_at ? new Date(r.published_at).toISOString() : null,
   createdAt: new Date(r.created_at ?? r.createdAt).toISOString(),
   updatedAt: new Date(r.updated_at ?? r.updatedAt).toISOString(),
@@ -126,17 +132,21 @@ const publicComment = (r: any): DiscussionComment => ({
   parentCommentId: r.parent_comment_id
     ? String(r.parent_comment_id)
     : (r.parentCommentId ?? null),
-  contentMarkdown: r.content_markdown ?? r.contentMarkdown,
+  contentMarkdown:
+    r.status === 'DELETED' ? '' : (r.content_markdown ?? r.contentMarkdown),
   status: r.status,
   createdAt: new Date(r.created_at ?? r.createdAt).toISOString(),
   updatedAt: new Date(r.updated_at ?? r.updatedAt).toISOString(),
   deletedAt: r.deleted_at ? new Date(r.deleted_at).toISOString() : null,
+  likeCount: Number(r.like_count ?? r.likeCount ?? 0),
+  viewerLiked: Boolean(r.viewer_liked ?? r.viewerLiked ?? false),
 });
 
 export class InMemoryDiscussionRepository implements DiscussionRepository {
   posts = new Map<string, DiscussionPost>();
   comments = new Map<string, DiscussionComment>();
   likes = new Set<string>();
+  commentLikes = new Set<string>();
   async list(i: {
     status?: DiscussionPostStatus;
     type?: DiscussionPostType;
@@ -229,9 +239,30 @@ export class InMemoryDiscussionRepository implements DiscussionRepository {
     const p = await this.get(id);
     if (p?.status === 'PUBLISHED') p.viewCount++;
   }
-  async listComments(postId: string, value?: string, limit = 20) {
+  async listComments(
+    postId: string,
+    value?: string,
+    limit = 20,
+    viewerId?: string,
+  ) {
     const all = [...this.comments.values()]
-      .filter((c) => c.postId === postId && c.status !== 'DELETED')
+      .filter(
+        (c) =>
+          c.postId === postId &&
+          (c.status !== 'DELETED' ||
+            [...this.comments.values()].some(
+              (child) => child.parentCommentId === c.id && child.status === 'VISIBLE',
+            )),
+      )
+      .map((c) => ({
+        ...c,
+        likeCount: [...this.commentLikes].filter((key) =>
+          key.startsWith(`${c.id}:`),
+        ).length,
+        viewerLiked: viewerId
+          ? this.commentLikes.has(`${c.id}:${viewerId}`)
+          : false,
+      }))
       .sort(
         (a, b) =>
           a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
@@ -249,10 +280,28 @@ export class InMemoryDiscussionRepository implements DiscussionRepository {
       from + items.length < all.length ? commentCursor(items) : undefined;
     return { items, ...(nextCursor ? { nextCursor } : {}) };
   }
-  async getComment(id: string) {
+  async getComment(id: string, viewerId?: string) {
+    const comment = this.comments.get(id);
+    if (!comment || comment.status === 'DELETED') return null;
+    return {
+      ...comment,
+      likeCount: [...this.commentLikes].filter((key) =>
+        key.startsWith(`${id}:`),
+      ).length,
+      viewerLiked: viewerId
+        ? this.commentLikes.has(`${id}:${viewerId}`)
+        : false,
+    };
+  }
+  async getCommentAny(id: string) {
     return this.comments.get(id) ?? null;
   }
   async createComment(i: any) {
+    const parent = i.parentCommentId
+      ? await this.getCommentAny(i.parentCommentId)
+      : null;
+    if (i.parentCommentId && (!parent || parent.postId !== i.postId))
+      throw new Error('Parent comment not found');
     const now = new Date().toISOString();
     const c: DiscussionComment = {
       id: randomUUID(),
@@ -264,18 +313,20 @@ export class InMemoryDiscussionRepository implements DiscussionRepository {
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
+      likeCount: 0,
+      viewerLiked: false,
     };
     this.comments.set(c.id, c);
     const p = await this.get(i.postId);
     if (p) p.commentCount++;
     return c;
   }
-  async updateComment(id: string, contentMarkdown: string) {
+  async updateComment(id: string, contentMarkdown: string, viewerId?: string) {
     const c = this.comments.get(id);
     if (!c || c.status === 'DELETED') return null;
     c.contentMarkdown = contentMarkdown;
     c.updatedAt = new Date().toISOString();
-    return c;
+    return this.getComment(id, viewerId);
   }
   async tombstoneComment(id: string) {
     const c = this.comments.get(id);
@@ -301,6 +352,15 @@ export class InMemoryDiscussionRepository implements DiscussionRepository {
     const p = await this.get(postId);
     if (p) p.likeCount = Math.max(0, p.likeCount - 1);
     return true;
+  }
+  async likeComment(commentId: string, userId: string) {
+    const key = `${commentId}:${userId}`;
+    if (this.commentLikes.has(key)) return false;
+    this.commentLikes.add(key);
+    return true;
+  }
+  async unlikeComment(commentId: string, userId: string) {
+    return this.commentLikes.delete(`${commentId}:${userId}`);
   }
 }
 
@@ -397,44 +457,77 @@ export class PostgresDiscussionRepository implements DiscussionRepository {
       [id],
     );
   }
-  async listComments(postId: string, value?: string, limit = 20) {
+  async listComments(
+    postId: string,
+    value?: string,
+    limit = 20,
+    viewerId?: string,
+  ) {
     const c = decodeCursor(value);
-    const p: any[] = [postId];
+    const p: any[] = [postId, viewerId ?? null];
     let pred = '';
     if (c) {
       p.push(c.sortAt, c.id);
-      pred = ` AND (created_at,id) > ($${p.length - 1},$${p.length})`;
+      pred = ` AND (c.created_at,c.id) > ($${p.length - 1},$${p.length})`;
     }
     const size = Math.min(100, Math.max(1, limit));
     p.push(size + 1);
     const r = await this.db.query(
-      `SELECT * FROM discussion_comments WHERE post_id=$1 AND status='VISIBLE'${pred} ORDER BY created_at ASC,id ASC LIMIT $${p.length}`,
+      `SELECT c.*,
+        (SELECT count(*) FROM discussion_comment_likes l WHERE l.comment_id=c.id)::int like_count,
+        CASE WHEN $2::uuid IS NULL THEN false ELSE EXISTS(
+          SELECT 1 FROM discussion_comment_likes l WHERE l.comment_id=c.id AND l.user_id=$2
+        ) END viewer_liked
+       FROM discussion_comments c
+       WHERE c.post_id=$1
+         AND (c.status='VISIBLE' OR EXISTS(
+           SELECT 1 FROM discussion_comments child
+           WHERE child.parent_comment_id=c.id AND child.status='VISIBLE'
+         ))${pred}
+       ORDER BY c.created_at ASC,c.id ASC LIMIT $${p.length}`,
       p,
     );
     const items = r.rows.slice(0, size).map(publicComment);
     const nextCursor = r.rows.length > size ? commentCursor(items) : undefined;
     return { items, ...(nextCursor ? { nextCursor } : {}) };
   }
-  async getComment(id: string) {
+  async getComment(id: string, viewerId?: string) {
     const r = await this.db.query(
-      "SELECT * FROM discussion_comments WHERE id=$1 AND status='VISIBLE'",
+      `SELECT c.*,
+        (SELECT count(*) FROM discussion_comment_likes l WHERE l.comment_id=c.id)::int like_count,
+        CASE WHEN $2::uuid IS NULL THEN false ELSE EXISTS(
+          SELECT 1 FROM discussion_comment_likes l WHERE l.comment_id=c.id AND l.user_id=$2
+        ) END viewer_liked
+       FROM discussion_comments c WHERE c.id=$1 AND c.status='VISIBLE'`,
+      [id, viewerId ?? null],
+    );
+    return r.rows[0] ? publicComment(r.rows[0]) : null;
+  }
+  async getCommentAny(id: string) {
+    const r = await this.db.query(
+      'SELECT * FROM discussion_comments WHERE id=$1',
       [id],
     );
     return r.rows[0] ? publicComment(r.rows[0]) : null;
   }
   async createComment(i: any) {
+    if (i.parentCommentId) {
+      const parent = await this.getCommentAny(i.parentCommentId);
+      if (!parent || parent.postId !== i.postId)
+        throw new Error('Parent comment not found');
+    }
     const r = await this.db.query(
       'INSERT INTO discussion_comments(post_id,author_id,parent_comment_id,content_markdown) VALUES($1,$2,$3,$4) RETURNING *',
       [i.postId, i.authorId, i.parentCommentId ?? null, i.contentMarkdown],
     );
     return publicComment(r.rows[0]);
   }
-  async updateComment(id: string, c: string) {
+  async updateComment(id: string, c: string, viewerId?: string) {
     const r = await this.db.query(
       "UPDATE discussion_comments SET content_markdown=$2,updated_at=now() WHERE id=$1 AND status='VISIBLE' RETURNING *",
       [id, c],
     );
-    return r.rows[0] ? publicComment(r.rows[0]) : null;
+    return r.rows[0] ? this.getComment(id, viewerId) : null;
   }
   async tombstoneComment(id: string) {
     const r = await this.db.query(
@@ -454,6 +547,20 @@ export class PostgresDiscussionRepository implements DiscussionRepository {
     const r = await this.db.query(
       'DELETE FROM discussion_post_likes WHERE post_id=$1 AND user_id=$2',
       [postId, userId],
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+  async likeComment(commentId: string, userId: string) {
+    const r = await this.db.query(
+      'INSERT INTO discussion_comment_likes(comment_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING',
+      [commentId, userId],
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+  async unlikeComment(commentId: string, userId: string) {
+    const r = await this.db.query(
+      'DELETE FROM discussion_comment_likes WHERE comment_id=$1 AND user_id=$2',
+      [commentId, userId],
     );
     return (r.rowCount ?? 0) > 0;
   }

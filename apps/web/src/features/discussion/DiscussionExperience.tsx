@@ -296,29 +296,33 @@ export function DiscussionPostPage({
       <header className="discussion-detail-header">
         <div className="discussion-detail-heading">
           <div>
-            <DiscussionTypeBadge type={post.type} />
             <h1>{post.title}</h1>
           </div>
-          {(post.capabilities?.canEdit || post.capabilities?.canDelete) && (
-            <div className="discussion-owner-actions" aria-label="内容管理">
-              {post.capabilities.canEdit && (
-                <button
-                  className="secondary"
-                  onClick={() => navigate(`/discussion/${post.publicId}/edit`)}
-                >
-                  编辑
-                </button>
-              )}
-              {post.capabilities.canDelete && (
-                <button
-                  className="discussion-delete-action"
-                  onClick={() => void deletePost()}
-                >
-                  删除
-                </button>
-              )}
-            </div>
-          )}
+          <div className="discussion-detail-controls">
+            <DiscussionTypeBadge type={post.type} />
+            {(post.capabilities?.canEdit || post.capabilities?.canDelete) && (
+              <div className="discussion-owner-actions" aria-label="内容管理">
+                {post.capabilities.canEdit && (
+                  <button
+                    className="secondary"
+                    onClick={() =>
+                      navigate(`/discussion/${post.publicId}/edit`)
+                    }
+                  >
+                    编辑
+                  </button>
+                )}
+                {post.capabilities.canDelete && (
+                  <button
+                    className="discussion-delete-action"
+                    onClick={() => void deletePost()}
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         <div className="discussion-detail-meta">
           <DiscussionAuthorLink author={post.author} navigate={navigate} />

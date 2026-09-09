@@ -42,6 +42,8 @@ export type DiscussionComment = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  likeCount?: number;
+  viewerLiked?: boolean;
   author?: DiscussionAuthor;
   capabilities?: DiscussionViewerCapabilities;
 };
