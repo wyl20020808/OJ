@@ -15,7 +15,8 @@ Status: PASS for candidate integration and focused automated validation. Manual 
 - Candidate: `D:\OJPlatform-worktrees\wave4-login-credential-integration-v1`
 - Branch: `codex/wave4-login-credential-integration-v1`
 - Feature application: normal cherry-pick, no conflicts, no whole-file ours/theirs resolution.
-- Candidate commit before final report: `e518011eb6af8707741a884b386934b0a3a1fa7c`
+- Candidate commits: `e518011eb6af8707741a884b386934b0a3a1fa7c`, `e739d6a`.
+- Merge commit: `44462e7ff7a18783d9a4f4fb46b0dc321d0132bd`.
 - Latest main features preserved: yes.
 
 ## Semantics
@@ -52,6 +53,7 @@ Status: PASS for candidate integration and focused automated validation. Manual 
 - Changed-file ESLint: PASS.
 - Architecture check: PASS.
 - `git diff --check`: PASS.
+- Canonical main revalidation: focused rich-login/auth tests 66/66 PASS; API/Web builds, root typecheck, changed-file ESLint, architecture, and diff checks PASS.
 - Runtime smoke: NOT RUN per task scope.
 - Password Manager save prompt, logout/autofill, and manual UI: PENDING USER.
 
@@ -62,4 +64,4 @@ Status: PASS for candidate integration and focused automated validation. Manual 
 
 ## Next
 
-After main merge, rerun focused rich-login, auth semantics/logout/security, typecheck, builds, architecture, and diff checks from canonical main. Do not merge other Wave 4 workers.
+Main is merged and revalidated. Do not merge other Wave 4 workers as part of this goal.
