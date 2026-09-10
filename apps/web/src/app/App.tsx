@@ -21,6 +21,8 @@ import {
   type Language,
   type Problem,
   type ProblemDifficulty,
+  type ProblemListOrder,
+  type ProblemListSort,
   type ProblemSourceType,
   type ProfileContest,
   type Submission,
@@ -891,7 +893,7 @@ function HomeReference({
             <span />
             从这里出发、刷题、比赛、交流、成长
             <br />
-             与一群热爱算法的人，走向更远的未来。
+            与一群热爱算法的人，走向更远的未来。
           </div>
           <div className="home-reference-actions">
             <Link to="/problems" className="home-reference-primary">
@@ -905,7 +907,7 @@ function HomeReference({
         <span className="home-reference-slogan" aria-hidden="true">
           代码如山
           <br />
-           行则将至
+          行则将至
         </span>
       </section>
       <section className="home-reference-grid">
@@ -1304,6 +1306,11 @@ function ProblemList({
   const [data, setData] = useState<{
     items: Problem[];
     page: { total: number; offset: number; limit: number };
+    facets?: {
+      difficulty: Partial<Record<ProblemDifficulty, number>>;
+      sourceType: Partial<Record<ProblemSourceType, number>>;
+      tags: Array<{ id: number; count: number }>;
+    };
   } | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1317,13 +1324,18 @@ function ProblemList({
       difficulty: params.get('difficulty') ?? '',
       tagId: params.get('tagIds') ?? '',
       sourceType: params.get('sourceType') ?? '',
+      sort: params.get('sort') ?? 'publicNumber',
+      order: params.get('order') ?? 'asc',
     };
   }, []);
   const [page, setPage] = useState(initialState.page);
   const [query, setQuery] = useState(initialState.query);
+  const [searchInput, setSearchInput] = useState(initialState.query);
   const [difficulty, setDifficulty] = useState(initialState.difficulty);
   const [tagId, setTagId] = useState(initialState.tagId);
   const [sourceType, setSourceType] = useState(initialState.sourceType);
+  const [sort, setSort] = useState(initialState.sort);
+  const [order, setOrder] = useState(initialState.order);
   const [tagCatalog, setTagCatalog] = useState<
     NonNullable<Problem['tagDetails']>
   >([]);
@@ -1339,6 +1351,8 @@ function ProblemList({
       difficulty: string;
       tagId: string;
       sourceType: string;
+      sort: string;
+      order: string;
     },
     nextPage: number,
     replace = false,
@@ -1346,13 +1360,27 @@ function ProblemList({
     const params = new URLSearchParams();
     if (nextPage > 1) params.set('page', String(nextPage));
     Object.entries(values).forEach(([key, value]) => {
-      if (value) params.set(key === 'tagId' ? 'tagIds' : key, value);
+      if (
+        value &&
+        !(
+          (key === 'sort' && value === 'publicNumber') ||
+          (key === 'order' && value === 'asc')
+        )
+      )
+        params.set(key === 'tagId' ? 'tagIds' : key, value);
     });
     const url = `/problems${params.size ? `?${params.toString()}` : ''}`;
     if (replace) window.history.replaceState({}, '', url);
     else window.history.pushState({}, '', url);
   };
-  const currentFilters = () => ({ q: query, difficulty, tagId, sourceType });
+  const currentFilters = () => ({
+    q: query,
+    difficulty,
+    tagId,
+    sourceType,
+    sort,
+    order,
+  });
   const changePage = (nextPage: number) => {
     const totalPages = data ? Math.ceil(data.page.total / data.page.limit) : 0;
     if (loading || !totalPages || nextPage < 1 || nextPage > totalPages) return;
@@ -1366,9 +1394,22 @@ function ProblemList({
   ) => {
     const next = { ...currentFilters(), [key]: value };
     setQuery(next.q);
+    if (key === 'q') setSearchInput(value);
     setDifficulty(next.difficulty);
     setTagId(next.tagId);
     setSourceType(next.sourceType);
+    setPage(1);
+    syncUrl(next, 1, true);
+  };
+  const updateSort = (value: string) => {
+    const [nextSort, nextOrder] = value.split(':') as [string, string];
+    const next = {
+      ...currentFilters(),
+      sort: nextSort,
+      order: nextOrder,
+    };
+    setSort(nextSort);
+    setOrder(nextOrder);
     setPage(1);
     syncUrl(next, 1, true);
   };
@@ -1382,6 +1423,8 @@ function ProblemList({
         ...(difficulty ? { difficulty: difficulty as ProblemDifficulty } : {}),
         ...(tagId ? { tagId: Number(tagId) } : {}),
         ...(sourceType ? { sourceType: sourceType as ProblemSourceType } : {}),
+        sort: sort as ProblemListSort,
+        order: order as ProblemListOrder,
       })
       .then((nextData) => {
         if (activeRequest === requestId.current) setData(nextData);
@@ -1393,7 +1436,16 @@ function ProblemList({
         if (activeRequest === requestId.current) setLoading(false);
       });
   };
-  useEffect(load, [api, offset, query, difficulty, tagId, sourceType]);
+  useEffect(load, [
+    api,
+    offset,
+    query,
+    difficulty,
+    tagId,
+    sourceType,
+    sort,
+    order,
+  ]);
   useEffect(() => {
     let active = true;
     void api
@@ -1445,9 +1497,12 @@ function ProblemList({
         Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1,
       );
       setQuery(params.get('q') ?? '');
+      setSearchInput(params.get('q') ?? '');
       setDifficulty(params.get('difficulty') ?? '');
       setTagId(params.get('tagIds') ?? '');
       setSourceType(params.get('sourceType') ?? '');
+      setSort(params.get('sort') ?? 'publicNumber');
+      setOrder(params.get('order') ?? 'asc');
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -1478,13 +1533,20 @@ function ProblemList({
   const selectedTag = tagCatalog.find((item) => String(item.id) === tagId);
   const clearFilters = () => {
     setQuery('');
+    setSearchInput('');
     setDifficulty('');
     setTagId('');
     setSourceType('');
+    setSort('publicNumber');
+    setOrder('asc');
     setPage(1);
     window.history.replaceState({}, '', '/problems');
   };
   const totalPages = Math.ceil(data.page.total / data.page.limit);
+  const facets = data.facets ?? { difficulty: {}, sourceType: {}, tags: [] };
+  const tagCounts = new Map(
+    facets.tags.map((facet) => [facet.id, facet.count]),
+  );
   const categoryOptions = [
     { label: '全部题目', value: '' },
     ...tagCatalog
@@ -1603,7 +1665,7 @@ function ProblemList({
                     />
                     {item}
                   </button>
-                  <b>—</b>
+                  <b>{facets.difficulty[item as ProblemDifficulty] ?? 0}</b>
                 </div>
               ))}
             </div>
@@ -1634,7 +1696,7 @@ function ProblemList({
                     </span>
                     {problemSourceLabel(item)}
                   </button>
-                  <b>—</b>
+                  <b>{facets.sourceType[item] ?? 0}</b>
                 </div>
               ))}
             </div>
@@ -1647,7 +1709,8 @@ function ProblemList({
             aria-label="题库筛选"
             onSubmit={(event) => {
               event.preventDefault();
-              load();
+              if (searchInput === query) load();
+              else updateFilter('q', searchInput);
             }}
           >
             <div className="filter-row category-filter-row">
@@ -1781,8 +1844,8 @@ function ProblemList({
                 <input
                   id="problem-keyword"
                   aria-label="关键词"
-                  value={query}
-                  onChange={(event) => updateFilter('q', event.target.value)}
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
                   placeholder="输入题目标题、描述关键词等…"
                 />
                 <span aria-hidden="true" className="search-icon">
@@ -1795,19 +1858,19 @@ function ProblemList({
               <strong>其他筛选</strong>
               <label className="compact-select-label">
                 <span>时间限制</span>
-                <select aria-label="时间限制">
+                <select aria-label="时间限制" disabled>
                   <option>不限</option>
                 </select>
               </label>
               <label className="compact-select-label">
                 <span>内存限制</span>
-                <select aria-label="内存限制">
+                <select aria-label="内存限制" disabled>
                   <option>不限</option>
                 </select>
               </label>
               <label className="compact-select-label">
                 <span>通过率</span>
-                <select aria-label="通过率">
+                <select aria-label="通过率" disabled>
                   <option>不限</option>
                 </select>
               </label>
@@ -1855,8 +1918,16 @@ function ProblemList({
               共 <b>{data.page.total.toLocaleString('zh-CN')}</b> 道题目
             </span>
             <div>
-              <select aria-label="题目排序">
-                <option>默认排序</option>
+              <select
+                aria-label="题目排序"
+                value={`${sort}:${order}`}
+                onChange={(event) => updateSort(event.target.value)}
+              >
+                <option value="publicNumber:asc">题号升序</option>
+                <option value="title:asc">标题升序</option>
+                <option value="difficulty:asc">难度升序</option>
+                <option value="updatedAt:desc">最近更新</option>
+                <option value="createdAt:desc">最新创建</option>
               </select>
               <span
                 className="view-toggle active"
@@ -1909,16 +1980,10 @@ function ProblemList({
                 <span>来源</span>
                 <span>通过率</span>
                 <span>提交数</span>
-                <span>收藏</span>
+                <span>收藏（未开放）</span>
                 <span>操作</span>
               </div>
               {data.items.map((problem) => {
-                const submissionCount =
-                  problem.statistics?.submissionCount ?? 0;
-                const acceptedCount = problem.statistics?.acceptedCount ?? 0;
-                const acceptance = submissionCount
-                  ? `${((acceptedCount / submissionCount) * 100).toFixed(1)}%`
-                  : '—';
                 const problemTags =
                   problem.tagDetails?.map((item) => item.name) ??
                   problem.tags ??
@@ -1951,14 +2016,22 @@ function ProblemList({
                       <span className="problem-source">
                         {problemSourceLabel(problem.sourceType)}
                       </span>
-                      <span className="problem-rate">{acceptance}</span>
-                      <span className="problem-submissions">
-                        {submissionCount.toLocaleString('zh-CN')}
+                      <span
+                        className="problem-rate"
+                        title="权威通过率聚合暂未接入"
+                      >
+                        —
+                      </span>
+                      <span
+                        className="problem-submissions"
+                        title="权威提交次数聚合暂未接入"
+                      >
+                        —
                       </span>
                       <span className="problem-star" aria-hidden="true">
-                        ☆
+                        —
                       </span>
-                      <span className="problem-action">练习</span>
+                      <span className="problem-action">查看题目</span>
                     </Link>
                   </div>
                 );
@@ -2021,7 +2094,7 @@ function ProblemList({
                     type="button"
                     onClick={() => updateFilter('tagId', String(tag.id))}
                   >
-                    {tag.name}
+                    {tag.name} <small>{tagCounts.get(tag.id) ?? 0}</small>
                   </button>
                 ))
               ) : (

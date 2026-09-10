@@ -95,4 +95,54 @@ describe('problem library server filter integration', () => {
     expect(window.location.search).toContain('tagIds=1');
     expect(window.location.search).toContain('sourceType=EXTERNAL');
   });
+
+  it('uses the sort selection in the server request and disables unsupported filters', async () => {
+    const requests: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.endsWith('/api/auth/me')) return response({}, 401);
+        if (url.endsWith('/ready')) return response({ status: 'ok' });
+        if (url.endsWith('/api/tags')) return response([]);
+        if (url.includes('/api/problems?'))
+          return response({
+            items: [],
+            page: { total: 0, offset: 0, limit: 20 },
+            facets: { difficulty: {}, sourceType: {}, tags: [] },
+          });
+        return response({}, 404);
+      }),
+    );
+    window.history.replaceState({}, '', '/problems');
+    render(<App />);
+    await screen.findByText('暂无题目');
+    expect(screen.getByLabelText('时间限制')).toBeDisabled();
+    expect(screen.getByLabelText('内存限制')).toBeDisabled();
+    expect(screen.getByLabelText('通过率')).toBeDisabled();
+
+    const search = screen.getByLabelText('关键词');
+    const listRequests = () =>
+      requests.filter((url) => url.includes('/api/problems?')).length;
+    const beforeSearch = listRequests();
+    fireEvent.change(search, { target: { value: 'graph' } });
+    expect(listRequests()).toBe(beforeSearch);
+    fireEvent.submit(search.closest('form')!);
+    await waitFor(() =>
+      expect(requests.some((url) => url.includes('search=graph'))).toBe(true),
+    );
+
+    fireEvent.change(screen.getByLabelText('题目排序'), {
+      target: { value: 'updatedAt:desc' },
+    });
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (url) => url.includes('sort=updatedAt') && url.includes('order=desc'),
+        ),
+      ).toBe(true),
+    );
+    expect(window.location.search).toContain('sort=updatedAt');
+  });
 });

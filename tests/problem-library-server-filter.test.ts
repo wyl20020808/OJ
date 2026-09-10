@@ -131,4 +131,82 @@ describe('problem library server-side filters', () => {
     }
     await app.close();
   });
+
+  it('returns authoritative facets and applies whitelisted sorting before pagination', async () => {
+    const app = Fastify();
+    const repository = new InMemoryProblemRepository();
+    const catalog = new InMemoryTagCatalogRepository();
+    const service = new ProblemService(
+      repository,
+      allow,
+      undefined,
+      undefined,
+      undefined,
+      catalog,
+    );
+    await service.create(
+      {
+        ...baseInput,
+        slug: 'binary-alpha',
+        title: 'Binary Alpha',
+        difficulty: '简单',
+        sourceType: 'IMPORT',
+        tagIds: [1],
+      },
+      { userId: 'author' },
+    );
+    await service.create(
+      {
+        ...baseInput,
+        slug: 'binary-zeta',
+        title: 'Binary Zeta',
+        difficulty: '中等',
+        sourceType: 'EXTERNAL',
+        tagIds: [1, 2],
+      },
+      { userId: 'author' },
+    );
+    await registerProblemModule(app, {
+      repository,
+      tagCatalog: catalog,
+      authorizationPolicy: allow,
+      getAuthContext: () => undefined,
+    });
+
+    const first = await app.inject({
+      method: 'GET',
+      url: '/api/problems?search=binary&sort=title&order=desc&limit=1',
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      items: [{ slug: 'binary-zeta' }],
+      page: { total: 2, offset: 0, limit: 1 },
+      facets: {
+        difficulty: { 简单: 1, 中等: 1 },
+        sourceType: { IMPORT: 1, EXTERNAL: 1 },
+      },
+    });
+    expect(first.json().facets.tags).toEqual(
+      expect.arrayContaining([
+        { id: 1, count: 2 },
+        { id: 2, count: 1 },
+      ]),
+    );
+
+    const second = await app.inject({
+      method: 'GET',
+      url: '/api/problems?search=binary&sort=title&order=desc&limit=1&offset=1',
+    });
+    expect(second.statusCode).toBe(200);
+    expect(
+      second.json().items.map((item: { slug: string }) => item.slug),
+    ).toEqual(['binary-alpha']);
+
+    for (const url of [
+      '/api/problems?sort=unsupported',
+      '/api/problems?order=sideways',
+    ])
+      expect((await app.inject({ method: 'GET', url })).statusCode).toBe(400);
+    await app.close();
+  });
 });

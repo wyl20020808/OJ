@@ -8,6 +8,8 @@ import {
   type ProblemUpdateInput,
   type AuditHook,
   type ProblemStatus,
+  type ProblemListOrder,
+  type ProblemListSort,
 } from './model.js';
 import { validateCreate, validateUpdate } from './validation.js';
 import type { ProblemRepository } from './repository.js';
@@ -48,6 +50,8 @@ export class ProblemService {
     difficulty?: Problem['difficulty'];
     tagIds?: number[];
     sourceType?: NonNullable<Problem['sourceType']>;
+    sort?: ProblemListSort;
+    order?: ProblemListOrder;
     status?: Problem['status'];
     visibility?: Problem['visibility'];
   }) {
@@ -71,13 +75,28 @@ export class ProblemService {
       ...(query.difficulty ? { difficulty: query.difficulty } : {}),
       ...(query.tagIds?.length ? { tagIds: query.tagIds } : {}),
       ...(query.sourceType ? { sourceType: query.sourceType } : {}),
+      ...(query.sort ? { sort: query.sort } : {}),
+      ...(query.order ? { order: query.order } : {}),
       ...(query.context && query.status ? { status: query.status } : {}),
       ...(query.context && query.visibility
         ? { visibility: query.visibility }
         : {}),
     });
+    const facets = await this.repository.facets({
+      ...filter,
+      ...(query.search ? { search: query.search } : {}),
+      ...(query.difficulty ? { difficulty: query.difficulty } : {}),
+      ...(query.tagIds?.length ? { tagIds: query.tagIds } : {}),
+      ...(query.sourceType ? { sourceType: query.sourceType } : {}),
+      ...(query.context && query.status ? { status: query.status } : {}),
+      ...(query.context && query.visibility
+        ? { visibility: query.visibility }
+        : {}),
+      limit: query.limit,
+    });
     return {
       ...result,
+      facets,
       items: await Promise.all(
         result.items.map((problem) => this.project(problem, query.context)),
       ),

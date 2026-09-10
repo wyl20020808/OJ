@@ -1,5 +1,17 @@
 # OJPlatform Project Status
 
+Problem Library Full Backend Support V1 (2026-09-10): PASS for automated
+feature scope in independent worktree `codex/problem-library-full-backend-support-v1`.
+The list now has server-side whitelisted sorting and authoritative
+difficulty/source/tag facets using the same visibility-aware predicate as the
+filtered list. Search, filters, sorting, pagination, and URL state are
+contract-tested; unsupported time/memory/acceptance/personal-state controls are
+explicitly disabled or shown as `—`, never fabricated. Focused Problem/Web tests
+(19/19), typecheck, changed-file lint, API/Web builds, and diff check pass.
+No migration was needed; PostgreSQL runtime qualification and manual UI
+acceptance remain NOT VERIFIED/PENDING USER. Canonical main was not modified.
+See `Docs/reports/OJPLATFORM_PROBLEM_LIBRARY_FULL_BACKEND_SUPPORT_V1_REPORT.md`.
+
 Problem Library Real Backend Data & Server-side Filtering V1 (2026-09-10): PASS for implementation and automated scope on feature branch `codex/problem-library-server-filter-v1`. Difficulty, canonical tag ID, and canonical source-type filters are validated server-side, compose with search, use the same PostgreSQL predicate for rows and filtered totals, and replace all current-page Problem Library business filtering. URL state restores canonical filters and resets pagination on change. No migration was needed; real PostgreSQL/runtime/manual UI remain NOT VERIFIED/PENDING USER. See `Docs/reports/OJPLATFORM_PROBLEM_LIBRARY_REAL_BACKEND_FILTERING_V1_REPORT.md`.
 
 Home + Problem Library UI Main Integration V1 (2026-09-10): PASS for automated integration scope. Canonical-main UI working changes were captured safely, static production Problem Library sample rows were removed, and the new Home/Problem Library UI remains bound to existing real API contracts. Home announcements, contests, daily problem, routing, query search, current-page difficulty/tag/source filtering, real offset pagination, and sticky pagination are preserved. Typecheck, Web build, focused Home/Problem tests, changed-file lint, and diff checks pass. Manual UI acceptance remains PENDING USER; no browser automation or runtime startup was used. See `Docs/reports/OJPLATFORM_HOME_PROBLEM_LIBRARY_UI_MAIN_INTEGRATION_REPORT.md`.

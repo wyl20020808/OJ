@@ -16,6 +16,15 @@ export const problemSourceTypes = [
   'API_AUTOMATION',
 ] as const;
 export type ProblemSourceType = (typeof problemSourceTypes)[number];
+export const problemListSorts = [
+  'publicNumber',
+  'title',
+  'difficulty',
+  'updatedAt',
+  'createdAt',
+] as const;
+export type ProblemListSort = (typeof problemListSorts)[number];
+export type ProblemListOrder = 'asc' | 'desc';
 
 export type ProblemExample = { input: string; output: string; note?: string };
 export type ProblemSample = {

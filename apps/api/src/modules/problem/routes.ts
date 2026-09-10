@@ -9,6 +9,7 @@ import {
   type AuditHook,
   type Problem,
   problemDifficulties,
+  problemListSorts,
   problemSourceTypes,
 } from './model.js';
 import {
@@ -115,6 +116,8 @@ export async function registerProblemModule(
       typeof q.sourceType === 'string' ? q.sourceType : undefined;
     const tagIdsValue = typeof q.tagIds === 'string' ? q.tagIds : undefined;
     const tagId = tagIdsValue === undefined ? undefined : Number(tagIdsValue);
+    const sort = typeof q.sort === 'string' ? q.sort : undefined;
+    const order = typeof q.order === 'string' ? q.order : undefined;
     if (
       !Number.isInteger(limit) ||
       limit < 1 ||
@@ -145,6 +148,10 @@ export async function registerProblemModule(
         'VALIDATION_ERROR',
         'Invalid source type',
       );
+    if (sort && !problemListSorts.includes(sort as never))
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid sort');
+    if (order && order !== 'asc' && order !== 'desc')
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid order');
     if (
       tagIdsValue !== undefined &&
       (!Number.isSafeInteger(tagId) ||
@@ -183,6 +190,10 @@ export async function registerProblemModule(
                       sourceType as (typeof problemSourceTypes)[number],
                   }
                 : {}),
+              ...(sort
+                ? { sort: sort as (typeof problemListSorts)[number] }
+                : {}),
+              ...(order ? { order: order as 'asc' | 'desc' } : {}),
             }
           : {
               limit,
@@ -201,6 +212,10 @@ export async function registerProblemModule(
                       sourceType as (typeof problemSourceTypes)[number],
                   }
                 : {}),
+              ...(sort
+                ? { sort: sort as (typeof problemListSorts)[number] }
+                : {}),
+              ...(order ? { order: order as 'asc' | 'desc' } : {}),
             },
       );
       const nextCursor =
@@ -211,6 +226,7 @@ export async function registerProblemModule(
           : undefined;
       return reply.send({
         items: result.items,
+        facets: result.facets,
         page: {
           limit,
           offset,

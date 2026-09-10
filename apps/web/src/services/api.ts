@@ -85,6 +85,9 @@ export type Example = { input: string; output: string; note?: string };
 export type ProblemDifficulty = '入门' | '简单' | '中等' | '困难' | '专家';
 export type ProblemSourceType =
   'CREATOR' | 'EXTERNAL' | 'IMPORT' | 'TEST_FIXTURE' | 'API_AUTOMATION';
+export type ProblemListSort =
+  'publicNumber' | 'title' | 'difficulty' | 'updatedAt' | 'createdAt';
+export type ProblemListOrder = 'asc' | 'desc';
 export type ProblemSample = {
   ordinal: number;
   input: string;
@@ -204,7 +207,16 @@ const normalizeJudgeDraft = (draft: BackendJudgeDraft): JudgeDraft => ({
   },
 });
 export type Page = { limit: number; offset: number; total: number };
-export type ProblemList = { items: Problem[]; page: Page };
+export type ProblemFacets = {
+  difficulty: Partial<Record<ProblemDifficulty, number>>;
+  sourceType: Partial<Record<ProblemSourceType, number>>;
+  tags: Array<{ id: number; count: number }>;
+};
+export type ProblemList = {
+  items: Problem[];
+  page: Page;
+  facets?: ProblemFacets;
+};
 export type Home = { recentProblems: Problem[] };
 export type BackendContest = {
   id: string;
@@ -1186,6 +1198,8 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         difficulty?: ProblemDifficulty;
         tagId?: number;
         sourceType?: ProblemSourceType;
+        sort?: ProblemListSort;
+        order?: ProblemListOrder;
       } = {},
     ) => {
       const params = new URLSearchParams({
@@ -1196,6 +1210,8 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       if (options.difficulty) params.set('difficulty', options.difficulty);
       if (options.tagId) params.set('tagIds', String(options.tagId));
       if (options.sourceType) params.set('sourceType', options.sourceType);
+      if (options.sort) params.set('sort', options.sort);
+      if (options.order) params.set('order', options.order);
       return request<ProblemList>(
         baseUrl,
         `/api/problems?${params.toString()}`,
