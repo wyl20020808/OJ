@@ -2825,126 +2825,292 @@ function ProblemDetail({
               {problem.publicId ?? '编号不可用'}
             </span>
             <h1>{problem.title}</h1>
-            <div className="problem-header-actions" aria-label="题目操作">
-              <Link to={`/problems/${encodeURIComponent(id)}/submit`}>
-                <button type="button">提交代码</button>
-              </Link>
+            <div className="problem-heading-tags" aria-label="题目分类">
+              {problem.difficulty && (
+                <span className="problem-difficulty-badge">
+                  {problem.difficulty}
+                </span>
+              )}
+              {tags.slice(0, 3).map((tag) => (
+                <span key={tag}>{tag}</span>
+              ))}
+            </div>
+            <dl className="problem-heading-stats" aria-label="题目统计">
+              <div>
+                <dt>
+                  <ProblemDetailIcon name="send" />
+                  提交
+                </dt>
+                <dd>{submissionCount?.toLocaleString('zh-CN') ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>
+                  <ProblemDetailIcon name="check" />
+                  通过
+                </dt>
+                <dd>{acceptedCount?.toLocaleString('zh-CN') ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>
+                  <ProblemDetailIcon name="percent" />
+                  通过率
+                </dt>
+                <dd>{acceptanceRate}</dd>
+              </div>
+              <div>
+                <dt>
+                  <ProblemDetailIcon name="sparkles" />
+                  难度
+                </dt>
+                <dd>{problem.difficulty ?? '—'}</dd>
+              </div>
+            </dl>
+          </header>
+          <nav className="problem-detail-tabs" aria-label="题目内容">
+            <button
+              type="button"
+              className={activeTab === 'statement' ? 'active' : ''}
+              aria-current={activeTab === 'statement' ? 'page' : undefined}
+              onClick={() => setActiveTab('statement')}
+            >
+              <ProblemDetailIcon name="file" />
+              题面
+            </button>
+            <button
+              type="button"
+              className={activeTab === 'discussion' ? 'active' : ''}
+              aria-current={activeTab === 'discussion' ? 'page' : undefined}
+              onClick={() => setActiveTab('discussion')}
+            >
+              <ProblemDetailIcon name="message" />
+              讨论
+              {discussionState === 'ready' && (
+                <span>({discussionPosts.length})</span>
+              )}
+            </button>
+            <Link to="/submissions">
+              <ProblemDetailIcon name="clock" />
+              提交记录
+            </Link>
+          </nav>
+          {activeTab === 'statement' ? (
+            <section className="problem-content-surface">
+              <ProblemStatementRenderer
+                content={problem}
+                showTitle={false}
+                onCopySample={(input) => {
+                  if (!navigator.clipboard) {
+                    setCopyMessage('当前浏览器不支持复制样例。');
+                    return;
+                  }
+                  void navigator.clipboard.writeText(input).then(
+                    () => setCopyMessage('样例输入已复制。'),
+                    () => setCopyMessage('复制失败，请手动选择样例输入。'),
+                  );
+                }}
+              />
+              {copyMessage && (
+                <p className="sample-copy-status" role="status">
+                  {copyMessage}
+                </p>
+              )}
+            </section>
+          ) : (
+            <section className="problem-discussion-panel">
+              <header>
+                <div>
+                  <span className="problem-section-icon">
+                    <ProblemDetailIcon name="message" />
+                  </span>
+                  <div>
+                    <h2>讨论区</h2>
+                    <p>交流解题思路，分享经验，一起进步。</p>
+                  </div>
+                </div>
+                {user && (
+                  <Link
+                    className="problem-discussion-create"
+                    to="/discussion/new"
+                  >
+                    <ProblemDetailIcon name="code" />
+                    发起讨论
+                  </Link>
+                )}
+              </header>
+              {discussionState === 'loading' ? (
+                <DiscussionFeedSkeleton />
+              ) : discussionState === 'error' ? (
+                <div className="problem-inline-state" role="alert">
+                  <strong>讨论暂时无法加载</strong>
+                  <span>请稍后重试，题面内容不受影响。</span>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setDiscussionState('idle');
+                      setDiscussionReload((value) => value + 1);
+                    }}
+                  >
+                    重试
+                  </button>
+                </div>
+              ) : discussionPosts.length ? (
+                <div
+                  className="discussion-feed"
+                  role="feed"
+                  aria-label="题目讨论"
+                >
+                  {discussionPosts.map((post) => (
+                    <DiscussionFeedItem
+                      key={post.id}
+                      post={post}
+                      navigate={navigate}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="problem-inline-state">
+                  <strong>还没有匹配到这道题的讨论</strong>
+                  <span>讨论内容按题号和题目名称从真实社区内容中检索。</span>
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+        <aside className="problem-aside" aria-label="题目信息">
+          <section className="problem-action-card" aria-label="题目操作">
+            <Link
+              className="problem-primary-action"
+              to={`/problems/${encodeURIComponent(id)}/submit`}
+            >
+              <ProblemDetailIcon name="code" />
+              提交代码
+              <ProblemDetailIcon name="arrow-right" />
+            </Link>
+            <div>
               {canEdit && (
                 <Link
                   to={`/author/problems/${encodeURIComponent(problem.id)}/edit`}
                 >
                   <button type="button" className="secondary">
+                    <ProblemDetailIcon name="file" />
                     编辑题目
                   </button>
                 </Link>
               )}
               <button type="button" className="secondary" disabled>
+                <ProblemDetailIcon name="star" />
                 收藏
               </button>
             </div>
-            <p className="muted">
-              {problem.currentRevisionId
-                ? `版本 ${problem.currentRevisionId}`
-                : '版本信息暂不可用'}
-              {problem.testdataVersion
-                ? ` · 测试数据 ${problem.testdataVersion}`
-                : ''}
-            </p>
-          </header>
-          <section className="problem-content-surface">
-            <ProblemStatementRenderer
-              content={problem}
-              showTitle={false}
-              onCopySample={(input) => {
-                if (!navigator.clipboard) {
-                  setCopyMessage('当前浏览器不支持复制样例。');
-                  return;
-                }
-                void navigator.clipboard.writeText(input).then(
-                  () => setCopyMessage('样例输入已复制。'),
-                  () => setCopyMessage('复制失败，请手动选择样例输入。'),
-                );
-              }}
-            />
-            {copyMessage && (
-              <p className="sample-copy-status" role="status">
-                {copyMessage}
-              </p>
+          </section>
+          <section className="problem-aside-card">
+            <h2>
+              <ProblemDetailIcon name="info" />
+              题目信息
+            </h2>
+            <dl className="problem-facts">
+              <div>
+                <dt>难度等级</dt>
+                <dd>{problem.difficulty ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>题目来源</dt>
+                <dd>{problem.source ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>题目编号</dt>
+                <dd>{problem.publicId ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>提交次数</dt>
+                <dd>{submissionCount?.toLocaleString('zh-CN') ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>通过次数</dt>
+                <dd>{acceptedCount?.toLocaleString('zh-CN') ?? '—'}</dd>
+              </div>
+              <div>
+                <dt>通过率</dt>
+                <dd>{acceptanceRate}</dd>
+              </div>
+              <div>
+                <dt>评测时限</dt>
+                <dd>{problem.timeLimitMs} ms</dd>
+              </div>
+              <div>
+                <dt>内存限制</dt>
+                <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
+              </div>
+            </dl>
+          </section>
+          <section className="problem-aside-card">
+            <h2>
+              <ProblemDetailIcon name="tag" />
+              所属分类
+            </h2>
+            <div className="problem-aside-tags">
+              {tags.length ? (
+                tags.map((tag) => <span key={tag}>{tag}</span>)
+              ) : (
+                <span>暂无标签</span>
+              )}
+            </div>
+          </section>
+          <section className="problem-aside-card problem-related-card">
+            <h2>
+              <ProblemDetailIcon name="sparkles" />
+              相关题目
+            </h2>
+            {relatedLoading ? (
+              <p className="muted">正在获取相关题目…</p>
+            ) : relatedProblems.length ? (
+              <ul>
+                {relatedProblems.map((item) => (
+                  <li key={item.id}>
+                    <Link to={`/problems/${encodeURIComponent(item.slug)}`}>
+                      <span>
+                        {item.publicId ?? `#${item.publicNumber ?? ''}`}
+                      </span>
+                      <strong>{item.title}</strong>
+                    </Link>
+                    <small>{item.difficulty ?? '难度未标注'}</small>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">暂无可展示的相关题目。</p>
             )}
           </section>
-        </div>
-        <aside className="problem-aside" aria-label="题目信息">
-          <dl className="problem-facts">
-            <div>
-              <dt>难度</dt>
-              <dd>{problem.difficulty ?? '后端暂未提供'}</dd>
-            </div>
-            <div>
-              <dt>标签</dt>
-              <dd>
-                <span className="tag-row">
-                  {(problem.tagDetails?.length ?? problem.tags?.length ?? 0) > 0
-                    ? (
-                        problem.tagDetails?.map((tag) => tag.name) ??
-                        problem.tags ??
-                        []
-                      ).map((tag) => <span key={tag}>{tag}</span>)
-                    : '后端暂未提供'}
-                </span>
-              </dd>
-            </div>
-            <div>
-              <dt>来源</dt>
-              <dd>{problem.source ?? '后端暂未提供'}</dd>
-            </div>
-            <div>
-              <dt>时间限制</dt>
-              <dd>{problem.timeLimitMs} ms</dd>
-            </div>
-            <div>
-              <dt>内存限制</dt>
-              <dd>{formatMemoryLimit(problem.memoryLimitBytes)}</dd>
-            </div>
-            {problem.statistics && (
-              <div>
-                <dt>真实提交统计</dt>
-                <dd>
-                  {problem.statistics.acceptedCount} /{' '}
-                  {problem.statistics.submissionCount}
-                </dd>
-              </div>
-            )}
-          </dl>
-          <p className="field-help">
-            收藏、题单、最近尝试与通过统计仅在后端提供真实 contract 后启用。
-          </p>
         </aside>
       </article>
-      <section
-        id="solve"
-        className="problem-editor-slot"
-        aria-label="OnlineCodeEditor"
-      >
-        <ProblemSolveEditorSlot
-          context={
-            {
-              problemId: problem.id,
-              slug: problem.slug,
-              samples: problem.examples.map((sample, index) => ({
-                input: sample.input,
-                output: sample.output,
-                label: `样例 ${index + 1}`,
-              })),
-              problemRevisionId: problem.currentRevisionId ?? problem.id,
-              checker,
-              codeRunAdapter,
-              ...(user ? { submissionAdapter } : {}),
-              onViewSubmission: (submissionId: string) =>
-                navigate(`/submissions/${encodeURIComponent(submissionId)}`),
-            } as ProblemSolveEditorContext
-          }
-        />
-      </section>
+      {activeTab === 'statement' && (
+        <section
+          id="solve"
+          className="problem-editor-slot"
+          aria-label="OnlineCodeEditor"
+        >
+          <ProblemSolveEditorSlot
+            context={
+              {
+                problemId: problem.id,
+                slug: problem.slug,
+                samples: problem.examples.map((sample, index) => ({
+                  input: sample.input,
+                  output: sample.output,
+                  label: `样例 ${index + 1}`,
+                })),
+                problemRevisionId: problem.currentRevisionId ?? problem.id,
+                checker,
+                codeRunAdapter,
+                ...(user ? { submissionAdapter } : {}),
+                onViewSubmission: (submissionId: string) =>
+                  navigate(`/submissions/${encodeURIComponent(submissionId)}`),
+              } as ProblemSolveEditorContext
+            }
+          />
+        </section>
+      )}
     </>
   );
 }
