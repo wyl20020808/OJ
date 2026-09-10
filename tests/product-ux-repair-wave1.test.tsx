@@ -114,6 +114,22 @@ describe('Product UX Repair Wave 1', () => {
       teams: vi.fn().mockResolvedValue({ items: [team] }),
     } as unknown as ApiClient;
     render(<TeamPage api={api} user={{ id: 'u1' }} navigate={vi.fn()} />);
+    expect(
+      screen.getByRole('heading', { name: '在团队中，遇见更强的自己' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '热门团队' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '团队日历' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '推荐团队' }),
+    ).toBeInTheDocument();
+    expect(screen.getByTitle('训练小组分类将在后续接入')).toHaveAttribute(
+      'data-ui-only',
+      'true',
+    );
     expect(await screen.findAllByText(team.name)).toHaveLength(1);
     expect(screen.getByText('@alpha-team')).toBeInTheDocument();
     expect(screen.getByText('18 名成员')).toBeInTheDocument();
