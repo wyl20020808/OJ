@@ -4279,6 +4279,8 @@ footer {
 .reference-fortune { min-height: 142px; padding: 15px 20px; border-radius: 9px; background: linear-gradient(125deg,#fffdfa 0%,rgba(245,250,255,.88) 72%), url('/problem-library-banner.png') center bottom / 610px auto no-repeat; }.reference-fortune > div { display: flex; justify-content: space-between; color: #f3ac2c; }.reference-fortune small { padding: 3px 9px; border-radius: 10px; background: #e8f0ff; color: #5b81d1; font-size: 10px; }.reference-fortune h2 { margin: 9px 0 4px; color: #22375f; font-family: Georgia, 'Noto Serif SC', serif; font-size: 25px; }.reference-fortune p { margin: 0; color: #7082a1; font-family: Georgia, 'Noto Serif SC', serif; font-size: 12px; line-height: 1.55; }
 @media (max-width: 1180px) { .nav > nav > a, .link-button { padding-inline: 8px; }.nav-search { width: 180px; }.home-reference-grid { grid-template-columns: minmax(225px,.88fr) minmax(410px,1.35fr); }.home-reference-right { display: none; } }
 @media (max-width: 860px) { .nav { padding-inline: 20px; }.nav strong { font-size: 26px; }.nav-search { display: none; }.home-reference-grid { grid-template-columns: 1fr; }.home-reference-left { grid-template-columns: 1fr 1fr; }.home-reference-hero-inner { padding-left: 18px; }.home-reference-slogan { right: 30px; }.home-reference-right { display: grid; grid-template-columns: repeat(3,1fr); }.reference-fortune { min-height: 0; } }
+@media (max-width: 560px) { .nav { min-height: 58px; align-items: center; flex-direction: row; padding: 0 16px; }.nav-toggle { display: block; order: 2; }.nav > nav { order: 3; }.nav > nav > a, .link-button { padding: 10px 12px; }.home-reference-hero { height: 284px; background-position: center, center -66px; }.home-reference-hero-inner, .home-reference-grid { width: calc(100% - 24px); }.home-reference-hero h1 { font-size: 32px; }.home-reference-hero-copy { font-size: 13px; }.home-reference-slogan { display: none; }.home-reference-left, .home-reference-right { grid-template-columns: 1fr; }.reference-recommendation-grid { grid-template-columns: repeat(2,1fr); }.reference-calendar-body { grid-template-columns: 1fr; }.reference-streak { display: none; } }
+
 /* Blog reference UI: three-column editorial layout built from the supplied visual. */
 .brand-section {
   margin-left: 0.35em;
@@ -4763,8 +4765,8 @@ footer {
   font-size: 10px;
   font-weight: 700;
 }
-.blog-kind-??? { background: #ffebee; color: #f06c75; }
-.blog-kind-??? { background: #e5f7ef; color: #40a87d; }
+.blog-kind-置顶 { background: #ffebee; color: #f06c75; }
+.blog-kind-题解 { background: #e5f7ef; color: #40a87d; }
 .blog-post-copy > p {
   display: -webkit-box;
   min-height: 36px;
@@ -5057,6 +5059,7 @@ footer {
   .blog-post-copy footer { flex-wrap: wrap; }
   .blog-post-counts { width: 100%; margin-left: 37px; }
 }
+
 
 /* Problem detail: reference-led composition with truthful product data. */
 .breadcrumbs {
@@ -5607,8 +5610,6 @@ footer {
     justify-content: center;
   }
 }
-
-@media (max-width: 560px) { .nav { min-height: 58px; align-items: center; flex-direction: row; padding: 0 16px; }.nav-toggle { display: block; order: 2; }.nav > nav { order: 3; }.nav > nav > a, .link-button { padding: 10px 12px; }.home-reference-hero { height: 284px; background-position: center, center -66px; }.home-reference-hero-inner, .home-reference-grid { width: calc(100% - 24px); }.home-reference-hero h1 { font-size: 32px; }.home-reference-hero-copy { font-size: 13px; }.home-reference-slogan { display: none; }.home-reference-left, .home-reference-right { grid-template-columns: 1fr; }.reference-recommendation-grid { grid-template-columns: repeat(2,1fr); }.reference-calendar-body { grid-template-columns: 1fr; }.reference-streak { display: none; } }
 
 /* Blog detail reference UI: shared reading template for solution, discussion and announcement posts. */
 .shell.shell-blog-detail {
