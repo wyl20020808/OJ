@@ -80,6 +80,10 @@ import {
   DiscussionHome,
   DiscussionPostPage,
 } from '../features/discussion/DiscussionExperience.js';
+import {
+  DiscussionFeedItem,
+  DiscussionFeedSkeleton,
+} from '../features/discussion/DiscussionContent.js';
 
 type Route = {
   name:
@@ -2535,6 +2539,114 @@ function AuthorForm({ api, id }: { api: ApiClient; id?: string }) {
     </section>
   );
 }
+type ProblemDetailIconName =
+  | 'arrow-right'
+  | 'check'
+  | 'clock'
+  | 'code'
+  | 'file'
+  | 'info'
+  | 'message'
+  | 'percent'
+  | 'send'
+  | 'sparkles'
+  | 'star'
+  | 'tag';
+
+function ProblemDetailIcon({ name }: { name: ProblemDetailIconName }) {
+  const paths: Record<ProblemDetailIconName, ReactNode> = {
+    'arrow-right': <path d="m9 18 6-6-6-6M3 12h12" />,
+    check: <path d="M20 6 9 17l-5-5" />,
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </>
+    ),
+    code: <path d="m8 9-3 3 3 3m8-6 3 3-3 3m-2-9-4 12" />,
+    file: (
+      <>
+        <path d="M6 3h9l3 3v15H6z" />
+        <path d="M14 3v4h4M9 12h6M9 16h6" />
+      </>
+    ),
+    info: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 11v5m0-8h.01" />
+      </>
+    ),
+    message: (
+      <>
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+        <path d="M8 9h8M8 13h5" />
+      </>
+    ),
+    percent: (
+      <>
+        <path d="m19 5-14 14" />
+        <circle cx="7" cy="7" r="2" />
+        <circle cx="17" cy="17" r="2" />
+      </>
+    ),
+    send: <path d="m22 2-7 20-4-9-9-4zM22 2 11 13" />,
+    sparkles: (
+      <>
+        <path d="m12 3 1.2 3.1L16 7.5l-2.8 1.4L12 12l-1.2-3.1L8 7.5l2.8-1.4z" />
+        <path d="m18.5 13 .8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8zM5 14l.7 1.8 1.8.7-1.8.7L5 19l-.7-1.8-1.8-.7 1.8-.7z" />
+      </>
+    ),
+    star: (
+      <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z" />
+    ),
+    tag: (
+      <>
+        <path d="M20 13 13 20 4 11V4h7z" />
+        <circle cx="8.5" cy="8.5" r="1" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      className="problem-ui-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[name]}
+    </svg>
+  );
+}
+
+function ProblemDetailBreadcrumb({
+  id,
+  problem,
+}: {
+  id: string;
+  problem: Problem | null;
+}) {
+  const label = problem
+    ? `${problem.publicId ?? id} ${problem.title}`
+    : id || '题目';
+  return (
+    <nav className="breadcrumbs problem-local-breadcrumbs" aria-label="面包屑">
+      <span>
+        <Link to="/problems">题库</Link>
+      </span>
+      <span>
+        <span aria-hidden="true">›</span>
+        <span aria-current="page" title={label}>
+          {label}
+        </span>
+      </span>
+    </nav>
+  );
+}
+
 function ProblemDetail({
   api,
   id,
@@ -2547,6 +2659,17 @@ function ProblemDetail({
   const [problem, setProblem] = useState<Problem | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [copyMessage, setCopyMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<'statement' | 'discussion'>(
+    'statement',
+  );
+  const [discussionPosts, setDiscussionPosts] = useState<DiscussionPost[]>([]);
+  const [discussionState, setDiscussionState] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
+  const discussionRequestKey = useRef('');
+  const [discussionReload, setDiscussionReload] = useState(0);
+  const [relatedProblems, setRelatedProblems] = useState<Problem[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(true);
   const [checker, setChecker] = useState<'EXACT_BYTES' | 'TOKEN_WHITESPACE'>(
     'EXACT_BYTES',
   );
@@ -2556,10 +2679,20 @@ function ProblemDetail({
     [api],
   );
   useEffect(() => {
+    let active = true;
+    setProblem(null);
+    setError(null);
+    setActiveTab('statement');
+    setDiscussionPosts([]);
+    setDiscussionState('idle');
+    discussionRequestKey.current = '';
     void api
       .problem(id)
-      .then(setProblem)
-      .catch((e) =>
+      .then((value) => {
+        if (active) setProblem(value);
+      })
+      .catch((e) => {
+        if (!active) return;
         setError(
           e instanceof ApiError
             ? e
@@ -2571,8 +2704,11 @@ function ProblemDetail({
                 },
                 0,
               ),
-        ),
-      );
+        );
+      });
+    return () => {
+      active = false;
+    };
   }, [api, id]);
   useEffect(() => {
     void api
@@ -2582,16 +2718,106 @@ function ProblemDetail({
         console.error('[ProblemDetail] judge checker unavailable', e),
       );
   }, [api, id]);
-  if (error)
-    return error.code === 'NOT_FOUND' ? (
-      <State title="题目不存在" text="该题目不存在或当前不可用。" />
-    ) : (
-      <State title="题目暂不可用" text={error.message} />
+  useEffect(() => {
+    if (!problem) return;
+    let active = true;
+    const firstTagId = problem.tagDetails?.[0]?.id;
+    const options = firstTagId
+      ? { tagId: firstTagId }
+      : problem.difficulty
+        ? { difficulty: problem.difficulty }
+        : undefined;
+    if (!options) {
+      setRelatedProblems([]);
+      setRelatedLoading(false);
+      return;
+    }
+    setRelatedLoading(true);
+    void api
+      .problems(0, 6, options)
+      .then((result) => {
+        if (active)
+          setRelatedProblems(
+            result.items.filter((item) => item.id !== problem.id).slice(0, 4),
+          );
+      })
+      .catch(() => {
+        if (active) setRelatedProblems([]);
+      })
+      .finally(() => {
+        if (active) setRelatedLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, problem]);
+  useEffect(() => {
+    if (!problem || activeTab !== 'discussion') return;
+    const requestKey = `${problem.id}:${problem.updatedAt}`;
+    if (discussionRequestKey.current === requestKey) return;
+    discussionRequestKey.current = requestKey;
+    let active = true;
+    const terms = [problem.publicId, problem.title].filter(
+      (value, index, values): value is string =>
+        Boolean(value) && values.indexOf(value) === index,
     );
-  if (!problem) return <State title="正在加载题目" text="正在获取题面详情…" />;
+    setDiscussionState('loading');
+    void Promise.all(
+      terms.map((term) =>
+        api.discussionPosts(
+          new URLSearchParams({ limit: '8', q: term }).toString(),
+        ),
+      ),
+    )
+      .then((results) => {
+        if (!active) return;
+        const unique = new Map<string, DiscussionPost>();
+        results.forEach((result) =>
+          result.items.forEach((post) => unique.set(post.id, post)),
+        );
+        setDiscussionPosts([...unique.values()].slice(0, 8));
+        setDiscussionState('ready');
+      })
+      .catch(() => {
+        if (active) {
+          discussionRequestKey.current = '';
+          setDiscussionState('error');
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeTab, api, discussionReload, problem]);
+  const breadcrumb = <ProblemDetailBreadcrumb id={id} problem={problem} />;
+  if (error)
+    return (
+      <>
+        {breadcrumb}
+        {error.code === 'NOT_FOUND' ? (
+          <State title="题目不存在" text="该题目不存在或当前不可用。" />
+        ) : (
+          <State title="题目暂不可用" text={error.message} />
+        )}
+      </>
+    );
+  if (!problem)
+    return (
+      <>
+        {breadcrumb}
+        <State title="正在加载题目" text="正在获取题面详情…" />
+      </>
+    );
   const canEdit = problem.capabilities?.canEdit === true;
+  const submissionCount = problem.statistics?.submissionCount;
+  const acceptedCount = problem.statistics?.acceptedCount;
+  const acceptanceRate =
+    submissionCount && acceptedCount !== undefined
+      ? `${((acceptedCount / submissionCount) * 100).toFixed(1)}%`
+      : '—';
+  const tags = problem.tagDetails?.map((tag) => tag.name) ?? problem.tags ?? [];
   return (
     <>
+      {breadcrumb}
       <article className="problem-detail-v4">
         <div className="problem-main">
           <header className="problem-heading">
