@@ -11,6 +11,8 @@ import {
   ProblemDeleteConflictError,
   type Problem,
   type ProblemCreateInput,
+  type ProblemDifficulty,
+  type ProblemSourceType,
   type ProblemUpdateInput,
 } from './model.js';
 import type { ProblemRevision } from './model.js';
@@ -30,6 +32,9 @@ export type ProblemListQuery = {
   ownedOrPublicBy?: string;
   authorId?: string;
   search?: string;
+  difficulty?: ProblemDifficulty;
+  tagIds?: number[];
+  sourceType?: ProblemSourceType;
   status?: Problem['status'];
   visibility?: Problem['visibility'];
 };
@@ -124,6 +129,12 @@ export class InMemoryProblemRepository implements ProblemRepository {
           (!query.authorId || p.authorId === query.authorId) &&
           (!query.status || p.status === query.status) &&
           (!query.visibility || p.visibility === query.visibility) &&
+          (!query.difficulty || p.difficulty === query.difficulty) &&
+          (!query.sourceType || p.sourceType === query.sourceType) &&
+          (!query.tagIds?.length ||
+            query.tagIds.some((tagId) =>
+              p.tagDetails?.some((tag) => tag.id === tagId),
+            )) &&
           (!query.search ||
             `${p.slug} ${p.title}`
               .toLocaleLowerCase()
@@ -376,9 +387,23 @@ export class PostgresProblemRepository implements ProblemRepository {
         `(slug ILIKE $${params.length} OR title ILIKE $${params.length})`,
       );
     }
+    if (query.difficulty) {
+      params.push(query.difficulty);
+      clauses.push(`difficulty = $${params.length}`);
+    }
+    if (query.sourceType) {
+      params.push(query.sourceType);
+      clauses.push(`source_type = $${params.length}`);
+    }
+    if (query.tagIds?.length) {
+      params.push(query.tagIds);
+      clauses.push(
+        `EXISTS (SELECT 1 FROM problem_tags filtered_tags WHERE filtered_tags.problem_id = p.id AND filtered_tags.tag_id = ANY($${params.length}::bigint[]))`,
+      );
+    }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const count = await this.pool.query(
-      `SELECT count(*)::int AS total FROM problems ${where}`,
+      `SELECT count(*)::int AS total FROM problems p ${where}`,
       params,
     );
     params.push(query.limit, query.offset ?? 0);

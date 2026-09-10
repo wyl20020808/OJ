@@ -45,17 +45,32 @@ export class ProblemService {
     offset?: number;
     context?: AuthContext;
     search?: string;
+    difficulty?: Problem['difficulty'];
+    tagIds?: number[];
+    sourceType?: NonNullable<Problem['sourceType']>;
     status?: Problem['status'];
     visibility?: Problem['visibility'];
   }) {
     const filter = query.context
       ? { ownedOrPublicBy: query.context.userId }
       : { publicOnly: true as const };
+    if (query.tagIds?.length) {
+      if (!this.tagCatalog) throw new Error('TAG_CATALOG_UNAVAILABLE');
+      const tags = await this.tagCatalog.getByIds(query.tagIds);
+      if (
+        tags.length !== query.tagIds.length ||
+        tags.some((tag) => !tag.isActive)
+      )
+        throw new Error('INVALID_TAGS');
+    }
     const result = await this.repository.list({
       limit: query.limit,
       ...(query.offset === undefined ? {} : { offset: query.offset }),
       ...filter,
       ...(query.search ? { search: query.search } : {}),
+      ...(query.difficulty ? { difficulty: query.difficulty } : {}),
+      ...(query.tagIds?.length ? { tagIds: query.tagIds } : {}),
+      ...(query.sourceType ? { sourceType: query.sourceType } : {}),
       ...(query.context && query.status ? { status: query.status } : {}),
       ...(query.context && query.visibility
         ? { visibility: query.visibility }
