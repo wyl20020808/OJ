@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ErrorInfo,
+  type CSSProperties,
   type FormEvent,
   type MouseEvent,
   type ReactNode,
@@ -58,10 +59,7 @@ import type {
   ConversationSummary,
   NotificationSummary,
 } from '../services/portal-contracts.js';
-import {
-  chooseDailyProblem,
-  getDailyFortune,
-} from './homeContent.js';
+import { chooseDailyProblem, getDailyFortune } from './homeContent.js';
 import {
   formatDate,
   translateJudgeLabel,
@@ -647,7 +645,7 @@ function Home({
       )
       .catch(() => setDiscussionAnnouncements([]));
   }, [api]);
-  const dailyProblem = chooseDailyProblem(recentProblems ?? []);
+  const dailyProblem = chooseDailyProblem(recentProblems ?? []) as Problem;
   const contestGroups: Array<[string, BackendContest[]]> = contestSummary
     ? [
         ['进行中', contestSummary.running],
@@ -655,6 +653,18 @@ function Home({
         ['最近结束', contestSummary.recentEnded],
       ]
     : [];
+  return (
+    <HomeReference
+      announcements={discussionAnnouncements}
+      contests={contestSummary}
+      dailyProblem={dailyProblem}
+      unavailable={error || contestError}
+      signedIn={Boolean(user)}
+      fortune={fortune}
+      fortuneVisible={fortuneVisible}
+      onRevealFortune={() => setFortuneVisible(true)}
+    />
+  );
   return (
     <section className="home-page home-v4">
       <section className="home-columns home-v4-columns">
@@ -830,6 +840,346 @@ function Home({
     </section>
   );
 }
+function HomeReference({
+  announcements,
+  contests,
+  dailyProblem,
+  unavailable,
+  signedIn,
+  fortune,
+  fortuneVisible,
+  onRevealFortune,
+}: {
+  announcements: DiscussionPost[];
+  contests:
+    | {
+        running: BackendContest[];
+        upcoming: BackendContest[];
+        recentEnded: BackendContest[];
+      }
+    | undefined;
+  dailyProblem: Problem | null;
+  unavailable: boolean;
+  signedIn: boolean;
+  fortune: ReturnType<typeof getDailyFortune>;
+  fortuneVisible: boolean;
+  onRevealFortune: () => void;
+}) {
+  const now = new Date();
+  const leadingDays =
+    (new Date(now.getFullYear(), now.getMonth(), 1).getDay() + 6) % 7;
+  const days = Array.from(
+    { length: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() },
+    (_, index) => index + 1,
+  );
+  const nearbyContests = contests
+    ? [...contests.running, ...contests.upcoming].slice(0, 4)
+    : [];
+  return (
+    <section className="home-reference">
+      <section className="home-reference-hero">
+        <div className="home-reference-hero-inner">
+          <p>用代码探索更大的世界</p>
+          <h1>
+            在算法的世界里
+            <br />
+            遇见更好的自己
+          </h1>
+          <div className="home-reference-hero-copy">
+            <span />
+            从这里出发、刷题、比赛、交流、成长
+            <br />
+             与一群热爱算法的人，走向更远的未来。
+          </div>
+          <div className="home-reference-actions">
+            <Link to="/problems" className="home-reference-primary">
+              开始刷题 →
+            </Link>
+            <Link to="/problems" className="home-reference-secondary">
+              浏览题库
+            </Link>
+          </div>
+        </div>
+        <span className="home-reference-slogan" aria-hidden="true">
+          代码如山
+          <br />
+           行则将至
+        </span>
+      </section>
+      <section className="home-reference-grid">
+        <div className="home-reference-left">
+          <section className="reference-card reference-announcements">
+            <div className="reference-card-title">
+              <h2>
+                <span aria-hidden="true">⚑</span> 公告
+              </h2>
+              <Link to="/discussion">更多 →</Link>
+            </div>
+            <ul>
+              {announcements.slice(0, 5).map((item) => (
+                <li key={item.id}>
+                  <span>公告</span>
+                  <Link to={`/discussion/${item.publicId}`}>{item.title}</Link>
+                  <time>
+                    {formatDate(item.publishedAt ?? item.createdAt, false)}
+                  </time>
+                </li>
+              ))}
+              {!announcements.length && (
+                <li className="reference-empty">暂无公告</li>
+              )}
+            </ul>
+          </section>
+          <section className="reference-card reference-contests">
+            <div className="reference-card-title">
+              <h2 aria-label="比赛与排名">
+                <span aria-hidden="true">♛</span> 近期比赛
+              </h2>
+              <Link to="/contests">更多 →</Link>
+            </div>
+            <div className="reference-contest-list">
+              {nearbyContests.map((contest) => (
+                <Link key={contest.id} to={`/contests/${contest.id}`}>
+                  <time>{formatDate(contest.startsAt, false)}</time>
+                  <strong>{contest.title}</strong>
+                  <small>
+                    {contest.lifecycle === 'RUNNING' ? '进行中' : '即将开始'}
+                  </small>
+                </Link>
+              ))}
+              {!nearbyContests.length && (
+                <p>
+                  {unavailable
+                    ? '比赛摘要暂时不可用，请稍后重试。当前不展示虚构赛程或名次。'
+                    : '正在加载真实比赛摘要…'}
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
+        <div className="home-reference-center">
+          <section className="reference-card reference-daily">
+            <div className="reference-card-title">
+              <h2>
+                <span aria-hidden="true">▣</span> 每日一题
+              </h2>
+              <Link to="/problems">往期题目 →</Link>
+            </div>
+            {dailyProblem ? (
+              <div className="reference-daily-body">
+                <div>
+                  <h3>{dailyProblem.title}</h3>
+                  <small>
+                    #
+                    {dailyProblem.publicId ??
+                      dailyProblem.slug ??
+                      dailyProblem.id}
+                  </small>
+                </div>
+                <div className="reference-tags">
+                  {dailyProblem.difficulty && (
+                    <span>{dailyProblem.difficulty}</span>
+                  )}
+                  {dailyProblem.tags?.slice(0, 2).map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
+                </div>
+                <p>从一道题开始，保持对算法的好奇与热爱。</p>
+                <div className="reference-daily-meta">
+                  <span>◉ 进入练习页查看题目详情</span>
+                  <Link
+                    to={`/problems/${dailyProblem.slug || dailyProblem.id}`}
+                  >
+                    开始练习 →
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <p className="reference-empty">
+                {unavailable ? '题库数据暂不可用。' : '正在加载每日练习题目…'}
+              </p>
+            )}
+          </section>
+          <section className="reference-card reference-recommendations">
+            <div className="reference-card-title">
+              <h2>
+                <span>▰</span> 推荐题单
+              </h2>
+              <Link to="/problems">更多 →</Link>
+            </div>
+            <div className="reference-recommendation-grid">
+              {['入门必刷', '数据结构基础', '经典算法', '面试精选'].map(
+                (title, index) => (
+                  <Link
+                    key={title}
+                    to="/problems"
+                    className={`recommendation-card recommendation-${index}`}
+                  >
+                    <strong>{title}</strong>
+                    <small>
+                      {
+                        [
+                          '从零开始，打好基础',
+                          '掌握核心数据结构',
+                          '提升算法思维',
+                          '大厂高频题目',
+                        ][index]
+                      }
+                    </small>
+                    <span>推荐练习 {['▮▮', '◆', '♧', '▣'][index]}</span>
+                  </Link>
+                ),
+              )}
+            </div>
+          </section>
+          <section className="reference-card reference-calendar">
+            <div className="reference-card-title">
+              <h2>
+                <span>▣</span> 学习日历
+              </h2>
+              <div>
+                <button type="button" aria-label="上个月">
+                  ‹
+                </button>
+                <b>
+                  {now.getFullYear()} 年 {now.getMonth() + 1} 月
+                </b>
+                <button type="button" aria-label="下个月">
+                  ›
+                </button>
+                <Link to="/profile">更多 →</Link>
+              </div>
+            </div>
+            <div className="reference-calendar-body">
+              <div className="reference-calendar-grid">
+                <span>日</span>
+                <span>一</span>
+                <span>二</span>
+                <span>三</span>
+                <span>四</span>
+                <span>五</span>
+                <span>六</span>
+                {Array.from({ length: leadingDays }).map((_, index) => (
+                  <i key={`blank-${index}`} />
+                ))}
+                {days.map((day) => (
+                  <span
+                    key={day}
+                    className={day === now.getDate() ? 'today' : ''}
+                  >
+                    {day}
+                  </span>
+                ))}
+              </div>
+              <div className="reference-streak">
+                <span>🔥</span>
+                <small>连续打卡</small>
+                <strong>{signedIn ? '— 天' : '登录后查看'}</strong>
+                <p>
+                  “坚持下去，
+                  <br />
+                  你会遇见更好的自己。”
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+        <aside className="home-reference-right">
+          <section className="reference-card reference-progress">
+            <div className="reference-card-title">
+              <h2>
+                <span>▥</span> 学习进度
+              </h2>
+              <Link to="/profile">详情 →</Link>
+            </div>
+            <div className="reference-progress-body">
+              <div className="reference-progress-ring">
+                <b>—</b>
+              </div>
+              <dl>
+                <div>
+                  <dt>已通过题目</dt>
+                  <dd>—</dd>
+                </div>
+                <div>
+                  <dt>继续加油，成为更强的自己！</dt>
+                  <dd />
+                </div>
+              </dl>
+            </div>
+          </section>
+          <section className="reference-card reference-homework">
+            <div className="reference-card-title">
+              <h2>
+                <span aria-hidden="true">▤</span> 我的作业
+              </h2>
+              <Link to="/homework">全部 →</Link>
+            </div>
+            <p>
+              作业功能正在接入。当前不会显示虚构的作业、截止时间或完成进度。
+            </p>
+          </section>
+          <section className="reference-card reference-wrong">
+            <div className="reference-card-title">
+              <h2>
+                <span>×</span> 错题集
+              </h2>
+              <Link to="/wrong-book">查看 →</Link>
+            </div>
+            <div>
+              <strong>—</strong>
+              <span>道错题</span>
+              <div className="reference-bars">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </div>
+            </div>
+          </section>
+          <section className="reference-fortune">
+            <div>
+              <span aria-hidden="true">★</span>
+              <small>好运相伴</small>
+            </div>
+            <h2>今日运势</h2>
+            {fortuneVisible ? (
+              <div aria-live="polite">
+                <p className="fortune-state">{fortune.state}</p>
+                <dl>
+                  <div>
+                    <dt>宜</dt>
+                    <dd>{fortune.should}</dd>
+                  </div>
+                  <div>
+                    <dt>忌</dt>
+                    <dd>{fortune.avoid}</dd>
+                  </div>
+                  <div>
+                    <dt>幸运算法</dt>
+                    <dd>
+                      {fortune.algorithm} · {fortune.complexity}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="field-help">
+                  同一浏览器同一天结果一致，种子不使用邮箱、手机号、令牌、密码或
+                  IP。
+                </p>
+              </div>
+            ) : (
+              <button type="button" onClick={onRevealFortune}>
+                获取今日运势
+              </button>
+            )}
+          </section>
+        </aside>
+      </section>
+    </section>
+  );
+}
+
 function State({
   title,
   text,
@@ -927,6 +1277,21 @@ function Pagination({
   );
 }
 
+const namedProblemSources = new Set([
+  'OJPlatform',
+  '洛谷',
+  'Codeforces',
+  'AtCoder',
+  'LeetCode',
+  'AcWing',
+  'SPOJ',
+]);
+
+function problemSourceLabel(source: string | null | undefined) {
+  if (!source) return '—';
+  return namedProblemSources.has(source) ? source : '其他';
+}
+
 function ProblemList({
   api,
   user,
@@ -958,6 +1323,11 @@ function ProblemList({
   const [difficulty, setDifficulty] = useState(initialState.difficulty);
   const [tag, setTag] = useState(initialState.tag);
   const [source, setSource] = useState(initialState.source);
+  const [profileOverview, setProfileOverview] = useState<{
+    solvedProblemCount: number;
+    submissionCount: number;
+    favoriteCount?: number;
+  } | null>(null);
   const offset = (page - 1) * pageSize;
   const syncUrl = (
     values: {
@@ -1015,6 +1385,26 @@ function ProblemList({
       });
   };
   useEffect(load, [api, offset, query]);
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      setProfileOverview(null);
+      return () => {
+        active = false;
+      };
+    }
+    void api
+      .profileOverview(user.username)
+      .then((overview) => {
+        if (active) setProfileOverview(overview);
+      })
+      .catch(() => {
+        if (active) setProfileOverview(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, user]);
   useEffect(() => {
     if (!data || data.page.total === 0) return;
     const totalPages = Math.ceil(data.page.total / data.page.limit);
@@ -1085,6 +1475,42 @@ function ProblemList({
     window.history.replaceState({}, '', '/problems');
   };
   const totalPages = Math.ceil(data.page.total / data.page.limit);
+  const countBy = (values: Array<string | null | undefined>) =>
+    values.reduce<Record<string, number>>((counts, value) => {
+      if (value) counts[value] = (counts[value] ?? 0) + 1;
+      return counts;
+    }, {});
+  const difficultyCounts = countBy(
+    data.items.map((problem) => problem.difficulty),
+  );
+  const sourceCounts = countBy(data.items.map((problem) => problem.source));
+  const tagCounts = Object.entries(
+    countBy(data.items.flatMap((problem) => problem.tags ?? [])),
+  ).sort((left, right) => right[1] - left[1]);
+  const difficultyOptions = [
+    ...new Set(['入门', '简单', '中等', '困难', ...difficulties]),
+  ].slice(0, 5);
+  const sourceOptions = [
+    ...new Set(['OJPlatform', '洛谷', 'Codeforces', 'AtCoder', ...sources]),
+  ].slice(0, 6);
+  const categoryOptions = [
+    { label: '全部题目', value: '' },
+    { label: '基础入门', value: '入门' },
+    { label: '数据结构', value: '数据结构' },
+    { label: '动态规划', value: '动态规划' },
+    { label: '图论', value: '图论' },
+    { label: '字符串', value: '字符串' },
+    { label: '数学', value: '数学' },
+  ];
+  const solvedPercent =
+    profileOverview && data.page.total
+      ? Math.min(
+          100,
+          Math.round(
+            (profileOverview.solvedProblemCount / data.page.total) * 100,
+          ),
+        )
+      : null;
   const activeFilters = [
     query ? { key: 'q' as const, label: `关键词：${query}` } : null,
     difficulty
@@ -1097,182 +1523,541 @@ function ProblemList({
     label: string;
   }>;
   return (
-    <section className="problem-list-v4">
-      <details className="problem-filter-disclosure" open>
-        <summary>筛选题目</summary>
-        <div className="problem-filters" aria-label="题库筛选">
-          <div className="problem-filter-toolbar">
-            <strong>搜索与筛选</strong>
-            {user && (
-              <Link to="/author/problems/new" className="button-link">
-                新建题目
-              </Link>
-            )}
-          </div>
-          <label className="search-field">
-            关键词
-            <input
-              value={query}
-              onChange={(event) => {
-                updateFilter('q', event.target.value);
-              }}
-              placeholder="按题目标题或题号筛选"
-            />
-          </label>
-          <label>
-            难度
-            <select
-              value={difficulty}
-              disabled={!difficulties.length}
-              onChange={(event) => {
-                updateFilter('difficulty', event.target.value);
-              }}
-            >
-              <option value="">
-                {difficulties.length ? '全部难度' : '后端暂未提供'}
-              </option>
-              {difficulties.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            标签
-            <select
-              value={tag}
-              disabled={!tags.length}
-              onChange={(event) => {
-                updateFilter('tag', event.target.value);
-              }}
-            >
-              <option value="">
-                {tags.length ? '全部标签' : '后端暂未提供'}
-              </option>
-              {tags.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            来源
-            <select
-              value={source}
-              disabled={!sources.length}
-              onChange={(event) => {
-                updateFilter('source', event.target.value);
-              }}
-            >
-              <option value="">
-                {sources.length ? '全部来源' : '后端暂未提供'}
-              </option>
-              {sources.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
+    <section className="problem-library problem-list-v4">
+      <header className="problem-library-hero">
+        <div className="problem-library-hero-inner">
+          <p>在题目中遇见更大的世界</p>
+          <h1>题库</h1>
+          <span aria-hidden="true" className="problem-library-hero-rule" />
+          <span>精选优质题目，循序渐进，见证你的成长。</span>
+        </div>
+      </header>
+
+      <div className="problem-library-layout">
+        <aside className="problem-sidebar" aria-label="题库侧栏筛选">
           <button
             type="button"
-            className="secondary"
-            disabled={!query && !difficulty && !tag && !source}
-            onClick={clearFilters}
+            className="sidebar-custom-filter"
+            onClick={() =>
+              document
+                .querySelector<HTMLInputElement>('#problem-keyword')
+                ?.focus()
+            }
           >
-            清除筛选
+            <span aria-hidden="true">＋</span> 自定义筛选
           </button>
-        </div>
-      </details>
-      {activeFilters.length > 0 && (
-        <div className="applied-filters" aria-label="已应用筛选">
-          <span className="applied-filters-label">已筛选</span>
-          {activeFilters.map((filter) => (
-            <button
-              key={filter.key}
-              type="button"
-              className="filter-chip"
-              onClick={() => updateFilter(filter.key, '')}
-            >
-              {filter.label} ×
-            </button>
-          ))}
-          <button type="button" className="filter-clear" onClick={clearFilters}>
-            清除全部
-          </button>
-        </div>
-      )}
-      <div className="filter-summary" aria-live="polite">
-        <span>
-          本页 {filtered.length} 条 · 共 {data.page.total} 题
-        </span>
-        {!difficulties.length && !tags.length && (
-          <span>难度与标签筛选将在后端提供字段后启用</span>
-        )}
-      </div>
-      {filtered.length === 0 ? (
-        <State
-          title={
-            query || difficulty || tag || source ? '当前筛选无结果' : '暂无题目'
-          }
-          text={
-            query || difficulty || tag || source
-              ? '请尝试其他关键词，或清除筛选条件。'
-              : '已发布题目会显示在这里。'
-          }
-          action={
-            query || difficulty || tag || source ? (
-              <button
-                type="button"
-                className="secondary"
-                onClick={clearFilters}
-              >
-                清除筛选
-              </button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="problem-table problem-list-modern" role="list">
-          {filtered.map((p) => (
-            <Link key={p.id} to={`/problems/${p.slug || p.id}`}>
-              <article className="problem-row" role="listitem">
-                <span
-                  className="problem-id"
-                  aria-label={`题目编号 ${p.publicId ?? '编号不可用'}`}
-                >
-                  {p.publicId ?? '编号不可用'}
-                </span>
-                <div className="problem-title-cell">
-                  <div className="problem-main-line">
-                    <h2>{p.title}</h2>
-                    <div className="tag-row" aria-label="题目标签">
-                      {p.tagDetails?.length || p.tags?.length ? (
-                        (p.tagDetails?.map((tag) => tag.name) ?? p.tags ?? [])
-                          .slice(0, 4)
-                          .map((item) => <span key={item}>{item}</span>)
-                      ) : (
-                        <span>暂无标签</span>
-                      )}
-                      {(p.tagDetails?.length ?? p.tags?.length ?? 0) > 4 && (
-                        <span>
-                          +{(p.tagDetails?.length ?? p.tags?.length ?? 0) - 4}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <span className="difficulty-label problem-difficulty-chip">
-                  {p.difficulty ?? '难度未提供'}
-                </span>
-                <span aria-hidden="true">→</span>
-              </article>
+          {user && (
+            <Link to="/author/problems/new" className="sidebar-new-problem">
+              新建题目
             </Link>
-          ))}
+          )}
+
+          <section>
+            <div className="sidebar-heading">
+              <h2>我的筛选</h2>
+              {user && <Link to="/profile">管理</Link>}
+            </div>
+            <div className="sidebar-list">
+              <div>
+                <span>
+                  <span className="sidebar-icon">♧</span>我的收藏
+                </span>
+                <b>{profileOverview?.favoriteCount ?? '—'}</b>
+              </div>
+              <div>
+                <span>
+                  <span className="sidebar-icon">◷</span>最近浏览
+                </span>
+                <b>—</b>
+              </div>
+              <div>
+                <span>
+                  <span className="sidebar-icon">✓</span>已通过
+                </span>
+                <b>{profileOverview?.solvedProblemCount ?? '—'}</b>
+              </div>
+              <div>
+                <span>
+                  <span className="sidebar-icon">◷</span>待练习
+                </span>
+                <b>—</b>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2>难度分类</h2>
+            <div className="sidebar-list">
+              {difficultyOptions.slice(0, 4).map((item, index) => (
+                <div key={item}>
+                  <button
+                    type="button"
+                    className={
+                      difficulty === item ? 'sidebar-filter-active' : ''
+                    }
+                    onClick={() =>
+                      updateFilter(
+                        'difficulty',
+                        difficulty === item ? '' : item,
+                      )
+                    }
+                  >
+                    <span
+                      className={`difficulty-dot difficulty-dot-${index}`}
+                    />
+                    {item}
+                  </button>
+                  <b>{difficultyCounts[item] ?? 0}</b>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h2>题目来源</h2>
+            <div className="sidebar-list source-list">
+              {sourceOptions.map((item, index) => (
+                <div key={item}>
+                  <button
+                    type="button"
+                    className={source === item ? 'sidebar-filter-active' : ''}
+                    onClick={() =>
+                      updateFilter('source', source === item ? '' : item)
+                    }
+                  >
+                    <span
+                      className={`source-mark source-mark-${index}`}
+                      aria-hidden="true"
+                    >
+                      {['◇', '⌁', '▥', '◉', '♢', '⊞'][index]}
+                    </span>
+                    {problemSourceLabel(item)}
+                  </button>
+                  <b>{sourceCounts[item] ?? 0}</b>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
+
+        <div className="problem-library-main">
+          <form
+            className="problem-filters"
+            aria-label="题库筛选"
+            onSubmit={(event) => {
+              event.preventDefault();
+              load();
+            }}
+          >
+            <div className="filter-row category-filter-row">
+              <strong>题目分类</strong>
+              <div className="category-tabs">
+                {categoryOptions.map((item) => {
+                  const active = item.value
+                    ? tag === item.value || difficulty === item.value
+                    : !tag && !difficulty;
+                  return (
+                    <button
+                      key={item.label}
+                      type="button"
+                      className={active ? 'active' : ''}
+                      onClick={() => {
+                        if (!item.value) {
+                          const next = {
+                            ...currentFilters(),
+                            difficulty: '',
+                            tag: '',
+                          };
+                          setDifficulty('');
+                          setTag('');
+                          setPage(1);
+                          syncUrl(next, 1, true);
+                        } else if (item.value === '入门') {
+                          updateFilter('difficulty', item.value);
+                        } else {
+                          updateFilter('tag', item.value);
+                        }
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+                <span className="category-more">其他⌄</span>
+              </div>
+            </div>
+
+            <div className="filter-row">
+              <strong>题目来源</strong>
+              <div className="check-options">
+                {sourceOptions.map((item) => (
+                  <label key={item}>
+                    <input
+                      type="checkbox"
+                      checked={source === item}
+                      onChange={() =>
+                        updateFilter('source', source === item ? '' : item)
+                      }
+                    />
+                    {problemSourceLabel(item)}
+                  </label>
+                ))}
+              </div>
+              <label className="sr-only">
+                来源
+                <select
+                  value={source}
+                  disabled={!sources.length}
+                  onChange={(event) =>
+                    updateFilter('source', event.target.value)
+                  }
+                >
+                  <option value="">全部来源</option>
+                  {sources.map((item) => (
+                    <option key={item} value={item}>
+                      {problemSourceLabel(item)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="filter-row">
+              <strong>难度等级</strong>
+              <div className="check-options">
+                {difficultyOptions.slice(0, 4).map((item) => (
+                  <label key={item}>
+                    <input
+                      type="checkbox"
+                      checked={difficulty === item}
+                      onChange={() =>
+                        updateFilter(
+                          'difficulty',
+                          difficulty === item ? '' : item,
+                        )
+                      }
+                    />
+                    {item}
+                  </label>
+                ))}
+              </div>
+              <label className="sr-only">
+                难度
+                <select
+                  value={difficulty}
+                  disabled={!difficulties.length}
+                  onChange={(event) =>
+                    updateFilter('difficulty', event.target.value)
+                  }
+                >
+                  <option value="">全部难度</option>
+                  {difficulties.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="filter-row filter-input-row">
+              <strong>标签</strong>
+              <label>
+                <span className="sr-only">标签</span>
+                <select
+                  value={tag}
+                  disabled={!tags.length}
+                  onChange={(event) => updateFilter('tag', event.target.value)}
+                >
+                  <option value="">
+                    {tags.length ? '选择标签（可多选）' : '后端暂未提供'}
+                  </option>
+                  {tags.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <strong className="keyword-label">关键词</strong>
+              <label className="keyword-field">
+                <span className="sr-only">关键词</span>
+                <input
+                  id="problem-keyword"
+                  aria-label="关键词"
+                  value={query}
+                  onChange={(event) => updateFilter('q', event.target.value)}
+                  placeholder="输入题目标题、描述关键词等…"
+                />
+                <span aria-hidden="true" className="search-icon">
+                  ⌕
+                </span>
+              </label>
+            </div>
+
+            <div className="filter-row filter-extra-row">
+              <strong>其他筛选</strong>
+              <label className="compact-select-label">
+                <span>时间限制</span>
+                <select aria-label="时间限制">
+                  <option>不限</option>
+                </select>
+              </label>
+              <label className="compact-select-label">
+                <span>内存限制</span>
+                <select aria-label="内存限制">
+                  <option>不限</option>
+                </select>
+              </label>
+              <label className="compact-select-label">
+                <span>通过率</span>
+                <select aria-label="通过率">
+                  <option>不限</option>
+                </select>
+              </label>
+              <label
+                className="only-unpassed"
+                title="当前后端暂未提供个人题目状态筛选"
+              >
+                <input type="checkbox" disabled />
+                只看未通过
+              </label>
+              <div className="filter-actions">
+                <button type="submit" className="filter-submit">
+                  筛选题目
+                </button>
+                <button
+                  type="button"
+                  className="filter-reset"
+                  disabled={!query && !difficulty && !tag && !source}
+                  onClick={clearFilters}
+                  aria-label="清除筛选"
+                >
+                  重置
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {activeFilters.length > 0 && (
+            <div className="applied-filters" aria-label="已应用筛选">
+              {activeFilters.map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  className="filter-chip"
+                  onClick={() => updateFilter(filter.key, '')}
+                >
+                  {filter.label} ×
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="problem-results-heading" aria-live="polite">
+            <span>
+              共 <b>{data.page.total.toLocaleString('zh-CN')}</b> 道题目
+            </span>
+            <div>
+              <select aria-label="题目排序">
+                <option>默认排序</option>
+              </select>
+              <span
+                className="view-toggle active"
+                title="列表视图"
+                aria-hidden="true"
+              >
+                ☷
+              </span>
+              <span
+                className="view-toggle"
+                title="网格视图暂不可用"
+                aria-hidden="true"
+              >
+                ⊞
+              </span>
+            </div>
+          </div>
+
+          {filtered.length === 0 ? (
+            <State
+              title={
+                query || difficulty || tag || source
+                  ? '当前筛选无结果'
+                  : '暂无题目'
+              }
+              text={
+                query || difficulty || tag || source
+                  ? '请尝试其他关键词，或清除筛选条件。'
+                  : '已发布题目会显示在这里。'
+              }
+              action={
+                query || difficulty || tag || source ? (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={clearFilters}
+                  >
+                    清除筛选
+                  </button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="problem-table problem-list-modern" role="list">
+              <div className="problem-table-header" aria-hidden="true">
+                <span>#</span>
+                <span>题目标题</span>
+                <span>难度</span>
+                <span>标签</span>
+                <span>来源</span>
+                <span>通过率</span>
+                <span>提交数</span>
+                <span>收藏</span>
+                <span>操作</span>
+              </div>
+              {filtered.map((problem) => {
+                const submissionCount =
+                  problem.statistics?.submissionCount ?? 0;
+                const acceptedCount = problem.statistics?.acceptedCount ?? 0;
+                const acceptance = submissionCount
+                  ? `${((acceptedCount / submissionCount) * 100).toFixed(1)}%`
+                  : '—';
+                const problemTags =
+                  problem.tagDetails?.map((item) => item.name) ??
+                  problem.tags ??
+                  [];
+                return (
+                  <div key={problem.id} role="listitem">
+                    <Link
+                      to={`/problems/${problem.slug || problem.id}`}
+                      className="problem-row"
+                      ariaLabel={`${problem.publicId ?? '编号不可用'} ${problem.title}`}
+                    >
+                      <span className="problem-id">
+                        {problem.publicId ?? '编号不可用'}
+                      </span>
+                      <span className="problem-title">{problem.title}</span>
+                      <span
+                        className={`problem-difficulty-chip difficulty-${problem.difficulty ?? 'unknown'}`}
+                      >
+                        {problem.difficulty ?? '未提供'}
+                      </span>
+                      <span className="tag-row" aria-label="题目标签">
+                        {problemTags.length ? (
+                          problemTags
+                            .slice(0, 2)
+                            .map((item) => <span key={item}>{item}</span>)
+                        ) : (
+                          <span>暂无标签</span>
+                        )}
+                      </span>
+                      <span className="problem-source">
+                        {problemSourceLabel(problem.source)}
+                      </span>
+                      <span className="problem-rate">{acceptance}</span>
+                      <span className="problem-submissions">
+                        {submissionCount.toLocaleString('zh-CN')}
+                      </span>
+                      <span className="problem-star" aria-hidden="true">
+                        ☆
+                      </span>
+                      <span className="problem-action">练习</span>
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <Pagination
+            current={page}
+            total={totalPages}
+            loading={loading}
+            onChange={changePage}
+          />
         </div>
-      )}
-      <Pagination
-        current={page}
-        total={totalPages}
-        loading={loading}
-        onChange={changePage}
-      />
+
+        <aside className="problem-rightbar" aria-label="题库概览">
+          <section className="right-card progress-card">
+            <div className="right-card-heading">
+              <h2>我的做题情况</h2>
+              {user && <Link to="/profile">查看详情 →</Link>}
+            </div>
+            <div className="progress-content">
+              <div
+                className="progress-ring"
+                style={
+                  { '--progress': `${solvedPercent ?? 0}%` } as CSSProperties
+                }
+              >
+                <strong>
+                  {solvedPercent === null ? '—' : `${solvedPercent}%`}
+                </strong>
+              </div>
+              <dl>
+                <div>
+                  <dt>已通过</dt>
+                  <dd>{profileOverview?.solvedProblemCount ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt>总题目</dt>
+                  <dd>{data.page.total.toLocaleString('zh-CN')}</dd>
+                </div>
+                <div>
+                  <dt>提交记录</dt>
+                  <dd>{profileOverview?.submissionCount ?? '—'}</dd>
+                </div>
+              </dl>
+            </div>
+          </section>
+
+          <section className="right-card hot-tag-card">
+            <div className="right-card-heading">
+              <h2>热门标签</h2>
+              <span>本页统计</span>
+            </div>
+            <div className="hot-tags">
+              {tagCounts.length ? (
+                tagCounts.slice(0, 14).map(([name, count]) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => updateFilter('tag', name)}
+                  >
+                    {name} <small>{count}</small>
+                  </button>
+                ))
+              ) : (
+                <span>暂无标签</span>
+              )}
+            </div>
+          </section>
+
+          <section className="right-card recent-card">
+            <div className="right-card-heading">
+              <h2>近期更新</h2>
+              <span>更多 →</span>
+            </div>
+            <div className="recent-list">
+              {data.items.slice(0, 5).map((problem) => (
+                <div key={problem.id}>
+                  <Link to={`/problems/${problem.slug || problem.id}`}>
+                    {problem.publicId ?? problem.slug} ›
+                  </Link>
+                  <time dateTime={problem.updatedAt}>
+                    {problem.updatedAt.slice(0, 10)}
+                  </time>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <blockquote className="right-quote">
+            <span aria-hidden="true">“</span>
+            每一道题，
+            <br />
+            都是通往更大世界的一小步。
+            <cite>— OJPlatform</cite>
+          </blockquote>
+        </aside>
+      </div>
     </section>
   );
 }
@@ -3176,7 +3961,7 @@ export function App() {
           <span className="brand-mark" aria-hidden="true">
             OJ
           </span>
-          <strong>OJPlatform</strong>
+          <strong>AlgoOJ</strong>
         </Link>
         <button
           type="button"
@@ -3234,7 +4019,11 @@ export function App() {
           </Link>
           <Link
             to="/homework"
-            className={current.name === 'homework' || current.name === 'homework-detail' ? 'active' : ''}
+            className={
+              current.name === 'homework' || current.name === 'homework-detail'
+                ? 'active'
+                : ''
+            }
           >
             作业
           </Link>
@@ -3255,6 +4044,12 @@ export function App() {
           >
             评测列表
           </Link>
+          <Link
+            to="/notifications"
+            className={current.name === 'notifications' ? 'active' : ''}
+          >
+            通知
+          </Link>
           {canViewJudgeAdmin && (
             <Link
               to="/admin/judge/nodes"
@@ -3263,6 +4058,29 @@ export function App() {
               管理
             </Link>
           )}
+          <form
+            className="nav-search"
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const query = new FormData(event.currentTarget)
+                .get('q')
+                ?.toString()
+                .trim();
+              navigate(
+                query
+                  ? `/problems?q=${encodeURIComponent(query)}`
+                  : '/problems',
+              );
+            }}
+          >
+            <span aria-hidden="true">⌕</span>
+            <input
+              name="q"
+              placeholder="搜索题目、比赛、用户…"
+              aria-label="全站搜索"
+            />
+          </form>
           <NotificationBell navigate={navigate} api={api} />
           {user ? (
             <>
@@ -3300,12 +4118,14 @@ export function App() {
           )}
         </nav>
       </header>
-      <Breadcrumbs current={current} />
+      {current.name !== 'home' && <Breadcrumbs current={current} />}
       <main
         className={
           current.name === 'author-new' || current.name === 'author-edit'
             ? 'shell shell-authoring'
-            : 'shell'
+            : current.name === 'problems'
+              ? 'shell shell-problem-library'
+              : 'shell'
         }
       >
         {page}
