@@ -8,6 +8,23 @@ export const problemDifficulties = [
   '专家',
 ] as const;
 export type ProblemDifficulty = (typeof problemDifficulties)[number];
+export const problemSourceTypes = [
+  'CREATOR',
+  'EXTERNAL',
+  'IMPORT',
+  'TEST_FIXTURE',
+  'API_AUTOMATION',
+] as const;
+export type ProblemSourceType = (typeof problemSourceTypes)[number];
+export const problemListSorts = [
+  'publicNumber',
+  'title',
+  'difficulty',
+  'updatedAt',
+  'createdAt',
+] as const;
+export type ProblemListSort = (typeof problemListSorts)[number];
+export type ProblemListOrder = 'asc' | 'desc';
 
 export type ProblemExample = { input: string; output: string; note?: string };
 export type ProblemSample = {
@@ -47,8 +64,7 @@ export type Problem = {
   testdataVersion: string | null;
   authorId: string | null;
   source?: string | null;
-  sourceType?:
-    'CREATOR' | 'EXTERNAL' | 'IMPORT' | 'TEST_FIXTURE' | 'API_AUTOMATION';
+  sourceType?: ProblemSourceType;
   tags: string[];
   tagDetails?: ProblemTag[];
   createdAt: string;

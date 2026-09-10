@@ -8,6 +8,9 @@ import {
   type AuthorizationPolicy,
   type AuditHook,
   type Problem,
+  problemDifficulties,
+  problemListSorts,
+  problemSourceTypes,
 } from './model.js';
 import {
   InMemoryTagCatalogRepository,
@@ -107,6 +110,14 @@ export async function registerProblemModule(
     const status = typeof q.status === 'string' ? q.status : undefined;
     const visibility =
       typeof q.visibility === 'string' ? q.visibility : undefined;
+    const difficulty =
+      typeof q.difficulty === 'string' ? q.difficulty : undefined;
+    const sourceType =
+      typeof q.sourceType === 'string' ? q.sourceType : undefined;
+    const tagIdsValue = typeof q.tagIds === 'string' ? q.tagIds : undefined;
+    const tagId = tagIdsValue === undefined ? undefined : Number(tagIdsValue);
+    const sort = typeof q.sort === 'string' ? q.sort : undefined;
+    const order = typeof q.order === 'string' ? q.order : undefined;
     if (
       !Number.isInteger(limit) ||
       limit < 1 ||
@@ -121,40 +132,123 @@ export async function registerProblemModule(
         'VALIDATION_ERROR',
         'Invalid pagination',
       );
+    if (difficulty && !problemDifficulties.includes(difficulty as never))
+      return error(
+        reply,
+        request,
+        400,
+        'VALIDATION_ERROR',
+        'Invalid difficulty',
+      );
+    if (sourceType && !problemSourceTypes.includes(sourceType as never))
+      return error(
+        reply,
+        request,
+        400,
+        'VALIDATION_ERROR',
+        'Invalid source type',
+      );
+    if (sort && !problemListSorts.includes(sort as never))
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid sort');
+    if (order && order !== 'asc' && order !== 'desc')
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid order');
+    if (
+      tagIdsValue !== undefined &&
+      (!Number.isSafeInteger(tagId) ||
+        (tagId ?? 0) < 1 ||
+        !/^\d+$/.test(tagIdsValue))
+    )
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid tag ID');
+    const tagIds = tagIdsValue === undefined ? undefined : [tagId as number];
     const contextValue = await auth(request);
-    const result = await service.list(
-      contextValue
-        ? {
-            limit,
-            offset,
-            context: contextValue,
-            ...(search ? { search } : {}),
-            ...(status === 'draft' ||
-            status === 'published' ||
-            status === 'archived'
-              ? { status }
-              : {}),
-            ...(visibility === 'private' || visibility === 'public'
-              ? { visibility }
-              : {}),
-          }
-        : { limit, offset, ...(search ? { search } : {}) },
-    );
-    const nextCursor =
-      result.items.length === limit
-        ? Buffer.from(String(offset + result.items.length), 'utf8').toString(
-            'base64url',
-          )
-        : undefined;
-    return reply.send({
-      items: result.items,
-      page: {
-        limit,
-        offset,
-        total: result.total,
-        ...(nextCursor ? { nextCursor } : {}),
-      },
-    });
+    try {
+      const result = await service.list(
+        contextValue
+          ? {
+              limit,
+              offset,
+              context: contextValue,
+              ...(search ? { search } : {}),
+              ...(status === 'draft' ||
+              status === 'published' ||
+              status === 'archived'
+                ? { status }
+                : {}),
+              ...(visibility === 'private' || visibility === 'public'
+                ? { visibility }
+                : {}),
+              ...(difficulty
+                ? {
+                    difficulty:
+                      difficulty as (typeof problemDifficulties)[number],
+                  }
+                : {}),
+              ...(tagIds ? { tagIds } : {}),
+              ...(sourceType
+                ? {
+                    sourceType:
+                      sourceType as (typeof problemSourceTypes)[number],
+                  }
+                : {}),
+              ...(sort
+                ? { sort: sort as (typeof problemListSorts)[number] }
+                : {}),
+              ...(order ? { order: order as 'asc' | 'desc' } : {}),
+            }
+          : {
+              limit,
+              offset,
+              ...(search ? { search } : {}),
+              ...(difficulty
+                ? {
+                    difficulty:
+                      difficulty as (typeof problemDifficulties)[number],
+                  }
+                : {}),
+              ...(tagIds ? { tagIds } : {}),
+              ...(sourceType
+                ? {
+                    sourceType:
+                      sourceType as (typeof problemSourceTypes)[number],
+                  }
+                : {}),
+              ...(sort
+                ? { sort: sort as (typeof problemListSorts)[number] }
+                : {}),
+              ...(order ? { order: order as 'asc' | 'desc' } : {}),
+            },
+      );
+      const nextCursor =
+        result.items.length === limit
+          ? Buffer.from(String(offset + result.items.length), 'utf8').toString(
+              'base64url',
+            )
+          : undefined;
+      return reply.send({
+        items: result.items,
+        facets: result.facets,
+        page: {
+          limit,
+          offset,
+          total: result.total,
+          ...(nextCursor ? { nextCursor } : {}),
+        },
+      });
+    } catch (e) {
+      if (
+        e instanceof Error &&
+        (e.message === 'INVALID_TAGS' ||
+          e.message === 'TAG_CATALOG_UNAVAILABLE')
+      )
+        return error(
+          reply,
+          request,
+          400,
+          'INVALID_TAG',
+          'Selected tag is unavailable or inactive',
+        );
+      throw e;
+    }
   });
   app.get('/api/home', async (_request, reply) =>
     reply.send(await service.home()),

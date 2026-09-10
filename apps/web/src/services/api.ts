@@ -83,6 +83,11 @@ export type AccountIdentifier = {
 };
 export type Example = { input: string; output: string; note?: string };
 export type ProblemDifficulty = '入门' | '简单' | '中等' | '困难' | '专家';
+export type ProblemSourceType =
+  'CREATOR' | 'EXTERNAL' | 'IMPORT' | 'TEST_FIXTURE' | 'API_AUTOMATION';
+export type ProblemListSort =
+  'publicNumber' | 'title' | 'difficulty' | 'updatedAt' | 'createdAt';
+export type ProblemListOrder = 'asc' | 'desc';
 export type ProblemSample = {
   ordinal: number;
   input: string;
@@ -122,6 +127,7 @@ export type Problem = {
     isActive: boolean;
   }>;
   source?: string;
+  sourceType?: ProblemSourceType;
   statistics?: {
     submissionCount: number;
     acceptedCount: number;
@@ -201,7 +207,16 @@ const normalizeJudgeDraft = (draft: BackendJudgeDraft): JudgeDraft => ({
   },
 });
 export type Page = { limit: number; offset: number; total: number };
-export type ProblemList = { items: Problem[]; page: Page };
+export type ProblemFacets = {
+  difficulty: Partial<Record<ProblemDifficulty, number>>;
+  sourceType: Partial<Record<ProblemSourceType, number>>;
+  tags: Array<{ id: number; count: number }>;
+};
+export type ProblemList = {
+  items: Problem[];
+  page: Page;
+  facets?: ProblemFacets;
+};
 export type Home = { recentProblems: Problem[] };
 export type BackendContest = {
   id: string;
@@ -939,18 +954,33 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         fetcher,
       ),
     team: (slug: string) =>
-      request<TeamSummary & { membershipState: string; joinRequestStatus: TeamJoinRequest['status'] | null }>(
+      request<
+        TeamSummary & {
+          membershipState: string;
+          joinRequestStatus: TeamJoinRequest['status'] | null;
+        }
+      >(baseUrl, `/api/teams/${encodeURIComponent(slug)}`, undefined, fetcher),
+    teamJoinRequests: (slug: string) =>
+      request<{ items: TeamJoinRequest[] }>(
         baseUrl,
-        `/api/teams/${encodeURIComponent(slug)}`,
+        `/api/teams/${encodeURIComponent(slug)}/join-requests`,
         undefined,
         fetcher,
       ),
-    teamJoinRequests: (slug: string) =>
-      request<{ items: TeamJoinRequest[] }>(baseUrl, `/api/teams/${encodeURIComponent(slug)}/join-requests`, undefined, fetcher),
     approveJoinRequest: (slug: string, id: string) =>
-      request<TeamJoinRequest>(baseUrl, `/api/teams/${encodeURIComponent(slug)}/join-requests/${encodeURIComponent(id)}/approve`, { method: 'POST', body: '{}' }, fetcher),
+      request<TeamJoinRequest>(
+        baseUrl,
+        `/api/teams/${encodeURIComponent(slug)}/join-requests/${encodeURIComponent(id)}/approve`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
     rejectJoinRequest: (slug: string, id: string) =>
-      request<TeamJoinRequest>(baseUrl, `/api/teams/${encodeURIComponent(slug)}/join-requests/${encodeURIComponent(id)}/reject`, { method: 'POST', body: '{}' }, fetcher),
+      request<TeamJoinRequest>(
+        baseUrl,
+        `/api/teams/${encodeURIComponent(slug)}/join-requests/${encodeURIComponent(id)}/reject`,
+        { method: 'POST', body: '{}' },
+        fetcher,
+      ),
     createTeam: (input: {
       name: string;
       slug?: string;
@@ -1160,12 +1190,28 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'DELETE' },
         fetcher,
       ),
-    problems: (offset = 0, limit = 20, options: { search?: string } = {}) => {
+    problems: (
+      offset = 0,
+      limit = 20,
+      options: {
+        search?: string;
+        difficulty?: ProblemDifficulty;
+        tagId?: number;
+        sourceType?: ProblemSourceType;
+        sort?: ProblemListSort;
+        order?: ProblemListOrder;
+      } = {},
+    ) => {
       const params = new URLSearchParams({
         offset: String(offset),
         limit: String(limit),
       });
       if (options.search) params.set('search', options.search);
+      if (options.difficulty) params.set('difficulty', options.difficulty);
+      if (options.tagId) params.set('tagIds', String(options.tagId));
+      if (options.sourceType) params.set('sourceType', options.sourceType);
+      if (options.sort) params.set('sort', options.sort);
+      if (options.order) params.set('order', options.order);
       return request<ProblemList>(
         baseUrl,
         `/api/problems?${params.toString()}`,
@@ -1190,7 +1236,12 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       ),
     editableProfile: () =>
       request<EditableProfile>(baseUrl, '/api/profile/me', undefined, fetcher),
-    updateProfile: (profile: Omit<EditableProfile, 'username' | 'avatarUrl' | 'backgroundUrl'>) =>
+    updateProfile: (
+      profile: Omit<
+        EditableProfile,
+        'username' | 'avatarUrl' | 'backgroundUrl'
+      >,
+    ) =>
       request<EditableProfile>(
         baseUrl,
         '/api/profile/me',
@@ -1198,11 +1249,22 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         fetcher,
       ),
     uploadProfileMedia: (kind: 'avatar' | 'background', file: File) => {
-      const form = new FormData(); form.append('file', file);
-      return request<{ url: string }>(baseUrl, `/api/profile/me/${kind}`, { method: 'POST', body: form }, fetcher);
+      const form = new FormData();
+      form.append('file', file);
+      return request<{ url: string }>(
+        baseUrl,
+        `/api/profile/me/${kind}`,
+        { method: 'POST', body: form },
+        fetcher,
+      );
     },
     removeProfileMedia: (kind: 'avatar' | 'background') =>
-      request<void>(baseUrl, `/api/profile/me/${kind}`, { method: 'DELETE' }, fetcher),
+      request<void>(
+        baseUrl,
+        `/api/profile/me/${kind}`,
+        { method: 'DELETE' },
+        fetcher,
+      ),
     profileActivity: (username: string) =>
       request<ProfileActivity>(
         baseUrl,

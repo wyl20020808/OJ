@@ -20,6 +20,10 @@ import {
   type EvaluationFilters,
   type Language,
   type Problem,
+  type ProblemDifficulty,
+  type ProblemListOrder,
+  type ProblemListSort,
+  type ProblemSourceType,
   type ProfileContest,
   type Submission,
   type SubmissionEvaluation,
@@ -889,7 +893,7 @@ function HomeReference({
             <span />
             从这里出发、刷题、比赛、交流、成长
             <br />
-             与一群热爱算法的人，走向更远的未来。
+            与一群热爱算法的人，走向更远的未来。
           </div>
           <div className="home-reference-actions">
             <Link to="/problems" className="home-reference-primary">
@@ -903,7 +907,7 @@ function HomeReference({
         <span className="home-reference-slogan" aria-hidden="true">
           代码如山
           <br />
-           行则将至
+          行则将至
         </span>
       </section>
       <section className="home-reference-grid">
@@ -1277,19 +1281,18 @@ function Pagination({
   );
 }
 
-const namedProblemSources = new Set([
-  'OJPlatform',
-  '洛谷',
-  'Codeforces',
-  'AtCoder',
-  'LeetCode',
-  'AcWing',
-  'SPOJ',
-]);
+const problemSourceLabels = {
+  CREATOR: '平台创建',
+  EXTERNAL: '外部题源',
+  IMPORT: '导入题目',
+  TEST_FIXTURE: '测试数据',
+  API_AUTOMATION: 'API 自动创建',
+} as const;
 
-function problemSourceLabel(source: string | null | undefined) {
-  if (!source) return '—';
-  return namedProblemSources.has(source) ? source : '其他';
+function problemSourceLabel(
+  sourceType: keyof typeof problemSourceLabels | null | undefined,
+) {
+  return sourceType ? (problemSourceLabels[sourceType] ?? '—') : '—';
 }
 
 function ProblemList({
@@ -1303,6 +1306,11 @@ function ProblemList({
   const [data, setData] = useState<{
     items: Problem[];
     page: { total: number; offset: number; limit: number };
+    facets?: {
+      difficulty: Partial<Record<ProblemDifficulty, number>>;
+      sourceType: Partial<Record<ProblemSourceType, number>>;
+      tags: Array<{ id: number; count: number }>;
+    };
   } | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1314,15 +1322,23 @@ function ProblemList({
       page: Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1,
       query: params.get('q') ?? '',
       difficulty: params.get('difficulty') ?? '',
-      tag: params.get('tag') ?? '',
-      source: params.get('source') ?? '',
+      tagId: params.get('tagIds') ?? '',
+      sourceType: params.get('sourceType') ?? '',
+      sort: params.get('sort') ?? 'publicNumber',
+      order: params.get('order') ?? 'asc',
     };
   }, []);
   const [page, setPage] = useState(initialState.page);
   const [query, setQuery] = useState(initialState.query);
+  const [searchInput, setSearchInput] = useState(initialState.query);
   const [difficulty, setDifficulty] = useState(initialState.difficulty);
-  const [tag, setTag] = useState(initialState.tag);
-  const [source, setSource] = useState(initialState.source);
+  const [tagId, setTagId] = useState(initialState.tagId);
+  const [sourceType, setSourceType] = useState(initialState.sourceType);
+  const [sort, setSort] = useState(initialState.sort);
+  const [order, setOrder] = useState(initialState.order);
+  const [tagCatalog, setTagCatalog] = useState<
+    NonNullable<Problem['tagDetails']>
+  >([]);
   const [profileOverview, setProfileOverview] = useState<{
     solvedProblemCount: number;
     submissionCount: number;
@@ -1333,8 +1349,10 @@ function ProblemList({
     values: {
       q: string;
       difficulty: string;
-      tag: string;
-      source: string;
+      tagId: string;
+      sourceType: string;
+      sort: string;
+      order: string;
     },
     nextPage: number,
     replace = false,
@@ -1342,13 +1360,27 @@ function ProblemList({
     const params = new URLSearchParams();
     if (nextPage > 1) params.set('page', String(nextPage));
     Object.entries(values).forEach(([key, value]) => {
-      if (value) params.set(key, value);
+      if (
+        value &&
+        !(
+          (key === 'sort' && value === 'publicNumber') ||
+          (key === 'order' && value === 'asc')
+        )
+      )
+        params.set(key === 'tagId' ? 'tagIds' : key, value);
     });
     const url = `/problems${params.size ? `?${params.toString()}` : ''}`;
     if (replace) window.history.replaceState({}, '', url);
     else window.history.pushState({}, '', url);
   };
-  const currentFilters = () => ({ q: query, difficulty, tag, source });
+  const currentFilters = () => ({
+    q: query,
+    difficulty,
+    tagId,
+    sourceType,
+    sort,
+    order,
+  });
   const changePage = (nextPage: number) => {
     const totalPages = data ? Math.ceil(data.page.total / data.page.limit) : 0;
     if (loading || !totalPages || nextPage < 1 || nextPage > totalPages) return;
@@ -1357,14 +1389,27 @@ function ProblemList({
     syncUrl(currentFilters(), nextPage);
   };
   const updateFilter = (
-    key: 'q' | 'difficulty' | 'tag' | 'source',
+    key: 'q' | 'difficulty' | 'tagId' | 'sourceType',
     value: string,
   ) => {
     const next = { ...currentFilters(), [key]: value };
     setQuery(next.q);
+    if (key === 'q') setSearchInput(value);
     setDifficulty(next.difficulty);
-    setTag(next.tag);
-    setSource(next.source);
+    setTagId(next.tagId);
+    setSourceType(next.sourceType);
+    setPage(1);
+    syncUrl(next, 1, true);
+  };
+  const updateSort = (value: string) => {
+    const [nextSort, nextOrder] = value.split(':') as [string, string];
+    const next = {
+      ...currentFilters(),
+      sort: nextSort,
+      order: nextOrder,
+    };
+    setSort(nextSort);
+    setOrder(nextOrder);
     setPage(1);
     syncUrl(next, 1, true);
   };
@@ -1373,7 +1418,14 @@ function ProblemList({
     setError(false);
     setLoading(true);
     void api
-      .problems(offset, pageSize, query.trim() ? { search: query.trim() } : {})
+      .problems(offset, pageSize, {
+        ...(query.trim() ? { search: query.trim() } : {}),
+        ...(difficulty ? { difficulty: difficulty as ProblemDifficulty } : {}),
+        ...(tagId ? { tagId: Number(tagId) } : {}),
+        ...(sourceType ? { sourceType: sourceType as ProblemSourceType } : {}),
+        sort: sort as ProblemListSort,
+        order: order as ProblemListOrder,
+      })
       .then((nextData) => {
         if (activeRequest === requestId.current) setData(nextData);
       })
@@ -1384,7 +1436,30 @@ function ProblemList({
         if (activeRequest === requestId.current) setLoading(false);
       });
   };
-  useEffect(load, [api, offset, query]);
+  useEffect(load, [
+    api,
+    offset,
+    query,
+    difficulty,
+    tagId,
+    sourceType,
+    sort,
+    order,
+  ]);
+  useEffect(() => {
+    let active = true;
+    void api
+      .tags()
+      .then((tags) => {
+        if (active) setTagCatalog(tags);
+      })
+      .catch(() => {
+        if (active) setTagCatalog([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api]);
   useEffect(() => {
     let active = true;
     if (!user) {
@@ -1422,9 +1497,12 @@ function ProblemList({
         Number.isSafeInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1,
       );
       setQuery(params.get('q') ?? '');
+      setSearchInput(params.get('q') ?? '');
       setDifficulty(params.get('difficulty') ?? '');
-      setTag(params.get('tag') ?? '');
-      setSource(params.get('source') ?? '');
+      setTagId(params.get('tagIds') ?? '');
+      setSourceType(params.get('sourceType') ?? '');
+      setSort(params.get('sort') ?? 'publicNumber');
+      setOrder(params.get('order') ?? 'asc');
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -1448,59 +1526,32 @@ function ProblemList({
         </div>
       </section>
     );
-  const difficulties = [
-    ...new Set(data.items.map((problem) => problem.difficulty).filter(Boolean)),
-  ] as string[];
-  const tags = [
-    ...new Set(data.items.flatMap((problem) => problem.tags ?? [])),
-  ];
-  const sources = [
-    ...new Set(data.items.map((problem) => problem.source).filter(Boolean)),
-  ] as string[];
-  const filtered = data.items.filter(
-    (problem) =>
-      `${problem.title} ${problem.slug}`
-        .toLowerCase()
-        .includes(query.toLowerCase()) &&
-      (!difficulty || problem.difficulty === difficulty) &&
-      (!tag || problem.tags?.includes(tag)) &&
-      (!source || problem.source === source),
-  );
+  const difficultyOptions = ['入门', '简单', '中等', '困难', '专家'];
+  const sourceOptions = Object.keys(problemSourceLabels) as Array<
+    keyof typeof problemSourceLabels
+  >;
+  const selectedTag = tagCatalog.find((item) => String(item.id) === tagId);
   const clearFilters = () => {
     setQuery('');
+    setSearchInput('');
     setDifficulty('');
-    setTag('');
-    setSource('');
+    setTagId('');
+    setSourceType('');
+    setSort('publicNumber');
+    setOrder('asc');
     setPage(1);
     window.history.replaceState({}, '', '/problems');
   };
   const totalPages = Math.ceil(data.page.total / data.page.limit);
-  const countBy = (values: Array<string | null | undefined>) =>
-    values.reduce<Record<string, number>>((counts, value) => {
-      if (value) counts[value] = (counts[value] ?? 0) + 1;
-      return counts;
-    }, {});
-  const difficultyCounts = countBy(
-    data.items.map((problem) => problem.difficulty),
+  const facets = data.facets ?? { difficulty: {}, sourceType: {}, tags: [] };
+  const tagCounts = new Map(
+    facets.tags.map((facet) => [facet.id, facet.count]),
   );
-  const sourceCounts = countBy(data.items.map((problem) => problem.source));
-  const tagCounts = Object.entries(
-    countBy(data.items.flatMap((problem) => problem.tags ?? [])),
-  ).sort((left, right) => right[1] - left[1]);
-  const difficultyOptions = [
-    ...new Set(['入门', '简单', '中等', '困难', ...difficulties]),
-  ].slice(0, 5);
-  const sourceOptions = [
-    ...new Set(['OJPlatform', '洛谷', 'Codeforces', 'AtCoder', ...sources]),
-  ].slice(0, 6);
   const categoryOptions = [
     { label: '全部题目', value: '' },
-    { label: '基础入门', value: '入门' },
-    { label: '数据结构', value: '数据结构' },
-    { label: '动态规划', value: '动态规划' },
-    { label: '图论', value: '图论' },
-    { label: '字符串', value: '字符串' },
-    { label: '数学', value: '数学' },
+    ...tagCatalog
+      .slice(0, 6)
+      .map((item) => ({ label: item.name, value: String(item.id) })),
   ];
   const solvedPercent =
     profileOverview && data.page.total
@@ -1516,10 +1567,17 @@ function ProblemList({
     difficulty
       ? { key: 'difficulty' as const, label: `难度：${difficulty}` }
       : null,
-    tag ? { key: 'tag' as const, label: `标签：${tag}` } : null,
-    source ? { key: 'source' as const, label: `来源：${source}` } : null,
+    selectedTag
+      ? { key: 'tagId' as const, label: `标签：${selectedTag.name}` }
+      : null,
+    sourceType
+      ? {
+          key: 'sourceType' as const,
+          label: `来源：${problemSourceLabel(sourceType as keyof typeof problemSourceLabels)}`,
+        }
+      : null,
   ].filter(Boolean) as Array<{
-    key: 'q' | 'difficulty' | 'tag' | 'source';
+    key: 'q' | 'difficulty' | 'tagId' | 'sourceType';
     label: string;
   }>;
   return (
@@ -1607,7 +1665,7 @@ function ProblemList({
                     />
                     {item}
                   </button>
-                  <b>{difficultyCounts[item] ?? 0}</b>
+                  <b>{facets.difficulty[item as ProblemDifficulty] ?? 0}</b>
                 </div>
               ))}
             </div>
@@ -1620,9 +1678,14 @@ function ProblemList({
                 <div key={item}>
                   <button
                     type="button"
-                    className={source === item ? 'sidebar-filter-active' : ''}
+                    className={
+                      sourceType === item ? 'sidebar-filter-active' : ''
+                    }
                     onClick={() =>
-                      updateFilter('source', source === item ? '' : item)
+                      updateFilter(
+                        'sourceType',
+                        sourceType === item ? '' : item,
+                      )
                     }
                   >
                     <span
@@ -1633,7 +1696,7 @@ function ProblemList({
                     </span>
                     {problemSourceLabel(item)}
                   </button>
-                  <b>{sourceCounts[item] ?? 0}</b>
+                  <b>{facets.sourceType[item] ?? 0}</b>
                 </div>
               ))}
             </div>
@@ -1646,16 +1709,15 @@ function ProblemList({
             aria-label="题库筛选"
             onSubmit={(event) => {
               event.preventDefault();
-              load();
+              if (searchInput === query) load();
+              else updateFilter('q', searchInput);
             }}
           >
             <div className="filter-row category-filter-row">
-              <strong>题目分类</strong>
+              <strong>题目标签</strong>
               <div className="category-tabs">
                 {categoryOptions.map((item) => {
-                  const active = item.value
-                    ? tag === item.value || difficulty === item.value
-                    : !tag && !difficulty;
+                  const active = item.value ? tagId === item.value : !tagId;
                   return (
                     <button
                       key={item.label}
@@ -1665,17 +1727,13 @@ function ProblemList({
                         if (!item.value) {
                           const next = {
                             ...currentFilters(),
-                            difficulty: '',
-                            tag: '',
+                            tagId: '',
                           };
-                          setDifficulty('');
-                          setTag('');
+                          setTagId('');
                           setPage(1);
                           syncUrl(next, 1, true);
-                        } else if (item.value === '入门') {
-                          updateFilter('difficulty', item.value);
                         } else {
-                          updateFilter('tag', item.value);
+                          updateFilter('tagId', item.value);
                         }
                       }}
                     >
@@ -1694,9 +1752,12 @@ function ProblemList({
                   <label key={item}>
                     <input
                       type="checkbox"
-                      checked={source === item}
+                      checked={sourceType === item}
                       onChange={() =>
-                        updateFilter('source', source === item ? '' : item)
+                        updateFilter(
+                          'sourceType',
+                          sourceType === item ? '' : item,
+                        )
                       }
                     />
                     {problemSourceLabel(item)}
@@ -1706,14 +1767,13 @@ function ProblemList({
               <label className="sr-only">
                 来源
                 <select
-                  value={source}
-                  disabled={!sources.length}
+                  value={sourceType}
                   onChange={(event) =>
-                    updateFilter('source', event.target.value)
+                    updateFilter('sourceType', event.target.value)
                   }
                 >
                   <option value="">全部来源</option>
-                  {sources.map((item) => (
+                  {sourceOptions.map((item) => (
                     <option key={item} value={item}>
                       {problemSourceLabel(item)}
                     </option>
@@ -1745,13 +1805,12 @@ function ProblemList({
                 难度
                 <select
                   value={difficulty}
-                  disabled={!difficulties.length}
                   onChange={(event) =>
                     updateFilter('difficulty', event.target.value)
                   }
                 >
                   <option value="">全部难度</option>
-                  {difficulties.map((item) => (
+                  {difficultyOptions.map((item) => (
                     <option key={item}>{item}</option>
                   ))}
                 </select>
@@ -1763,15 +1822,19 @@ function ProblemList({
               <label>
                 <span className="sr-only">标签</span>
                 <select
-                  value={tag}
-                  disabled={!tags.length}
-                  onChange={(event) => updateFilter('tag', event.target.value)}
+                  value={tagId}
+                  disabled={!tagCatalog.length}
+                  onChange={(event) =>
+                    updateFilter('tagId', event.target.value)
+                  }
                 >
                   <option value="">
-                    {tags.length ? '选择标签（可多选）' : '后端暂未提供'}
+                    {tagCatalog.length ? '选择标签' : '后端暂未提供'}
                   </option>
-                  {tags.map((item) => (
-                    <option key={item}>{item}</option>
+                  {tagCatalog.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -1781,8 +1844,8 @@ function ProblemList({
                 <input
                   id="problem-keyword"
                   aria-label="关键词"
-                  value={query}
-                  onChange={(event) => updateFilter('q', event.target.value)}
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
                   placeholder="输入题目标题、描述关键词等…"
                 />
                 <span aria-hidden="true" className="search-icon">
@@ -1795,19 +1858,19 @@ function ProblemList({
               <strong>其他筛选</strong>
               <label className="compact-select-label">
                 <span>时间限制</span>
-                <select aria-label="时间限制">
+                <select aria-label="时间限制" disabled>
                   <option>不限</option>
                 </select>
               </label>
               <label className="compact-select-label">
                 <span>内存限制</span>
-                <select aria-label="内存限制">
+                <select aria-label="内存限制" disabled>
                   <option>不限</option>
                 </select>
               </label>
               <label className="compact-select-label">
                 <span>通过率</span>
-                <select aria-label="通过率">
+                <select aria-label="通过率" disabled>
                   <option>不限</option>
                 </select>
               </label>
@@ -1825,7 +1888,7 @@ function ProblemList({
                 <button
                   type="button"
                   className="filter-reset"
-                  disabled={!query && !difficulty && !tag && !source}
+                  disabled={!query && !difficulty && !tagId && !sourceType}
                   onClick={clearFilters}
                   aria-label="清除筛选"
                 >
@@ -1855,8 +1918,16 @@ function ProblemList({
               共 <b>{data.page.total.toLocaleString('zh-CN')}</b> 道题目
             </span>
             <div>
-              <select aria-label="题目排序">
-                <option>默认排序</option>
+              <select
+                aria-label="题目排序"
+                value={`${sort}:${order}`}
+                onChange={(event) => updateSort(event.target.value)}
+              >
+                <option value="publicNumber:asc">题号升序</option>
+                <option value="title:asc">标题升序</option>
+                <option value="difficulty:asc">难度升序</option>
+                <option value="updatedAt:desc">最近更新</option>
+                <option value="createdAt:desc">最新创建</option>
               </select>
               <span
                 className="view-toggle active"
@@ -1875,20 +1946,20 @@ function ProblemList({
             </div>
           </div>
 
-          {filtered.length === 0 ? (
+          {data.items.length === 0 ? (
             <State
               title={
-                query || difficulty || tag || source
+                query || difficulty || tagId || sourceType
                   ? '当前筛选无结果'
                   : '暂无题目'
               }
               text={
-                query || difficulty || tag || source
+                query || difficulty || tagId || sourceType
                   ? '请尝试其他关键词，或清除筛选条件。'
                   : '已发布题目会显示在这里。'
               }
               action={
-                query || difficulty || tag || source ? (
+                query || difficulty || tagId || sourceType ? (
                   <button
                     type="button"
                     className="secondary"
@@ -1909,16 +1980,10 @@ function ProblemList({
                 <span>来源</span>
                 <span>通过率</span>
                 <span>提交数</span>
-                <span>收藏</span>
+                <span>收藏（未开放）</span>
                 <span>操作</span>
               </div>
-              {filtered.map((problem) => {
-                const submissionCount =
-                  problem.statistics?.submissionCount ?? 0;
-                const acceptedCount = problem.statistics?.acceptedCount ?? 0;
-                const acceptance = submissionCount
-                  ? `${((acceptedCount / submissionCount) * 100).toFixed(1)}%`
-                  : '—';
+              {data.items.map((problem) => {
                 const problemTags =
                   problem.tagDetails?.map((item) => item.name) ??
                   problem.tags ??
@@ -1949,16 +2014,24 @@ function ProblemList({
                         )}
                       </span>
                       <span className="problem-source">
-                        {problemSourceLabel(problem.source)}
+                        {problemSourceLabel(problem.sourceType)}
                       </span>
-                      <span className="problem-rate">{acceptance}</span>
-                      <span className="problem-submissions">
-                        {submissionCount.toLocaleString('zh-CN')}
+                      <span
+                        className="problem-rate"
+                        title="权威通过率聚合暂未接入"
+                      >
+                        —
+                      </span>
+                      <span
+                        className="problem-submissions"
+                        title="权威提交次数聚合暂未接入"
+                      >
+                        —
                       </span>
                       <span className="problem-star" aria-hidden="true">
-                        ☆
+                        —
                       </span>
-                      <span className="problem-action">练习</span>
+                      <span className="problem-action">查看题目</span>
                     </Link>
                   </div>
                 );
@@ -2010,18 +2083,18 @@ function ProblemList({
 
           <section className="right-card hot-tag-card">
             <div className="right-card-heading">
-              <h2>热门标签</h2>
-              <span>本页统计</span>
+              <h2>标签目录</h2>
+              <span>后端提供</span>
             </div>
             <div className="hot-tags">
-              {tagCounts.length ? (
-                tagCounts.slice(0, 14).map(([name, count]) => (
+              {tagCatalog.length ? (
+                tagCatalog.slice(0, 14).map((tag) => (
                   <button
-                    key={name}
+                    key={tag.id}
                     type="button"
-                    onClick={() => updateFilter('tag', name)}
+                    onClick={() => updateFilter('tagId', String(tag.id))}
                   >
-                    {name} <small>{count}</small>
+                    {tag.name} <small>{tagCounts.get(tag.id) ?? 0}</small>
                   </button>
                 ))
               ) : (
@@ -2042,7 +2115,7 @@ function ProblemList({
                     {problem.publicId ?? problem.slug} ›
                   </Link>
                   <time dateTime={problem.updatedAt}>
-                    {problem.updatedAt.slice(0, 10)}
+                    {problem.updatedAt?.slice(0, 10) ?? '—'}
                   </time>
                 </div>
               ))}

@@ -11,6 +11,10 @@ import {
   ProblemDeleteConflictError,
   type Problem,
   type ProblemCreateInput,
+  type ProblemDifficulty,
+  type ProblemListOrder,
+  type ProblemListSort,
+  type ProblemSourceType,
   type ProblemUpdateInput,
 } from './model.js';
 import type { ProblemRevision } from './model.js';
@@ -30,14 +34,25 @@ export type ProblemListQuery = {
   ownedOrPublicBy?: string;
   authorId?: string;
   search?: string;
+  difficulty?: ProblemDifficulty;
+  tagIds?: number[];
+  sourceType?: ProblemSourceType;
+  sort?: ProblemListSort;
+  order?: ProblemListOrder;
   status?: Problem['status'];
   visibility?: Problem['visibility'];
+};
+export type ProblemFacets = {
+  difficulty: Partial<Record<ProblemDifficulty, number>>;
+  sourceType: Partial<Record<ProblemSourceType, number>>;
+  tags: Array<{ id: number; count: number }>;
 };
 export interface ProblemRepository {
   create(input: ProblemCreateInput): Promise<Problem>;
   get(idOrSlug: string): Promise<Problem | undefined>;
   getMany?(ids: string[]): Promise<Problem[]>;
   list(query: ProblemListQuery): Promise<{ items: Problem[]; total: number }>;
+  facets(query: ProblemListQuery): Promise<ProblemFacets>;
   update(idOrSlug: string, input: ProblemUpdateInput): Promise<Problem>;
   tombstone(
     idOrSlug: string,
@@ -111,28 +126,92 @@ export class InMemoryProblemRepository implements ProblemRepository {
     this.rows.set(row.id, updated);
     return updated;
   }
+  private matchingRows(query: ProblemListQuery) {
+    return [...this.rows.values()].filter(
+      (p) =>
+        !p.deletedAt &&
+        (!query.publicOnly ||
+          (p.visibility === 'public' && p.status === 'published')) &&
+        (!query.ownedOrPublicBy ||
+          p.authorId === query.ownedOrPublicBy ||
+          (p.visibility === 'public' && p.status === 'published')) &&
+        (!query.authorId || p.authorId === query.authorId) &&
+        (!query.status || p.status === query.status) &&
+        (!query.visibility || p.visibility === query.visibility) &&
+        (!query.difficulty || p.difficulty === query.difficulty) &&
+        (!query.sourceType || p.sourceType === query.sourceType) &&
+        (!query.tagIds?.length ||
+          query.tagIds.some((tagId) =>
+            p.tagDetails?.some((tag) => tag.id === tagId),
+          )) &&
+        (!query.search ||
+          `${p.slug} ${p.title}`
+            .toLocaleLowerCase()
+            .includes(query.search.toLocaleLowerCase())),
+    );
+  }
+  private compareRows(
+    left: Problem,
+    right: Problem,
+    sort: ProblemListSort,
+    order: ProblemListOrder,
+  ) {
+    const difficultyRank = (value: Problem['difficulty']) =>
+      ['入门', '简单', '中等', '困难', '专家'].indexOf(value ?? '');
+    const value = (problem: Problem) => {
+      switch (sort) {
+        case 'title':
+          return problem.title;
+        case 'difficulty':
+          return difficultyRank(problem.difficulty);
+        case 'updatedAt':
+          return problem.updatedAt;
+        case 'createdAt':
+          return problem.createdAt;
+        default:
+          return problem.publicNumber;
+      }
+    };
+    const first = value(left),
+      second = value(right);
+    const compared =
+      typeof first === 'number' && typeof second === 'number'
+        ? first - second
+        : String(first).localeCompare(String(second));
+    const stable = compared || left.id.localeCompare(right.id);
+    return order === 'desc' ? -stable : stable;
+  }
   async list(query: ProblemListQuery) {
-    const rows = [...this.rows.values()]
-      .filter(
-        (p) =>
-          !p.deletedAt &&
-          (!query.publicOnly ||
-            (p.visibility === 'public' && p.status === 'published')) &&
-          (!query.ownedOrPublicBy ||
-            p.authorId === query.ownedOrPublicBy ||
-            (p.visibility === 'public' && p.status === 'published')) &&
-          (!query.authorId || p.authorId === query.authorId) &&
-          (!query.status || p.status === query.status) &&
-          (!query.visibility || p.visibility === query.visibility) &&
-          (!query.search ||
-            `${p.slug} ${p.title}`
-              .toLocaleLowerCase()
-              .includes(query.search.toLocaleLowerCase())),
-      )
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const sort = query.sort ?? 'publicNumber';
+    const order = query.order ?? 'asc';
+    const rows = this.matchingRows(query).sort((left, right) =>
+      this.compareRows(left, right, sort, order),
+    );
     return {
       items: rows.slice(query.offset ?? 0, (query.offset ?? 0) + query.limit),
       total: rows.length,
+    };
+  }
+  async facets(query: ProblemListQuery): Promise<ProblemFacets> {
+    const difficulty: ProblemFacets['difficulty'] = {};
+    const sourceType: ProblemFacets['sourceType'] = {};
+    const tags = new Map<number, number>();
+    for (const problem of this.matchingRows(query)) {
+      if (problem.difficulty)
+        difficulty[problem.difficulty] =
+          (difficulty[problem.difficulty] ?? 0) + 1;
+      if (problem.sourceType)
+        sourceType[problem.sourceType] =
+          (sourceType[problem.sourceType] ?? 0) + 1;
+      for (const tag of problem.tagDetails ?? [])
+        tags.set(tag.id, (tags.get(tag.id) ?? 0) + 1);
+    }
+    return {
+      difficulty,
+      sourceType,
+      tags: [...tags.entries()]
+        .map(([id, count]) => ({ id, count }))
+        .sort((left, right) => right.count - left.count || left.id - right.id),
     };
   }
   async update(key: string, input: ProblemUpdateInput) {
@@ -344,7 +423,7 @@ export class PostgresProblemRepository implements ProblemRepository {
       return mapRow(result.rows[0]);
     });
   }
-  async list(query: ProblemListQuery) {
+  private listWhere(query: ProblemListQuery) {
     const clauses = [
       'deleted_at IS NULL',
       ...(query.publicOnly
@@ -376,23 +455,88 @@ export class PostgresProblemRepository implements ProblemRepository {
         `(slug ILIKE $${params.length} OR title ILIKE $${params.length})`,
       );
     }
-    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    if (query.difficulty) {
+      params.push(query.difficulty);
+      clauses.push(`difficulty = $${params.length}`);
+    }
+    if (query.sourceType) {
+      params.push(query.sourceType);
+      clauses.push(`source_type = $${params.length}`);
+    }
+    if (query.tagIds?.length) {
+      params.push(query.tagIds);
+      clauses.push(
+        `EXISTS (SELECT 1 FROM problem_tags filtered_tags WHERE filtered_tags.problem_id = p.id AND filtered_tags.tag_id = ANY($${params.length}::bigint[]))`,
+      );
+    }
+    return {
+      where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '',
+      params,
+    };
+  }
+  async list(query: ProblemListQuery) {
+    const { where, params } = this.listWhere(query);
     const count = await this.pool.query(
-      `SELECT count(*)::int AS total FROM problems ${where}`,
+      `SELECT count(*)::int AS total FROM problems p ${where}`,
       params,
     );
+    const sortColumn: Record<ProblemListSort, string> = {
+      publicNumber: 'p.public_number',
+      title: 'p.title',
+      difficulty:
+        "array_position(ARRAY['入门','简单','中等','困难','专家'], p.difficulty)",
+      updatedAt: 'p.updated_at',
+      createdAt: 'p.created_at',
+    };
+    const order = query.order === 'desc' ? 'DESC' : 'ASC';
     params.push(query.limit, query.offset ?? 0);
     const result = await this.pool.query(
       `SELECT p.*, COALESCE((SELECT array_agg(t.display_name ORDER BY t.display_order, t.id)
         FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), ARRAY[]::text[]) AS tags,
         COALESCE((SELECT json_agg(json_build_object('id',t.id,'slug',t.slug,'name',t.name,'category',t.category,'displayOrder',t.display_order,'isActive',t.is_active) ORDER BY t.display_order,t.id)
         FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), '[]'::json) AS tag_details
-       FROM problems p ${where} ORDER BY public_number ASC, id ASC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+       FROM problems p ${where} ORDER BY ${sortColumn[query.sort ?? 'publicNumber']} ${order}, p.id ${order} LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
     return {
       items: result.rows.map(mapRow),
       total: Number(count.rows[0]?.total ?? 0),
+    };
+  }
+  async facets(query: ProblemListQuery): Promise<ProblemFacets> {
+    const { where, params } = this.listWhere(query);
+    const scoped = (condition: string) => `${where} AND ${condition}`;
+    const [difficulty, sourceType, tags] = await Promise.all([
+      this.pool.query(
+        `SELECT p.difficulty, count(*)::int count FROM problems p ${scoped('p.difficulty IS NOT NULL')} GROUP BY p.difficulty`,
+        params,
+      ),
+      this.pool.query(
+        `SELECT p.source_type, count(*)::int count FROM problems p ${scoped('p.source_type IS NOT NULL')} GROUP BY p.source_type`,
+        params,
+      ),
+      this.pool.query(
+        `SELECT t.id, count(DISTINCT p.id)::int count FROM problems p JOIN problem_tags pt ON pt.problem_id=p.id JOIN tags t ON t.id=pt.tag_id ${where} GROUP BY t.id ORDER BY count DESC,t.id ASC`,
+        params,
+      ),
+    ]);
+    return {
+      difficulty: Object.fromEntries(
+        difficulty.rows.map((row) => [
+          String(row.difficulty),
+          Number(row.count),
+        ]),
+      ) as ProblemFacets['difficulty'],
+      sourceType: Object.fromEntries(
+        sourceType.rows.map((row) => [
+          String(row.source_type),
+          Number(row.count),
+        ]),
+      ) as ProblemFacets['sourceType'],
+      tags: tags.rows.map((row) => ({
+        id: Number(row.id),
+        count: Number(row.count),
+      })),
     };
   }
   async update(key: string, input: ProblemUpdateInput) {
