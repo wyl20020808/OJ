@@ -59,10 +59,7 @@ import type {
   ConversationSummary,
   NotificationSummary,
 } from '../services/portal-contracts.js';
-import {
-  chooseDailyProblem,
-  getDailyFortune,
-} from './homeContent.js';
+import { chooseDailyProblem, getDailyFortune } from './homeContent.js';
 import {
   formatDate,
   translateJudgeLabel,
@@ -663,6 +660,9 @@ function Home({
       dailyProblem={dailyProblem}
       unavailable={error || contestError}
       signedIn={Boolean(user)}
+      fortune={fortune}
+      fortuneVisible={fortuneVisible}
+      onRevealFortune={() => setFortuneVisible(true)}
     />
   );
   return (
@@ -846,6 +846,9 @@ function HomeReference({
   dailyProblem,
   unavailable,
   signedIn,
+  fortune,
+  fortuneVisible,
+  onRevealFortune,
 }: {
   announcements: DiscussionPost[];
   contests:
@@ -858,9 +861,13 @@ function HomeReference({
   dailyProblem: Problem | null;
   unavailable: boolean;
   signedIn: boolean;
+  fortune: ReturnType<typeof getDailyFortune>;
+  fortuneVisible: boolean;
+  onRevealFortune: () => void;
 }) {
   const now = new Date();
-  const leadingDays = (new Date(now.getFullYear(), now.getMonth(), 1).getDay() + 6) % 7;
+  const leadingDays =
+    (new Date(now.getFullYear(), now.getMonth(), 1).getDay() + 6) % 7;
   const days = Array.from(
     { length: new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() },
     (_, index) => index + 1,
@@ -873,27 +880,300 @@ function HomeReference({
       <section className="home-reference-hero">
         <div className="home-reference-hero-inner">
           <p>用代码探索更大的世界</p>
-          <h1>在算法的世界里<br />遇见更好的自己</h1>
-          <div className="home-reference-hero-copy"><span />从这里出发、刷题、比赛、交流、成长<br />　与一群热爱算法的人，走向更远的未来。</div>
-          <div className="home-reference-actions"><Link to="/problems" className="home-reference-primary">开始刷题　→</Link><Link to="/problems" className="home-reference-secondary">浏览题库</Link></div>
+          <h1>
+            在算法的世界里
+            <br />
+            遇见更好的自己
+          </h1>
+          <div className="home-reference-hero-copy">
+            <span />
+            从这里出发、刷题、比赛、交流、成长
+            <br />
+             与一群热爱算法的人，走向更远的未来。
+          </div>
+          <div className="home-reference-actions">
+            <Link to="/problems" className="home-reference-primary">
+              开始刷题 →
+            </Link>
+            <Link to="/problems" className="home-reference-secondary">
+              浏览题库
+            </Link>
+          </div>
         </div>
-        <span className="home-reference-slogan" aria-hidden="true">代码如山<br />　行则将至</span>
+        <span className="home-reference-slogan" aria-hidden="true">
+          代码如山
+          <br />
+           行则将至
+        </span>
       </section>
       <section className="home-reference-grid">
         <div className="home-reference-left">
-          <section className="reference-card reference-announcements"><div className="reference-card-title"><h2><span aria-hidden="true">⚑</span> 公告</h2><Link to="/discussion">更多 →</Link></div><ul>{announcements.slice(0, 5).map((item) => <li key={item.id}><span>公告</span><Link to={`/discussion/${item.publicId}`}>{item.title}</Link><time>{formatDate(item.publishedAt ?? item.createdAt, false)}</time></li>)}{!announcements.length && <li className="reference-empty">{unavailable ? '公告暂时不可用' : '暂无公告'}</li>}</ul></section>
-          <section className="reference-card reference-contests"><div className="reference-card-title"><h2><span>♛</span> 近期比赛</h2><Link to="/contests">更多　→</Link></div><div className="reference-contest-list">{nearbyContests.map((contest) => <Link key={contest.id} to={`/contests/${contest.id}`}><time>{formatDate(contest.startsAt, false)}</time><strong>{contest.title}</strong><small>{contest.lifecycle === 'RUNNING' ? '进行中' : '即将开始'}</small></Link>)}{!nearbyContests.length && <p>{unavailable ? '比赛信息暂时不可用' : '暂无近期比赛'}</p>}</div></section>
+          <section className="reference-card reference-announcements">
+            <div className="reference-card-title">
+              <h2>
+                <span aria-hidden="true">⚑</span> 公告
+              </h2>
+              <Link to="/discussion">更多 →</Link>
+            </div>
+            <ul>
+              {announcements.slice(0, 5).map((item) => (
+                <li key={item.id}>
+                  <span>公告</span>
+                  <Link to={`/discussion/${item.publicId}`}>{item.title}</Link>
+                  <time>
+                    {formatDate(item.publishedAt ?? item.createdAt, false)}
+                  </time>
+                </li>
+              ))}
+              {!announcements.length && (
+                <li className="reference-empty">暂无公告</li>
+              )}
+            </ul>
+          </section>
+          <section className="reference-card reference-contests">
+            <div className="reference-card-title">
+              <h2 aria-label="比赛与排名">
+                <span aria-hidden="true">♛</span> 近期比赛
+              </h2>
+              <Link to="/contests">更多 →</Link>
+            </div>
+            <div className="reference-contest-list">
+              {nearbyContests.map((contest) => (
+                <Link key={contest.id} to={`/contests/${contest.id}`}>
+                  <time>{formatDate(contest.startsAt, false)}</time>
+                  <strong>{contest.title}</strong>
+                  <small>
+                    {contest.lifecycle === 'RUNNING' ? '进行中' : '即将开始'}
+                  </small>
+                </Link>
+              ))}
+              {!nearbyContests.length && (
+                <p>
+                  {unavailable
+                    ? '比赛摘要暂时不可用，请稍后重试。当前不展示虚构赛程或名次。'
+                    : '正在加载真实比赛摘要…'}
+                </p>
+              )}
+            </div>
+          </section>
         </div>
         <div className="home-reference-center">
-          <section className="reference-card reference-daily"><div className="reference-card-title"><h2><span>▣</span> 每日一题</h2><Link to="/problems">往期题目　→</Link></div>{dailyProblem ? <div className="reference-daily-body"><div><h3>{dailyProblem.title}</h3><small>#{dailyProblem.publicId ?? dailyProblem.slug ?? dailyProblem.id}</small></div><div className="reference-tags">{dailyProblem.difficulty && <span>{dailyProblem.difficulty}</span>}{dailyProblem.tags?.slice(0, 2).map((tag) => <span key={tag}>{tag}</span>)}</div><p>从一道题开始，保持对算法的好奇与热爱。</p><div className="reference-daily-meta"><span>◉ 进入练习页查看题目详情</span><Link to={`/problems/${dailyProblem.slug || dailyProblem.id}`}>立即挑战　→</Link></div></div> : <p className="reference-empty">{unavailable ? '题库数据暂时不可用' : '正在加载每日练习题目…'}</p>}</section>
-          <section className="reference-card reference-recommendations"><div className="reference-card-title"><h2><span>▰</span> 推荐题单</h2><Link to="/problems">更多　→</Link></div><div className="reference-recommendation-grid">{['入门必刷', '数据结构基础', '经典算法', '面试精选'].map((title, index) => <Link key={title} to="/problems" className={`recommendation-card recommendation-${index}`}><strong>{title}</strong><small>{['从零开始，打好基础', '掌握核心数据结构', '提升算法思维', '大厂高频题目'][index]}</small><span>推荐练习　{['▮▮', '◆', '♧', '▣'][index]}</span></Link>)}</div></section>
-          <section className="reference-card reference-calendar"><div className="reference-card-title"><h2><span>▣</span> 学习日历</h2><div><button type="button" aria-label="上个月">‹</button><b>{now.getFullYear()} 年 {now.getMonth() + 1} 月</b><button type="button" aria-label="下个月">›</button><Link to="/profile">更多　→</Link></div></div><div className="reference-calendar-body"><div className="reference-calendar-grid"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>{Array.from({ length: leadingDays }).map((_, index) => <i key={`blank-${index}`} />)}{days.map((day) => <span key={day} className={day === now.getDate() ? 'today' : ''}>{day}</span>)}</div><div className="reference-streak"><span>🔥</span><small>连续打卡</small><strong>{signedIn ? '— 天' : '登录后查看'}</strong><p>“坚持下去，<br />你会遇见更好的自己。”</p></div></div></section>
+          <section className="reference-card reference-daily">
+            <div className="reference-card-title">
+              <h2>
+                <span aria-hidden="true">▣</span> 每日一题
+              </h2>
+              <Link to="/problems">往期题目 →</Link>
+            </div>
+            {dailyProblem ? (
+              <div className="reference-daily-body">
+                <div>
+                  <h3>{dailyProblem.title}</h3>
+                  <small>
+                    #
+                    {dailyProblem.publicId ??
+                      dailyProblem.slug ??
+                      dailyProblem.id}
+                  </small>
+                </div>
+                <div className="reference-tags">
+                  {dailyProblem.difficulty && (
+                    <span>{dailyProblem.difficulty}</span>
+                  )}
+                  {dailyProblem.tags?.slice(0, 2).map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
+                </div>
+                <p>从一道题开始，保持对算法的好奇与热爱。</p>
+                <div className="reference-daily-meta">
+                  <span>◉ 进入练习页查看题目详情</span>
+                  <Link
+                    to={`/problems/${dailyProblem.slug || dailyProblem.id}`}
+                  >
+                    开始练习 →
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <p className="reference-empty">
+                {unavailable ? '题库数据暂不可用。' : '正在加载每日练习题目…'}
+              </p>
+            )}
+          </section>
+          <section className="reference-card reference-recommendations">
+            <div className="reference-card-title">
+              <h2>
+                <span>▰</span> 推荐题单
+              </h2>
+              <Link to="/problems">更多 →</Link>
+            </div>
+            <div className="reference-recommendation-grid">
+              {['入门必刷', '数据结构基础', '经典算法', '面试精选'].map(
+                (title, index) => (
+                  <Link
+                    key={title}
+                    to="/problems"
+                    className={`recommendation-card recommendation-${index}`}
+                  >
+                    <strong>{title}</strong>
+                    <small>
+                      {
+                        [
+                          '从零开始，打好基础',
+                          '掌握核心数据结构',
+                          '提升算法思维',
+                          '大厂高频题目',
+                        ][index]
+                      }
+                    </small>
+                    <span>推荐练习 {['▮▮', '◆', '♧', '▣'][index]}</span>
+                  </Link>
+                ),
+              )}
+            </div>
+          </section>
+          <section className="reference-card reference-calendar">
+            <div className="reference-card-title">
+              <h2>
+                <span>▣</span> 学习日历
+              </h2>
+              <div>
+                <button type="button" aria-label="上个月">
+                  ‹
+                </button>
+                <b>
+                  {now.getFullYear()} 年 {now.getMonth() + 1} 月
+                </b>
+                <button type="button" aria-label="下个月">
+                  ›
+                </button>
+                <Link to="/profile">更多 →</Link>
+              </div>
+            </div>
+            <div className="reference-calendar-body">
+              <div className="reference-calendar-grid">
+                <span>日</span>
+                <span>一</span>
+                <span>二</span>
+                <span>三</span>
+                <span>四</span>
+                <span>五</span>
+                <span>六</span>
+                {Array.from({ length: leadingDays }).map((_, index) => (
+                  <i key={`blank-${index}`} />
+                ))}
+                {days.map((day) => (
+                  <span
+                    key={day}
+                    className={day === now.getDate() ? 'today' : ''}
+                  >
+                    {day}
+                  </span>
+                ))}
+              </div>
+              <div className="reference-streak">
+                <span>🔥</span>
+                <small>连续打卡</small>
+                <strong>{signedIn ? '— 天' : '登录后查看'}</strong>
+                <p>
+                  “坚持下去，
+                  <br />
+                  你会遇见更好的自己。”
+                </p>
+              </div>
+            </div>
+          </section>
         </div>
         <aside className="home-reference-right">
-          <section className="reference-card reference-progress"><div className="reference-card-title"><h2><span>▥</span> 学习进度</h2><Link to="/profile">详情　→</Link></div><div className="reference-progress-body"><div className="reference-progress-ring"><b>—</b></div><dl><div><dt>已通过题目</dt><dd>—</dd></div><div><dt>继续加油，成为更强的自己！</dt><dd /></div></dl></div></section>
-          <section className="reference-card reference-homework"><div className="reference-card-title"><h2><span>▤</span> 我的作业</h2><Link to="/homework">全部　→</Link></div><p>作业功能正在接入。进入作业页查看可用任务。</p></section>
-          <section className="reference-card reference-wrong"><div className="reference-card-title"><h2><span>×</span> 错题集</h2><Link to="/wrong-book">查看　→</Link></div><div><strong>—</strong><span>道错题</span><div className="reference-bars"><i /><i /><i /><i /><i /></div></div></section>
-          <section className="reference-fortune"><div><span>★</span><small>好运相伴</small></div><h2>宜 坚 持</h2><p>“算法的道路上，每一次提交<br />都是向更好的自己靠近。”</p></section>
+          <section className="reference-card reference-progress">
+            <div className="reference-card-title">
+              <h2>
+                <span>▥</span> 学习进度
+              </h2>
+              <Link to="/profile">详情 →</Link>
+            </div>
+            <div className="reference-progress-body">
+              <div className="reference-progress-ring">
+                <b>—</b>
+              </div>
+              <dl>
+                <div>
+                  <dt>已通过题目</dt>
+                  <dd>—</dd>
+                </div>
+                <div>
+                  <dt>继续加油，成为更强的自己！</dt>
+                  <dd />
+                </div>
+              </dl>
+            </div>
+          </section>
+          <section className="reference-card reference-homework">
+            <div className="reference-card-title">
+              <h2>
+                <span aria-hidden="true">▤</span> 我的作业
+              </h2>
+              <Link to="/homework">全部 →</Link>
+            </div>
+            <p>
+              作业功能正在接入。当前不会显示虚构的作业、截止时间或完成进度。
+            </p>
+          </section>
+          <section className="reference-card reference-wrong">
+            <div className="reference-card-title">
+              <h2>
+                <span>×</span> 错题集
+              </h2>
+              <Link to="/wrong-book">查看 →</Link>
+            </div>
+            <div>
+              <strong>—</strong>
+              <span>道错题</span>
+              <div className="reference-bars">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </div>
+            </div>
+          </section>
+          <section className="reference-fortune">
+            <div>
+              <span aria-hidden="true">★</span>
+              <small>好运相伴</small>
+            </div>
+            <h2>今日运势</h2>
+            {fortuneVisible ? (
+              <div aria-live="polite">
+                <p className="fortune-state">{fortune.state}</p>
+                <dl>
+                  <div>
+                    <dt>宜</dt>
+                    <dd>{fortune.should}</dd>
+                  </div>
+                  <div>
+                    <dt>忌</dt>
+                    <dd>{fortune.avoid}</dd>
+                  </div>
+                  <div>
+                    <dt>幸运算法</dt>
+                    <dd>
+                      {fortune.algorithm} · {fortune.complexity}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="field-help">
+                  同一浏览器同一天结果一致，种子不使用邮箱、手机号、令牌、密码或
+                  IP。
+                </p>
+              </div>
+            ) : (
+              <button type="button" onClick={onRevealFortune}>
+                获取今日运势
+              </button>
+            )}
+          </section>
         </aside>
       </section>
     </section>
@@ -1500,6 +1780,7 @@ function ProblemList({
                 <span className="sr-only">关键词</span>
                 <input
                   id="problem-keyword"
+                  aria-label="关键词"
                   value={query}
                   onChange={(event) => updateFilter('q', event.target.value)}
                   placeholder="输入题目标题、描述关键词等…"
@@ -3738,7 +4019,11 @@ export function App() {
           </Link>
           <Link
             to="/homework"
-            className={current.name === 'homework' || current.name === 'homework-detail' ? 'active' : ''}
+            className={
+              current.name === 'homework' || current.name === 'homework-detail'
+                ? 'active'
+                : ''
+            }
           >
             作业
           </Link>
@@ -3782,11 +4067,19 @@ export function App() {
                 .get('q')
                 ?.toString()
                 .trim();
-              navigate(query ? `/problems?q=${encodeURIComponent(query)}` : '/problems');
+              navigate(
+                query
+                  ? `/problems?q=${encodeURIComponent(query)}`
+                  : '/problems',
+              );
             }}
           >
             <span aria-hidden="true">⌕</span>
-            <input name="q" placeholder="搜索题目、比赛、用户…" aria-label="全站搜索" />
+            <input
+              name="q"
+              placeholder="搜索题目、比赛、用户…"
+              aria-label="全站搜索"
+            />
           </form>
           <NotificationBell navigate={navigate} api={api} />
           {user ? (
