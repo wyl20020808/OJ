@@ -283,8 +283,8 @@ const breadcrumbHistory = (): BreadcrumbItem[] => {
 function Breadcrumbs({ current }: { current: Route }) {
   const leaf: Record<Route['name'], string> = {
     home: '首页',
-    discussion: '讨论',
-    'discussion-post': '内容详情',
+    discussion: '博客',
+    'discussion-post': '文章详情',
     'discussion-new': '写文章',
     'discussion-edit': '编辑文章',
     login: '登录',
@@ -4260,7 +4260,12 @@ export function App() {
           <span className="brand-mark" aria-hidden="true">
             OJ
           </span>
-          <strong>AlgoOJ</strong>
+          <strong>
+            AlgoOJ
+            {current.name.startsWith('discussion') && (
+              <span className="brand-section">博客</span>
+            )}
+          </strong>
         </Link>
         <button
           type="button"
@@ -4330,7 +4335,7 @@ export function App() {
             to="/discussion"
             className={current.name.startsWith('discussion') ? 'active' : ''}
           >
-            讨论
+            博客
           </Link>
           <Link
             to="/submissions"
@@ -4366,17 +4371,26 @@ export function App() {
                 .get('q')
                 ?.toString()
                 .trim();
+              const isBlog = current.name.startsWith('discussion');
               navigate(
                 query
-                  ? `/problems?q=${encodeURIComponent(query)}`
-                  : '/problems',
+                  ? `${isBlog ? '/discussion' : '/problems'}?q=${encodeURIComponent(
+                      query,
+                    )}`
+                  : isBlog
+                    ? '/discussion'
+                    : '/problems',
               );
             }}
           >
             <span aria-hidden="true">⌕</span>
             <input
               name="q"
-              placeholder="搜索题目、比赛、用户…"
+              placeholder={
+                current.name.startsWith('discussion')
+                  ? '搜索文章、用户或关键词…'
+                  : '搜索题目、比赛、用户…'
+              }
               aria-label="全站搜索"
             />
           </form>

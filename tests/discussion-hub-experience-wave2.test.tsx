@@ -55,8 +55,8 @@ afterEach(() => {
   window.history.pushState({}, '', '/');
 });
 
-describe('Discussion Hub Experience Wave 2', () => {
-  it('renders loading skeleton, internal navigation and unified article/announcement feed rows', async () => {
+describe('Blog Hub Reference Experience', () => {
+  it('renders the blog masthead, editorial navigation and data-backed article cards', async () => {
     let resolvePosts!: (value: { items: DiscussionPost[] }) => void;
     const api = {
       discussionPosts: vi.fn(
@@ -69,18 +69,22 @@ describe('Discussion Hub Experience Wave 2', () => {
     render(<DiscussionHome api={api} navigate={vi.fn()} user={user} />);
 
     expect(screen.getByLabelText('正在加载讨论内容')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '讨论' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '全部' })).toHaveAttribute(
+    expect(
+      screen.getByRole('heading', {
+        name: '用文字记录思考，让算法的世界更温暖',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '讨论' })).toHaveAttribute(
       'aria-current',
       'page',
-    );
-    expect(screen.getByRole('link', { name: '文章' })).toHaveAttribute(
-      'href',
-      '/discussion?type=article',
     );
     expect(screen.getByRole('link', { name: '公告' })).toHaveAttribute(
       'href',
       '/discussion?type=announcement',
+    );
+    expect(screen.getByRole('link', { name: '题解' })).toHaveAttribute(
+      'href',
+      '/discussion?type=solution',
     );
 
     const announcement = post({
@@ -105,10 +109,14 @@ describe('Discussion Hub Experience Wave 2', () => {
     ).toBeInTheDocument();
     expect(
       document.querySelectorAll('[data-content-template="discussion"]'),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
     expect(screen.getByText('Deleted User')).toBeInTheDocument();
-    expect(screen.getAllByText('评论 1')).toHaveLength(2);
-    expect(screen.getAllByText('♡ 4')).toHaveLength(2);
+    expect(
+      screen.getByRole('heading', { name: '优秀作者榜' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '社区数据' }),
+    ).toBeInTheDocument();
   });
 
   it('preserves type and search in URL-driven navigation and API query', async () => {
@@ -120,15 +128,15 @@ describe('Discussion Hub Experience Wave 2', () => {
 
     await waitFor(() =>
       expect(discussionPosts).toHaveBeenCalledWith(
-        'limit=20&type=ANNOUNCEMENT&q=release',
+        'limit=30&type=ANNOUNCEMENT&q=release',
       ),
     );
     expect(screen.getByRole('link', { name: '公告' })).toHaveAttribute(
       'aria-current',
       'page',
     );
-    fireEvent.click(screen.getByRole('link', { name: '文章' }));
-    expect(navigate).toHaveBeenCalledWith('/discussion?type=article&q=release');
+    fireEvent.click(screen.getByRole('link', { name: '讨论' }));
+    expect(navigate).toHaveBeenCalledWith('/discussion?q=release');
 
     fireEvent.change(screen.getByRole('searchbox'), {
       target: { value: 'compiler' },
@@ -149,7 +157,7 @@ describe('Discussion Hub Experience Wave 2', () => {
     render(<DiscussionHome api={api} navigate={vi.fn()} user={null} />);
 
     expect(
-      await screen.findByRole('heading', { name: '加载讨论内容失败' }),
+      await screen.findByRole('heading', { name: '加载博客内容失败' }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
     expect(
@@ -221,6 +229,9 @@ describe('Discussion Hub Experience Wave 2', () => {
     expect(
       view.container.querySelector('[data-content-template="discussion"]'),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: '题目链接' }),
+    ).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '编辑' })).toHaveLength(2);
     expect(screen.getAllByRole('button', { name: '删除' })).toHaveLength(2);
 
@@ -257,7 +268,10 @@ describe('Discussion Hub Experience Wave 2', () => {
     expect(
       await screen.findByRole('heading', { name: '系统维护公告' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('公告')).toBeInTheDocument();
+    expect(screen.getAllByText('公告')).not.toHaveLength(0);
+    expect(
+      screen.queryByRole('heading', { name: '题目链接' }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Deleted User/ })).toHaveAttribute(
       'href',
       '/profiles/deleted-user',
@@ -272,6 +286,42 @@ describe('Discussion Hub Experience Wave 2', () => {
       screen.queryByRole('button', { name: '删除' }),
     ).not.toBeInTheDocument();
     expect(screen.getByTitle('登录后点赞')).toBeDisabled();
+  });
+
+  it('shows the problem-link preview only for posts identified as solutions', async () => {
+    const solution = post({
+      title: '【题解】 CF 1920F：从贪心到构造的完整思路',
+      contentMarkdown:
+        '## 题意概述\n\n先理解约束。\n\n## 代码实现\n\n```cpp\nint main() {}\n```',
+    });
+    const api = {
+      discussionPost: vi.fn(async () => solution),
+      discussionComments: vi.fn().mockResolvedValue({ items: [] }),
+    } as unknown as ApiClient;
+
+    render(
+      <DiscussionPostPage
+        api={api}
+        navigate={vi.fn()}
+        id="cf-1920f"
+        user={null}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: /题意概述/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /代码实现/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI总结' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '题目链接' }),
+    ).toBeInTheDocument();
+    expect(screen.getByTitle('题目关联功能将在后续接入')).toHaveAttribute(
+      'data-ui-only',
+      'true',
+    );
   });
 
   it('preserves GFM, math and rich content while dropping unsafe HTML', () => {
