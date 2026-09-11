@@ -1,10 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  PutObjectCommand,
-  type S3Client,
-} from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 import { randomUUID } from 'node:crypto';
 import type { TeamService } from '../team/service.js';
 
@@ -46,11 +41,7 @@ export async function registerProfileModule(
   options: ProfileModuleOptions,
 ) {
   if (!app.hasContentTypeParser('multipart/form-data')) {
-    app.addContentTypeParser(
-      'multipart/form-data',
-      { parseAs: 'buffer', bodyLimit: 10 * 1024 * 1024 },
-      (_request, body, done) => done(null, body),
-    );
+    app.addContentTypeParser('multipart/form-data', { parseAs: 'buffer', bodyLimit: 10 * 1024 * 1024 }, (_request, body, done) => done(null, body));
   }
   const error = (
     reply: FastifyReply,
@@ -61,12 +52,7 @@ export async function registerProfileModule(
   ) => reply.status(status).send({ code, message, requestId: request.id });
   const csrf = (request: FastifyRequest) => {
     const token = request.headers['x-csrf-token'];
-    return (
-      typeof token === 'string' &&
-      request.headers.cookie
-        ?.split(';')
-        .some((item) => item.trim() === `oj_csrf=${token}`)
-    );
+    return typeof token === 'string' && request.headers.cookie?.split(';').some((item) => item.trim() === `oj_csrf=${token}`);
   };
   const passwordUser = async (request: FastifyRequest, reply: FastifyReply) => {
     const auth = await options.getAuth(request);
@@ -145,7 +131,7 @@ export async function registerProfileModule(
   };
   const publicProblemFilter = (isSelf: boolean) =>
     isSelf
-      ? ' AND p.deleted_at IS NULL'
+      ? " AND p.deleted_at IS NULL"
       : " AND p.deleted_at IS NULL AND p.visibility='public' AND p.status='published'";
   app.get('/api/profiles/:username', async (request, reply) => {
     const target = await profileTarget(request, reply);
@@ -164,16 +150,8 @@ export async function registerProfileModule(
       ...(meta.organization ? { organization: String(meta.organization) } : {}),
       ...(meta.website ? { website: String(meta.website) } : {}),
       ...(meta.github ? { github: String(meta.github) } : {}),
-      ...(meta.avatar_object_key
-        ? {
-            avatarUrl: `/api/profile/media/${String(meta.avatar_object_key).split('/').map(encodeURIComponent).join('/')}`,
-          }
-        : {}),
-      ...(meta.background_object_key
-        ? {
-            backgroundUrl: `/api/profile/media/${String(meta.background_object_key).split('/').map(encodeURIComponent).join('/')}`,
-          }
-        : {}),
+      ...(meta.avatar_object_key ? { avatarUrl: `/api/profile/media/${String(meta.avatar_object_key).split('/').map(encodeURIComponent).join('/')}` } : {}),
+      ...(meta.background_object_key ? { backgroundUrl: `/api/profile/media/${String(meta.background_object_key).split('/').map(encodeURIComponent).join('/')}` } : {}),
       createdAt: new Date(String(user.created_at)).toISOString(),
       capabilities: profileCapabilities(auth, isSelf),
       isSelf,
@@ -196,8 +174,7 @@ export async function registerProfileModule(
       [auth.userId],
     );
     const row = result.rows[0];
-    if (!row)
-      return error(reply, request, 404, 'NOT_FOUND', 'Profile not found');
+    if (!row) return error(reply, request, 404, 'NOT_FOUND', 'Profile not found');
     return reply.send({
       username: String(row.username),
       displayName: String(row.display_name),
@@ -207,43 +184,18 @@ export async function registerProfileModule(
       organization: row.organization ? String(row.organization) : '',
       website: row.website ? String(row.website) : '',
       github: row.github ? String(row.github) : '',
-      avatarUrl: row.avatar_object_key
-        ? `/api/profile/media/${String(row.avatar_object_key).split('/').map(encodeURIComponent).join('/')}`
-        : '',
-      backgroundUrl: row.background_object_key
-        ? `/api/profile/media/${String(row.background_object_key).split('/').map(encodeURIComponent).join('/')}`
-        : '',
+      avatarUrl: row.avatar_object_key ? `/api/profile/media/${String(row.avatar_object_key).split('/').map(encodeURIComponent).join('/')}` : '',
+      backgroundUrl: row.background_object_key ? `/api/profile/media/${String(row.background_object_key).split('/').map(encodeURIComponent).join('/')}` : '',
     });
   });
   app.patch('/api/profile/me', async (request, reply) => {
     const auth = await passwordUser(request, reply);
     if (!auth) return;
-    if (!csrf(request))
-      return error(
-        reply,
-        request,
-        403,
-        'CSRF_INVALID',
-        'CSRF validation failed',
-      );
+    if (!csrf(request)) return error(reply, request, 403, 'CSRF_INVALID', 'CSRF validation failed');
     const body = (request.body ?? {}) as Record<string, unknown>;
-    const fields = [
-      'displayName',
-      'headline',
-      'bio',
-      'location',
-      'organization',
-      'website',
-      'github',
-    ];
+    const fields = ['displayName', 'headline', 'bio', 'location', 'organization', 'website', 'github'];
     if (Object.keys(body).some((key) => !fields.includes(key)))
-      return error(
-        reply,
-        request,
-        400,
-        'VALIDATION_ERROR',
-        'Invalid profile data',
-      );
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid profile data');
     const value = (key: string, max: number) => {
       const v = body[key] === undefined ? '' : body[key];
       if (typeof v !== 'string' || v.length > max) return null;
@@ -264,69 +216,20 @@ export async function registerProfileModule(
     if (organization === null) details.organization = '组织名称过长。';
     if (website === null) details.website = '个人网站过长。';
     if (github === null) details.github = 'GitHub 信息过长。';
-    if (Object.keys(details).length)
-      return reply
-        .status(400)
-        .send({
-          code: 'VALIDATION_ERROR',
-          message: '请检查输入。',
-          details,
-          requestId: request.id,
-        });
+    if (Object.keys(details).length) return reply.status(400).send({ code: 'VALIDATION_ERROR', message: '请检查输入。', details, requestId: request.id });
     if (website && !/^https?:\/\/[^\s]+$/i.test(website))
-      return reply
-        .status(400)
-        .send({
-          code: 'VALIDATION_ERROR',
-          message: '网站链接格式不正确。',
-          details: { website: '请输入 http 或 https 地址。' },
-          requestId: request.id,
-        });
-    if (
-      github &&
-      !/^(?:[A-Za-z0-9-]{1,39}|https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/?$)$/.test(
-        github,
-      )
-    )
-      return reply
-        .status(400)
-        .send({
-          code: 'VALIDATION_ERROR',
-          message: 'GitHub 信息格式不正确。',
-          details: { github: '请输入 GitHub 用户名或主页地址。' },
-          requestId: request.id,
-        });
-    const client = (
-      options.pool as Pool & {
-        connect?: () => Promise<Pool & { release(): void }>;
-      }
-    ).connect
-      ? await (
-          options.pool as Pool & {
-            connect: () => Promise<Pool & { release(): void }>;
-          }
-        ).connect()
+      return reply.status(400).send({ code: 'VALIDATION_ERROR', message: '网站链接格式不正确。', details: { website: '请输入 http 或 https 地址。' }, requestId: request.id });
+    if (github && !/^(?:[A-Za-z0-9-]{1,39}|https:\/\/github\.com\/[A-Za-z0-9-]{1,39}\/?$)$/.test(github))
+      return reply.status(400).send({ code: 'VALIDATION_ERROR', message: 'GitHub 信息格式不正确。', details: { github: '请输入 GitHub 用户名或主页地址。' }, requestId: request.id });
+    const client = (options.pool as Pool & { connect?: () => Promise<Pool & { release(): void }> }).connect
+      ? await (options.pool as Pool & { connect: () => Promise<Pool & { release(): void }> }).connect()
       : options.pool;
     try {
       if ('release' in client) await client.query('BEGIN');
-      await client.query(
-        "UPDATE users SET display_name=$2,updated_at=now() WHERE id=$1 AND status='active'",
-        [auth.userId, displayName],
-      );
-      await client.query(
-        `INSERT INTO user_profiles(user_id,display_name,headline,bio,location,organization,website,github,updated_at)
+      await client.query('UPDATE users SET display_name=$2,updated_at=now() WHERE id=$1 AND status=\'active\'', [auth.userId, displayName]);
+      await client.query(`INSERT INTO user_profiles(user_id,display_name,headline,bio,location,organization,website,github,updated_at)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,now()) ON CONFLICT(user_id) DO UPDATE SET display_name=EXCLUDED.display_name,headline=EXCLUDED.headline,bio=EXCLUDED.bio,location=EXCLUDED.location,organization=EXCLUDED.organization,website=EXCLUDED.website,github=EXCLUDED.github,updated_at=now()`,
-        [
-          auth.userId,
-          displayName,
-          headline,
-          bio,
-          location,
-          organization,
-          website,
-          github,
-        ],
-      );
+      [auth.userId, displayName, headline, bio, location, organization, website, github]);
       if ('release' in client) await client.query('COMMIT');
     } catch (e) {
       if ('release' in client) await client.query('ROLLBACK');
@@ -334,20 +237,7 @@ export async function registerProfileModule(
     } finally {
       if ('release' in client) (client as Pool & { release(): void }).release();
     }
-    return reply.send({
-      username: (
-        await options.pool.query('SELECT username FROM users WHERE id=$1', [
-          auth.userId,
-        ])
-      ).rows[0]?.username,
-      displayName,
-      headline,
-      bio,
-      location,
-      organization,
-      website,
-      github,
-    });
+    return reply.send({ username: (await options.pool.query('SELECT username FROM users WHERE id=$1', [auth.userId])).rows[0]?.username, displayName, headline, bio, location, organization, website, github });
   });
   const parseUpload = (body: unknown, contentType: string) => {
     const match = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType);
@@ -360,152 +250,51 @@ export async function registerProfileModule(
       const header = part.slice(0, split);
       const raw = part.slice(split + 4).replace(/\r\n--?\s*$/g, '');
       const bytes = Buffer.from(raw, 'binary');
-      const type =
-        /Content-Type:\s*([^\r\n]+)/i.exec(header)?.[1]?.trim() ?? '';
+      const type = /Content-Type:\s*([^\r\n]+)/i.exec(header)?.[1]?.trim() ?? '';
       return { bytes, type };
     }
   };
   app.get('/api/profile/media/:owner/:kind/:id', async (request, reply) => {
-    if (!options.storage)
-      return error(reply, request, 404, 'NOT_FOUND', 'Media not found');
-    const params = request.params as {
-      owner: string;
-      kind: string;
-      id: string;
-    };
+    if (!options.storage) return error(reply, request, 404, 'NOT_FOUND', 'Media not found');
+    const params = request.params as { owner: string; kind: string; id: string };
     const key = `profile/${params.owner}/${params.kind}/${params.id}`;
-    if (!/^profile\/[a-f0-9-]+\/(avatar|background)\/[a-f0-9-]+$/.test(key))
-      return error(reply, request, 404, 'NOT_FOUND', 'Media not found');
+    if (!/^profile\/[a-f0-9-]+\/(avatar|background)\/[a-f0-9-]+$/.test(key)) return error(reply, request, 404, 'NOT_FOUND', 'Media not found');
     try {
-      const result = await options.storage.client.send(
-        new GetObjectCommand({ Bucket: options.storage.bucket, Key: key }),
-      );
-      reply
-        .header('cache-control', 'public, max-age=31536000, immutable')
-        .type(result.ContentType ?? 'image/*');
+      const result = await options.storage.client.send(new GetObjectCommand({ Bucket: options.storage.bucket, Key: key }));
+      reply.header('cache-control', 'public, max-age=31536000, immutable').type(result.ContentType ?? 'image/*');
       return reply.send(result.Body);
-    } catch {
-      return error(reply, request, 404, 'NOT_FOUND', 'Media not found');
-    }
+    } catch { return error(reply, request, 404, 'NOT_FOUND', 'Media not found'); }
   });
-  const upload = async (
-    request: FastifyRequest,
-    reply: FastifyReply,
-    kind: 'avatar' | 'background',
-  ) => {
-    const auth = await passwordUser(request, reply);
-    if (!auth) return;
-    if (!csrf(request))
-      return error(
-        reply,
-        request,
-        403,
-        'CSRF_INVALID',
-        'CSRF validation failed',
-      );
-    if (!options.storage)
-      return error(
-        reply,
-        request,
-        503,
-        'STORAGE_UNAVAILABLE',
-        'Media storage unavailable',
-      );
-    const file = parseUpload(
-      request.body,
-      String(request.headers['content-type'] ?? ''),
-    );
+  const upload = async (request: FastifyRequest, reply: FastifyReply, kind: 'avatar' | 'background') => {
+    const auth = await passwordUser(request, reply); if (!auth) return;
+    if (!csrf(request)) return error(reply, request, 403, 'CSRF_INVALID', 'CSRF validation failed');
+    if (!options.storage) return error(reply, request, 503, 'STORAGE_UNAVAILABLE', 'Media storage unavailable');
+    const file = parseUpload(request.body, String(request.headers['content-type'] ?? ''));
     const max = kind === 'avatar' ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
-    if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))
-      return error(
-        reply,
-        request,
-        400,
-        'UNSUPPORTED_MEDIA_TYPE',
-        '文件格式不支持',
-      );
-    if (file.bytes.length > max)
-      return error(reply, request, 413, 'PAYLOAD_TOO_LARGE', '图片过大');
-    const signature =
-      file.type === 'image/png'
-        ? file.bytes
-            .subarray(0, 8)
-            .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-        : file.type === 'image/jpeg'
-          ? file.bytes.subarray(0, 3).equals(Buffer.from([255, 216, 255]))
-          : file.bytes.subarray(0, 4).equals(Buffer.from('RIFF')) &&
-            file.bytes.subarray(8, 12).equals(Buffer.from('WEBP'));
-    if (!signature)
-      return error(
-        reply,
-        request,
-        400,
-        'UNSUPPORTED_MEDIA_TYPE',
-        '文件格式不支持',
-      );
+    if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return error(reply, request, 400, 'UNSUPPORTED_MEDIA_TYPE', '文件格式不支持');
+    if (file.bytes.length > max) return error(reply, request, 413, 'PAYLOAD_TOO_LARGE', '图片过大');
+    const signature = file.type === 'image/png' ? file.bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) : file.type === 'image/jpeg' ? file.bytes.subarray(0, 3).equals(Buffer.from([255,216,255])) : file.bytes.subarray(0, 4).equals(Buffer.from('RIFF')) && file.bytes.subarray(8, 12).equals(Buffer.from('WEBP'));
+    if (!signature) return error(reply, request, 400, 'UNSUPPORTED_MEDIA_TYPE', '文件格式不支持');
     const key = `profile/${auth.userId}/${kind}/${randomUUID()}`;
-    await options.storage.client.send(
-      new PutObjectCommand({
-        Bucket: options.storage.bucket,
-        Key: key,
-        Body: file.bytes,
-        ContentType: file.type,
-      }),
-    );
-    const column =
-      kind === 'avatar' ? 'avatar_object_key' : 'background_object_key';
-    await options.pool.query(
-      `INSERT INTO user_profiles(user_id,display_name,${column},updated_at) SELECT $1,display_name,$2,now() FROM users WHERE id=$1 ON CONFLICT(user_id) DO UPDATE SET ${column}=EXCLUDED.${column},updated_at=now()`,
-      [auth.userId, key],
-    );
+    await options.storage.client.send(new PutObjectCommand({ Bucket: options.storage.bucket, Key: key, Body: file.bytes, ContentType: file.type }));
+    const column = kind === 'avatar' ? 'avatar_object_key' : 'background_object_key';
+    await options.pool.query(`INSERT INTO user_profiles(user_id,display_name,${column},updated_at) SELECT $1,display_name,$2,now() FROM users WHERE id=$1 ON CONFLICT(user_id) DO UPDATE SET ${column}=EXCLUDED.${column},updated_at=now()`, [auth.userId, key]);
     return reply.send({ url: `/api/profile/media/${encodeURIComponent(key)}` });
   };
-  app.post('/api/profile/me/avatar', (request, reply) =>
-    upload(request, reply, 'avatar'),
-  );
-  app.post('/api/profile/me/background', (request, reply) =>
-    upload(request, reply, 'background'),
-  );
-  const removeMedia = async (
-    request: FastifyRequest,
-    reply: FastifyReply,
-    kind: 'avatar' | 'background',
-  ) => {
-    const auth = await passwordUser(request, reply);
-    if (!auth) return;
-    if (!csrf(request))
-      return error(
-        reply,
-        request,
-        403,
-        'CSRF_INVALID',
-        'CSRF validation failed',
-      );
-    const column =
-      kind === 'avatar' ? 'avatar_object_key' : 'background_object_key';
-    const result = await options.pool.query(
-      `SELECT ${column} AS key FROM user_profiles WHERE user_id=$1`,
-      [auth.userId],
-    );
+  app.post('/api/profile/me/avatar', (request, reply) => upload(request, reply, 'avatar'));
+  app.post('/api/profile/me/background', (request, reply) => upload(request, reply, 'background'));
+  const removeMedia = async (request: FastifyRequest, reply: FastifyReply, kind: 'avatar' | 'background') => {
+    const auth = await passwordUser(request, reply); if (!auth) return;
+    if (!csrf(request)) return error(reply, request, 403, 'CSRF_INVALID', 'CSRF validation failed');
+    const column = kind === 'avatar' ? 'avatar_object_key' : 'background_object_key';
+    const result = await options.pool.query(`SELECT ${column} AS key FROM user_profiles WHERE user_id=$1`, [auth.userId]);
     const key = result.rows[0]?.key;
-    await options.pool.query(
-      `UPDATE user_profiles SET ${column}=NULL,updated_at=now() WHERE user_id=$1`,
-      [auth.userId],
-    );
-    if (key && options.storage && typeof key === 'string')
-      await options.storage.client
-        .send(
-          new DeleteObjectCommand({ Bucket: options.storage.bucket, Key: key }),
-        )
-        .catch(() => undefined);
+    await options.pool.query(`UPDATE user_profiles SET ${column}=NULL,updated_at=now() WHERE user_id=$1`, [auth.userId]);
+    if (key && options.storage && typeof key === 'string') await options.storage.client.send(new DeleteObjectCommand({ Bucket: options.storage.bucket, Key: key })).catch(() => undefined);
     return reply.status(204).send();
   };
-  app.delete('/api/profile/me/avatar', (request, reply) =>
-    removeMedia(request, reply, 'avatar'),
-  );
-  app.delete('/api/profile/me/background', (request, reply) =>
-    removeMedia(request, reply, 'background'),
-  );
+  app.delete('/api/profile/me/avatar', (request, reply) => removeMedia(request, reply, 'avatar'));
+  app.delete('/api/profile/me/background', (request, reply) => removeMedia(request, reply, 'background'));
   app.get('/api/profiles/:username/activity', async (request, reply) => {
     const target = await profileTarget(request, reply);
     if (!target) return;
@@ -636,13 +425,7 @@ export async function registerProfileModule(
     const limit = page(query);
     const cursor = decode(query.cursor);
     if (!limit || (query.cursor !== undefined && !cursor))
-      return error(
-        reply,
-        request,
-        400,
-        'VALIDATION_ERROR',
-        'Invalid pagination',
-      );
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid pagination');
     const filter = publicProblemFilter(target.isSelf);
     const result = await options.pool.query(
       `SELECT s.id,s.problem_id,s.language_id,s.status,s.created_at,p.slug,p.title,
@@ -700,7 +483,7 @@ export async function registerProfileModule(
       ? ''
       : " AND visibility='public' AND status='published'";
     const result = await options.pool.query(
-      `SELECT id,public_number,slug,title,status,visibility,created_at,updated_at FROM problems WHERE deleted_at IS NULL AND author_id=$1${filter}
+        `SELECT id,public_number,slug,title,status,visibility,created_at,updated_at FROM problems WHERE deleted_at IS NULL AND author_id=$1${filter}
        ${cursor ? 'AND (created_at,id)<($2,$3)' : ''} ORDER BY created_at DESC,id DESC LIMIT $${cursor ? 4 : 2}`,
       cursor
         ? [String(target.user.id), cursor.createdAt, cursor.id, limit]
