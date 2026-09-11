@@ -418,6 +418,53 @@ export async function registerProfileModule(
       },
     });
   });
+  app.get('/api/profiles/:username/submissions', async (request, reply) => {
+    const target = await profileTarget(request, reply);
+    if (!target) return;
+    const query = request.query as Record<string, unknown>;
+    const limit = page(query);
+    const cursor = decode(query.cursor);
+    if (!limit || (query.cursor !== undefined && !cursor))
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid pagination');
+    const filter = publicProblemFilter(target.isSelf);
+    const result = await options.pool.query(
+      `SELECT s.id,s.problem_id,s.language_id,s.status,s.created_at,p.slug,p.title,
+              se.status AS evaluation_status,se.verdict
+       FROM submissions s
+       JOIN problems p ON p.id=s.problem_id
+       LEFT JOIN submission_evaluations se ON se.submission_id=s.id AND se.current=true
+       WHERE s.owner_user_id=$1${filter}
+       ${cursor ? 'AND (s.created_at,s.id)<($2,$3)' : ''}
+       ORDER BY s.created_at DESC,s.id DESC LIMIT $${cursor ? 4 : 2}`,
+      cursor
+        ? [String(target.user.id), cursor.createdAt, cursor.id, limit]
+        : [String(target.user.id), limit],
+    );
+    const items = result.rows.map((row) => ({
+      id: String(row.id),
+      problemId: String(row.problem_id),
+      slug: String(row.slug),
+      title: String(row.title),
+      languageId: String(row.language_id),
+      status: String(row.evaluation_status ?? row.status),
+      ...(row.verdict ? { verdict: String(row.verdict) } : {}),
+      createdAt: new Date(String(row.created_at)).toISOString(),
+    }));
+    return reply.send({
+      items,
+      page: {
+        limit,
+        ...(items.length === limit
+          ? {
+              nextCursor: encode({
+                createdAt: items.at(-1)!.createdAt,
+                id: items.at(-1)!.id,
+              }),
+            }
+          : {}),
+      },
+    });
+  });
   app.get('/api/profiles/:username/problems', async (request, reply) => {
     const target = await profileTarget(request, reply);
     if (!target) return;

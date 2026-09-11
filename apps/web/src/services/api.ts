@@ -347,6 +347,20 @@ export type ProfileProblemList = {
   items: ProfileProblem[];
   page: { limit: number; total: number; nextCursor?: string };
 };
+export type ProfileSubmission = {
+  id: string;
+  problemId: string;
+  slug: string;
+  title: string;
+  languageId: string;
+  status: string;
+  verdict?: string;
+  createdAt: string;
+};
+export type ProfileSubmissionList = {
+  items: ProfileSubmission[];
+  page: { limit: number; nextCursor?: string };
+};
 export type Language = {
   id: string;
   name: string;
@@ -1286,6 +1300,16 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       return request<SolvedProblemList>(
         baseUrl,
         `/api/profiles/${encodeURIComponent(username)}/solved?${params.toString()}`,
+        undefined,
+        fetcher,
+      );
+    },
+    profileSubmissions: (username: string, limit = 10, cursor?: string) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (cursor) params.set('cursor', cursor);
+      return request<ProfileSubmissionList>(
+        baseUrl,
+        `/api/profiles/${encodeURIComponent(username)}/submissions?${params.toString()}`,
         undefined,
         fetcher,
       );

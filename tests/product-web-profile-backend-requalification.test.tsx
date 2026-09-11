@@ -92,6 +92,11 @@ describe('WEB Profile ↔ Backend requalification', () => {
           items: [],
           page: { limit: 20, total: 0 },
         }) as Response;
+      if (url.includes('/api/profiles/ada/submissions?'))
+        return response(200, {
+          items: [],
+          page: { limit: 10 },
+        }) as Response;
       if (url.includes('/api/profiles/ada/problems?'))
         return response(200, {
           items: [],
@@ -124,6 +129,7 @@ describe('WEB Profile ↔ Backend requalification', () => {
     await api.publicProfile('ada');
     await api.profileOverview('ada');
     await api.profileSolved('ada');
+    await api.profileSubmissions('ada');
     await api.profileProblemsFor('ada');
     await api.profileFavorites(10, 'cursor-1');
     await api.addFavorite('p1');
@@ -136,6 +142,7 @@ describe('WEB Profile ↔ Backend requalification', () => {
       { url: '/api/profiles/ada', method: 'GET' },
       { url: '/api/profiles/ada/overview', method: 'GET' },
       { url: '/api/profiles/ada/solved?limit=20', method: 'GET' },
+      { url: '/api/profiles/ada/submissions?limit=10', method: 'GET' },
       { url: '/api/profiles/ada/problems?limit=20', method: 'GET' },
       {
         url: '/api/profile/favorites?limit=10&cursor=cursor-1',
