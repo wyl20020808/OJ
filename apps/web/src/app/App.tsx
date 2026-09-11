@@ -16,8 +16,6 @@ import {
   type ApiClient,
   type AuthenticatedUser,
   type BackendContest,
-  type EvaluationListItem,
-  type EvaluationFilters,
   type Language,
   type Problem,
   type ProblemDifficulty,
@@ -74,6 +72,7 @@ import {
 import { ProductSubmissionAdapter } from '../services/submission-adapter.js';
 import { TeamPage } from '../features/team/TeamPage.js';
 import { AssignmentPage } from '../features/assignment/AssignmentPage.js';
+import { SubmissionHistoryPage } from '../features/submissions/SubmissionHistoryPage.js';
 import { TagSelector } from '../components/TagSelector.js';
 import {
   DiscussionEditor,
@@ -579,15 +578,6 @@ export function JudgeStatus({ submission }: { submission: Submission }) {
   );
 }
 
-function evaluationVerdictTone(value: string) {
-  if (value === 'AC') return 'accepted';
-  if (['WA', 'RE'].includes(value)) return 'failed';
-  if (value === 'TLE') return 'time-limit';
-  if (value === 'MLE' || value === 'CE') return 'compile-limit';
-  if (value === 'RUNNING' || value === 'QUEUED') return 'running';
-  if (value === 'INFRA_FAILED') return 'infra';
-  return 'pending';
-}
 function Home({
   api,
   user,
@@ -3240,219 +3230,6 @@ function SubmissionForm({
   );
 }
 
-function SubmissionHistory({
-  api,
-  user,
-}: {
-  api: ApiClient;
-  user: AuthenticatedUser | null;
-}) {
-  const [items, setItems] = useState<EvaluationListItem[] | null>(null);
-  const [next, setNext] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const [cursor, setCursor] = useState<string | undefined>();
-  const [resultFilter, setResultFilter] = useState('');
-  const [problemFilter, setProblemFilter] = useState('');
-  const [submitterFilter, setSubmitterFilter] = useState('');
-  const requestVersion = useRef(0);
-  const filters = useMemo<EvaluationFilters>(() => {
-    const verdicts = new Set(['AC', 'WA', 'CE', 'RE', 'TLE', 'MLE']);
-    return {
-      ...(resultFilter
-        ? verdicts.has(resultFilter)
-          ? { verdict: resultFilter }
-          : { status: resultFilter }
-        : {}),
-      ...(problemFilter.trim() ? { problemId: problemFilter.trim() } : {}),
-      ...(submitterFilter.trim()
-        ? { submitterId: submitterFilter.trim() }
-        : {}),
-    };
-  }, [problemFilter, resultFilter, submitterFilter]);
-  const load = () => {
-    const version = ++requestVersion.current;
-    setItems(null);
-    setError('');
-    void api
-      .evaluations(cursor, 20, filters)
-      .then((d) => {
-        if (version !== requestVersion.current) return;
-        setItems(d.items);
-        setNext(d.nextCursor);
-      })
-      .catch((e) => {
-        if (version !== requestVersion.current) return;
-        setError(e instanceof ApiError ? e.message : '无法加载评测列表。');
-      });
-  };
-  useEffect(load, [api, cursor, filters]);
-  useEffect(
-    () => () => {
-      requestVersion.current++;
-    },
-    [],
-  );
-  if (!user)
-    return (
-      <State
-        title="请先登录"
-        text="登录后才能查看评测列表。"
-        action={<Link to="/login">登录</Link>}
-      />
-    );
-  if (error)
-    return (
-      <State
-        title="评测列表暂不可用"
-        text={error}
-        action={<button onClick={load}>重试</button>}
-      />
-    );
-  if (!items)
-    return <State title="正在加载评测列表" text="正在获取你的评测记录…" />;
-  return (
-    <section>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">评测</p>
-          <h1>评测列表</h1>
-        </div>
-      </div>
-      <div className="evaluation-filters" aria-label="评测筛选">
-        <label>
-          结果
-          <select
-            aria-label="结果"
-            value={resultFilter}
-            onChange={(e) => {
-              setResultFilter(e.target.value);
-              setCursor(undefined);
-            }}
-          >
-            <option value="">全部结果</option>
-            <option value="AC">AC</option>
-            <option value="WA">WA</option>
-            <option value="CE">CE</option>
-            <option value="RE">RE</option>
-            <option value="TLE">TLE</option>
-            <option value="MLE">MLE</option>
-            <option value="INFRA_FAILED">INFRA_FAILED</option>
-            <option value="QUEUED">QUEUED</option>
-            <option value="RUNNING">RUNNING</option>
-          </select>
-        </label>
-        <label>
-          题目
-          <input
-            aria-label="题目"
-            value={problemFilter}
-            placeholder="题目 ID / slug"
-            onChange={(e) => {
-              setProblemFilter(e.target.value);
-              setCursor(undefined);
-            }}
-          />
-        </label>
-        <label>
-          提交者
-          <input
-            aria-label="提交者"
-            value={submitterFilter}
-            placeholder="提交者 ID"
-            onChange={(e) => {
-              setSubmitterFilter(e.target.value);
-              setCursor(undefined);
-            }}
-          />
-        </label>
-        <button
-          type="button"
-          className="filter-clear"
-          disabled={!resultFilter && !problemFilter && !submitterFilter}
-          onClick={() => {
-            setResultFilter('');
-            setProblemFilter('');
-            setSubmitterFilter('');
-            setCursor(undefined);
-          }}
-        >
-          清除筛选
-        </button>
-      </div>
-      {items.length === 0 ? (
-        <State title="暂无评测记录" text="你的提交评测会显示在这里。" />
-      ) : (
-        <div className="evaluation-list" role="table" aria-label="评测列表">
-          <div className="evaluation-list-header" role="row">
-            <span role="columnheader">评测 ID</span>
-            <span role="columnheader">题目</span>
-            <span role="columnheader">提交者</span>
-            <span role="columnheader">语言</span>
-            <span role="columnheader">状态</span>
-            <span role="columnheader">资源</span>
-            <span role="columnheader">时间</span>
-          </div>
-          {items.map((s) => (
-            <div
-              key={s.submissionId}
-              className="evaluation-row"
-              role="row"
-              tabIndex={0}
-              onClick={() =>
-                navigate(`/submissions/${encodeURIComponent(s.submissionId)}`)
-              }
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  navigate(
-                    `/submissions/${encodeURIComponent(s.submissionId)}`,
-                  );
-                }
-              }}
-            >
-              <Link
-                to={`/submissions/${encodeURIComponent(s.submissionId)}`}
-                ariaLabel={`查看评测 ${s.publicNumber !== undefined ? `#${s.publicNumber}` : s.submissionId}`}
-                onClick={(event) => event.stopPropagation()}
-              >
-                #{s.publicNumber ?? s.submissionId}
-              </Link>
-              <Link
-                to={`/problems/${encodeURIComponent(s.problem.id)}`}
-                className="evaluation-problem"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <strong>{s.problem.publicId || s.problem.slug}</strong>{' '}
-                <span>{s.problem.title}</span>
-              </Link>
-              <span>{s.submitter.displayName}</span>
-              <span>{s.languageProfileId}</span>
-              <strong
-                className={`evaluation-verdict tone-${evaluationVerdictTone(s.verdict ?? s.status)}`}
-              >
-                {s.verdict ?? s.status}
-              </strong>
-              <span>
-                {formatMilliseconds(s.totalTimeMs)} /{' '}
-                {formatBytes(s.peakMemoryBytes)}
-              </span>
-              <time>{formatDate(s.createdAt)}</time>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="pagination">
-        <button disabled={!cursor} onClick={() => setCursor(undefined)}>
-          第一页
-        </button>
-        <button disabled={!next} onClick={() => setCursor(next ?? undefined)}>
-          下一页
-        </button>
-      </div>
-    </section>
-  );
-}
-
 export function SubmissionDetail({
   api,
   id,
@@ -4347,7 +4124,7 @@ export function App() {
     ) : current.name === 'submit' ? (
       <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
     ) : current.name === 'submissions' ? (
-      <SubmissionHistory api={api} user={user} />
+      <SubmissionHistoryPage api={api} user={user} navigate={navigate} />
     ) : current.name === 'submission' ? (
       user && current.id ? (
         <SubmissionDetail api={api} id={current.id} user={user} />
@@ -4420,7 +4197,9 @@ export function App() {
       <NotFound />
     );
   return (
-    <div className="app">
+    <div
+      className={`app${current.name === 'submissions' ? ' submissions-view' : ''}`}
+    >
       <header className="nav">
         <Link to="/" className="brand">
           <span className="brand-mark" aria-hidden="true">
@@ -4512,7 +4291,7 @@ export function App() {
                 : ''
             }
           >
-            评测列表
+            评测
           </Link>
           <Link
             to="/notifications"
@@ -4601,9 +4380,8 @@ export function App() {
         current.name !== 'problem' &&
         current.name !== 'discussion' &&
         current.name !== 'discussion-post' &&
-        current.name !== 'teams' && (
-          <Breadcrumbs current={current} />
-        )}
+        current.name !== 'teams' &&
+        current.name !== 'submissions' && <Breadcrumbs current={current} />}
       <main
         className={
           current.name === 'author-new' || current.name === 'author-edit'
@@ -4618,7 +4396,9 @@ export function App() {
                     ? 'shell shell-blog-detail'
                     : current.name === 'teams'
                       ? 'shell shell-team-portal'
-                      : 'shell'
+                      : current.name === 'submissions'
+                        ? 'shell shell-submissions'
+                        : 'shell'
         }
       >
         {page}

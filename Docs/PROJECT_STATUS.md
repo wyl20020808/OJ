@@ -746,3 +746,15 @@ retry/detail flows remain intact; no backend or dependency changed. Typecheck,
 Web build, changed-component lint, focused contest tests, and diff check pass.
 Pixel-level browser comparison was explicitly waived by the user and remains
 NOT VERIFIED. See `Docs/reports/OJPLATFORM_CONTEST_REFERENCE_UI_V1_REPORT.md`.
+
+Submission Records Reference UI V1 (2026-09-11): PARTIAL. `/submissions` now
+uses an isolated feature-owned recreation of the supplied all-records and
+personal-records designs: mountain hero, contextual secondary tabs, summary
+cards, filters/search, responsive real-data table, cursor pagination, daily
+metrics, verdict analysis, and seven-day trend surfaces. Existing evaluation
+and profile APIs, secure detail/source navigation, loading/error/empty states,
+and authorization boundaries remain intact; no backend changed and unavailable
+aggregates display explicit placeholders instead of fabricated data. Typecheck,
+Web build, changed-file lint, Web tests 12/12, architecture, and diff checks
+pass. Manual visual acceptance remains PENDING USER. See
+`Docs/reports/OJPLATFORM_SUBMISSION_RECORDS_REFERENCE_UI_V1_REPORT.md`.
