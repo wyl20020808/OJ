@@ -45,12 +45,12 @@ import { ProblemSolveEditorSlot } from '../plugins/ProblemSolveEditorSlot.js';
 import { HttpCodeRunAdapter } from '@ojplatform/online-code-editor/run/HttpCodeRunAdapter';
 import type { ProblemSolveEditorContext } from '@ojplatform/plugin-sdk';
 import { ProblemStatementRenderer } from '../components/ProblemStatementRenderer.js';
+import { ProfilePage } from '../features/profile/ProfilePage.js';
 import {
   ContestExperience,
   MessagesExperience,
   NotificationBell,
   NotificationsPage,
-  ProfileExperience,
   WrongBookPage,
 } from '../components/PortalExperience.js';
 import type {
@@ -3927,7 +3927,7 @@ function Profile({
   username?: string;
 }) {
   return (
-    <ProfileExperience
+    <ProfilePage
       user={user}
       api={api}
       {...(username === undefined ? {} : { username })}
