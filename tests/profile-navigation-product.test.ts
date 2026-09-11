@@ -128,4 +128,61 @@ describe('Profile Navigation Product V1', () => {
     ).toContain("p.visibility='public' AND p.status='published'");
     await app.close();
   });
+
+  it('projects public recent submissions without exposing source code', async () => {
+    const sql: string[] = [];
+    const app = Fastify();
+    await registerProfileModule(app, {
+      getAuth: async () => undefined,
+      pool: {
+        query: async (statement: string) => {
+          sql.push(statement);
+          if (statement.includes('FROM users WHERE username'))
+            return { rows: [profile] };
+          if (statement.includes('FROM submissions s'))
+            return {
+              rows: [
+                {
+                  id: 'submission-1',
+                  problem_id: 'problem-1',
+                  slug: 'two-sum',
+                  title: 'Two Sum',
+                  language_id: 'cpp20-gcc-13-v1',
+                  status: 'QUEUED',
+                  evaluation_status: 'COMPLETED_WITH_VERDICT',
+                  verdict: 'AC',
+                  created_at: '2026-02-01T00:00:00Z',
+                  source: 'must-not-leak',
+                },
+              ],
+            };
+          return { rows: [] };
+        },
+      },
+    });
+
+    const response = await app.inject('/api/profiles/ada/submissions?limit=10');
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      items: [
+        {
+          id: 'submission-1',
+          problemId: 'problem-1',
+          slug: 'two-sum',
+          title: 'Two Sum',
+          languageId: 'cpp20-gcc-13-v1',
+          status: 'COMPLETED_WITH_VERDICT',
+          verdict: 'AC',
+          createdAt: '2026-02-01T00:00:00.000Z',
+        },
+      ],
+      page: { limit: 10 },
+    });
+    expect(response.json().items[0]).not.toHaveProperty('source');
+    expect(
+      sql.find((statement) => statement.includes('FROM submissions s')),
+    ).toContain("p.visibility='public' AND p.status='published'");
+    await app.close();
+  });
 });

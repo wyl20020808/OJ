@@ -6,29 +6,67 @@ import {
   type CSSProperties,
   type FormEvent,
   type ReactNode,
-} from "react";
-import { ApiError } from "../../services/api.js";
+} from 'react';
+import { ApiError } from '../../services/api.js';
 import type {
   ApiClient,
   AuthenticatedUser,
   FavoriteProblem,
+  ProfileCapability,
   ProfileCapabilities,
   ProfileOverview,
   ProfileProblem,
+  ProfileSubmission,
   PublicProfile,
   SolvedProblem,
-} from "../../services/api.js";
-import type { UserActivityDay } from "../../services/portal-contracts.js";
-import "./ProfilePage.css";
+} from '../../services/api.js';
+import type { UserActivityDay } from '../../services/portal-contracts.js';
+import './ProfilePage.css';
+import type { ProfileDevelopmentFixture } from './profileDevelopmentFixture.js';
 
 type Navigate = (path: string) => void;
 
-function PortalLink({ to, navigate, children, className }: { to: string; navigate: Navigate; children: ReactNode; className?: string }) {
-  return <a href={to} className={className} onClick={(event) => { event.preventDefault(); navigate(to); }}>{children}</a>;
+function PortalLink({
+  to,
+  navigate,
+  children,
+  className,
+}: {
+  to: string;
+  navigate: Navigate;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <a
+      href={to}
+      className={className}
+      onClick={(event) => {
+        event.preventDefault();
+        navigate(to);
+      }}
+    >
+      {children}
+    </a>
+  );
 }
 
-function CapabilityNotice({ title, text, request }: { title: string; text: string; request: string }) {
-  return <div className="capability-notice" role="status"><strong>{title}</strong><p>{text}</p><code>{request}</code></div>;
+function CapabilityNotice({
+  title,
+  text,
+  request,
+}: {
+  title: string;
+  text: string;
+  request: string;
+}) {
+  return (
+    <div className="capability-notice" role="status">
+      <strong>{title}</strong>
+      <p>{text}</p>
+      <code>{request}</code>
+    </div>
+  );
 }
 
 export function ActivityHeatmap({
@@ -251,6 +289,11 @@ export function ProfilePage({
   const [solvedItems, setSolvedItems] = useState<SolvedProblem[]>([]);
   const [solvedLoaded, setSolvedLoaded] = useState(false);
   const [solvedError, setSolvedError] = useState('');
+  const [submissionItems, setSubmissionItems] = useState<ProfileSubmission[]>(
+    [],
+  );
+  const [submissionsLoaded, setSubmissionsLoaded] = useState(false);
+  const [submissionsError, setSubmissionsError] = useState('');
   const [problemItems, setProblemItems] = useState<ProfileProblem[]>([]);
   const [problemsLoaded, setProblemsLoaded] = useState(false);
   const [problemsError, setProblemsError] = useState('');
@@ -266,6 +309,9 @@ export function ProfilePage({
     useState<UserActivityDay[]>();
   const [profileActivityLoading, setProfileActivityLoading] = useState(false);
   const [profileActivityError, setProfileActivityError] = useState('');
+  const [developmentFixture, setDevelopmentFixture] =
+    useState<ProfileDevelopmentFixture>();
+  const demoMode = developmentFixture !== undefined;
   const isPublic = Boolean(username);
   const tabs = ['概览', '做题记录', '收藏', '我的题目', '团队'];
   const profileUsername = username ?? user?.username;
@@ -380,6 +426,25 @@ export function ProfilePage({
       );
   }, [api, profileUsername]);
 
+  const loadSubmissions = useCallback(() => {
+    if (!api || !profileUsername || !profileApi?.profileSubmissions || demoMode)
+      return;
+    setSubmissionsError('');
+    void profileApi
+      .profileSubmissions(profileUsername)
+      .then((result) => {
+        setSubmissionItems(result.items);
+        setSubmissionsLoaded(true);
+      })
+      .catch((error: unknown) =>
+        setSubmissionsError(profileErrorText(error, 'Submission history')),
+      );
+  }, [api, demoMode, profileApi, profileUsername]);
+
+  useEffect(() => {
+    if (!submissionsLoaded && !demoMode) loadSubmissions();
+  }, [demoMode, loadSubmissions, submissionsLoaded]);
+
   useEffect(() => {
     if (tab === '做题记录' && !solvedLoaded) loadSolved();
     if (tab === '我的题目' && !problemsLoaded) loadProblems();
@@ -453,16 +518,28 @@ export function ProfilePage({
       .finally(() => setFavoriteAction(undefined));
   };
 
-  const displayName = isPublic ? publicProfile?.displayName : user?.displayName;
-  const displayUsername = isPublic ? publicProfile?.username : user?.username;
+  const displayedProfile = developmentFixture?.profile ?? publicProfile;
+  const activeCapabilities = displayedProfile?.capabilities ?? capabilities;
+  const displayName = demoMode
+    ? developmentFixture!.profile.displayName
+    : isPublic
+      ? publicProfile?.displayName
+      : user?.displayName;
+  const displayUsername = demoMode
+    ? developmentFixture!.profile.username
+    : isPublic
+      ? publicProfile?.username
+      : user?.username;
   const capability = (key: keyof ProfileCapabilities) => {
-    if (!capabilities || key === 'contractVersion') return undefined;
-    return capabilities[key];
+    if (!activeCapabilities || key === 'contractVersion') return undefined;
+    return activeCapabilities[key];
   };
   const activityCapability = capability('activity');
   const showLegacyActivity = !api && Boolean(activity);
 
   const renderActivity = () => {
+    if (demoMode)
+      return <ActivityHeatmap days={developmentFixture!.activity} />;
     if (showLegacyActivity)
       return <ActivityHeatmap days={profileActivityDays ?? activity} />;
     if (api && profileActivityLoading)
@@ -491,6 +568,24 @@ export function ProfilePage({
   };
 
   const renderFavorites = () => {
+    if (demoMode)
+      return (
+        <div className="profile-data-panel">
+          <p className="profile-fixture-label">DEVELOPMENT FIXTURE DATA</p>
+          <ul className="profile-data-list">
+            {developmentFixture!.favorites.map((item) => (
+              <li key={item.problemId}>
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>
+                    {item.slug} · {profileDate(item.favoritedAt)}
+                  </small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
     const favoriteCapability = capability('favorites');
     if (!api)
       return (
@@ -587,20 +682,74 @@ export function ProfilePage({
     );
   };
 
+  const renderSubmissions = () => {
+    const items = demoMode ? developmentFixture!.submissions : submissionItems;
+    if (!demoMode && (!api || !profileApi?.profileSubmissions)) return null;
+    if (!demoMode && submissionsError)
+      return (
+        <ProfileLoadError text={submissionsError} onRetry={loadSubmissions} />
+      );
+    if (!demoMode && !submissionsLoaded)
+      return (
+        <p className="muted" role="status">
+          Loading submission history…
+        </p>
+      );
+    return (
+      <div className="profile-submission-panel">
+        <div className="section-heading-inline">
+          <h3>Recent submissions</h3>
+          {demoMode && (
+            <span className="profile-fixture-label">
+              DEVELOPMENT FIXTURE DATA
+            </span>
+          )}
+        </div>
+        {items.length ? (
+          <ul className="profile-data-list">
+            {items.map((item) => (
+              <li key={item.id}>
+                <div>
+                  <PortalLink to={`/problems/${item.slug}`} navigate={navigate}>
+                    <strong>{item.title}</strong>
+                  </PortalLink>
+                  <small>
+                    {item.languageId} · {item.status} ·{' '}
+                    {profileDate(item.createdAt)}
+                  </small>
+                </div>
+                <span
+                  className={`profile-verdict profile-verdict-${item.verdict ?? 'pending'}`}
+                >
+                  {item.verdict ?? item.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">No public submissions to display.</p>
+        )}
+      </div>
+    );
+  };
+
   const renderSolved = () => {
     if (!api) return renderActivity();
     if (solvedError)
       return <ProfileLoadError text={solvedError} onRetry={loadSolved} />;
+    const items = demoMode ? developmentFixture!.solved : solvedItems;
+    const loaded = demoMode || solvedLoaded;
     return (
       <>
         {renderActivity()}
-        {!solvedLoaded ? (
+        {renderSubmissions()}
+        {!loaded ? (
           <p className="muted" role="status">
             正在加载已解决题目…
           </p>
-        ) : solvedItems.length ? (
+        ) : items.length ? (
           <ul className="profile-data-list">
-            {solvedItems.map((item) => (
+            {items.map((item) => (
               <li key={item.problemId}>
                 <div>
                   <PortalLink to={`/problems/${item.slug}`} navigate={navigate}>
@@ -619,6 +768,25 @@ export function ProfilePage({
   };
 
   const renderProblems = () => {
+    if (demoMode)
+      return (
+        <div className="profile-data-panel">
+          <p className="profile-fixture-label">DEVELOPMENT FIXTURE DATA</p>
+          <ul className="profile-data-list">
+            {developmentFixture!.problems.map((item) => (
+              <li key={item.id}>
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>
+                    {item.status} · {item.visibility} ·{' '}
+                    {profileDate(item.updatedAt)}
+                  </small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
     if (!api)
       return (
         <CapabilityNotice
@@ -668,44 +836,75 @@ export function ProfilePage({
 
   const renderTab = () => {
     if (tab === '概览') {
-      if (overviewError)
+      if (!demoMode && overviewError)
         return (
           <ProfileLoadError
             text={overviewError}
             onRetry={() => setProfileRefresh((value) => value + 1)}
           />
         );
-      if (!overview)
+      const displayedOverview = demoMode
+        ? developmentFixture!.overview
+        : overview;
+      if (!displayedOverview)
         return (
           <p className="muted" role="status">
             正在加载概览…
           </p>
         );
       const metrics = [
-        ['创建题目', overview.createdProblemCount],
-        ['已解决题目', overview.solvedProblemCount],
-        ['总提交', overview.submissionCount],
-        ['AC 提交', overview.acceptedSubmissionCount],
-        ...(overview.favoriteCount === undefined
+        ['创建题目', displayedOverview.createdProblemCount],
+        ['已解决题目', displayedOverview.solvedProblemCount],
+        ['总提交', displayedOverview.submissionCount],
+        ['AC 提交', displayedOverview.acceptedSubmissionCount],
+        ...(displayedOverview.favoriteCount === undefined
           ? []
-          : [['收藏', overview.favoriteCount] as const]),
+          : [['收藏', displayedOverview.favoriteCount] as const]),
       ];
+      const capabilityCards = [
+        ['收藏', activeCapabilities?.favorites],
+        ['做题活动', activeCapabilities?.activity],
+        ['团队', activeCapabilities?.teams],
+        ['题目管理', activeCapabilities?.myProblems],
+      ].filter((entry): entry is [string, ProfileCapability] =>
+        Boolean(entry[1]),
+      );
       return (
-        <div className="profile-overview-grid">
-          {metrics.map(([label, value]) => (
-            <section key={label}>
-              <strong>{value}</strong>
-              <span>{label}</span>
-            </section>
-          ))}
-        </div>
+        <>
+          {demoMode && (
+            <p className="profile-fixture-label">DEVELOPMENT FIXTURE DATA</p>
+          )}
+          <div className="profile-overview-grid">
+            {metrics.map(([label, value]) => (
+              <section key={label}>
+                <strong>{value}</strong>
+                <span>{label}</span>
+              </section>
+            ))}
+          </div>
+          {capabilityCards.length ? (
+            <div
+              className="profile-capability-grid"
+              aria-label="Profile capabilities"
+            >
+              {capabilityCards.map(([label, item]) => (
+                <section key={label}>
+                  <strong>{label}</strong>
+                  <span>
+                    {item.available ? 'Available' : profileReason(item.reason)}
+                  </span>
+                </section>
+              ))}
+            </div>
+          ) : null}
+        </>
       );
     }
     if (tab === '做题记录') return renderSolved();
     if (tab === '收藏') return renderFavorites();
     if (tab === '我的题目') return renderProblems();
     if (tab === '团队') {
-      const teams = publicProfile?.teams ?? [];
+      const teams = displayedProfile?.teams ?? [];
       return teams.length ? (
         <div className="profile-team-list">
           {teams.map((team) => (
@@ -737,17 +936,17 @@ export function ProfilePage({
   return (
     <section className="profile-v4">
       <div className="profile-cover" aria-label="OJPlatform 默认个人主页封面">
-        {publicProfile?.backgroundUrl && (
-          <img src={publicProfile.backgroundUrl} alt="个人主页背景" />
+        {displayedProfile?.backgroundUrl && (
+          <img src={displayedProfile.backgroundUrl} alt="个人主页背景" />
         )}
         <span>OJPlatform</span>
       </div>
       <div className="profile-identity">
         <div className="profile-identity-main">
-          {publicProfile?.avatarUrl ? (
+          {displayedProfile?.avatarUrl ? (
             <img
               className="profile-avatar"
-              src={publicProfile.avatarUrl}
+              src={displayedProfile.avatarUrl}
               alt="头像"
             />
           ) : (
@@ -759,26 +958,26 @@ export function ProfilePage({
           <p>
             {displayUsername ? `@${displayUsername}` : '公开资料服务正在接入'}
           </p>
-          {publicProfile?.headline && (
-            <p className="profile-headline">{publicProfile.headline}</p>
+          {displayedProfile?.headline && (
+            <p className="profile-headline">{displayedProfile.headline}</p>
           )}
           <p className="profile-meta">
-            {[publicProfile?.location, publicProfile?.organization]
+            {[displayedProfile?.location, displayedProfile?.organization]
               .filter(Boolean)
               .join(' · ')}
           </p>
-          {publicProfile?.bio && (
-            <p className="profile-bio">{publicProfile.bio}</p>
+          {displayedProfile?.bio && (
+            <p className="profile-bio">{displayedProfile.bio}</p>
           )}
           <p className="profile-joined">
-            {isPublic
-              ? `加入于 ${profileDate(publicProfile?.createdAt ?? '')}`
+            {demoMode || isPublic
+              ? `加入于 ${profileDate(displayedProfile?.createdAt ?? '')}`
               : user
                 ? '公开资料'
                 : '登录后可查看自己的真实账户资料。'}
           </p>
         </div>
-        {!isPublic && user && (
+        {!demoMode && !isPublic && user && (
           <div className="profile-actions">
             <button
               type="button"
@@ -790,6 +989,32 @@ export function ProfilePage({
           </div>
         )}
       </div>
+      {import.meta.env.DEV && (
+        <div className="profile-demo-control">
+          <span>
+            {demoMode
+              ? 'Development fixture data is active.'
+              : 'Local development preview only.'}
+          </span>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              if (developmentFixture) {
+                setDevelopmentFixture(undefined);
+                return;
+              }
+              void import(
+                /* @vite-ignore */ './profileDevelopmentFixture.js'
+              ).then(({ PROFILE_DEVELOPMENT_FIXTURE }) => {
+                setDevelopmentFixture(PROFILE_DEVELOPMENT_FIXTURE);
+              });
+            }}
+          >
+            {demoMode ? 'Use live profile data' : 'Preview development fixture'}
+          </button>
+        </div>
+      )}
       <div
         className="section-tabs profile-tabs"
         role="tablist"
@@ -842,4 +1067,3 @@ export function ProfilePage({
     </section>
   );
 }
-
