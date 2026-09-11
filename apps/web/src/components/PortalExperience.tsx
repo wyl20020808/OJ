@@ -78,35 +78,6 @@ export function CapabilityNotice({
     </div>
   );
 }
-export function HomeworkPage({ navigate }: { navigate: Navigate }) {
-  return (
-    <section className="portal-page">
-      <div className="portal-heading">
-        <div>
-          <p className="eyebrow">学习任务</p>
-          <h1>我的作业</h1>
-        </div>
-      </div>
-      <div className="compact-table" aria-label="作业列表">
-        <div className="compact-table-head">
-          <span>作业</span>
-          <span>来源</span>
-          <span>截止时间</span>
-          <span>进度</span>
-        </div>
-        <CapabilityNotice
-          title="作业功能正在接入"
-          text="后端尚未提供作业、题目集合和完成进度数据。"
-          request="HOMEWORK-BACKEND-INTEGRATION-REQUEST"
-        />
-      </div>
-      <button className="secondary" type="button" onClick={() => navigate('/')}>
-        返回首页
-      </button>
-    </section>
-  );
-}
-
 export function WrongBookPage({ navigate }: { navigate: Navigate }) {
   return (
     <section className="portal-page">
