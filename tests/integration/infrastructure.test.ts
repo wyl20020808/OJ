@@ -30,6 +30,20 @@ const storage = createStorage({
   bucket: config.s3Bucket,
 });
 
+async function cleanupSubmissionFixture(submissionId: string) {
+  await database.pool.query(
+    'DELETE FROM submission_dispatches WHERE submission_id=$1',
+    [submissionId],
+  );
+  await database.pool.query(
+    'DELETE FROM submission_evaluations WHERE submission_id=$1',
+    [submissionId],
+  );
+  await database.pool.query('DELETE FROM submissions WHERE id=$1', [
+    submissionId,
+  ]);
+}
+
 beforeAll(async () => {
   await cache.connect();
   await ensureBucket(storage);
@@ -97,38 +111,18 @@ describe('real local infrastructure', () => {
 
   it('persists authoritative evaluation history and current projection', async () => {
     const repository = new PostgresSubmissionRepository(database.pool);
+    const ownerUserId = crypto.randomUUID();
     const submission = await repository.create({
-      ownerUserId: `integration-${crypto.randomUUID()}`,
+      ownerUserId,
       problemId: 'integration-problem',
       problemRevisionId: 'integration-revision',
       testdataVersionRef: 'integration-testdata',
       languageId: 'cpp20',
       source: 'integration-source',
     });
-    await repository.beginEvaluation!(submission.id, 'integration-job-1');
-    await repository.publishEvaluation!({
-      submissionId: submission.id,
-      judgeJobId: 'integration-job-1',
-      evaluationGeneration: 1,
-      attemptGeneration: 1,
-      status: 'COMPLETED_WITH_VERDICT',
-      verdict: 'WA',
-      evaluationRecordDigest: 'integration-evaluation-1',
-      verdictRecordDigest: 'b'.repeat(64),
-    });
-    const rejudge = await repository.startRejudge!(
-      submission.id,
-      'integration-job-2',
-    );
-    expect(rejudge.evaluationGeneration).toBe(2);
-    await expect(
-      repository.startRejudge!(submission.id, 'integration-job-2'),
-    ).resolves.toMatchObject({ evaluationGeneration: 2 });
-    await expect(
-      repository.startRejudge!(submission.id, 'integration-job-conflict'),
-    ).rejects.toThrow('EVALUATION_ALREADY_EXISTS');
-    await expect(
-      repository.publishEvaluation!({
+    try {
+      await repository.beginEvaluation!(submission.id, 'integration-job-1');
+      await repository.publishEvaluation!({
         submissionId: submission.id,
         judgeJobId: 'integration-job-1',
         evaluationGeneration: 1,
@@ -137,92 +131,144 @@ describe('real local infrastructure', () => {
         verdict: 'WA',
         evaluationRecordDigest: 'integration-evaluation-1',
         verdictRecordDigest: 'b'.repeat(64),
-      }),
-    ).rejects.toThrow('STALE_EVALUATION');
-    await repository.publishEvaluation!({
-      submissionId: submission.id,
-      judgeJobId: 'integration-job-2',
-      evaluationGeneration: 2,
-      attemptGeneration: 2,
-      status: 'COMPLETED_WITH_VERDICT',
-      verdict: 'AC',
-      evaluationRecordDigest: 'integration-evaluation-2',
-      verdictRecordDigest: 'c'.repeat(64),
-    });
-    const cancelledRejudge = await repository.startRejudge!(
-      submission.id,
-      'integration-job-3',
-    );
-    await repository.cancelEvaluation!(
-      submission.id,
-      cancelledRejudge.judgeJobId,
-    );
-    const history = await repository.listEvaluationHistory!(submission.id);
-    expect(history).toEqual([
-      expect.objectContaining({
-        evaluationGeneration: 1,
-        verdict: 'WA',
-        current: false,
-      }),
-      expect.objectContaining({
+      });
+      const rejudge = await repository.startRejudge!(
+        submission.id,
+        'integration-job-2',
+      );
+      expect(rejudge.evaluationGeneration).toBe(2);
+      await expect(
+        repository.startRejudge!(submission.id, 'integration-job-2'),
+      ).resolves.toMatchObject({ evaluationGeneration: 2 });
+      await expect(
+        repository.startRejudge!(submission.id, 'integration-job-conflict'),
+      ).rejects.toThrow('EVALUATION_ALREADY_EXISTS');
+      await expect(
+        repository.publishEvaluation!({
+          submissionId: submission.id,
+          judgeJobId: 'integration-job-1',
+          evaluationGeneration: 1,
+          attemptGeneration: 1,
+          status: 'COMPLETED_WITH_VERDICT',
+          verdict: 'WA',
+          evaluationRecordDigest: 'integration-evaluation-1',
+          verdictRecordDigest: 'b'.repeat(64),
+        }),
+      ).rejects.toThrow('STALE_EVALUATION');
+      await repository.publishEvaluation!({
+        submissionId: submission.id,
+        judgeJobId: 'integration-job-2',
         evaluationGeneration: 2,
+        attemptGeneration: 2,
+        status: 'COMPLETED_WITH_VERDICT',
         verdict: 'AC',
-        current: false,
-      }),
-      expect.objectContaining({
+        evaluationRecordDigest: 'integration-evaluation-2',
+        verdictRecordDigest: 'c'.repeat(64),
+      });
+      const cancelledRejudge = await repository.startRejudge!(
+        submission.id,
+        'integration-job-3',
+      );
+      await repository.cancelEvaluation!(
+        submission.id,
+        cancelledRejudge.judgeJobId,
+      );
+      const history = await repository.listEvaluationHistory!(submission.id);
+      expect(history).toEqual([
+        expect.objectContaining({
+          evaluationGeneration: 1,
+          verdict: 'WA',
+          current: false,
+        }),
+        expect.objectContaining({
+          evaluationGeneration: 2,
+          verdict: 'AC',
+          current: false,
+        }),
+        expect.objectContaining({
+          evaluationGeneration: 3,
+          status: 'CANCELLED',
+          current: true,
+        }),
+      ]);
+      expect(await repository.getEvaluation!(submission.id)).toMatchObject({
         evaluationGeneration: 3,
         status: 'CANCELLED',
         current: true,
-      }),
-    ]);
-    expect(await repository.getEvaluation!(submission.id)).toMatchObject({
-      evaluationGeneration: 3,
-      status: 'CANCELLED',
-      current: true,
-    });
+      });
+      const app = await buildApp({
+        logger: false,
+        withInfrastructure: true,
+        config,
+      });
+      try {
+        const response = await app.inject({
+          method: 'GET',
+          url: `/api/evaluations?limit=20&submitterId=${ownerUserId}`,
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json().items).toEqual([
+          expect.objectContaining({
+            submissionId: submission.id,
+            submitter: { id: ownerUserId, displayName: 'Unknown user' },
+          }),
+        ]);
+      } finally {
+        await app.close();
+      }
+    } finally {
+      await cleanupSubmissionFixture(submission.id);
+    }
   });
 
   it('serializes concurrent rejudge commands into one current generation', async () => {
     const repository = new PostgresSubmissionRepository(database.pool);
     const submission = await repository.create({
-      ownerUserId: `integration-race-${crypto.randomUUID()}`,
+      ownerUserId: crypto.randomUUID(),
       problemId: 'integration-problem',
       problemRevisionId: 'integration-revision',
       testdataVersionRef: 'integration-testdata',
       languageId: 'cpp20',
       source: 'integration-source',
     });
-    await repository.beginEvaluation!(submission.id, 'integration-race-job-1');
-    await repository.publishEvaluation!({
-      submissionId: submission.id,
-      judgeJobId: 'integration-race-job-1',
-      evaluationGeneration: 1,
-      attemptGeneration: 1,
-      status: 'COMPLETED_WITH_VERDICT',
-      verdict: 'AC',
-      evaluationRecordDigest: 'integration-race-evaluation-1',
-      verdictRecordDigest: 'd'.repeat(64),
-    });
-    const results = await Promise.allSettled(
-      Array.from({ length: 20 }, (_, index) =>
-        repository.startRejudge!(
-          submission.id,
-          `integration-race-job-${index + 2}`,
+    try {
+      await repository.beginEvaluation!(
+        submission.id,
+        'integration-race-job-1',
+      );
+      await repository.publishEvaluation!({
+        submissionId: submission.id,
+        judgeJobId: 'integration-race-job-1',
+        evaluationGeneration: 1,
+        attemptGeneration: 1,
+        status: 'COMPLETED_WITH_VERDICT',
+        verdict: 'AC',
+        evaluationRecordDigest: 'integration-race-evaluation-1',
+        verdictRecordDigest: 'd'.repeat(64),
+      });
+      const results = await Promise.allSettled(
+        Array.from({ length: 20 }, (_, index) =>
+          repository.startRejudge!(
+            submission.id,
+            `integration-race-job-${index + 2}`,
+          ),
         ),
-      ),
-    );
-    expect(
-      results.filter((result) => result.status === 'fulfilled'),
-    ).toHaveLength(1);
-    expect(await repository.listEvaluationHistory!(submission.id)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ evaluationGeneration: 1, current: false }),
-        expect.objectContaining({
-          evaluationGeneration: 2,
-          current: true,
-          status: 'REJUDGE_PENDING',
-        }),
-      ]),
-    );
+      );
+      expect(
+        results.filter((result) => result.status === 'fulfilled'),
+      ).toHaveLength(1);
+      expect(await repository.listEvaluationHistory!(submission.id)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ evaluationGeneration: 1, current: false }),
+          expect.objectContaining({
+            evaluationGeneration: 2,
+            current: true,
+            status: 'REJUDGE_PENDING',
+          }),
+        ]),
+      );
+    } finally {
+      await cleanupSubmissionFixture(submission.id);
+    }
   });
 });

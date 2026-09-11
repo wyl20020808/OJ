@@ -1,0 +1,1 @@
+-- Data cleanup migration is intentionally irreversible.
