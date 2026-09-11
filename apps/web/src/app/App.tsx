@@ -45,10 +45,11 @@ import { ProfilePage } from '../features/profile/ProfilePage.js';
 import {
   ContestExperience,
   MessagesExperience,
-  NotificationBell,
   NotificationsPage,
   WrongBookPage,
 } from '../components/PortalExperience.js';
+import { AppLayout } from '../components/layout/AppLayout.js';
+import { AppNavbar } from '../components/layout/AppNavbar.js';
 import type {
   ContestDetail,
   ContestListItem,
@@ -3729,217 +3730,56 @@ export function App() {
       <NotFound />
     );
   return (
-    <div
-      className={`app${current.name === 'submissions' ? ' submissions-view' : ''}${current.name === 'submission' ? ' submission-detail-view' : ''}`}
-    >
-      <header className="nav">
-        <Link to="/" className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            OJ
-          </span>
-          <strong>
-            AlgoOJ
-            {current.name.startsWith('discussion') && (
-              <span className="brand-section">博客</span>
-            )}
-          </strong>
-        </Link>
-        <button
-          type="button"
-          className="nav-toggle"
-          aria-expanded={false}
-          aria-label={zhCN.nav.open}
-          onClick={(event) => {
-            const next =
-              event.currentTarget.getAttribute('aria-expanded') !== 'true';
-            event.currentTarget.setAttribute('aria-expanded', String(next));
-            event.currentTarget.setAttribute(
-              'aria-label',
-              next ? zhCN.nav.close : zhCN.nav.open,
-            );
-            event.currentTarget.parentElement?.classList.toggle(
-              'nav-open',
-              next,
-            );
+    <AppLayout
+      className={`${current.name === 'submissions' ? 'submissions-view' : ''}${current.name === 'submission' ? ' submission-detail-view' : ''}`.trim()}
+      navbar={
+        <AppNavbar
+          Link={Link}
+          api={api}
+          current={current}
+          user={user}
+          canViewJudgeAdmin={canViewJudgeAdmin}
+          navigate={navigate}
+          onLogoutComplete={() => {
+            setUser(null);
+            setAuthState('unauthenticated');
+            navigate('/');
           }}
-        >
-          <span aria-hidden="true">☰</span>
-        </button>
-        <nav aria-label="Primary navigation">
-          <Link
-            to="/"
-            ariaLabel="Home"
-            className={current.name === 'home' ? 'active' : ''}
-          >
-            首页
-          </Link>
-          <Link
-            to="/problems"
-            ariaLabel="Problems"
-            className={
-              current.name === 'problems' ||
-              current.name === 'problem' ||
-              current.name === 'submit'
-                ? 'active'
-                : ''
-            }
-          >
-            题库
-          </Link>
-          <Link
-            to="/contests"
-            className={current.name.includes('contest') ? 'active' : ''}
-          >
-            比赛
-          </Link>
-          <Link
-            to="/teams"
-            className={current.name.startsWith('team') ? 'active' : ''}
-          >
-            团队
-          </Link>
-          <Link
-            to="/homework"
-            className={
-              current.name === 'homework' || current.name === 'homework-detail'
-                ? 'active'
-                : ''
-            }
-          >
-            作业
-          </Link>
-          <Link
-            to="/discussion"
-            className={current.name.startsWith('discussion') ? 'active' : ''}
-          >
-            博客
-          </Link>
-          <Link
-            to="/submissions"
-            ariaLabel="Submissions"
-            className={
-              current.name === 'submissions' || current.name === 'submission'
-                ? 'active'
-                : ''
-            }
-          >
-            评测
-          </Link>
-          <Link
-            to="/notifications"
-            className={current.name === 'notifications' ? 'active' : ''}
-          >
-            通知
-          </Link>
-          {canViewJudgeAdmin && (
-            <Link
-              to="/admin/judge/nodes"
-              className={current.name.startsWith('judge-') ? 'active' : ''}
-            >
-              管理
-            </Link>
-          )}
-          <form
-            className="nav-search"
-            role="search"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const query = new FormData(event.currentTarget)
-                .get('q')
-                ?.toString()
-                .trim();
-              const isBlog = current.name.startsWith('discussion');
-              navigate(
-                query
-                  ? `${isBlog ? '/discussion' : '/problems'}?q=${encodeURIComponent(
-                      query,
-                    )}`
-                  : isBlog
-                    ? '/discussion'
-                    : '/problems',
-              );
-            }}
-          >
-            <span aria-hidden="true">⌕</span>
-            <input
-              name="q"
-              placeholder={
-                current.name.startsWith('discussion')
-                  ? '搜索文章、用户或关键词…'
-                  : '搜索题目、比赛、用户…'
-              }
-              aria-label="全站搜索"
-            />
-          </form>
-          <NotificationBell navigate={navigate} api={api} />
-          {user ? (
-            <>
-              {user.guest && (
-                <span className="guest-badge nav-guest-badge">游客</span>
-              )}
-              <Link
-                to="/profile"
-                className={current.name === 'profile' ? 'active' : ''}
-              >
-                {user.displayName}
-              </Link>
-              <button
-                className="link-button"
-                onClick={() => {
-                  void api.logout().finally(() => {
-                    setUser(null);
-                    setAuthState('unauthenticated');
-                    navigate('/');
-                  });
-                }}
-              >
-                退出登录
-              </button>
-            </>
-          ) : (
-            <>
-              <Link to="/login" ariaLabel="Sign in">
-                登录
-              </Link>
-              <Link to="/register" ariaLabel="Register">
-                注册
-              </Link>
-            </>
-          )}
-        </nav>
-      </header>
-      {current.name !== 'home' &&
+        />
+      }
+      breadcrumbs={
+        current.name !== 'home' &&
         current.name !== 'problem' &&
         current.name !== 'discussion' &&
         current.name !== 'discussion-post' &&
         current.name !== 'teams' &&
         current.name !== 'submissions' &&
-        current.name !== 'submission' && <Breadcrumbs current={current} />}
-      <main
-        className={
-          current.name === 'author-new' || current.name === 'author-edit'
-            ? 'shell shell-authoring'
-            : current.name === 'problems'
-              ? 'shell shell-problem-library'
-              : current.name === 'problem'
-                ? 'shell shell-problem-detail'
-                : current.name === 'discussion'
-                  ? 'shell shell-blog'
-                  : current.name === 'discussion-post'
-                    ? 'shell shell-blog-detail'
-                    : current.name === 'teams'
-                      ? 'shell shell-team-portal'
-                      : current.name === 'submissions'
-                        ? 'shell shell-submissions'
-                        : current.name === 'submission'
-                          ? 'shell shell-submission-detail'
-                          : 'shell'
-        }
-      >
-        {page}
-      </main>
-      <footer>OJPlatform · 练习、学习、持续进步。</footer>
-    </div>
+        current.name !== 'submission' ? (
+          <Breadcrumbs current={current} />
+        ) : undefined
+      }
+      mainClassName={
+        current.name === 'author-new' || current.name === 'author-edit'
+          ? 'shell shell-authoring'
+          : current.name === 'problems'
+            ? 'shell shell-problem-library'
+            : current.name === 'problem'
+              ? 'shell shell-problem-detail'
+              : current.name === 'discussion'
+                ? 'shell shell-blog'
+                : current.name === 'discussion-post'
+                  ? 'shell shell-blog-detail'
+                  : current.name === 'teams'
+                    ? 'shell shell-team-portal'
+                    : current.name === 'submissions'
+                      ? 'shell shell-submissions'
+                      : current.name === 'submission'
+                        ? 'shell shell-submission-detail'
+                        : 'shell'
+      }
+    >
+      {page}
+    </AppLayout>
   );
 }
 export function NotFound() {
