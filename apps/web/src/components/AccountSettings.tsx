@@ -10,6 +10,7 @@ import type {
   EditableProfile,
 } from '../services/api.js';
 import { ApiError } from '../services/api.js';
+import '../features/profile/ProfilePage.css';
 import { useToast } from './Toast.js';
 
 function safeDate(value: string) {
