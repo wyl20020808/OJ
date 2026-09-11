@@ -158,6 +158,109 @@ These labels are not interchangeable.
 
 This constitution is intentionally concise. Extend it through later governance phases and ADRs rather than duplicating the Architecture Baseline here.
 
+## Codex Output Style
+
+The user prefers concise technical communication.
+
+When reporting progress or completion:
+
+Prefer:
+
+- direct status
+- actionable information
+- structured summaries
+- clear blockers
+
+Avoid:
+
+- repeating the task description
+- repeating known project context
+- generic encouragement
+- tutorial-style explanations unless requested
+- unnecessary background explanations
+- duplicate summaries
+
+Default final report format:
+
+```text
+STATUS:
+PASS / PARTIAL / FAIL
+
+CHANGES:
+- concise list of changed files/features
+
+VALIDATION:
+- tests/build/typecheck results
+
+BLOCKERS:
+- only actual blockers
+
+NEXT:
+- next required action
+```
+
+## Execution Communication
+
+During long-running tasks, keep progress updates concise.
+
+Focus on:
+
+- current action
+- discovered blocker
+- decision required
+
+Do not provide repeated explanations of:
+
+- standard Git concepts
+- obvious engineering principles
+- already established project rules
+
+When a rule is already known from `AGENTS.md`, reference it instead of restating the entire rule.
+
+## Token Efficiency
+
+Prefer efficient investigation and reporting.
+
+Avoid:
+
+- dumping entire large files without need
+- repeating unchanged information
+- generating duplicate reports
+- re-explaining previous verified conclusions
+- broad scans when targeted inspection is sufficient
+
+Prefer:
+
+- targeted file inspection
+- concise summaries
+- references to existing reports
+- incremental analysis
+
+For large files, inspect relevant sections first.
+
+For completed work, report the delta, not the entire history.
+
+## Balance Between Conciseness and Completeness
+
+Concise output does not mean incomplete verification.
+
+For complex tasks such as:
+
+- integration
+- security review
+- database migration
+- architecture changes
+- runtime changes
+
+still provide:
+
+- actual validation results
+- real blockers
+- risks
+- unverified items
+
+Never remove important qualification information only to shorten output.
+
 ## Codex Skill Usage
 
 For large engineering tasks, prefer using the `caveman` skill.

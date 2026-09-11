@@ -272,3 +272,15 @@ Do not use caveman to justify:
 - putting more page CSS into app.css
 - replacing real APIs with mock data
 - removing permissions or loading states
+
+## Frontend Task Reporting
+
+For frontend tasks, prefer concise reporting of:
+
+- components changed
+- styles changed
+- API contracts affected
+- tests/build status
+- remaining UI acceptance status
+
+Do not include long explanations of common frontend concepts unless requested.
