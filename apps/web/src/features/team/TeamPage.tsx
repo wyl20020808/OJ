@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import type { ApiClient, TeamJoinRequest, TeamMember, TeamSummary } from '../../services/api.js';
 
 type TeamView = 'mine' | 'joined' | 'discoverable';
@@ -37,40 +44,121 @@ const visibilityLabel = (value: TeamVisibility) =>
 const policyLabel = (value: TeamPolicy) =>
   ({ OPEN: '自由加入', REQUEST: '申请加入', INVITE_ONLY: '仅邀请' })[value];
 
+type TeamPortalIconName =
+  | 'arrow'
+  | 'calendar'
+  | 'group'
+  | 'search'
+  | 'tag'
+  | 'trophy'
+  | 'users';
+
+function TeamPortalIcon({ name }: { name: TeamPortalIconName }) {
+  const paths: Record<TeamPortalIconName, ReactNode> = {
+    arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
+    calendar: <path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2zm2-2v4m10-4v4M3 9h18M7 13h2m3 0h2m3 0h1M7 17h2m3 0h2" />,
+    group: (
+      <>
+        <circle cx="9" cy="8" r="3" />
+        <circle cx="17" cy="9" r="2" />
+        <path d="M3 20v-2a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v2M15 14a4 4 0 0 1 6 3.5V20" />
+      </>
+    ),
+    search: (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path d="m16 16 5 5" />
+      </>
+    ),
+    tag: <path d="M20 13 13 20 4 11V4h7zM8.5 8.5h.01" />,
+    trophy: <path d="M8 4h8v4a4 4 0 0 1-8 0zm0 2H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4m-4 0v5m-4 3h8" />,
+    users: (
+      <>
+        <path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 20v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      className="team-portal-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {paths[name]}
+    </svg>
+  );
+}
+
+function teamCalendarDays(now: Date) {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  return [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ];
+}
+
 function TeamCard({
   team,
+  index,
   navigate,
 }: {
   team: TeamSummary;
+  index: number;
   navigate: (path: string) => void;
 }) {
   const path = `/teams/${team.slug}`;
   return (
-    <article className="team-card">
-      <a
-        className="team-card-main"
-        href={path}
-        onClick={(event) => {
-          event.preventDefault();
-          navigate(path);
-        }}
-      >
-        <span className="team-avatar" aria-hidden="true">
-          {initial(team.name)}
-        </span>
-        <span className="team-card-copy">
-          <strong>{team.name}</strong>
-          <small>@{team.slug}</small>
-          <span className="team-description">
-            {team.description || '这个团队还没有填写简介。'}
-          </span>
-        </span>
-      </a>
-      <footer className="team-card-meta">
-        <span>{team.memberCount ?? 0} 名成员</span>
-        <span>{visibilityLabel(team.visibility)}</span>
+    <article className={`team-portal-card team-portal-card-${index % 6}`}>
+      <header>
         <span>{policyLabel(team.joinPolicy)}</span>
+        <small>{team.role ? '已加入' : visibilityLabel(team.visibility)}</small>
+      </header>
+      <div className="team-portal-card-title">
+        <span className="team-avatar" aria-hidden="true">
+          {team.avatarUrl ? <img src={team.avatarUrl} alt="" /> : initial(team.name)}
+        </span>
+        <div>
+          <h2>
+            <a
+              href={path}
+              onClick={(event) => {
+                event.preventDefault();
+                navigate(path);
+              }}
+            >
+              {team.name}
+            </a>
+          </h2>
+          <small>@{team.slug}</small>
+        </div>
+      </div>
+      <p>{team.description || '这个团队还没有填写简介。'}</p>
+      <footer>
+        <span>
+          <TeamPortalIcon name="users" />
+          {team.memberCount ?? 0} 名成员
+        </span>
+        <span>{visibilityLabel(team.visibility)}</span>
         {team.role && <strong className="team-role">{team.role}</strong>}
+        <a
+          href={path}
+          onClick={(event) => {
+            event.preventDefault();
+            navigate(path);
+          }}
+        >
+          进入团队
+        </a>
       </footer>
     </article>
   );
@@ -150,8 +238,13 @@ export function TeamPage({
           .teamMembers(slug)
           .then((memberPage) => live && setMembers(memberPage.items))
           .catch(() => live && setMembers([]));
-        if ((detail.membershipState === 'OWNER' || detail.membershipState === 'MANAGER') && typeof api.teamJoinRequests === 'function') {
-          void api.teamJoinRequests(slug)
+        if (
+          (detail.membershipState === 'OWNER' ||
+            detail.membershipState === 'MANAGER') &&
+          typeof api.teamJoinRequests === 'function'
+        ) {
+          void api
+            .teamJoinRequests(slug)
             .then((page) => live && setRequests(page.items))
             .catch(() => live && setRequestError('暂时无法加载待处理申请'));
         }
@@ -175,6 +268,18 @@ export function TeamPage({
         .includes(normalized),
     );
   }, [query, source]);
+  const calendarNow = new Date();
+  const calendarDays = teamCalendarDays(calendarNow);
+  const activityDays = new Set(
+    discoverable
+      .map((item) => new Date(item.createdAt))
+      .filter(
+        (date) =>
+          date.getFullYear() === calendarNow.getFullYear() &&
+          date.getMonth() === calendarNow.getMonth(),
+      )
+      .map((date) => date.getDate()),
+  );
 
   if (create) return <CreateTeam api={api} navigate={navigate} />;
   if (error)
@@ -186,122 +291,348 @@ export function TeamPage({
     );
   if (!slug)
     return (
-      <section className="team-page">
-        <header className="team-page-header">
+      <section className="team-portal">
+        <header className="team-portal-hero">
           <div>
-            <p className="eyebrow">团队</p>
-            <h1>与你一起学习、训练和完成任务</h1>
-            <p>找到你的训练伙伴，或建立一个新的协作空间。</p>
+            <p>用协作拓宽算法的世界</p>
+            <h1>在团队中，遇见更强的自己</h1>
+            <span>与伙伴共同训练、交流经验，在持续挑战中成长。</span>
+            <button
+              type="button"
+              onClick={() => navigate(user ? '/teams/new' : '/login')}
+            >
+              创建团队 <TeamPortalIcon name="arrow" />
+            </button>
           </div>
-          {user && (
-            <button onClick={() => navigate('/teams/new')}>+ 创建团队</button>
-          )}
+          <blockquote>
+            以队会友
+            <br />
+            码向更远
+            <small>A BRIGHTER TOMORROW</small>
+          </blockquote>
         </header>
-        <div className="team-toolbar">
-          <div className="team-view-switcher" aria-label="团队视图">
-            <button
-              className={view === 'mine' ? 'active' : ''}
-              onClick={() => setView('mine')}
-              disabled={!user}
-            >
-              我的团队 <span>{mine.length}</span>
-            </button>
-            <button
-              className={view === 'joined' ? 'active' : ''}
-              onClick={() => setView('joined')}
-              disabled={!user}
-            >
-              已加入 <span>{joined.length}</span>
-            </button>
-            <button
-              className={view === 'discoverable' ? 'active' : ''}
-              onClick={() => setView('discoverable')}
-            >
-              可发现 <span>{discoverable.length}</span>
-            </button>
-          </div>
-          <input
-            type="search"
-            aria-label="搜索团队"
-            placeholder="搜索团队..."
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
-        {loading ? (
-          <p className="team-list-status">正在加载团队...</p>
-        ) : filtered.length ? (
-          <div className="team-grid">
-            {filtered.map((item) => (
-              <TeamCard key={item.id} team={item} navigate={navigate} />
-            ))}
-          </div>
-        ) : query ? (
-          <div className="team-empty">
-            <span className="team-empty-icon" aria-hidden="true">
-              群
-            </span>
-            <h2>没有匹配的团队</h2>
-            <p>尝试其他名称、标识或简介关键词。</p>
-          </div>
-        ) : (
-          <div className="team-empty">
-            <span className="team-empty-icon" aria-hidden="true">
-              群
-            </span>
-            <h2>
-              {view === 'discoverable' ? '暂无可发现团队' : '你还没有加入团队'}
-            </h2>
-            <p>创建自己的训练空间，或浏览公开团队。</p>
-            <div>
-              {user && (
-                <button onClick={() => navigate('/teams/new')}>创建团队</button>
-              )}
-              <button
-                className="secondary"
-                onClick={() => setView('discoverable')}
-              >
-                浏览公开团队
-              </button>
-            </div>
-          </div>
-        )}
-        {!loading && filtered.length > 0 && nextCursor && (
+        <section className="team-portal-platforms" aria-label="团队快速入口">
           <button
-            className="team-load-more secondary"
-            disabled={busy}
-            onClick={() => {
-              if (busy) return;
-              setBusy(true);
-              const request =
-                view === 'discoverable'
-                  ? api.teams(20, discoverableCursor)
-                  : api.myTeams(20, mineCursor);
-              void request
-                .then((page) => {
-                  if (view === 'discoverable') {
-                    const membershipIds = new Set(mine.map((item) => item.id));
-                    setDiscoverable((current) =>
-                      appendTeamPage(
-                        current,
-                        page.items.filter(
-                          (item) => !membershipIds.has(item.id),
-                        ),
-                      ),
-                    );
-                    setDiscoverableCursor(page.nextCursor);
-                  } else {
-                    setMine((current) => appendTeamPage(current, page.items));
-                    setMineCursor(page.nextCursor);
-                  }
-                })
-                .catch(() => setError('加载更多团队失败'))
-                .finally(() => setBusy(false));
-            }}
+            type="button"
+            className={view === 'mine' ? 'active' : ''}
+            disabled={!user}
+            onClick={() => setView('mine')}
           >
-            {busy ? '正在加载...' : '加载更多'}
+            <i>
+              <TeamPortalIcon name="group" />
+            </i>
+            <span>
+              <strong>我的团队</strong>
+              <small>{mine.length} 个协作空间</small>
+            </span>
+            <b>
+              <TeamPortalIcon name="arrow" />
+            </b>
           </button>
-        )}
+          <button
+            type="button"
+            className={view === 'joined' ? 'active' : ''}
+            disabled={!user}
+            onClick={() => setView('joined')}
+          >
+            <i>
+              <TeamPortalIcon name="users" />
+            </i>
+            <span>
+              <strong>已加入</strong>
+              <small>{joined.length} 个伙伴团队</small>
+            </span>
+            <b>
+              <TeamPortalIcon name="arrow" />
+            </b>
+          </button>
+          <button
+            type="button"
+            className={view === 'discoverable' ? 'active' : ''}
+            onClick={() => setView('discoverable')}
+          >
+            <i>
+              <TeamPortalIcon name="search" />
+            </i>
+            <span>
+              <strong>发现团队</strong>
+              <small>{discoverable.length} 个公开团队</small>
+            </span>
+            <b>
+              <TeamPortalIcon name="arrow" />
+            </b>
+          </button>
+          <button
+            type="button"
+            data-ui-only="true"
+            title="训练小组分类将在后续接入"
+          >
+            <i>
+              <TeamPortalIcon name="trophy" />
+            </i>
+            <span>
+              <strong>训练小组</strong>
+              <small>专注算法能力成长</small>
+            </span>
+            <b>
+              <TeamPortalIcon name="arrow" />
+            </b>
+          </button>
+          <button
+            type="button"
+            data-ui-only="true"
+            title="课程班级分类将在后续接入"
+          >
+            <i>
+              <TeamPortalIcon name="calendar" />
+            </i>
+            <span>
+              <strong>课程班级</strong>
+              <small>和同学一起进步</small>
+            </span>
+            <b>
+              <TeamPortalIcon name="arrow" />
+            </b>
+          </button>
+        </section>
+        <div className="team-portal-layout">
+          <main className="team-portal-main">
+            <section className="team-portal-featured">
+              <header>
+                <div>
+                  <h2>
+                    <TeamPortalIcon name="trophy" /> 热门团队
+                  </h2>
+                  <p>发现活跃的训练社区，和伙伴一起进步。</p>
+                </div>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setView('discoverable')}
+                >
+                  查看更多团队 <TeamPortalIcon name="arrow" />
+                </button>
+              </header>
+              <div className="team-toolbar team-portal-toolbar">
+                <div className="team-view-switcher" aria-label="团队视图">
+                  <button
+                    className={view === 'mine' ? 'active' : ''}
+                    onClick={() => setView('mine')}
+                    disabled={!user}
+                  >
+                    我的团队 <span>{mine.length}</span>
+                  </button>
+                  <button
+                    className={view === 'joined' ? 'active' : ''}
+                    onClick={() => setView('joined')}
+                    disabled={!user}
+                  >
+                    已加入 <span>{joined.length}</span>
+                  </button>
+                  <button
+                    className={view === 'discoverable' ? 'active' : ''}
+                    onClick={() => setView('discoverable')}
+                  >
+                    可发现 <span>{discoverable.length}</span>
+                  </button>
+                </div>
+                <input
+                  type="search"
+                  aria-label="搜索团队"
+                  placeholder="搜索团队..."
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </div>
+              {loading ? (
+                <p className="team-list-status">正在加载团队...</p>
+              ) : filtered.length ? (
+                <div className="team-portal-grid">
+                  {filtered.map((item, index) => (
+                    <TeamCard
+                      key={item.id}
+                      team={item}
+                      index={index}
+                      navigate={navigate}
+                    />
+                  ))}
+                </div>
+              ) : query ? (
+                <div className="team-empty">
+                  <span className="team-empty-icon" aria-hidden="true">
+                    群
+                  </span>
+                  <h2>没有匹配的团队</h2>
+                  <p>尝试其他名称、标识或简介关键词。</p>
+                </div>
+              ) : (
+                <div className="team-empty">
+                  <span className="team-empty-icon" aria-hidden="true">
+                    群
+                  </span>
+                  <h2>
+                    {view === 'discoverable'
+                      ? '暂无可发现团队'
+                      : '你还没有加入团队'}
+                  </h2>
+                  <p>创建自己的训练空间，或浏览公开团队。</p>
+                  <div>
+                    {user && (
+                      <button onClick={() => navigate('/teams/new')}>
+                        创建团队
+                      </button>
+                    )}
+                    <button
+                      className="secondary"
+                      onClick={() => setView('discoverable')}
+                    >
+                      浏览公开团队
+                    </button>
+                  </div>
+                </div>
+              )}
+              {!loading && filtered.length > 0 && nextCursor && (
+                <button
+                  className="team-load-more secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    if (busy) return;
+                    setBusy(true);
+                    const request =
+                      view === 'discoverable'
+                        ? api.teams(20, discoverableCursor)
+                        : api.myTeams(20, mineCursor);
+                    void request
+                      .then((page) => {
+                        if (view === 'discoverable') {
+                          const membershipIds = new Set(
+                            mine.map((item) => item.id),
+                          );
+                          setDiscoverable((current) =>
+                            appendTeamPage(
+                              current,
+                              page.items.filter(
+                                (item) => !membershipIds.has(item.id),
+                              ),
+                            ),
+                          );
+                          setDiscoverableCursor(page.nextCursor);
+                        } else {
+                          setMine((current) =>
+                            appendTeamPage(current, page.items),
+                          );
+                          setMineCursor(page.nextCursor);
+                        }
+                      })
+                      .catch(() => setError('加载更多团队失败'))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  {busy ? '正在加载...' : '加载更多'}
+                </button>
+              )}
+              <footer className="team-portal-tags">
+                <h3>
+                  <TeamPortalIcon name="tag" /> 团队标签
+                </h3>
+                <div>
+                  {[
+                    '入门友好',
+                    '高强度训练',
+                    '算法竞赛',
+                    '数据结构',
+                    '动态规划',
+                    '图论',
+                    '数学',
+                    '模拟',
+                    '团队合作',
+                    '高校赛事',
+                  ].map((tag) => (
+                    <button key={tag} type="button" data-ui-only="true">
+                      # {tag}
+                    </button>
+                  ))}
+                </div>
+              </footer>
+            </section>
+          </main>
+
+          <aside className="team-portal-aside">
+            <section className="team-calendar-card">
+              <header>
+                <h2>
+                  <TeamPortalIcon name="calendar" /> 团队日历
+                </h2>
+                <button type="button" data-ui-only="true">
+                  查看更多 →
+                </button>
+              </header>
+              <div className="team-calendar-month">
+                <button type="button" data-ui-only="true" aria-label="上一个月">
+                  ‹
+                </button>
+                <strong>
+                  {calendarNow.getFullYear()} 年 {calendarNow.getMonth() + 1} 月
+                </strong>
+                <button type="button" data-ui-only="true" aria-label="下一个月">
+                  ›
+                </button>
+              </div>
+              <div className="team-calendar-grid" data-ui-only="true">
+                {['日', '一', '二', '三', '四', '五', '六'].map((day) => (
+                  <strong key={day}>{day}</strong>
+                ))}
+                {calendarDays.map((day, index) => (
+                  <span
+                    key={`${day ?? 'blank'}-${index}`}
+                    className={
+                      day === calendarNow.getDate() ? 'today' : undefined
+                    }
+                  >
+                    {day}
+                    {day && activityDays.has(day) && <i aria-hidden="true" />}
+                  </span>
+                ))}
+              </div>
+              <p>
+                <i /> 小点表示本月有新的公开团队
+              </p>
+            </section>
+
+            <section className="team-recommendations-card">
+              <header>
+                <h2>
+                  <TeamPortalIcon name="group" /> 推荐团队
+                </h2>
+                <button type="button" onClick={() => setView('discoverable')}>
+                  查看更多 →
+                </button>
+              </header>
+              {discoverable.length ? (
+                <ul>
+                  {discoverable.slice(0, 6).map((item, index) => (
+                    <li key={item.id}>
+                      <span>{index + 1}</span>
+                      <a
+                        href={`/teams/${item.slug}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          navigate(`/teams/${item.slug}`);
+                        }}
+                      >
+                        <strong>{item.name}</strong>
+                        <small>{policyLabel(item.joinPolicy)}</small>
+                      </a>
+                      <b>{item.memberCount ?? 0} 人</b>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="team-recommendations-empty">暂无可推荐团队</p>
+              )}
+            </section>
+          </aside>
+        </div>
       </section>
     );
 
