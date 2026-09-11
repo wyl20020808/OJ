@@ -40,7 +40,7 @@ PARTIAL. Automated implementation scope is complete; runtime and manual UI accep
 ## VALIDATION
 
 - Focused Profile tests: PASS, 14/14.
-- Root TypeScript typecheck: BLOCKED by concurrent out-of-scope `apps/web/src/app/App.tsx` layout work referencing an unimported `zhCN` at line 3669. Profile code typechecked before that external change appeared.
+- Root TypeScript typecheck: PASS after the concurrent navbar commit resolved its own `zhCN` import.
 - Web production build: PASS.
 - Runtime API and browser visual acceptance: NOT VERIFIED.
 
