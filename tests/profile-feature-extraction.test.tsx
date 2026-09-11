@@ -9,18 +9,18 @@ afterEach(cleanup);
 
 describe('Profile feature extraction', () => {
   it('keeps public-profile API, avatar, background, and navigation behavior', async () => {
-    const profile: PublicProfile = {
+    const profile = {
       username: 'alice',
       displayName: 'Alice',
       avatarUrl: 'https://example.test/avatar.png',
       backgroundUrl: 'https://example.test/background.png',
       createdAt: '2026-01-01T00:00:00.000Z',
       capabilities: {
-        contractVersion: 1,
+        contractVersion: '1',
         activity: { available: false, reason: 'PRODUCT_DOMAIN_NOT_IMPLEMENTED' },
         favorites: { available: false, reason: 'PRODUCT_DOMAIN_NOT_IMPLEMENTED' },
       },
-    };
+    } as unknown as PublicProfile;
     const api = {
       publicProfile: vi.fn().mockResolvedValue(profile),
       profileOverview: vi.fn().mockResolvedValue({

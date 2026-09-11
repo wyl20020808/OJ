@@ -7,6 +7,7 @@ import {
   type ReactNode,
   useEffect,
 } from 'react';
+import { ApiError } from '../services/api.js';
 import type {
   ApiClient,
   AuthenticatedUser,
