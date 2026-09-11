@@ -13,6 +13,22 @@ Development Model = Goal / Phase Driven
 
 OJPlatform is a long-lived, maintainable Online Judge platform, not a one-off demo.
 
+## Frontend Architecture
+
+All web frontend changes must follow:
+
+`apps/web/AGENTS.md`
+
+Frontend code must prioritize:
+
+- feature ownership
+- component isolation
+- API correctness
+- maintainability
+- parallel development safety
+
+Do not accumulate page-specific code in global application files.
+
 ## Source of Truth and Conflicts
 
 Resolve ordinary guidance in this order:
