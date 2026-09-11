@@ -1,5 +1,11 @@
 # OJPlatform Project Status
 
+Team Portal Reference UI V1 (2026-09-10): PARTIAL overall, with front-end implementation and automated code scope complete. `/teams` now uses the supplied full-width mountain portal composition, adapted to Team semantics with functional real-data Team views, search, de-duplicated cards, pagination, detail navigation, a current-month creation-activity calendar, and a real-data recommendation rail. Future category, calendar-navigation, and tag controls are explicitly UI-only. Team detail/create flows and all backend/API/database contracts remain unchanged. Root typecheck, Web build, changed-file lint, focused Team/Blog/Problem Detail regression 16/16, and diff check pass. Runtime/browser visual acceptance remains PENDING USER by explicit request. See `Docs/reports/OJPLATFORM_TEAM_PORTAL_REFERENCE_UI_V1_REPORT.md`.
+
+Blog Reference UI V1 (2026-09-10): PARTIAL overall, with front-end implementation and automated code scope complete. The `/discussion` landing page is now an `AlgoOJ 博客` three-column editorial experience, while `/discussion/:id` now uses the supplied solution-style reading layout for solutions, discussions, and announcements. The detail template includes a mountain hero, real author/interaction data, numbered Markdown sections, summary preview, and compact real-comment rail; only solution-marked articles show the UI-only problem-link preview. Existing Discussion API/routes remain unchanged, unsupported controls are explicitly UI-only, and no backend or fabricated business counts were added. Root typecheck, Web build, changed-file lint, focused formatting, focused Blog/global-nav/Problem Detail regression 16/16, and diff check pass. Runtime/browser visual acceptance remains PENDING USER by explicit request. See `Docs/reports/OJPLATFORM_BLOG_REFERENCE_UI_V1_REPORT.md`.
+
+Problem Detail Reference UI V1 (2026-09-10): PARTIAL overall, with implementation and automated scope complete. The Problem Detail page now presents real submission/acceptance/difficulty metrics, consistent SVG icons, deterministic in-workspace breadcrumbs, a real Discussion API-backed secondary tab, and server-filtered related problems. Dedicated tests 2/2, focused existing Problem Detail/breadcrumb regression 18/18, root typecheck, changed-file lint, Web build, and diff check pass. No business data is fabricated and no backend/public contract changed. Runtime Manager startup/shutdown passed; manual browser visual acceptance remains PENDING USER by explicit request. See `Docs/reports/OJPLATFORM_PROBLEM_DETAIL_REFERENCE_UI_V1_REPORT.md`.
+
 Problem Library Full Backend Support V1 (2026-09-10): PASS for automated
 feature scope in independent worktree `codex/problem-library-full-backend-support-v1`.
 The list now has server-side whitelisted sorting and authoritative
@@ -731,3 +737,12 @@ PENDING USER. See
 `Docs/reports/OJPLATFORM_DISCUSSION_HUB_WAVE2_MAIN_INTEGRATION_V1_REPORT.md`.
 Authoring UX Wave 4C Problem Presentation V2 (2026-09-09): PARTIAL. Detail now uses one content surface with canonical statement/input/output/sample/constraints/notes order; duplicate notes composition removed at render contract; Create/Edit authoring order and grouped sample editing aligned; focused renderer/editor/UI tests 35/35 and root typecheck pass. Manual UI, API/Web builds, changed-file lint, and architecture checks remain pending. See `Docs/reports/OJPLATFORM_WAVE4_PROBLEM_PRESENTATION_UX_V2_REPORT.md`.
 Wave4F Profile Media & Save V2: merged to main (2026-09-09), but final qualification remains PARTIAL because real Profile/avatar/background API fixture was not verified. PostgreSQL/MinIO infrastructure and current-state migration 0031 PASS. Next: complete real fixture qualification, then update gate.
+
+Contest Reference UI V1 (2026-09-11): PARTIAL. The supplied competition landing
+page was recreated as a frontend-only React experience with the mountain hero,
+platform shortcuts, contest cards, filters/search, calendar, upcoming list,
+tags, responsive behavior, and dedicated footer. Existing contest API/error/
+retry/detail flows remain intact; no backend or dependency changed. Typecheck,
+Web build, changed-component lint, focused contest tests, and diff check pass.
+Pixel-level browser comparison was explicitly waived by the user and remains
+NOT VERIFIED. See `Docs/reports/OJPLATFORM_CONTEST_REFERENCE_UI_V1_REPORT.md`.
