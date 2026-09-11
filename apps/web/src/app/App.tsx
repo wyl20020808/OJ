@@ -354,7 +354,7 @@ function Breadcrumbs({ current }: { current: Route }) {
     <nav className="breadcrumbs" aria-label="面包屑">
       {items.map((item, index) => (
         <span key={`${index}-${item.to}-${item.label}`}>
-          {index > 0 && <span aria-hidden="true">/</span>}
+          {index > 0 && <span aria-hidden="true">›</span>}
           {index === items.length - 1 ? (
             <span aria-current="page" title={item.label}>
               {item.label}
@@ -4597,14 +4597,28 @@ export function App() {
           )}
         </nav>
       </header>
-      {current.name !== 'home' && <Breadcrumbs current={current} />}
+      {current.name !== 'home' &&
+        current.name !== 'problem' &&
+        current.name !== 'discussion' &&
+        current.name !== 'discussion-post' &&
+        current.name !== 'teams' && (
+          <Breadcrumbs current={current} />
+        )}
       <main
         className={
           current.name === 'author-new' || current.name === 'author-edit'
             ? 'shell shell-authoring'
             : current.name === 'problems'
               ? 'shell shell-problem-library'
-              : 'shell'
+              : current.name === 'problem'
+                ? 'shell shell-problem-detail'
+                : current.name === 'discussion'
+                  ? 'shell shell-blog'
+                  : current.name === 'discussion-post'
+                    ? 'shell shell-blog-detail'
+                    : current.name === 'teams'
+                      ? 'shell shell-team-portal'
+                      : 'shell'
         }
       >
         {page}
