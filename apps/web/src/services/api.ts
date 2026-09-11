@@ -537,6 +537,7 @@ export type EvaluationFilters = {
   status?: string;
   problemId?: string;
   submitterId?: string;
+  languageId?: string;
 };
 export type ProblemInput = Omit<
   Problem,
@@ -1887,7 +1888,7 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
     ) =>
       request<EvaluationList>(
         baseUrl,
-        `/api/evaluations?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${filters.verdict ? `&verdict=${encodeURIComponent(filters.verdict)}` : ''}${filters.status ? `&status=${encodeURIComponent(filters.status)}` : ''}${filters.problemId ? `&problemId=${encodeURIComponent(filters.problemId)}` : ''}${filters.submitterId ? `&submitterId=${encodeURIComponent(filters.submitterId)}` : ''}`,
+        `/api/evaluations?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${filters.verdict ? `&verdict=${encodeURIComponent(filters.verdict)}` : ''}${filters.status ? `&status=${encodeURIComponent(filters.status)}` : ''}${filters.problemId ? `&problemId=${encodeURIComponent(filters.problemId)}` : ''}${filters.submitterId ? `&submitterId=${encodeURIComponent(filters.submitterId)}` : ''}${filters.languageId ? `&language=${encodeURIComponent(filters.languageId)}` : ''}`,
         undefined,
         fetcher,
       ),

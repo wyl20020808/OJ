@@ -493,10 +493,12 @@ describe('Web platform shell', () => {
       publicNumber: 0,
       createdAt: submission.createdAt,
     };
+    const requests: string[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
         const url = String(input);
+        requests.push(url);
         if (url.endsWith('/api/auth/me'))
           return {
             status: 200,
@@ -513,15 +515,79 @@ describe('Web platform shell', () => {
             status: 200,
             json: async () => ({ status: 'ok', dependencies: {} }),
           };
+        if (url.endsWith('/api/profiles/u/overview'))
+          return {
+            status: 200,
+            json: async () => ({
+              createdProblemCount: 0,
+              solvedProblemCount: 1,
+              submissionCount: 2,
+              acceptedSubmissionCount: 1,
+            }),
+          };
+        if (url.endsWith('/api/profiles/u/activity'))
+          return {
+            status: 200,
+            json: async () => ({
+              timezone: 'UTC',
+              days: [
+                {
+                  date: '2026-09-11',
+                  submissionCount: 2,
+                  acceptedCount: 1,
+                },
+              ],
+            }),
+          };
+        if (url.endsWith('/api/submissions/sub-x/source'))
+          return {
+            status: 200,
+            json: async () => ({
+              submissionId: submission.id,
+              languageId: submission.languageId,
+              source: submission.source,
+              sourceBytes: submission.sourceBytes,
+            }),
+          };
         if (url.endsWith('/api/submissions/sub-x'))
           return {
             status: 200,
-            json: async () => ({ ...submission, evaluation: { ...evaluation, publicNumber: 0, evaluationGeneration: 1, attemptGeneration: 1 } }),
+            json: async () => ({
+              ...submission,
+              evaluation: {
+                ...evaluation,
+                publicNumber: 0,
+                evaluationGeneration: 1,
+                attemptGeneration: 1,
+              },
+            }),
           };
         if (url.includes('/api/submissions/sub-x/evaluations/1'))
-          return { status: 200, json: async () => ({ evaluation: { ...evaluation, publicNumber: 0, evaluationGeneration: 1, attemptGeneration: 1 } }) };
+          return {
+            status: 200,
+            json: async () => ({
+              evaluation: {
+                ...evaluation,
+                publicNumber: 0,
+                evaluationGeneration: 1,
+                attemptGeneration: 1,
+              },
+            }),
+          };
         if (url.endsWith('/api/submissions/sub-x/evaluations'))
-          return { status: 200, json: async () => ({ items: [{ ...evaluation, publicNumber: 0, evaluationGeneration: 1, attemptGeneration: 1 }] }) };
+          return {
+            status: 200,
+            json: async () => ({
+              items: [
+                {
+                  ...evaluation,
+                  publicNumber: 0,
+                  evaluationGeneration: 1,
+                  attemptGeneration: 1,
+                },
+              ],
+            }),
+          };
         return {
           status: 200,
           json: async () => ({ items: [evaluation], nextCursor: null }),
@@ -533,6 +599,20 @@ describe('Web platform shell', () => {
     expect(
       await screen.findByRole('heading', { name: '评测列表' }),
     ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '全部记录' })).toHaveClass(
+      'active',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '我的记录' }));
+    expect(
+      await screen.findByRole('heading', { name: '我的记录' }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(requests.some((url) => url.includes('submitterId=u1'))).toBe(true),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'C++' }));
+    await waitFor(() =>
+      expect(requests.some((url) => url.includes('language=cpp20'))).toBe(true),
+    );
     fireEvent.click(screen.getByRole('link', { name: '查看评测 #0' }));
     expect(
       await screen.findByRole('heading', { name: /^评测 #0/ }),
