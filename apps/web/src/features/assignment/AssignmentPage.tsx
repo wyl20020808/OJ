@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { ApiClient, Assignment } from '../../services/api.js';
+import './AssignmentPage.css';
 
 type Navigate = (path: string) => void;
 const dateText = (value: string | null) =>
