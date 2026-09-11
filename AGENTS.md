@@ -157,3 +157,84 @@ Code Exists | Feature Implemented | Feature Tested | Feature Runtime Qualified |
 These labels are not interchangeable.
 
 This constitution is intentionally concise. Extend it through later governance phases and ADRs rather than duplicating the Architecture Baseline here.
+
+## Codex Skill Usage
+
+For large engineering tasks, prefer using the `caveman` skill.
+
+Use `caveman` for:
+
+- repository-wide audits
+- architecture analysis
+- large refactors
+- multi-file feature implementation
+- integration work
+- complex debugging
+- dependency analysis
+- migration planning
+
+However:
+
+Project rules always override skill behavior.
+
+The `caveman` skill does NOT override:
+
+- Git safety rules
+- Feature Worker rules
+- Integration Lead rules
+- no fake PASS policy
+- manual UI acceptance policy
+- API/business correctness requirements
+
+## Caveman Operating Policy
+
+When using caveman, the agent should:
+
+- inspect before modifying
+- understand existing architecture
+- identify dependencies
+- avoid unnecessary scope expansion
+- preserve existing behavior
+- report uncertainty explicitly
+- separate implementation from verification
+
+Before large changes, perform:
+
+- repository state inspection
+- dependency analysis
+- ownership analysis
+- risk analysis
+
+Do not use caveman as permission to:
+
+- rewrite unrelated code
+- bypass review
+- ignore project constraints
+- make destructive Git operations
+
+## Rule Priority
+
+For OJPlatform task execution, priority order is:
+
+1. User explicit request
+2. OJPlatform AGENTS.md rules
+3. Security and data correctness requirements
+4. Git safety rules
+5. Feature/Integration workflow
+6. Caveman skill behavior
+7. General implementation convenience
+
+This execution order complements, and does not replace, the Source of Truth and
+Conflicts order above.
+
+Caveman improves execution quality but does not change project authority.
+
+## Workflow Role Boundaries
+
+Feature Workers MUST NOT merge into `main`. Integration Leads MUST start from
+the latest live `main` and preserve complete history through the approved
+integration workflow.
+
+Protect dirty tracked files, untracked files, stashes, and worktrees. Do not
+use `git restore .`, `stash drop`, destructive reset/clean commands, force
+merges, or history rewrites.

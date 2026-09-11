@@ -245,3 +245,30 @@ does not replace user manual UI acceptance.
 ```text
 MANUAL UI ACCEPTANCE = PENDING USER
 ```
+
+## Caveman Usage for Frontend
+
+Use caveman for:
+
+- frontend architecture migration
+- App.tsx/app.css extraction
+- large page refactoring
+- component ownership analysis
+- design system migration
+- multi-page UI modernization
+
+Before frontend refactoring, analyze:
+
+- component ownership
+- shared dependencies
+- routing impact
+- API contracts
+- CSS ownership
+- merge conflict risk
+
+Do not use caveman to justify:
+
+- putting more page code into App.tsx
+- putting more page CSS into app.css
+- replacing real APIs with mock data
+- removing permissions or loading states
