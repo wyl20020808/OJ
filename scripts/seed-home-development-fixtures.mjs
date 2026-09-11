@@ -112,7 +112,7 @@ try {
   for (const [id, slug, title, difficulty, tags] of problems) {
     const problem = await client.query(
       `INSERT INTO problems(id,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,source_type,provenance)
-       VALUES($1,$2,$3,'','这是用于 Home 页面开发验收的公开练习题。','标准输入。','标准输出。','[{"input":"1 2","output":"3"}]'::jsonb','n <= 100000','DEVELOPMENT FIXTURE / DEMO DATA',1000,268435456,'public',$4,'published',NULL,$5,'TEST_FIXTURE',$6::jsonb)
+       VALUES($1,$2,$3,'','这是用于 Home 页面开发验收的公开练习题。','标准输入。','标准输出。','[{"input":"1 2","output":"3"}]'::jsonb,'n <= 100000','DEVELOPMENT FIXTURE / DEMO DATA',1000,268435456,'public',$4,'published',NULL,$5,'TEST_FIXTURE',$6::jsonb)
        ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title,difficulty=EXCLUDED.difficulty,updated_at=now()
        RETURNING id,public_number,current_revision_id`,
       [
