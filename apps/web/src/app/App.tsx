@@ -645,6 +645,7 @@ function Home({
       .catch(() => setDiscussionAnnouncements([]));
   }, [api]);
   const dailyProblem = chooseDailyProblem(recentProblems ?? []) as Problem;
+  const recommendedProblems = (recentProblems ?? []).slice(0, 4);
   const contestGroups: Array<[string, BackendContest[]]> = contestSummary
     ? [
         ['进行中', contestSummary.running],
@@ -657,6 +658,7 @@ function Home({
       announcements={discussionAnnouncements}
       contests={contestSummary}
       dailyProblem={dailyProblem}
+      recommendedProblems={recommendedProblems}
       unavailable={error || contestError}
       signedIn={Boolean(user)}
       fortune={fortune}
@@ -843,6 +845,7 @@ function HomeReference({
   announcements,
   contests,
   dailyProblem,
+  recommendedProblems,
   unavailable,
   signedIn,
   fortune,
@@ -858,6 +861,7 @@ function HomeReference({
       }
     | undefined;
   dailyProblem: Problem | null;
+  recommendedProblems: Problem[];
   unavailable: boolean;
   signedIn: boolean;
   fortune: ReturnType<typeof getDailyFortune>;
@@ -1007,27 +1011,22 @@ function HomeReference({
               <Link to="/problems">更多 →</Link>
             </div>
             <div className="reference-recommendation-grid">
-              {['入门必刷', '数据结构基础', '经典算法', '面试精选'].map(
-                (title, index) => (
-                  <Link
-                    key={title}
-                    to="/problems"
-                    className={`recommendation-card recommendation-${index}`}
-                  >
-                    <strong>{title}</strong>
-                    <small>
-                      {
-                        [
-                          '从零开始，打好基础',
-                          '掌握核心数据结构',
-                          '提升算法思维',
-                          '大厂高频题目',
-                        ][index]
-                      }
-                    </small>
-                    <span>推荐练习 {['▮▮', '◆', '♧', '▣'][index]}</span>
-                  </Link>
-                ),
+              {recommendedProblems.map((problem, index) => (
+                <Link
+                  key={problem.id}
+                  to={`/problems/${problem.slug || problem.id}`}
+                  className={`recommendation-card recommendation-${index}`}
+                >
+                  <strong>{problem.title}</strong>
+                  <small>
+                    {problem.difficulty ?? '练习题'}
+                    {problem.tags?.[0] ? ` · ${problem.tags[0]}` : ''}
+                  </small>
+                  <span>推荐练习 {['▮▮', '◆', '♧', '▣'][index]}</span>
+                </Link>
+              ))}
+              {!recommendedProblems.length && (
+                <p className="reference-empty">暂无可推荐练习题目。</p>
               )}
             </div>
           </section>
