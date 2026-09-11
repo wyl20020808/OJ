@@ -758,3 +758,14 @@ aggregates display explicit placeholders instead of fabricated data. Typecheck,
 Web build, changed-file lint, Web tests 12/12, architecture, and diff checks
 pass. Manual visual acceptance remains PENDING USER. See
 `Docs/reports/OJPLATFORM_SUBMISSION_RECORDS_REFERENCE_UI_V1_REPORT.md`.
+
+Evaluation / Submission Detail UI Iteration V1 (2026-09-11): PARTIAL. The
+submission evaluation detail page is now feature-owned and recreates the
+supplied mountain hero, submission summary, live testcase matrix, run/resource
+overview, verdict counts, source tab, and SSE event log using existing real
+submission/judge/evaluation data. Missing score, ETA, limits, or logs use an
+explicit placeholder/empty state; no backend, contract, dependency, or global
+architecture changed. Focused detail tests 15/15, Web regression tests 12/12,
+typecheck, changed-file lint, Web build, architecture, and diff checks pass.
+Manual visual acceptance remains PENDING USER. See
+`Docs/reports/OJPLATFORM_EVALUATION_SUBMISSION_DETAIL_UI_ITERATION_V1_REPORT.md`.

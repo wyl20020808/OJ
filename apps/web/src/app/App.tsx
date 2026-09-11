@@ -24,8 +24,6 @@ import {
   type ProblemSourceType,
   type ProfileContest,
   type Submission,
-  type SubmissionEvaluation,
-  type SubmissionEvaluationDetail,
   type SubmissionStatus,
   type DiscussionPost,
 } from '../services/api.js';
@@ -73,6 +71,8 @@ import { ProductSubmissionAdapter } from '../services/submission-adapter.js';
 import { TeamPage } from '../features/team/TeamPage.js';
 import { AssignmentPage } from '../features/assignment/AssignmentPage.js';
 import { SubmissionHistoryPage } from '../features/submissions/SubmissionHistoryPage.js';
+import { SubmissionDetailPage } from '../features/submissions/SubmissionDetailPage.js';
+export { SubmissionDetailPage as SubmissionDetail } from '../features/submissions/SubmissionDetailPage.js';
 import { TagSelector } from '../components/TagSelector.js';
 import {
   DiscussionEditor,
@@ -2128,15 +2128,6 @@ function ProblemList({
     </section>
   );
 }
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="content-section">
-      <h2>{title}</h2>
-      <div>{children}</div>
-    </section>
-  );
-}
-
 function formatMemoryLimit(bytes: number) {
   return bytes < 1024 * 1024
     ? `${Math.round(bytes / 1024)} KB`
@@ -3230,470 +3221,6 @@ function SubmissionForm({
   );
 }
 
-export function SubmissionDetail({
-  api,
-  id,
-  user,
-}: {
-  api: ApiClient;
-  id: string;
-  user: AuthenticatedUser | null;
-}) {
-  const [submission, setSubmission] = useState<Submission | null>(null);
-  const [problem, setProblem] = useState<Problem | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [transportError, setTransportError] = useState('');
-  const [selectedGeneration, setSelectedGeneration] = useState<number>();
-  const [activeTab, setActiveTab] = useState<'result' | 'code'>('result');
-  const [copyMessage, setCopyMessage] = useState('');
-  const [source, setSource] = useState<string | null>(null);
-  const [sourceError, setSourceError] = useState(false);
-  const [evaluation, setEvaluation] = useState<
-    (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null
-  >(null);
-  const [evaluationError, setEvaluationError] = useState(false);
-  const canViewSource = source !== null;
-  const requestVersion = useRef(0);
-  const load = () => {
-    const version = ++requestVersion.current;
-    setError(null);
-    setTransportError('');
-    setSource(null);
-    setSourceError(false);
-    void api
-      .submission(id)
-      .then((value) => {
-        if (version !== requestVersion.current) return;
-        setSubmission(value);
-        void api
-          .submissionSource(id)
-          .then((result) => {
-            if (version === requestVersion.current) setSource(result.source);
-          })
-          .catch(() => {
-            if (version === requestVersion.current) setSourceError(true);
-          });
-        setProblem(null);
-        if (typeof api.problem === 'function') {
-          void api
-            .problem(value.problemId)
-            .then((result) => {
-              if (version === requestVersion.current) setProblem(result);
-            })
-            .catch(() => undefined);
-        }
-        void api
-          .submissionEvaluations(id)
-          .then((response) => {
-            if (version !== requestVersion.current) return;
-            setSelectedGeneration(
-              (selected) =>
-                selected ??
-                response.items.find((item) => item.current)
-                  ?.evaluationGeneration ??
-                value.evaluation?.evaluationGeneration,
-            );
-          })
-          .catch(() => {
-            if (version === requestVersion.current)
-              setSelectedGeneration(value.evaluation?.evaluationGeneration);
-          });
-      })
-      .catch((e) => {
-        if (version !== requestVersion.current) return;
-        if (e instanceof ApiError) setError(e);
-        else setTransportError('暂时无法连接服务。');
-      });
-  };
-  useEffect(() => {
-    if (!user) return;
-    load();
-    return () => {
-      requestVersion.current++;
-    };
-  }, [api, id, user]);
-  useEffect(() => {
-    if (!user || selectedGeneration === undefined) return;
-    let active = true;
-    setEvaluation(null);
-    setEvaluationError(false);
-    void api
-      .submissionEvaluation(id, selectedGeneration)
-      .then((response) => {
-        if (active) setEvaluation(response.evaluation);
-      })
-      .catch(() => {
-        if (active) setEvaluationError(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [api, id, selectedGeneration, user]);
-  useEffect(() => {
-    if (
-      !user ||
-      !evaluation ||
-      selectedGeneration !== evaluation.evaluationGeneration ||
-      isTerminalStatus(evaluation.status) ||
-      typeof api.submissionEvaluationStreamUrl !== 'function' ||
-      typeof EventSource === 'undefined'
-    )
-      return;
-    const stream = new EventSource(
-      api.submissionEvaluationStreamUrl(id, selectedGeneration),
-      { withCredentials: true },
-    );
-    const applyEvent = (message: MessageEvent<string>) => {
-      try {
-        const event = JSON.parse(message.data) as {
-          status?: SubmissionEvaluation['status'];
-          verdict?: SubmissionEvaluation['verdict'];
-          detail?: SubmissionEvaluationDetail;
-          completedAt?: string;
-        };
-        setEvaluation((current) => {
-          if (!current) return current;
-          const incoming = {
-            ...current,
-            ...(event.status ? { status: event.status } : {}),
-            ...(event.verdict ? { verdict: event.verdict } : {}),
-            ...(event.detail ? { detail: event.detail } : {}),
-            ...(event.completedAt ? { completedAt: event.completedAt } : {}),
-          };
-          return mergeEvaluation(current, incoming);
-        });
-        if (event.status && isTerminalStatus(event.status)) stream.close();
-      } catch {
-        /* Ignore malformed deltas; snapshot remains authoritative. */
-      }
-    };
-    stream.addEventListener('evaluation.updated', applyEvent);
-    stream.addEventListener('testcase.updated', applyEvent);
-    stream.addEventListener('evaluation.terminal', applyEvent);
-    stream.addEventListener('replay-gap', () => load());
-    return () => stream.close();
-  }, [api, evaluation?.evaluationGeneration, id, selectedGeneration, user]);
-  useEffect(() => {
-    if (
-      !user ||
-      !evaluation ||
-      selectedGeneration !== evaluation.evaluationGeneration ||
-      isTerminalStatus(evaluation.status)
-    )
-      return;
-    const timer = window.setInterval(() => {
-      void api
-        .submissionEvaluation(id, selectedGeneration)
-        .then((response) => {
-          setEvaluation((current) =>
-            mergeEvaluation(current, response.evaluation),
-          );
-        })
-        .catch(() => undefined);
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [
-    api,
-    evaluation?.evaluationGeneration,
-    evaluation?.status,
-    id,
-    selectedGeneration,
-    user,
-  ]);
-  if (!user)
-    return (
-      <State
-        title="请先登录"
-        text="登录后才能查看这条评测记录。"
-        action={<Link to="/login">登录</Link>}
-      />
-    );
-  if (error)
-    return (
-      <State
-        title={
-          error.status === 401
-            ? '请先登录'
-            : error.code === 'NOT_FOUND'
-              ? '提交不存在'
-              : error.code === 'FORBIDDEN'
-                ? '无权查看提交'
-                : error.status === 409
-                  ? '提交状态已变化'
-                  : '提交暂不可用'
-        }
-        text={error.message}
-        action={
-          error.status === 401 ? (
-            <Link to="/login">登录</Link>
-          ) : error.status === 409 || error.status >= 500 ? (
-            <button onClick={load}>重试</button>
-          ) : undefined
-        }
-      />
-    );
-  if (transportError)
-    return (
-      <State
-        title="提交暂不可用"
-        text={transportError}
-        action={<button onClick={load}>重试</button>}
-      />
-    );
-  if (!submission)
-    return <State title="正在加载提交" text="正在获取提交元数据…" />;
-  const isTerminal = evaluation ? isTerminalStatus(evaluation.status) : false;
-  const problemLabel = problem
-    ? `${problem.publicId || problem.slug || problem.id} · ${problem.title}`
-    : submission.problemId;
-  const copySource = async () => {
-    try {
-      if (source === null) throw new Error('source unavailable');
-      if (!navigator.clipboard?.writeText)
-        throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(source);
-      setCopyMessage('已复制');
-    } catch {
-      setCopyMessage('复制失败');
-    }
-    window.setTimeout(() => setCopyMessage(''), 1800);
-  };
-  return (
-    <article className="detail submission-detail">
-      <Link to="/submissions">← 返回评测列表</Link>
-      <div className="submission-heading">
-        <div>
-          <h1>
-            评测 #{evaluation?.publicNumber ?? submission.id}{' '}
-            <Link
-              to={`/problems/${encodeURIComponent(problem?.slug || submission.problemId)}`}
-            >
-              {problemLabel}
-            </Link>
-          </h1>
-        </div>
-      </div>
-      <div className="submission-layout">
-        <div className="submission-primary">
-          <nav
-            className="submission-tabs"
-            role="tablist"
-            aria-label="评测详情视图"
-          >
-            <button
-              type="button"
-              role="tab"
-              className={activeTab === 'result' ? 'active' : ''}
-              aria-selected={activeTab === 'result'}
-              onClick={() => setActiveTab('result')}
-            >
-              评测结果
-            </button>
-            {canViewSource ? (
-              <button
-                type="button"
-                role="tab"
-                className={activeTab === 'code' ? 'active' : ''}
-                aria-selected={activeTab === 'code'}
-                onClick={() => setActiveTab('code')}
-              >
-                代码
-              </button>
-            ) : null}
-          </nav>
-          {sourceError ? (
-            <p className="error" role="alert">
-              源代码暂不可用。
-            </p>
-          ) : null}
-          {activeTab === 'code' && canViewSource ? (
-            <Section title="源代码">
-              <div className="source-heading">
-                <span>{submission.languageId}</span>
-                <button
-                  type="button"
-                  className="secondary copy-source"
-                  aria-label="复制代码"
-                  onClick={() => void copySource()}
-                >
-                  {copyMessage || '复制代码'}
-                </button>
-              </div>
-              <pre className="source">{source}</pre>
-            </Section>
-          ) : (
-            <>
-              {evaluation?.detail?.testcases?.length ? (
-                <div
-                  className="testcase-progress"
-                  role="region"
-                  aria-label="测试点进度"
-                >
-                  {evaluation.detail.testcases.map((item) => {
-                    const state = item.verdict ?? item.status ?? 'WAITING';
-                    return (
-                      <span
-                        key={item.ordinal}
-                        className={`progress-cell verdict-${item.verdict ?? ''}`}
-                        aria-label={`测试点 ${item.ordinal} ${state}`}
-                      >
-                        {item.verdict === 'AC'
-                          ? '✓'
-                          : item.status === 'RUNNING'
-                            ? '…'
-                            : item.status === 'SKIPPED'
-                              ? '!'
-                              : item.verdict
-                                ? '×'
-                                : '·'}
-                      </span>
-                    );
-                  })}
-                </div>
-              ) : null}
-              {!evaluation ? (
-                <State
-                  title="正在加载评测详情"
-                  text="正在获取 Judge 已发布的评测结果…"
-                />
-              ) : !isTerminal ? (
-                <section className="submission-pending" aria-live="polite">
-                  <h2>
-                    {evaluation.status === 'QUEUED'
-                      ? '正在排队评测'
-                      : '正在评测'}
-                  </h2>
-                  <p>正在评测，详细测试点结果将在评测完成后显示。</p>
-                </section>
-              ) : (
-                <>
-                  {evaluation.detail?.compile?.diagnostics && (
-                    <Section title="编译诊断">
-                      <pre className="compiler-diagnostics">
-                        {evaluation.detail.compile.diagnostics}
-                      </pre>
-                    </Section>
-                  )}
-                  <section
-                    className="testcase-results"
-                    aria-labelledby="testcase-results-title"
-                  >
-                    <h2 id="testcase-results-title">测试点结果</h2>
-                    {evaluation.detail?.testcases.length ? (
-                      <div
-                        className="testcase-list"
-                        role="list"
-                        aria-label="测试点结果"
-                      >
-                        {evaluation.detail.testcases.map((item) => (
-                          <article
-                            key={item.ordinal}
-                            role="listitem"
-                            className={`testcase-row verdict-${item.verdict ?? item.status ?? ''}`}
-                          >
-                            <strong>#{item.ordinal}</strong>
-                            <span className="testcase-verdict">
-                              {item.verdict ?? item.status ?? '—'}
-                            </span>
-                            <span>Time {formatMilliseconds(item.timeMs)}</span>
-                            <span>Memory {formatBytes(item.memoryBytes)}</span>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="submission-muted">
-                        该评测代没有可展示的测试点执行记录。
-                      </p>
-                    )}
-                  </section>
-                </>
-              )}
-            </>
-          )}
-        </div>
-        <aside className="evaluation-info-card" aria-label="评测信息">
-          <h2>评测信息</h2>
-          <dl>
-            <div>
-              <dt>语言</dt>
-              <dd>{submission.languageId}</dd>
-            </div>
-            <div>
-              <dt>提交时间</dt>
-              <dd>{formatDate(submission.createdAt)}</dd>
-            </div>
-            <div>
-              <dt>完成时间</dt>
-              <dd>
-                {evaluation?.completedAt
-                  ? formatDate(evaluation.completedAt)
-                  : '—'}
-              </dd>
-            </div>
-            <div>
-              <dt>Verdict</dt>
-              <dd>{evaluation?.verdict ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>Time</dt>
-              <dd>{formatMilliseconds(evaluation?.detail?.totalTimeMs)}</dd>
-            </div>
-            <div>
-              <dt>Memory</dt>
-              <dd>{formatBytes(evaluation?.detail?.peakMemoryBytes)}</dd>
-            </div>
-            <div>
-              <dt>Generation</dt>
-              <dd>{evaluation?.evaluationGeneration ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>状态</dt>
-              <dd>{evaluation?.status ?? submission.status}</dd>
-            </div>
-          </dl>
-        </aside>
-      </div>
-      {evaluationError ? (
-        <State
-          title="评测详情暂不可用"
-          text="无法加载此代评测详情，请刷新后重试。"
-          action={<button onClick={load}>刷新</button>}
-        />
-      ) : null}
-    </article>
-  );
-}
-
-function formatMilliseconds(value: number | undefined) {
-  return value === undefined ? '—' : `${value} ms`;
-}
-function formatBytes(value: number | undefined) {
-  if (value === undefined) return '—';
-  return value >= 1024 * 1024
-    ? `${(value / (1024 * 1024)).toFixed(1)} MB`
-    : `${Math.max(1, Math.ceil(value / 1024))} KB`;
-}
-
-function isTerminalStatus(status: SubmissionEvaluation['status']) {
-  return [
-    'COMPLETED_WITH_VERDICT',
-    'CANCELLED',
-    'INFRA_FAILED',
-    'NO_VERDICT',
-    'INCOMPLETE',
-  ].includes(status);
-}
-
-function mergeEvaluation(
-  current:
-    (SubmissionEvaluation & { detail?: SubmissionEvaluationDetail }) | null,
-  incoming: SubmissionEvaluation & { detail?: SubmissionEvaluationDetail },
-) {
-  if (!current) return incoming;
-  if (isTerminalStatus(current.status)) return current;
-  return incoming;
-}
-
 function Profile({
   api,
   user,
@@ -4127,7 +3654,12 @@ export function App() {
       <SubmissionHistoryPage api={api} user={user} navigate={navigate} />
     ) : current.name === 'submission' ? (
       user && current.id ? (
-        <SubmissionDetail api={api} id={current.id} user={user} />
+        <SubmissionDetailPage
+          api={api}
+          id={current.id}
+          user={user}
+          navigate={navigate}
+        />
       ) : authState === 'unavailable' ? (
         <State
           title="提交服务暂不可用"
@@ -4198,7 +3730,7 @@ export function App() {
     );
   return (
     <div
-      className={`app${current.name === 'submissions' ? ' submissions-view' : ''}`}
+      className={`app${current.name === 'submissions' ? ' submissions-view' : ''}${current.name === 'submission' ? ' submission-detail-view' : ''}`}
     >
       <header className="nav">
         <Link to="/" className="brand">
@@ -4381,7 +3913,8 @@ export function App() {
         current.name !== 'discussion' &&
         current.name !== 'discussion-post' &&
         current.name !== 'teams' &&
-        current.name !== 'submissions' && <Breadcrumbs current={current} />}
+        current.name !== 'submissions' &&
+        current.name !== 'submission' && <Breadcrumbs current={current} />}
       <main
         className={
           current.name === 'author-new' || current.name === 'author-edit'
@@ -4398,7 +3931,9 @@ export function App() {
                       ? 'shell shell-team-portal'
                       : current.name === 'submissions'
                         ? 'shell shell-submissions'
-                        : 'shell'
+                        : current.name === 'submission'
+                          ? 'shell shell-submission-detail'
+                          : 'shell'
         }
       >
         {page}
