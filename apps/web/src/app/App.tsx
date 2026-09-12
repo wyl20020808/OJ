@@ -28,6 +28,7 @@ import {
   type DiscussionPost,
 } from '../services/api.js';
 import './app.css';
+import '../features/problem-detail/ProblemDetailLayout.css';
 import { JudgeMachinesPage } from '../components/JudgeMachinesPage.js';
 import { SandboxOperationsPage } from '../components/SandboxOperationsPage.js';
 import { AccountSettings } from '../components/AccountSettings.js';

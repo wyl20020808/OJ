@@ -1,0 +1,38 @@
+.shell.shell-problem-detail {
+  width: min(80vw, 1560px);
+  max-width: calc(100% - 2.5rem);
+}
+
+.problem-detail-v4 {
+  grid-template-columns: minmax(0, 1fr) clamp(292px, 22vw, 340px);
+}
+
+.problem-editor-slot,
+.problem-editor-slot > .plugin-contribution,
+.problem-editor-slot .online-code-editor-host {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .problem-detail-v4 {
+    grid-template-columns: minmax(0, 1fr) 258px;
+  }
+}
+
+@media (max-width: 760px) {
+  .shell.shell-problem-detail {
+    width: min(100% - 1.25rem, 1180px);
+    max-width: none;
+  }
+
+  .problem-detail-v4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .shell.shell-problem-detail {
+    width: calc(100% - 1rem);
+  }
+}
