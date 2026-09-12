@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   InMemoryProblemRepository,
   InMemoryTagCatalogRepository,
+  PostgresProblemRepository,
   ProblemService,
   registerProblemModule,
   type AuthorizationPolicy,
@@ -82,7 +83,12 @@ describe('problem library server-side filters', () => {
     });
     expect(first.statusCode).toBe(200);
     expect(first.json()).toMatchObject({
-      items: [{ slug: 'outside-first-page' }],
+      items: [
+        {
+          slug: 'outside-first-page',
+          statistics: { submissionCount: 0, acceptedCount: 0 },
+        },
+      ],
       page: { total: 2, limit: 1, offset: 0 },
     });
 
@@ -208,5 +214,58 @@ describe('problem library server-side filters', () => {
     ])
       expect((await app.inject({ method: 'GET', url })).statusCode).toBe(400);
     await app.close();
+  });
+
+  it('qualifies PostgreSQL search fields and maps real submission aggregates', async () => {
+    const queries: string[] = [];
+    const repository = new PostgresProblemRepository({
+      query: async (text: string) => {
+        queries.push(text);
+        if (queries.length === 1) return { rows: [{ total: 1 }] };
+        return {
+          rows: [
+            {
+              id: 'aggregate-problem',
+              public_number: 7,
+              slug: 'aggregate-problem',
+              title: 'Aggregate problem',
+              statement: 'statement',
+              input_description: 'input',
+              output_description: 'output',
+              examples: [],
+              constraints: 'constraints',
+              notes: '',
+              time_limit_ms: 1000,
+              memory_limit_bytes: 1024,
+              visibility: 'public',
+              status: 'published',
+              difficulty: '中等',
+              testdata_version: null,
+              author_id: 'author',
+              source_type: 'TEST_FIXTURE',
+              tags: [],
+              tag_details: [],
+              submission_count: 20,
+              accepted_count: 13,
+              created_at: '2026-01-01T00:00:00.000Z',
+              updated_at: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        };
+      },
+    });
+
+    const result = await repository.list({
+      limit: 20,
+      publicOnly: true,
+      search: 'aggregate',
+    });
+
+    expect(queries[1]).toContain('p.slug ILIKE');
+    expect(queries[1]).toContain('p.statement ILIKE');
+    expect(result.items[0]?.statistics).toEqual({
+      submissionCount: 20,
+      acceptedCount: 13,
+    });
   });
 });

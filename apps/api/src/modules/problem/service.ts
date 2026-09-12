@@ -328,6 +328,10 @@ export class ProblemService {
     return {
       ...problem,
       ...(this.projectMetadata ? await this.projectMetadata(problem) : {}),
+      statistics: problem.statistics ?? {
+        submissionCount: 0,
+        acceptedCount: 0,
+      },
       capabilities: { canEdit, canDelete: canEdit },
     };
   }

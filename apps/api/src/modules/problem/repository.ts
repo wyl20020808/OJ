@@ -388,7 +388,9 @@ export class PostgresProblemRepository implements ProblemRepository {
       `SELECT p.*, COALESCE((SELECT array_agg(t.display_name ORDER BY t.display_order, t.id)
         FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), ARRAY[]::text[]) AS tags,
         COALESCE((SELECT json_agg(json_build_object('id',t.id,'slug',t.slug,'name',t.name,'category',t.category,'displayOrder',t.display_order,'isActive',t.is_active) ORDER BY t.display_order,t.id)
-        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), '[]'::json) AS tag_details
+        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), '[]'::json) AS tag_details,
+        (SELECT count(*)::int FROM submissions s WHERE s.problem_id=p.id) AS submission_count,
+        (SELECT count(*)::int FROM submissions s JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=TRUE AND e.status='COMPLETED_WITH_VERDICT' AND e.verdict='AC' WHERE s.problem_id=p.id) AS accepted_count
        FROM problems p
        WHERE (p.id = $1 OR p.slug = $1)
           OR p.public_number = CASE WHEN $1 ~ '^P[0-9]+$' THEN substring($1 FROM 2)::bigint END
@@ -425,43 +427,43 @@ export class PostgresProblemRepository implements ProblemRepository {
   }
   private listWhere(query: ProblemListQuery) {
     const clauses = [
-      'deleted_at IS NULL',
+      'p.deleted_at IS NULL',
       ...(query.publicOnly
-        ? ["visibility='public'", "status='published'"]
+        ? ["p.visibility='public'", "p.status='published'"]
         : []),
     ];
     const params: unknown[] = [];
     if (query.ownedOrPublicBy) {
       params.push(query.ownedOrPublicBy);
       clauses.push(
-        `((visibility='public' AND status='published') OR author_id = $${params.length})`,
+        `((p.visibility='public' AND p.status='published') OR p.author_id = $${params.length})`,
       );
     }
     if (query.authorId) {
       params.push(query.authorId);
-      clauses.push(`author_id = $${params.length}`);
+      clauses.push(`p.author_id = $${params.length}`);
     }
     if (query.status) {
       params.push(query.status);
-      clauses.push(`status = $${params.length}`);
+      clauses.push(`p.status = $${params.length}`);
     }
     if (query.visibility) {
       params.push(query.visibility);
-      clauses.push(`visibility = $${params.length}`);
+      clauses.push(`p.visibility = $${params.length}`);
     }
     if (query.search) {
       params.push(`%${query.search}%`);
       clauses.push(
-        `(slug ILIKE $${params.length} OR title ILIKE $${params.length})`,
+        `(p.slug ILIKE $${params.length} OR p.title ILIKE $${params.length} OR p.statement ILIKE $${params.length})`,
       );
     }
     if (query.difficulty) {
       params.push(query.difficulty);
-      clauses.push(`difficulty = $${params.length}`);
+      clauses.push(`p.difficulty = $${params.length}`);
     }
     if (query.sourceType) {
       params.push(query.sourceType);
-      clauses.push(`source_type = $${params.length}`);
+      clauses.push(`p.source_type = $${params.length}`);
     }
     if (query.tagIds?.length) {
       params.push(query.tagIds);
@@ -494,7 +496,9 @@ export class PostgresProblemRepository implements ProblemRepository {
       `SELECT p.*, COALESCE((SELECT array_agg(t.display_name ORDER BY t.display_order, t.id)
         FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), ARRAY[]::text[]) AS tags,
         COALESCE((SELECT json_agg(json_build_object('id',t.id,'slug',t.slug,'name',t.name,'category',t.category,'displayOrder',t.display_order,'isActive',t.is_active) ORDER BY t.display_order,t.id)
-        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), '[]'::json) AS tag_details
+        FROM problem_tags pt JOIN tags t ON t.id=pt.tag_id WHERE pt.problem_id=p.id), '[]'::json) AS tag_details,
+        (SELECT count(*)::int FROM submissions s WHERE s.problem_id=p.id) AS submission_count,
+        (SELECT count(*)::int FROM submissions s JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=TRUE AND e.status='COMPLETED_WITH_VERDICT' AND e.verdict='AC' WHERE s.problem_id=p.id) AS accepted_count
        FROM problems p ${where} ORDER BY ${sortColumn[query.sort ?? 'publicNumber']} ${order}, p.id ${order} LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
@@ -758,6 +762,10 @@ function mapRow(row: Record<string, unknown>): Problem {
     sourceType: String(row.source_type ?? 'CREATOR') as NonNullable<
       Problem['sourceType']
     >,
+    statistics: {
+      submissionCount: Number(row.submission_count ?? 0),
+      acceptedCount: Number(row.accepted_count ?? 0),
+    },
     tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
     tagDetails:
       ((typeof row.tag_details === 'string'

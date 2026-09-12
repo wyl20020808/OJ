@@ -1641,7 +1641,7 @@ function ProblemList({
           <section>
             <h2>难度分类</h2>
             <div className="sidebar-list">
-              {difficultyOptions.slice(0, 4).map((item, index) => (
+              {difficultyOptions.map((item, index) => (
                 <div key={item}>
                   <button
                     type="button"
@@ -1780,7 +1780,7 @@ function ProblemList({
             <div className="filter-row">
               <strong>难度等级</strong>
               <div className="check-options">
-                {difficultyOptions.slice(0, 4).map((item) => (
+                {difficultyOptions.map((item) => (
                   <label key={item}>
                     <input
                       type="checkbox"
@@ -1983,6 +1983,16 @@ function ProblemList({
                   problem.tagDetails?.map((item) => item.name) ??
                   problem.tags ??
                   [];
+                const statistics = problem.statistics ?? {
+                  submissionCount: 0,
+                  acceptedCount: 0,
+                };
+                const acceptanceRate = statistics.submissionCount
+                  ? `${Math.round(
+                      (statistics.acceptedCount / statistics.submissionCount) *
+                        100,
+                    )}%`
+                  : '暂无记录';
                 return (
                   <div key={problem.id} role="listitem">
                     <Link
@@ -2011,17 +2021,11 @@ function ProblemList({
                       <span className="problem-source">
                         {problemSourceLabel(problem.sourceType)}
                       </span>
-                      <span
-                        className="problem-rate"
-                        title="权威通过率聚合暂未接入"
-                      >
-                        —
+                      <span className="problem-rate" title="当前判题结果聚合">
+                        {acceptanceRate}
                       </span>
-                      <span
-                        className="problem-submissions"
-                        title="权威提交次数聚合暂未接入"
-                      >
-                        —
+                      <span className="problem-submissions" title="当前提交记录总数">
+                        {statistics.submissionCount.toLocaleString('zh-CN')}
                       </span>
                       <span className="problem-star" aria-hidden="true">
                         —

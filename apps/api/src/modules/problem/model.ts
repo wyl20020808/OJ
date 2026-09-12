@@ -41,6 +41,10 @@ export type ProblemTag = {
   displayOrder: number;
   isActive: boolean;
 };
+export type ProblemStatistics = {
+  submissionCount: number;
+  acceptedCount: number;
+};
 
 export type Problem = {
   id: string;
@@ -65,6 +69,7 @@ export type Problem = {
   authorId: string | null;
   source?: string | null;
   sourceType?: ProblemSourceType;
+  statistics?: ProblemStatistics;
   tags: string[];
   tagDetails?: ProblemTag[];
   createdAt: string;
@@ -97,6 +102,7 @@ export type ProblemCreateInput = Omit<
   | 'createdAt'
   | 'updatedAt'
   | 'source'
+  | 'statistics'
   | 'tagDetails'
   | 'deletedAt'
   | 'deletedBy'
@@ -113,6 +119,7 @@ export type ProblemUpdateInput = Partial<
     | 'authorId'
     | 'source'
     | 'sourceType'
+    | 'statistics'
     | 'deletedAt'
     | 'deletedBy'
     | 'deleteReason'
