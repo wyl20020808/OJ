@@ -1,6 +1,8 @@
 export type DiscussionPostType = 'ARTICLE' | 'ANNOUNCEMENT';
+export type DiscussionPostKind = 'DISCUSSION' | 'SOLUTION' | 'ANNOUNCEMENT';
 export type DiscussionPostStatus = 'DRAFT' | 'PUBLISHED' | 'DELETED';
 export type DiscussionCommentStatus = 'VISIBLE' | 'DELETED';
+export type DiscussionDataOrigin = 'USER' | 'DEVELOPMENT_FIXTURE';
 export type DiscussionViewerCapabilities = {
   canEdit: boolean;
   canDelete: boolean;
@@ -12,11 +14,25 @@ export type DiscussionAuthor = {
   displayName: string;
   avatarUrl?: string;
 };
+export type DiscussionCategory = {
+  slug: string;
+  name: string;
+  description: string;
+  postCount: number;
+  dataOrigin: 'SYSTEM' | 'DEVELOPMENT_FIXTURE';
+};
+export type DiscussionTag = {
+  slug: string;
+  name: string;
+  postCount: number;
+  dataOrigin: 'SYSTEM' | 'DEVELOPMENT_FIXTURE';
+};
 export type DiscussionPost = {
   id: string;
   publicId: string;
   authorId: string;
   type: DiscussionPostType;
+  kind: DiscussionPostKind;
   status: DiscussionPostStatus;
   title: string;
   summary: string | null;
@@ -29,6 +45,13 @@ export type DiscussionPost = {
   viewCount: number;
   likeCount: number;
   commentCount: number;
+  category: DiscussionCategory | null;
+  tags: DiscussionTag[];
+  coverImageUrl: string | null;
+  isFeatured: boolean;
+  isPinned: boolean;
+  dataOrigin: DiscussionDataOrigin;
+  viewerLiked?: boolean;
   author?: DiscussionAuthor;
   capabilities?: DiscussionViewerCapabilities;
 };
@@ -42,8 +65,32 @@ export type DiscussionComment = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  dataOrigin?: DiscussionDataOrigin;
   likeCount?: number;
   viewerLiked?: boolean;
   author?: DiscussionAuthor;
   capabilities?: DiscussionViewerCapabilities;
+};
+
+export type DiscussionBlogOverview = {
+  featured: DiscussionPost | null;
+  hotPosts: DiscussionPost[];
+  recommendedPosts: DiscussionPost[];
+  categories: DiscussionCategory[];
+  tags: DiscussionTag[];
+  authors: Array<{
+    author: DiscussionAuthor;
+    postCount: number;
+  }>;
+  stats: {
+    todayPosts: number;
+    weekPosts: number;
+    totalAuthors: number;
+    totalPosts: number;
+  };
+  recentComments: Array<
+    DiscussionComment & {
+      post: { publicId: string; title: string };
+    }
+  >;
 };

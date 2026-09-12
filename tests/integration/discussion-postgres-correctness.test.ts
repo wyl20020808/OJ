@@ -130,4 +130,77 @@ describe.skipIf(!databaseUrl)('Discussion PostgreSQL correctness', () => {
       await database.pool.end();
     }
   });
+
+  it('persists Blog category, tags, cover and overview read models', async () => {
+    const database = createDatabase({ url: databaseUrl! });
+    const client = await database.pool.connect();
+    await client.query('BEGIN');
+    try {
+      const suffix = randomUUID().slice(0, 8);
+      const userId = randomUUID();
+      await client.query(
+        "INSERT INTO users(id,username,email,display_name,status) VALUES($1,$2,$3,$4,'active')",
+        [
+          userId,
+          `blog-meta-${suffix}`,
+          `blog-meta-${suffix}@example.test`,
+          'Blog Meta Writer',
+        ],
+      );
+      const categorySlug = `algorithm-${suffix}`;
+      const tagSlug = `dp-${suffix}`;
+      await client.query(
+        `INSERT INTO discussion_categories(slug,name,description,data_origin)
+         VALUES($1,'算法教程','integration test','SYSTEM')`,
+        [categorySlug],
+      );
+      await client.query(
+        `INSERT INTO discussion_tags(slug,name,data_origin)
+         VALUES($1,'DP','SYSTEM')`,
+        [tagSlug],
+      );
+      const repo = new PostgresDiscussionRepository(client);
+      const post = await repo.create({
+        authorId: userId,
+        type: 'ARTICLE',
+        kind: 'SOLUTION',
+        title: 'PostgreSQL Blog metadata',
+        summary: 'cursor and metadata integration',
+        contentMarkdown: '# solution',
+        status: 'PUBLISHED',
+        categorySlug,
+        tagSlugs: [tagSlug],
+        coverImageUrl: '/blog-mountain-hero.png',
+      });
+      expect(post).toMatchObject({
+        kind: 'SOLUTION',
+        category: { slug: categorySlug, name: '算法教程' },
+        tags: [{ slug: tagSlug, name: 'DP' }],
+        coverImageUrl: '/blog-mountain-hero.png',
+      });
+      const filtered = await repo.list({
+        status: 'PUBLISHED',
+        kind: 'SOLUTION',
+        category: categorySlug,
+        tag: tagSlug,
+        q: 'DP',
+        limit: 10,
+      });
+      expect(filtered.items.some((item) => item.id === post.id)).toBe(true);
+      const overview = await repo.getBlogOverview();
+      expect(
+        overview.categories.find((item) => item.slug === categorySlug),
+      ).toMatchObject({ postCount: 1 });
+      expect(overview.tags.find((item) => item.slug === tagSlug)).toMatchObject(
+        {
+          postCount: 1,
+        },
+      );
+      expect(overview.stats.totalPosts).toBeGreaterThanOrEqual(1);
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+      await database.pool.end();
+    }
+  });
 });

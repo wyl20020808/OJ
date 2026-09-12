@@ -40,7 +40,9 @@ export function AppNavbar({
         </span>
         <strong>
           AlgoOJ
-          {isDiscussion && <span className="app-navbar__brand-section">博客</span>}
+          {isDiscussion && (
+            <span className="app-navbar__brand-section">博客</span>
+          )}
         </strong>
       </Link>
       <button
@@ -95,10 +97,7 @@ export function AppNavbar({
         >
           作业
         </Link>
-        <Link
-          to="/discussion"
-          className={isDiscussion ? 'active' : ''}
-        >
+        <Link to="/discussion" className={isDiscussion ? 'active' : ''}>
           博客
         </Link>
         <Link
@@ -144,7 +143,7 @@ export function AppNavbar({
           <input
             name="q"
             placeholder={
-              isDiscussion ? '搜索文章、用户或关键词…' : '搜索题目、比赛、用户…'
+              isDiscussion ? '搜索文章、摘要或标签…' : '搜索题目、比赛、用户…'
             }
             aria-label="全站搜索"
           />

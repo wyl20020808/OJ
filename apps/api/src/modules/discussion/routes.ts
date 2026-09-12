@@ -6,9 +6,12 @@ import {
   type DiscussionRepository,
 } from './repository.js';
 import type { DiscussionPostType } from './model.js';
+import type { DiscussionPostKind } from './model.js';
+import { DiscussionBlogService } from './service.js';
 
 export type DiscussionModuleOptions = {
   repository: DiscussionRepository;
+  blogService?: DiscussionBlogService;
   getAuthContext: (request: FastifyRequest) => Promise<AuthContext | undefined>;
   hasCapability?: (userId: string, capability: string) => Promise<boolean>;
   getAuthor?: (userId: string) => Promise<{
@@ -49,12 +52,20 @@ const page = (q: any) => {
   const n = Number(q.limit ?? 20);
   return Number.isInteger(n) && n >= 1 && n <= 100 ? n : null;
 };
+const slug = (value: unknown) =>
+  typeof value === 'string' && /^[a-z0-9][a-z0-9-]{0,79}$/.test(value);
+const coverImage = (value: unknown) =>
+  value === null ||
+  (typeof value === 'string' &&
+    value.length <= 2048 &&
+    (value.startsWith('/') || /^https:\/\//i.test(value)));
 
 export async function registerDiscussionModule(
   app: FastifyInstance,
   o: DiscussionModuleOptions,
 ) {
   const auth = (r: FastifyRequest) => o.getAuthContext(r);
+  const blogService = o.blogService ?? new DiscussionBlogService(o.repository);
   const can = async (ctx: AuthContext | undefined, capability: string) =>
     Boolean(
       ctx?.strength === 'password' &&
@@ -188,6 +199,13 @@ export async function registerDiscussionModule(
         ...(q.type === 'ARTICLE' || q.type === 'ANNOUNCEMENT'
           ? { type: q.type }
           : {}),
+        ...(q.kind === 'DISCUSSION' ||
+        q.kind === 'SOLUTION' ||
+        q.kind === 'ANNOUNCEMENT'
+          ? { kind: q.kind as DiscussionPostKind }
+          : {}),
+        ...(slug(q.category) ? { category: q.category } : {}),
+        ...(slug(q.tag) ? { tag: q.tag } : {}),
         ...(own && ctx ? { authorId: ctx.userId } : {}),
         ...(typeof q.q === 'string' ? { q: q.q.slice(0, 80) } : {}),
         status: own
@@ -208,6 +226,27 @@ export async function registerDiscussionModule(
       throw e;
     }
   });
+  app.get('/api/discussion/blog/overview', async (_r, reply) => {
+    const overview = await blogService.getOverview();
+    const projectPosts = (posts: any[]) =>
+      Promise.all(posts.map((post) => projectPost(post)));
+    const projectedComments = await projectComments(overview.recentComments);
+    return reply.send({
+      featured: overview.featured ? await projectPost(overview.featured) : null,
+      hotPosts: await projectPosts(overview.hotPosts),
+      recommendedPosts: await projectPosts(overview.recommendedPosts),
+      categories: overview.categories,
+      tags: overview.tags,
+      authors: await Promise.all(
+        overview.authorRanks.map(async ({ authorId, postCount }) => ({
+          author: safeAuthor(getAuthor ? await getAuthor(authorId) : null),
+          postCount,
+        })),
+      ),
+      stats: overview.stats,
+      recentComments: projectedComments,
+    });
+  });
   app.post('/api/discussion/posts', async (r, reply) => {
     const ctx = await auth(r);
     if (!ctx)
@@ -217,6 +256,12 @@ export async function registerDiscussionModule(
     const b = r.body as any;
     const type: DiscussionPostType =
       b?.type === 'ANNOUNCEMENT' ? 'ANNOUNCEMENT' : 'ARTICLE';
+    const kind: DiscussionPostKind =
+      type === 'ANNOUNCEMENT'
+        ? 'ANNOUNCEMENT'
+        : b?.kind === 'SOLUTION'
+          ? 'SOLUTION'
+          : 'DISCUSSION';
     if (
       type === 'ANNOUNCEMENT' &&
       !(await can(ctx, 'discussion:announcement:create'))
@@ -231,18 +276,30 @@ export async function registerDiscussionModule(
     if (
       !text(b?.title, 240) ||
       typeof b?.contentMarkdown !== 'string' ||
-      b.contentMarkdown.length > 500_000
+      b.contentMarkdown.length > 500_000 ||
+      (b.categorySlug !== undefined && !slug(b.categorySlug)) ||
+      (b.coverImageUrl !== undefined && !coverImage(b.coverImageUrl)) ||
+      (b.tagSlugs !== undefined &&
+        (!Array.isArray(b.tagSlugs) ||
+          b.tagSlugs.length > 10 ||
+          b.tagSlugs.some((value: unknown) => !slug(value))))
     )
       return error(reply, r, 400, 'VALIDATION_ERROR', 'Invalid post content');
     const status = b.status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT';
     const post = await o.repository.create({
       authorId: ctx.userId,
       type,
+      kind,
       title: b.title.trim(),
       summary:
         typeof b.summary === 'string' ? b.summary.slice(0, 1000) : undefined,
       contentMarkdown: b.contentMarkdown,
       status,
+      ...(slug(b.categorySlug) ? { categorySlug: b.categorySlug } : {}),
+      ...(Array.isArray(b.tagSlugs) ? { tagSlugs: b.tagSlugs } : {}),
+      ...(b.coverImageUrl !== undefined
+        ? { coverImageUrl: b.coverImageUrl }
+        : {}),
     });
     await audit(
       ctx,
@@ -254,21 +311,24 @@ export async function registerDiscussionModule(
   });
   app.get('/api/discussion/posts/:id', async (r, reply) => {
     const key = (r.params as any).id;
-    const post = await o.repository.get(key);
+    const ctx = await auth(r);
+    const post = await o.repository.get(key, ctx?.userId);
     if (!post || post.status === 'DELETED')
       return error(reply, r, 404, 'NOT_FOUND', 'Post not found');
-    const ctx = await auth(r);
     if (
       post.status !== 'PUBLISHED' &&
       !(await ownerOr(ctx, post, 'discussion:post:moderate'))
     )
       return error(reply, r, 404, 'NOT_FOUND', 'Post not found');
-    if (post.status === 'PUBLISHED') await o.repository.incrementViews(post.id);
+    const trackView = (r.query as any)?.trackView !== 'false';
+    if (post.status === 'PUBLISHED' && trackView)
+      await o.repository.incrementViews(post.id);
     return reply.send(
       await projectPost(
         {
           ...post,
-          viewCount: post.viewCount + (post.status === 'PUBLISHED' ? 1 : 0),
+          viewCount:
+            post.viewCount + (post.status === 'PUBLISHED' && trackView ? 1 : 0),
         },
         ctx,
         true,
@@ -299,6 +359,23 @@ export async function registerDiscussionModule(
         'FORBIDDEN',
         'Announcement capability required',
       );
+    if (
+      (b.categorySlug !== undefined &&
+        b.categorySlug !== null &&
+        !slug(b.categorySlug)) ||
+      (b.coverImageUrl !== undefined && !coverImage(b.coverImageUrl)) ||
+      (b.tagSlugs !== undefined &&
+        (!Array.isArray(b.tagSlugs) ||
+          b.tagSlugs.length > 10 ||
+          b.tagSlugs.some((value: unknown) => !slug(value)))) ||
+      (b.kind !== undefined &&
+        b.kind !== 'DISCUSSION' &&
+        b.kind !== 'SOLUTION') ||
+      (b.kind !== undefined &&
+        (b.type === 'ANNOUNCEMENT' ||
+          (b.type === undefined && post.type === 'ANNOUNCEMENT')))
+    )
+      return error(reply, r, 400, 'VALIDATION_ERROR', 'Invalid blog metadata');
     const updated = await o.repository.update(post.id, {
       title: typeof b.title === 'string' ? b.title.trim() : undefined,
       summary:
@@ -307,6 +384,19 @@ export async function registerDiscussionModule(
         typeof b.contentMarkdown === 'string' ? b.contentMarkdown : undefined,
       type:
         b.type === 'ARTICLE' || b.type === 'ANNOUNCEMENT' ? b.type : undefined,
+      kind:
+        b.type === 'ANNOUNCEMENT'
+          ? 'ANNOUNCEMENT'
+          : b.kind === 'DISCUSSION' || b.kind === 'SOLUTION'
+            ? b.kind
+            : b.type === 'ARTICLE'
+              ? 'DISCUSSION'
+              : undefined,
+      ...(b.categorySlug !== undefined ? { categorySlug: b.categorySlug } : {}),
+      ...(Array.isArray(b.tagSlugs) ? { tagSlugs: b.tagSlugs } : {}),
+      ...(b.coverImageUrl !== undefined
+        ? { coverImageUrl: b.coverImageUrl }
+        : {}),
     });
     return updated
       ? reply.send(await projectPost(updated, ctx, true))

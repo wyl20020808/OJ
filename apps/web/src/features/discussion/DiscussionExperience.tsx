@@ -9,7 +9,7 @@ import {
 import type {
   ApiClient,
   AuthenticatedUser,
-  DiscussionComment,
+  DiscussionBlogOverview,
   DiscussionPost,
 } from '../../services/api.js';
 import { MarkdownToolbar } from '../../components/ProblemEditor.js';
@@ -22,6 +22,7 @@ import {
 } from './DiscussionContent.js';
 import { DiscussionRenderer } from './DiscussionRenderer.js';
 import { useToast } from '../../components/Toast.js';
+import './DiscussionExperience.css';
 
 type DiscussionFilter = 'article' | 'announcement' | 'solution';
 type BlogSort = 'newest' | 'comments' | 'views';
@@ -40,10 +41,17 @@ function readDiscussionFilter(): DiscussionFilter {
   return value === 'announcement' || value === 'solution' ? value : 'article';
 }
 
-function discussionHref(type: DiscussionFilter, search: string) {
+function discussionHref(
+  type: DiscussionFilter,
+  search: string,
+  category = '',
+  tag = '',
+) {
   const query = new URLSearchParams();
   if (type !== 'article') query.set('type', type);
   if (search) query.set('q', search);
+  if (category) query.set('category', category);
+  if (tag) query.set('tag', tag);
   const value = query.toString();
   return `/discussion${value ? `?${value}` : ''}`;
 }
@@ -144,9 +152,15 @@ function compactCount(value: number) {
 
 function blogPostKind(post: DiscussionPost) {
   if (post.type === 'ANNOUNCEMENT') return '公告';
-  return /题解|solution/i.test(`${post.title} ${post.summary ?? ''}`)
+  return post.kind === 'SOLUTION' ||
+    /题解|solution/i.test(`${post.title} ${post.summary ?? ''}`)
     ? '题解'
     : '讨论';
+}
+
+function safeCoverImage(value: string | null) {
+  if (!value) return null;
+  return value.startsWith('/') || /^https:\/\//i.test(value) ? value : null;
 }
 
 type BlogArticleSection = {
@@ -189,20 +203,23 @@ function solutionProblemLabel(title: string) {
 
 function BlogPostCard({
   post,
-  index,
   navigate,
 }: {
   post: DiscussionPost;
-  index: number;
   navigate: (path: string) => void;
 }) {
   const href = `/discussion/${post.publicId}`;
   const kind = blogPostKind(post);
+  const badge = post.isPinned ? '置顶' : kind;
+  const coverImageUrl = safeCoverImage(post.coverImageUrl);
   return (
-    <article className="blog-post-card" data-content-template="discussion">
+    <article
+      className={`blog-post-card${coverImageUrl ? '' : ' without-cover'}`}
+      data-content-template="discussion"
+    >
       <div className="blog-post-copy">
         <div className="blog-post-heading">
-          <span className={`blog-kind blog-kind-${kind}`}>{kind}</span>
+          <span className={`blog-kind blog-kind-${badge}`}>{badge}</span>
           <h2>
             <a
               href={href}
@@ -222,7 +239,10 @@ function BlogPostCard({
             {formatDiscussionDate(post.publishedAt ?? post.createdAt)}
           </time>
           <span>·</span>
-          <span>{kind}</span>
+          <span>{post.category?.name ?? kind}</span>
+          {post.dataOrigin === 'DEVELOPMENT_FIXTURE' && (
+            <span className="blog-demo-badge">DEMO</span>
+          )}
           <span className="blog-post-counts">
             <span>
               <BlogIcon name="comment" />
@@ -235,9 +255,9 @@ function BlogPostCard({
           </span>
         </footer>
       </div>
-      {index % 3 !== 2 && (
+      {coverImageUrl && (
         <a
-          className={`blog-post-thumb variant-${index % 2}`}
+          className="blog-post-thumb"
           href={href}
           aria-label={`阅读 ${post.title}`}
           onClick={(event) => {
@@ -245,9 +265,7 @@ function BlogPostCard({
             navigate(href);
           }}
         >
-          {index % 2 === 1 && (
-            <code>{'while (learn) {\n  become(better);\n}'}</code>
-          )}
+          <img src={coverImageUrl} alt="" loading="lazy" />
         </a>
       )}
     </article>
@@ -266,31 +284,45 @@ export function DiscussionHome({
   const filter = readDiscussionFilter();
   const search =
     new URLSearchParams(window.location.search).get('q')?.trim() ?? '';
+  const category =
+    new URLSearchParams(window.location.search).get('category')?.trim() ?? '';
+  const tag =
+    new URLSearchParams(window.location.search).get('tag')?.trim() ?? '';
   const [posts, setPosts] = useState<DiscussionPost[]>([]);
+  const [overview, setOverview] = useState<DiscussionBlogOverview | null>(null);
+  const [overviewError, setOverviewError] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [error, setError] = useState(false);
   const [reload, setReload] = useState(0);
   const [sort, setSort] = useState<BlogSort>('newest');
-  const [recentComments, setRecentComments] = useState<DiscussionComment[]>([]);
 
   useEffect(() => {
     let active = true;
-    const query = new URLSearchParams({ limit: '30' });
-    if (filter === 'article' || filter === 'solution')
-      query.set('type', 'ARTICLE');
-    if (filter === 'announcement') query.set('type', 'ANNOUNCEMENT');
+    const query = new URLSearchParams({ limit: '8' });
+    query.set(
+      'kind',
+      filter === 'solution'
+        ? 'SOLUTION'
+        : filter === 'announcement'
+          ? 'ANNOUNCEMENT'
+          : 'DISCUSSION',
+    );
     if (search) query.set('q', search);
+    if (category) query.set('category', category);
+    if (tag) query.set('tag', tag);
     setLoading(true);
     setError(false);
+    setLoadMoreError(false);
     void api
       .discussionPosts(query.toString())
       .then((result) => {
-        if (active)
-          setPosts(
-            filter === 'solution'
-              ? result.items.filter((post) => blogPostKind(post) === '题解')
-              : result.items,
-          );
+        if (active) {
+          setPosts(result.items);
+          setNextCursor(result.nextCursor);
+        }
       })
       .catch(() => {
         if (active) setError(true);
@@ -301,39 +333,62 @@ export function DiscussionHome({
     return () => {
       active = false;
     };
-  }, [api, filter, reload, search]);
+  }, [api, category, filter, reload, search, tag]);
 
   useEffect(() => {
     let active = true;
-    if (!posts.length || typeof api.discussionComments !== 'function') {
-      setRecentComments([]);
-      return;
-    }
-    void Promise.all(
-      posts
-        .slice(0, 4)
-        .map((post) =>
-          api
-            .discussionComments(post.id, 'limit=2')
-            .catch(() => ({ items: [] })),
-        ),
-    ).then((results) => {
-      if (active)
-        setRecentComments(
-          results.flatMap((result) => result.items).slice(0, 5),
-        );
-    });
+    setOverviewError(false);
+    void api
+      .discussionBlogOverview()
+      .then((result) => {
+        if (active) setOverview(result);
+      })
+      .catch(() => {
+        if (active) setOverviewError(true);
+      });
     return () => {
       active = false;
     };
-  }, [api, posts]);
+  }, [api, reload]);
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    const query = new URLSearchParams({ limit: '8', cursor: nextCursor });
+    query.set(
+      'kind',
+      filter === 'solution'
+        ? 'SOLUTION'
+        : filter === 'announcement'
+          ? 'ANNOUNCEMENT'
+          : 'DISCUSSION',
+    );
+    if (search) query.set('q', search);
+    if (category) query.set('category', category);
+    if (tag) query.set('tag', tag);
+    setLoadingMore(true);
+    setLoadMoreError(false);
+    try {
+      const result = await api.discussionPosts(query.toString());
+      setPosts((current) => [
+        ...current,
+        ...result.items.filter(
+          (item) => !current.some((existing) => existing.id === item.id),
+        ),
+      ]);
+      setNextCursor(result.nextCursor);
+    } catch {
+      setLoadMoreError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const value = String(
       new FormData(event.currentTarget).get('q') ?? '',
     ).trim();
-    navigate(discussionHref(filter, value));
+    navigate(discussionHref(filter, value, category, tag));
   };
   const emptyTitle =
     filter === 'announcement'
@@ -357,55 +412,17 @@ export function DiscussionHome({
         : new Date(b.publishedAt ?? b.createdAt).getTime() -
           new Date(a.publishedAt ?? a.createdAt).getTime(),
   );
-  const featured = visiblePosts[0];
-  const feed = visiblePosts.slice(1);
-  const authors = [
-    ...posts
-      .reduce((result, post) => {
-        if (!post.author) return result;
-        const previous = result.get(post.author.username);
-        result.set(post.author.username, {
-          author: post.author,
-          count: (previous?.count ?? 0) + 1,
-        });
-        return result;
-      }, new Map<string, { author: NonNullable<DiscussionPost['author']>; count: number }>())
-      .values(),
-  ]
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
-  const now = Date.now();
-  const todayCount = posts.filter(
-    (post) =>
-      now - new Date(post.publishedAt ?? post.createdAt).getTime() < 86_400_000,
-  ).length;
-  const weekCount = posts.filter(
-    (post) =>
-      now - new Date(post.publishedAt ?? post.createdAt).getTime() <
-      604_800_000,
-  ).length;
-  const categories = [
-    '全部分类',
-    '算法思维',
-    '数据结构',
-    '数学基础',
-    '竞赛经验',
-    '学习方法',
-    '工具与资源',
-    '生活随笔',
-  ];
-  const hotTags = [
-    '动态规划',
-    '图论',
-    '贪心',
-    '二分',
-    '线段树',
-    '比赛经验',
-    'Python',
-    '面试',
-    'STL',
-    '新手问',
-  ];
+  const featured = overview?.featured ?? visiblePosts[0];
+  const feed = visiblePosts.filter((post) => post.id !== featured?.id);
+  const authors = overview?.authors ?? [];
+  const stats = overview?.stats ?? {
+    todayPosts: 0,
+    weekPosts: 0,
+    totalAuthors: 0,
+    totalPosts: 0,
+  };
+  const categories = overview?.categories ?? [];
+  const hotTags = overview?.tags ?? [];
 
   return (
     <section className="blog-hub">
@@ -478,25 +495,65 @@ export function DiscussionHome({
           <section>
             <h2>文章分类</h2>
             <div className="blog-category-list">
-              {categories.map((category, index) => (
-                <button key={category} type="button" data-ui-only="true">
+              <a
+                className={!category ? 'active' : ''}
+                href={discussionHref(filter, search, '', tag)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate(discussionHref(filter, search, '', tag));
+                }}
+              >
+                <BlogIcon name="archive" />
+                全部分类
+                <small>{stats.totalPosts}</small>
+              </a>
+              {categories.map((item, index) => (
+                <a
+                  key={item.slug}
+                  className={category === item.slug ? 'active' : ''}
+                  href={discussionHref(filter, search, item.slug, tag)}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    navigate(discussionHref(filter, search, item.slug, tag));
+                  }}
+                >
                   <BlogIcon name={index % 2 ? 'folder' : 'archive'} />
-                  {category}
-                </button>
+                  {item.name}
+                  <small>{item.postCount}</small>
+                </a>
               ))}
+              {overviewError && (
+                <p className="blog-side-error">分类暂时不可用</p>
+              )}
             </div>
           </section>
           <section>
             <div className="blog-side-heading">
               <h2>热门标签</h2>
-              <button type="button" data-ui-only="true">
-                换一批
-              </button>
+              {tag && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(discussionHref(filter, search, category, ''))
+                  }
+                >
+                  清除
+                </button>
+              )}
             </div>
             <div className="blog-tag-cloud">
-              {hotTags.map((tag) => (
-                <button key={tag} type="button" data-ui-only="true">
-                  # {tag}
+              {hotTags.slice(0, 10).map((item) => (
+                <button
+                  className={tag === item.slug ? 'active' : ''}
+                  key={item.slug}
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      discussionHref(filter, search, category, item.slug),
+                    )
+                  }
+                >
+                  # {item.name} {item.postCount}
                 </button>
               ))}
             </div>
@@ -557,7 +614,7 @@ export function DiscussionHome({
           <div className="blog-feed-toolbar">
             <nav aria-label="博客内容分类">
               {discussionFilters.map((item) => {
-                const href = discussionHref(item.value, search);
+                const href = discussionHref(item.value, search, category, tag);
                 return (
                   <a
                     key={item.value}
@@ -605,7 +662,7 @@ export function DiscussionHome({
               name="q"
               type="search"
               defaultValue={search}
-              placeholder="搜索文章标题、作者或关键词…"
+              placeholder="搜索文章标题、摘要或标签…"
             />
             <button type="submit">搜索</button>
           </form>
@@ -623,14 +680,21 @@ export function DiscussionHome({
             </div>
           ) : feed.length ? (
             <div className="blog-feed" role="feed" aria-label="博客文章">
-              {feed.map((post, index) => (
-                <BlogPostCard
-                  key={post.id}
-                  post={post}
-                  index={index}
-                  navigate={navigate}
-                />
+              {feed.map((post) => (
+                <BlogPostCard key={post.id} post={post} navigate={navigate} />
               ))}
+              {(nextCursor || loadMoreError) && (
+                <div className="blog-pagination">
+                  {loadMoreError && <p role="alert">更多文章加载失败。</p>}
+                  <button
+                    type="button"
+                    disabled={loadingMore}
+                    onClick={() => void loadMore()}
+                  >
+                    {loadingMore ? '正在加载…' : '加载更多文章'}
+                  </button>
+                </div>
+              )}
             </div>
           ) : visiblePosts.length ? (
             <p className="blog-feed-end">暂无有更多文章，欢迎继续分享。</p>
@@ -661,12 +725,12 @@ export function DiscussionHome({
             </div>
             {authors.length ? (
               <ol>
-                {authors.map(({ author, count }, index) => (
+                {authors.map(({ author, postCount }, index) => (
                   <li key={author.username}>
                     <b>{index + 1}</b>
                     <DiscussionAuthorLink author={author} navigate={navigate} />
                     <strong>
-                      {count}
+                      {postCount}
                       <small> 篇</small>
                     </strong>
                   </li>
@@ -688,7 +752,7 @@ export function DiscussionHome({
                   今日新增
                 </dt>
                 <dd>
-                  {todayCount}
+                  {stats.todayPosts}
                   <small> 篇</small>
                 </dd>
               </div>
@@ -698,26 +762,55 @@ export function DiscussionHome({
                   近七日新增
                 </dt>
                 <dd>
-                  {weekCount}
+                  {stats.weekPosts}
                   <small> 篇</small>
                 </dd>
               </div>
               <div>
                 <dt>
                   <BlogIcon name="users" />
-                  本页作者
+                  注册作者
                 </dt>
-                <dd>{authors.length}</dd>
+                <dd>{stats.totalAuthors}</dd>
               </div>
               <div>
                 <dt>
                   <BlogIcon name="archive" />
-                  本页文章
+                  文章总数
                 </dt>
-                <dd>{posts.length}</dd>
+                <dd>{stats.totalPosts}</dd>
               </div>
             </dl>
             <blockquote>“每一个认真分享的人，都在点亮别人的路。”</blockquote>
+          </section>
+          <section className="blog-panel blog-hot-posts">
+            <div className="blog-panel-heading">
+              <h2>
+                <BlogIcon name="star" />
+                热门文章
+              </h2>
+            </div>
+            {overview?.hotPosts.length ? (
+              <ol>
+                {overview.hotPosts.slice(0, 4).map((post, index) => (
+                  <li key={post.id}>
+                    <b>{index + 1}</b>
+                    <a
+                      href={`/discussion/${post.publicId}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        navigate(`/discussion/${post.publicId}`);
+                      }}
+                    >
+                      {post.title}
+                    </a>
+                    <small>{compactCount(post.viewCount)} 浏览</small>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="blog-panel-empty">暂无热门文章</p>
+            )}
           </section>
           <section className="blog-panel blog-recent-comments">
             <div className="blog-panel-heading">
@@ -729,9 +822,9 @@ export function DiscussionHome({
                 查看更多 <BlogIcon name="arrow" />
               </button>
             </div>
-            {recentComments.length ? (
+            {overview?.recentComments.length ? (
               <ul>
-                {recentComments.map((comment) => (
+                {overview.recentComments.map((comment) => (
                   <li key={comment.id}>
                     <DiscussionAuthorLink
                       author={comment.author}
@@ -742,6 +835,18 @@ export function DiscussionHome({
                         .replace(/[#*_`>]/g, '')
                         .slice(0, 48)}
                     </p>
+                    {comment.post && (
+                      <a
+                        className="blog-comment-post"
+                        href={`/discussion/${comment.post.publicId}`}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          navigate(`/discussion/${comment.post!.publicId}`);
+                        }}
+                      >
+                        {comment.post.title}
+                      </a>
+                    )}
                     <time dateTime={comment.createdAt}>
                       {formatDiscussionDate(comment.createdAt)}
                     </time>
@@ -780,7 +885,9 @@ export function DiscussionPostPage({
     setLoading(true);
     setError('');
     try {
-      setPost(await api.discussionPost(id));
+      const loaded = await api.discussionPost(id);
+      setPost(loaded);
+      setLiked(Boolean(loaded.viewerLiked));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '文章加载失败');
     } finally {
@@ -791,7 +898,10 @@ export function DiscussionPostPage({
   const refreshPost = useCallback(async () => {
     if (!post) return;
     try {
-      setPost(await api.discussionPost(post.id));
+      const refreshed = await api.discussionPost(post.id, false);
+      setPost(refreshed);
+      if (refreshed.viewerLiked !== undefined)
+        setLiked(Boolean(refreshed.viewerLiked));
     } catch (reason) {
       setActionMessage(reason instanceof Error ? reason.message : '刷新失败');
     }
@@ -904,6 +1014,17 @@ export function DiscussionPostPage({
               {compactCount(post.viewCount)}
             </span>
             <span className="blog-detail-kind">{kind}</span>
+            {post.category && (
+              <span className="blog-detail-category">{post.category.name}</span>
+            )}
+            {(post.tags ?? []).slice(0, 4).map((tag) => (
+              <span className="blog-detail-tag" key={tag.slug}>
+                #{tag.name}
+              </span>
+            ))}
+            {post.dataOrigin === 'DEVELOPMENT_FIXTURE' && (
+              <span className="blog-demo-badge">DEVELOPMENT FIXTURE</span>
+            )}
           </div>
         </div>
 

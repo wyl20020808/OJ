@@ -66,6 +66,7 @@ const post: DiscussionPost = {
   id: 'discussion-1',
   publicId: 'D0001',
   type: 'ARTICLE',
+  kind: 'SOLUTION',
   status: 'PUBLISHED',
   title: 'P1216 数字三角形题解汇总',
   summary: '整理多种动态规划写法。',
@@ -76,6 +77,12 @@ const post: DiscussionPost = {
   viewCount: 128,
   likeCount: 32,
   commentCount: 9,
+  category: null,
+  tags: [],
+  coverImageUrl: null,
+  isFeatured: false,
+  isPinned: false,
+  dataOrigin: 'USER',
   author: { username: 'solver', displayName: '解题者' },
 };
 
