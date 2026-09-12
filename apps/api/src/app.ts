@@ -97,6 +97,7 @@ import {
 import {
   InMemoryDiscussionRepository,
   PostgresDiscussionRepository,
+  DiscussionBlogService,
   registerDiscussionModule,
 } from './modules/discussion/index.js';
 import {
@@ -1042,8 +1043,12 @@ export async function buildApp(options: AppOptions = {}) {
       getAuth: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
     });
+    const discussionRepository = new PostgresDiscussionRepository(
+      database.pool,
+    );
     await registerDiscussionModule(app, {
-      repository: new PostgresDiscussionRepository(database.pool),
+      repository: discussionRepository,
+      blogService: new DiscussionBlogService(discussionRepository),
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       hasCapability: (userId, capability) =>

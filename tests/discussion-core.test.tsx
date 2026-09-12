@@ -51,8 +51,10 @@ describe('Discussion Core V1', () => {
     await repository.publish(row.public_id);
     expect(queries[0]).toContain('WHERE p.id=$1');
     expect(queries[1]).toContain('WHERE p.public_id=$1');
-    expect(queries[2]).toContain('WHERE id=$1');
-    expect(queries[3]).toContain('WHERE public_id=$1');
+    expect(queries.some((sql) => sql.includes('WHERE id=$1'))).toBe(true);
+    expect(queries.some((sql) => sql.includes('WHERE public_id=$1'))).toBe(
+      true,
+    );
     expect(queries.every((sql) => !sql.includes('id=$1 OR'))).toBe(true);
   });
 
@@ -100,6 +102,7 @@ describe('Discussion Core V1', () => {
         publicId: id,
         authorId: 'u1',
         type: 'ARTICLE',
+        kind: 'DISCUSSION',
         status: 'PUBLISHED',
         title: `Post ${index}`,
         summary: null,
@@ -112,6 +115,12 @@ describe('Discussion Core V1', () => {
         viewCount: 0,
         likeCount: 0,
         commentCount: 0,
+        category: null,
+        tags: [],
+        coverImageUrl: null,
+        isFeatured: false,
+        isPinned: false,
+        dataOrigin: 'USER',
       };
       repo.posts.set(id, post);
     }
@@ -140,6 +149,97 @@ describe('Discussion Core V1', () => {
     await expect(
       repo.list({ status: 'PUBLISHED', limit: 10, cursor: 'broken' }),
     ).rejects.toThrow('Invalid discussion cursor');
+  });
+
+  it('serves persisted Blog metadata, filters and overview data', async () => {
+    const repo = new InMemoryDiscussionRepository();
+    const solution = await repo.create({
+      authorId: 'writer',
+      type: 'ARTICLE',
+      kind: 'SOLUTION',
+      title: '背包状态转移',
+      summary: '动态规划题解',
+      contentMarkdown: '# 题解',
+      status: 'PUBLISHED',
+      coverImageUrl: '/blog-mountain-hero.png',
+    });
+    Object.assign(solution, {
+      category: {
+        slug: 'algorithm-tutorial',
+        name: '算法教程',
+        description: '算法与题解',
+        postCount: 0,
+        dataOrigin: 'DEVELOPMENT_FIXTURE',
+      },
+      tags: [
+        {
+          slug: 'dynamic-programming',
+          name: 'DP',
+          postCount: 0,
+          dataOrigin: 'DEVELOPMENT_FIXTURE',
+        },
+      ],
+      isFeatured: true,
+      dataOrigin: 'DEVELOPMENT_FIXTURE',
+      viewCount: 42,
+    });
+    await repo.createComment({
+      postId: solution.id,
+      authorId: 'reader',
+      contentMarkdown: '讲得很清楚',
+    });
+    await repo.like(solution.id, 'reader');
+
+    const app = Fastify({ logger: false });
+    await registerDiscussionModule(app, {
+      repository: repo,
+      getAuthContext: async () => ctx('reader'),
+      getAuthor: async (id) => ({
+        id,
+        username: id,
+        displayName: id === 'writer' ? '作者' : '读者',
+      }),
+    });
+
+    const filtered = await app.inject({
+      method: 'GET',
+      url: '/api/discussion/posts?kind=SOLUTION&category=algorithm-tutorial&tag=dynamic-programming&q=DP',
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json().items[0]).toMatchObject({
+      kind: 'SOLUTION',
+      coverImageUrl: '/blog-mountain-hero.png',
+      dataOrigin: 'DEVELOPMENT_FIXTURE',
+      category: { slug: 'algorithm-tutorial', name: '算法教程' },
+      tags: [{ slug: 'dynamic-programming', name: 'DP' }],
+    });
+
+    const overview = await app.inject({
+      method: 'GET',
+      url: '/api/discussion/blog/overview',
+    });
+    expect(overview.statusCode).toBe(200);
+    expect(overview.json()).toMatchObject({
+      featured: { id: solution.id },
+      categories: [{ slug: 'algorithm-tutorial', postCount: 1 }],
+      tags: [{ slug: 'dynamic-programming', postCount: 1 }],
+      authors: [{ author: { displayName: '作者' }, postCount: 1 }],
+      stats: { totalAuthors: 1, totalPosts: 1 },
+      recentComments: [
+        {
+          contentMarkdown: '讲得很清楚',
+          post: { publicId: solution.publicId },
+        },
+      ],
+    });
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/discussion/posts/${solution.id}?trackView=false`,
+    });
+    expect(detail.json()).toMatchObject({ viewCount: 42, viewerLiked: true });
+    expect((await repo.get(solution.id))?.viewCount).toBe(42);
+    await app.close();
   });
 
   it('keeps comment counts independent of page size and updates them on create/delete', async () => {

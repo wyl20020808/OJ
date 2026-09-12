@@ -702,6 +702,7 @@ export type DiscussionPost = {
   id: string;
   publicId: string;
   type: 'ARTICLE' | 'ANNOUNCEMENT';
+  kind: 'DISCUSSION' | 'SOLUTION' | 'ANNOUNCEMENT';
   status: 'DRAFT' | 'PUBLISHED' | 'DELETED';
   title: string;
   summary: string | null;
@@ -712,8 +713,28 @@ export type DiscussionPost = {
   viewCount: number;
   likeCount: number;
   commentCount: number;
+  category: DiscussionCategory | null;
+  tags: DiscussionTag[];
+  coverImageUrl: string | null;
+  isFeatured: boolean;
+  isPinned: boolean;
+  dataOrigin: 'USER' | 'DEVELOPMENT_FIXTURE';
+  viewerLiked?: boolean;
   author?: DiscussionAuthor;
   capabilities?: DiscussionViewerCapabilities;
+};
+export type DiscussionCategory = {
+  slug: string;
+  name: string;
+  description: string;
+  postCount: number;
+  dataOrigin: 'SYSTEM' | 'DEVELOPMENT_FIXTURE';
+};
+export type DiscussionTag = {
+  slug: string;
+  name: string;
+  postCount: number;
+  dataOrigin: 'SYSTEM' | 'DEVELOPMENT_FIXTURE';
 };
 export type DiscussionAuthor = {
   username: string;
@@ -738,6 +759,23 @@ export type DiscussionComment = {
   author?: DiscussionAuthor;
   replyTarget?: DiscussionAuthor;
   capabilities?: DiscussionViewerCapabilities;
+  dataOrigin?: 'USER' | 'DEVELOPMENT_FIXTURE';
+  post?: { publicId: string; title: string };
+};
+export type DiscussionBlogOverview = {
+  featured: DiscussionPost | null;
+  hotPosts: DiscussionPost[];
+  recommendedPosts: DiscussionPost[];
+  categories: DiscussionCategory[];
+  tags: DiscussionTag[];
+  authors: Array<{ author: DiscussionAuthor; postCount: number }>;
+  stats: {
+    todayPosts: number;
+    weekPosts: number;
+    totalAuthors: number;
+    totalPosts: number;
+  };
+  recentComments: DiscussionComment[];
 };
 const defaultAuthMethods: AuthMethods = {
   registration: { email: false, phone: false },
@@ -764,10 +802,17 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
-    discussionPost: (id: string) =>
+    discussionBlogOverview: () =>
+      request<DiscussionBlogOverview>(
+        baseUrl,
+        '/api/discussion/blog/overview',
+        undefined,
+        fetcher,
+      ),
+    discussionPost: (id: string, trackView = true) =>
       request<DiscussionPost>(
         baseUrl,
-        `/api/discussion/posts/${encodeURIComponent(id)}`,
+        `/api/discussion/posts/${encodeURIComponent(id)}${trackView ? '' : '?trackView=false'}`,
         undefined,
         fetcher,
       ),
@@ -776,7 +821,11 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       summary?: string;
       contentMarkdown: string;
       type?: 'ARTICLE' | 'ANNOUNCEMENT';
+      kind?: 'DISCUSSION' | 'SOLUTION';
       status?: 'DRAFT' | 'PUBLISHED';
+      categorySlug?: string;
+      tagSlugs?: string[];
+      coverImageUrl?: string | null;
     }) =>
       request<DiscussionPost>(
         baseUrl,
@@ -787,8 +836,15 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
     updateDiscussionPost: (
       id: string,
       input: Partial<
-        Pick<DiscussionPost, 'title' | 'summary' | 'contentMarkdown' | 'type'>
-      >,
+        Pick<
+          DiscussionPost,
+          'title' | 'summary' | 'contentMarkdown' | 'type' | 'kind'
+        >
+      > & {
+        categorySlug?: string | null;
+        tagSlugs?: string[];
+        coverImageUrl?: string | null;
+      },
     ) =>
       request<DiscussionPost>(
         baseUrl,

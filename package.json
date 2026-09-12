@@ -25,6 +25,7 @@
     "db:rollback": "node scripts/migrate.mjs down",
     "seed:home-development": "node scripts/seed-home-development-fixtures.mjs",
     "seed:problem-library-development": "node scripts/seed-problem-library-development-fixtures.mjs",
+    "seed:blog-development": "node scripts/seed-blog-development-fixtures.mjs",
     "maintenance:cleanup-generated-problems": "node scripts/cleanup-generated-problems.mjs",
     "integration": "vitest run --config vitest.integration.config.ts",
     "ci:integration": "pnpm infra:up && pnpm infra:wait && pnpm db:migrate && pnpm integration",

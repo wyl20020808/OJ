@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 
 const direction = process.argv[2] ?? 'up';
+const requestedMigration = process.argv[3];
 const client = new pg.Client({
   connectionString:
     process.env.DATABASE_URL ??
@@ -46,8 +47,12 @@ try {
     '0030_discussion_announcement_capability',
     '0031_profile_media_save_v2',
     '0032_submission_integration_fixture_cleanup',
+    '0033_blog_full_experience',
   ];
-  const ordered = direction === 'down' ? [...migrations].reverse() : migrations;
+  if (requestedMigration && !migrations.includes(requestedMigration))
+    throw new Error(`Unknown migration: ${requestedMigration}`);
+  const selected = requestedMigration ? [requestedMigration] : migrations;
+  const ordered = direction === 'down' ? [...selected].reverse() : selected;
   for (const name of ordered) {
     const file = `packages/database/migrations/${name}${direction === 'down' ? '.down' : ''}.sql`;
     await client.query(await readFile(file, 'utf8'));

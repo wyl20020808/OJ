@@ -160,9 +160,9 @@ try {
 
   for (const [publicId, title, summary] of announcements) {
     await client.query(
-      `INSERT INTO discussion_posts(public_id,author_id,type,status,title,summary,content_markdown,published_at)
-       VALUES($1,$2,'ANNOUNCEMENT','PUBLISHED',$3,$4,$5,now())
-       ON CONFLICT (public_id) DO UPDATE SET title=EXCLUDED.title,summary=EXCLUDED.summary,content_markdown=EXCLUDED.content_markdown,status='PUBLISHED',published_at=now(),updated_at=now()`,
+      `INSERT INTO discussion_posts(public_id,author_id,type,kind,status,title,summary,content_markdown,published_at)
+       VALUES($1,$2,'ANNOUNCEMENT','ANNOUNCEMENT','PUBLISHED',$3,$4,$5,now())
+       ON CONFLICT (public_id) DO UPDATE SET title=EXCLUDED.title,summary=EXCLUDED.summary,content_markdown=EXCLUDED.content_markdown,type='ANNOUNCEMENT',kind='ANNOUNCEMENT',status='PUBLISHED',published_at=now(),updated_at=now()`,
       [publicId, fixtureOwnerId, title, summary, `# ${title}\n\n${summary}`],
     );
   }

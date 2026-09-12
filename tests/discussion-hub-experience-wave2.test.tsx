@@ -17,6 +17,7 @@ import { DiscussionRenderer } from '../apps/web/src/features/discussion/Discussi
 import type {
   ApiClient,
   AuthenticatedUser,
+  DiscussionBlogOverview,
   DiscussionPost,
 } from '../apps/web/src/services/api.js';
 
@@ -33,6 +34,7 @@ function post(overrides: Partial<DiscussionPost> = {}): DiscussionPost {
     id: 'post-1',
     publicId: 'interval-dp',
     type: 'ARTICLE',
+    kind: 'DISCUSSION',
     status: 'PUBLISHED',
     title: '区间 DP 中最容易写错的三个地方',
     summary: '整理状态设计、枚举顺序和常见边界错误。',
@@ -43,11 +45,28 @@ function post(overrides: Partial<DiscussionPost> = {}): DiscussionPost {
     viewCount: 18,
     likeCount: 4,
     commentCount: 1,
+    category: null,
+    tags: [],
+    coverImageUrl: null,
+    isFeatured: false,
+    isPinned: false,
+    dataOrigin: 'USER',
     author: { username: 'alice', displayName: 'Alice' },
     capabilities: { canEdit: true, canDelete: true, canModerate: false },
     ...overrides,
   };
 }
+
+const emptyOverview: DiscussionBlogOverview = {
+  featured: null,
+  hotPosts: [],
+  recommendedPosts: [],
+  categories: [],
+  tags: [],
+  authors: [],
+  stats: { todayPosts: 0, weekPosts: 0, totalAuthors: 0, totalPosts: 0 },
+  recentComments: [],
+};
 
 afterEach(() => {
   cleanup();
@@ -59,6 +78,7 @@ describe('Blog Hub Reference Experience', () => {
   it('renders the blog masthead, editorial navigation and data-backed article cards', async () => {
     let resolvePosts!: (value: { items: DiscussionPost[] }) => void;
     const api = {
+      discussionBlogOverview: vi.fn().mockResolvedValue(emptyOverview),
       discussionPosts: vi.fn(
         () =>
           new Promise<{ items: DiscussionPost[] }>((resolve) => {
@@ -123,12 +143,15 @@ describe('Blog Hub Reference Experience', () => {
     window.history.pushState({}, '', '/discussion?type=announcement&q=release');
     const navigate = vi.fn();
     const discussionPosts = vi.fn().mockResolvedValue({ items: [] });
-    const api = { discussionPosts } as unknown as ApiClient;
+    const api = {
+      discussionPosts,
+      discussionBlogOverview: vi.fn().mockResolvedValue(emptyOverview),
+    } as unknown as ApiClient;
     render(<DiscussionHome api={api} navigate={navigate} user={null} />);
 
     await waitFor(() =>
       expect(discussionPosts).toHaveBeenCalledWith(
-        'limit=30&type=ANNOUNCEMENT&q=release',
+        'limit=8&kind=ANNOUNCEMENT&q=release',
       ),
     );
     expect(screen.getByRole('link', { name: '公告' })).toHaveAttribute(
@@ -147,13 +170,92 @@ describe('Blog Hub Reference Experience', () => {
     );
   });
 
+  it('renders persisted Blog facets and loads cursor-paginated cards', async () => {
+    const navigate = vi.fn();
+    const featured = post({ id: 'featured', publicId: 'featured' });
+    const first = post({
+      id: 'post-2',
+      publicId: 'metadata-card',
+      title: '带完整元数据的文章',
+      category: {
+        slug: 'technical-sharing',
+        name: '技术分享',
+        description: '工程实践',
+        postCount: 3,
+        dataOrigin: 'DEVELOPMENT_FIXTURE',
+      },
+      tags: [
+        {
+          slug: 'backend',
+          name: 'Backend',
+          postCount: 2,
+          dataOrigin: 'DEVELOPMENT_FIXTURE',
+        },
+      ],
+      coverImageUrl: '/blog-mountain-hero.png',
+      dataOrigin: 'DEVELOPMENT_FIXTURE',
+    });
+    const second = post({
+      id: 'post-3',
+      publicId: 'next-page',
+      title: '下一页文章',
+    });
+    const discussionPosts = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [first], nextCursor: 'cursor-2' })
+      .mockResolvedValueOnce({ items: [second] });
+    const api = {
+      discussionPosts,
+      discussionBlogOverview: vi.fn().mockResolvedValue({
+        ...emptyOverview,
+        featured,
+        categories: [first.category],
+        tags: first.tags,
+        authors: [{ author: first.author!, postCount: 3 }],
+        stats: {
+          todayPosts: 1,
+          weekPosts: 4,
+          totalAuthors: 2,
+          totalPosts: 9,
+        },
+      }),
+    } as unknown as ApiClient;
+
+    const view = render(
+      <DiscussionHome api={api} navigate={navigate} user={user} />,
+    );
+    expect(
+      await screen.findByRole('heading', { name: '带完整元数据的文章' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('DEMO')).toBeInTheDocument();
+    expect(
+      view.container.querySelector('.blog-post-thumb img'),
+    ).toHaveAttribute('src', '/blog-mountain-hero.png');
+    expect(screen.getByRole('link', { name: /技术分享/ })).toHaveAttribute(
+      'href',
+      '/discussion?category=technical-sharing',
+    );
+    expect(screen.getByRole('button', { name: /Backend 2/ })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: '加载更多文章' }));
+    expect(
+      await screen.findByRole('heading', { name: '下一页文章' }),
+    ).toBeInTheDocument();
+    expect(discussionPosts).toHaveBeenLastCalledWith(
+      'limit=8&cursor=cursor-2&kind=DISCUSSION',
+    );
+  });
+
   it('shows content-specific empty state and compact retry state', async () => {
     window.history.pushState({}, '', '/discussion?type=announcement');
     const discussionPosts = vi
       .fn()
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce({ items: [] });
-    const api = { discussionPosts } as unknown as ApiClient;
+    const api = {
+      discussionPosts,
+      discussionBlogOverview: vi.fn().mockResolvedValue(emptyOverview),
+    } as unknown as ApiClient;
     render(<DiscussionHome api={api} navigate={vi.fn()} user={null} />);
 
     expect(
