@@ -1,4 +1,10 @@
-/* Blog-only corrections and data-backed states. Legacy Blog styles remain in app.css. */
+/* Blog-owned layout repairs. Legacy Blog styles remain in app.css until a scoped extraction. */
+.blog-layout {
+  grid-template-columns: 242px minmax(0, 1fr) 360px;
+  width: min(1430px, calc(100% - 54px));
+  padding-top: 0;
+}
+
 .blog-category-list a {
   display: flex;
   align-items: center;
@@ -35,14 +41,35 @@
 }
 
 .blog-post-copy {
-  display: grid;
-  grid-template-rows: auto minmax(36px, 1fr) auto;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.blog-post-card {
+  min-height: 0;
+}
+
+.blog-post-heading h2 {
+  min-width: 0;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.blog-post-copy > p {
+  min-height: 0;
+  margin-top: 6px;
+  margin-bottom: 8px;
 }
 
 .blog-post-copy footer {
-  flex-wrap: wrap;
-  row-gap: 6px;
-  min-height: 27px;
+  min-height: 25px;
+  margin-top: auto;
+  padding: 0;
+  border-top: 0;
+  flex-wrap: nowrap;
+  row-gap: 0;
 }
 
 .blog-post-copy footer > time,
@@ -54,6 +81,7 @@
 .blog-post-counts {
   flex: 0 0 auto;
   justify-content: flex-end;
+  margin-left: auto;
   white-space: nowrap;
 }
 
@@ -63,6 +91,10 @@
 
 .blog-post-thumb {
   position: relative;
+  align-self: center;
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
 }
 
 .blog-post-thumb img {
@@ -149,6 +181,28 @@
   white-space: nowrap;
 }
 
+.blog-panel {
+  padding: 16px 18px;
+}
+
+.blog-panel h2 {
+  font-size: 17px;
+}
+
+.blog-author-board li {
+  min-height: 43px;
+}
+
+.blog-author-board .discussion-author-avatar {
+  width: 38px;
+  height: 38px;
+}
+
+.blog-recent-comments .discussion-author-avatar {
+  width: 28px;
+  height: 28px;
+}
+
 .blog-comment-post {
   grid-column: 1 / -1;
   margin: 1px 0 0 34px;
@@ -166,13 +220,40 @@
   white-space: nowrap;
 }
 
+@media (min-width: 841px) and (max-width: 1280px) {
+  .blog-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+    width: min(1180px, calc(100% - 38px));
+  }
+
+  .blog-rightbar {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 840px) {
+  .blog-layout {
+    grid-template-columns: minmax(0, 1fr);
+    width: min(760px, calc(100% - 24px));
+  }
+}
+
 @media (max-width: 680px) {
   .blog-post-copy footer {
     gap: 6px 9px;
+    margin-top: 4px;
+    flex-wrap: wrap;
   }
 
   .blog-post-counts {
     width: auto;
     margin-left: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .blog-layout {
+    width: calc(100% - 16px);
   }
 }

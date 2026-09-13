@@ -65,7 +65,39 @@ for (const viewport of viewports) {
     );
     expect(layoutFailures).toEqual([]);
 
-    const covers = cards.locator('img.blog-post-thumb');
+    const cardMetrics = await cards.evaluateAll((items) =>
+      items.map((item) => {
+        const card = item.getBoundingClientRect();
+        const footer = item.querySelector('footer')?.getBoundingClientRect();
+        const date = item.querySelector('time');
+        const dateRect = date?.getBoundingClientRect();
+        const cover = item
+          .querySelector('.blog-post-thumb')
+          ?.getBoundingClientRect();
+        return {
+          cardHeight: card.height,
+          footerHeight: footer?.height ?? 0,
+          dateHeight: dateRect?.height ?? 0,
+          dateWhiteSpace: date ? getComputedStyle(date).whiteSpace : '',
+          coverRatio: cover?.height ? cover.width / cover.height : null,
+        };
+      }),
+    );
+    const maxCardHeight = viewport.name === 'mobile' ? 190 : 155;
+    for (const metric of cardMetrics) {
+      expect(metric.cardHeight).toBeLessThanOrEqual(maxCardHeight);
+      expect(metric.footerHeight).toBeLessThanOrEqual(
+        viewport.name === 'mobile' ? 75 : 30,
+      );
+      expect(metric.dateHeight).toBeLessThanOrEqual(20);
+      expect(metric.dateWhiteSpace).toBe('nowrap');
+      if (viewport.name !== 'mobile' && metric.coverRatio !== null) {
+        expect(metric.coverRatio).toBeGreaterThan(1.7);
+        expect(metric.coverRatio).toBeLessThan(1.85);
+      }
+    }
+
+    const covers = cards.locator('.blog-post-thumb img');
     if ((await covers.count()) > 0) {
       await expect
         .poll(async () =>
