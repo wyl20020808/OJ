@@ -297,7 +297,9 @@ describe('Product Access & Evaluation V1', () => {
         submitter: { displayName: 'User u1' },
         languageProfileId: 'cpp20',
         verdict: 'WA',
+        sourceBytes: Buffer.byteLength('third-secret-source'),
       });
+      expect(pageOne.json()).toMatchObject({ total: 3, page: 1 });
       expect(pageOne.body).not.toContain('secret-source');
       const anonymousPage = await app.inject({
         method: 'GET',
@@ -326,6 +328,48 @@ describe('Product Access & Evaluation V1', () => {
           .json()
           .items.map((item: { submissionId: string }) => item.submissionId),
       ).toEqual([first.id]);
+      const searchedPage = await app.inject({
+        method: 'GET',
+        url: '/api/evaluations?problemSearch=P1',
+      });
+      expect(
+        searchedPage
+          .json()
+          .items.map((item: { submissionId: string }) => item.submissionId),
+      ).toEqual([third.id, first.id]);
+      const offsetPage = await app.inject({
+        method: 'GET',
+        url: '/api/evaluations?limit=2&page=2',
+      });
+      expect(
+        offsetPage
+          .json()
+          .items.map((item: { submissionId: string }) => item.submissionId),
+      ).toEqual([first.id]);
+      const failedPage = await app.inject({
+        method: 'GET',
+        url: '/api/evaluations?failed=true',
+      });
+      expect(
+        failedPage
+          .json()
+          .items.map((item: { submissionId: string }) => item.submissionId),
+      ).toEqual([third.id]);
+      const statistics = await app.inject({
+        method: 'GET',
+        url: '/api/evaluations/statistics?submitterId=u1',
+      });
+      expect(statistics.statusCode).toBe(200);
+      expect(statistics.json()).toMatchObject({
+        total: 2,
+        accepted: 1,
+        failed: 1,
+        judging: 0,
+        passRate: 50,
+        today: { submissions: 2, accepted: 1, activeUsers: 1 },
+        verdicts: { AC: 1, WA: 1, CE: 0, RE: 0, TLE: 0, MLE: 0 },
+      });
+      expect(statistics.json().trend).toHaveLength(7);
       expect(
         (
           await app.inject({

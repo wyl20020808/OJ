@@ -225,12 +225,14 @@ export async function registerSubmissionModule(
   app.get('/api/evaluations', async (request, reply) => {
     const query = request.query as Record<string, unknown>;
     const limit = Number(query.limit ?? 20);
+    const page = query.page === undefined ? undefined : Number(query.page);
     const status =
       typeof query.status === 'string' ? query.status.toUpperCase() : undefined;
     const verdict =
       typeof query.verdict === 'string'
         ? query.verdict.toUpperCase()
         : undefined;
+    const failed = query.failed === 'true';
     const allowedStatuses = new Set([
       'QUEUED',
       'RUNNING',
@@ -249,6 +251,7 @@ export async function registerSubmissionModule(
       !Number.isInteger(limit) ||
       limit < 1 ||
       limit > 100 ||
+      (page !== undefined && (!Number.isSafeInteger(page) || page < 1)) ||
       (status && !allowedStatuses.has(status)) ||
       (verdict && !allowedVerdicts.has(verdict))
     )
@@ -257,15 +260,19 @@ export async function registerSubmissionModule(
       const listQuery: GlobalSubmissionListQuery = { limit };
       const cursor = stringFilter(query.cursor);
       const problemId = stringFilter(query.problemId);
+      const problemSearch = stringFilter(query.problemSearch);
       const submitterId = stringFilter(query.submitterId);
       const languageId = stringFilter(query.language);
       if (cursor) listQuery.cursor = cursor;
+      if (page !== undefined) listQuery.page = page;
       if (problemId) listQuery.problemId = problemId;
+      if (problemSearch) listQuery.problemSearch = problemSearch;
       if (submitterId) listQuery.ownerUserId = submitterId;
       if (languageId) listQuery.languageId = languageId;
       if (status)
         listQuery.evaluationStatus = status as SubmissionEvaluationStatus;
       if (verdict) listQuery.verdict = verdict as SubmissionVerdict;
+      if (failed) listQuery.failed = true;
       const result = await service.listGlobal(listQuery, await auth(request));
       const items = await Promise.all(
         result.items.map(async (submission) => {
@@ -304,10 +311,16 @@ export async function registerSubmissionModule(
             ...(evaluation?.detail?.peakMemoryBytes !== undefined
               ? { peakMemoryBytes: evaluation.detail.peakMemoryBytes }
               : {}),
+            sourceBytes: Buffer.byteLength(submission.source, 'utf8'),
           } satisfies GlobalEvaluationListItem;
         }),
       );
-      return reply.send({ items, nextCursor: result.nextCursor ?? null });
+      return reply.send({
+        items,
+        nextCursor: result.nextCursor ?? null,
+        total: result.total,
+        page: page ?? 1,
+      });
     } catch (e) {
       if (e instanceof Error && e.message === 'FORBIDDEN')
         return error(
@@ -319,6 +332,28 @@ export async function registerSubmissionModule(
         );
       if (e instanceof Error && e.message === 'VALIDATION_ERROR')
         return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid query');
+      throw e;
+    }
+  });
+  app.get('/api/evaluations/statistics', async (request, reply) => {
+    const query = request.query as Record<string, unknown>;
+    const submitterId =
+      typeof query.submitterId === 'string' && query.submitterId.trim()
+        ? query.submitterId.trim()
+        : undefined;
+    try {
+      return reply.send(
+        await service.statistics(submitterId, await auth(request)),
+      );
+    } catch (e) {
+      if (e instanceof Error && e.message === 'FORBIDDEN')
+        return error(
+          reply,
+          request,
+          403,
+          'FORBIDDEN',
+          'Evaluation statistics are forbidden',
+        );
       throw e;
     }
   });

@@ -3,6 +3,7 @@ import type {
   Submission,
   SubmissionCreateInput,
   GlobalSubmissionListQuery,
+  EvaluationStatistics,
   SubmissionListQuery,
   SubmissionEvaluation,
   SubmissionEvaluationDetail,
@@ -35,7 +36,8 @@ export interface SubmissionRepository {
   ): Promise<{ items: Submission[]; nextCursor?: string }>;
   listGlobal(
     query: GlobalSubmissionListQuery,
-  ): Promise<{ items: Submission[]; nextCursor?: string }>;
+  ): Promise<{ items: Submission[]; nextCursor?: string; total: number }>;
+  statistics(ownerUserId?: string): Promise<EvaluationStatistics>;
   getEvaluation?(
     submissionId: string,
   ): Promise<SubmissionEvaluation | undefined>;
@@ -305,10 +307,17 @@ export class InMemorySubmissionRepository implements SubmissionRepository {
         return (
           (!query.ownerUserId || row.ownerUserId === query.ownerUserId) &&
           (!query.problemId || row.problemId === query.problemId) &&
+          (!query.problemSearch ||
+            row.problemId
+              .toLocaleLowerCase()
+              .includes(query.problemSearch.toLocaleLowerCase())) &&
           (!query.languageId || row.languageId === query.languageId) &&
           (!query.evaluationStatus ||
             evaluation?.status === query.evaluationStatus) &&
           (!query.verdict || evaluation?.verdict === query.verdict) &&
+          (!query.failed ||
+            (evaluation?.verdict !== undefined &&
+              evaluation.verdict !== 'AC')) &&
           (!cursor ||
             row.createdAt < cursor.createdAt ||
             (row.createdAt === cursor.createdAt && row.id < cursor.id))
@@ -318,13 +327,130 @@ export class InMemorySubmissionRepository implements SubmissionRepository {
         (a, b) =>
           b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
       );
-    const page = rows.slice(0, query.limit + 1);
+    const offset = query.page ? (query.page - 1) * query.limit : 0;
+    const page = rows.slice(offset, offset + query.limit + 1);
     const items = page.slice(0, query.limit).map((row) => ({ ...row }));
     return {
       items,
+      total: rows.length,
       ...(page.length > query.limit && items.length
         ? { nextCursor: encodeGlobalCursor(items.at(-1)!) }
         : {}),
+    };
+  }
+
+  async statistics(ownerUserId?: string): Promise<EvaluationStatistics> {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const dayKey = (date: Date) => date.toISOString().slice(0, 10);
+    const start = new Date(today);
+    start.setUTCDate(start.getUTCDate() - 6);
+    const rows = [...this.rows.values()].filter(
+      (row) => !ownerUserId || row.ownerUserId === ownerUserId,
+    );
+    const verdicts: EvaluationStatistics['verdicts'] = {
+      AC: 0,
+      WA: 0,
+      CE: 0,
+      RE: 0,
+      TLE: 0,
+      MLE: 0,
+    };
+    const judgingStatuses = new Set([
+      'QUEUED',
+      'RUNNING',
+      'REJUDGE_PENDING',
+      'REJUDGING',
+    ]);
+    let judging = 0;
+    for (const row of rows) {
+      const evaluation = this.evaluations
+        .get(row.id)
+        ?.find((item) => item.current);
+      if (evaluation?.verdict) verdicts[evaluation.verdict] += 1;
+      if (evaluation && judgingStatuses.has(evaluation.status)) judging += 1;
+    }
+    const trend = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(start);
+      date.setUTCDate(start.getUTCDate() + index);
+      const key = dayKey(date);
+      const dayRows = rows.filter((row) => row.createdAt.slice(0, 10) === key);
+      const accepted = dayRows.filter(
+        (row) =>
+          this.evaluations.get(row.id)?.find((item) => item.current)
+            ?.verdict === 'AC',
+      ).length;
+      const failed = dayRows.filter((row) => {
+        const verdict = this.evaluations
+          .get(row.id)
+          ?.find((item) => item.current)?.verdict;
+        return verdict !== undefined && verdict !== 'AC';
+      }).length;
+      return { date: key, total: dayRows.length, accepted, failed };
+    });
+    const accepted = verdicts.AC;
+    const failed =
+      verdicts.WA + verdicts.CE + verdicts.RE + verdicts.TLE + verdicts.MLE;
+    const todayRows = rows.filter(
+      (row) => row.createdAt.slice(0, 10) === dayKey(today),
+    );
+    const yesterday = new Date(today);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const yesterdayRows = rows.filter(
+      (row) => row.createdAt.slice(0, 10) === dayKey(yesterday),
+    );
+    const dayAccepted = (dayRows: Submission[]) =>
+      dayRows.filter(
+        (row) =>
+          this.evaluations.get(row.id)?.find((item) => item.current)
+            ?.verdict === 'AC',
+      ).length;
+    const activeUsers = (dayRows: Submission[]) =>
+      new Set(dayRows.map((row) => row.ownerUserId)).size;
+    const delta = (current: number, previous: number) =>
+      previous > 0 ? ((current - previous) / previous) * 100 : undefined;
+    const todayAccepted = dayAccepted(todayRows);
+    return {
+      total: rows.length,
+      accepted,
+      failed,
+      judging,
+      passRate: rows.length ? (accepted / rows.length) * 100 : 0,
+      today: {
+        submissions: todayRows.length,
+        accepted: todayAccepted,
+        activeUsers: activeUsers(todayRows),
+        passRate: todayRows.length
+          ? (todayAccepted / todayRows.length) * 100
+          : 0,
+        ...(delta(todayRows.length, yesterdayRows.length) !== undefined
+          ? {
+              submissionDeltaPercent: delta(
+                todayRows.length,
+                yesterdayRows.length,
+              ),
+            }
+          : {}),
+        ...(delta(todayAccepted, dayAccepted(yesterdayRows)) !== undefined
+          ? {
+              acceptedDeltaPercent: delta(
+                todayAccepted,
+                dayAccepted(yesterdayRows),
+              ),
+            }
+          : {}),
+        ...(delta(activeUsers(todayRows), activeUsers(yesterdayRows)) !==
+        undefined
+          ? {
+              activeUserDeltaPercent: delta(
+                activeUsers(todayRows),
+                activeUsers(yesterdayRows),
+              ),
+            }
+          : {}),
+      },
+      verdicts,
+      trend,
     };
   }
 }
@@ -413,6 +539,12 @@ export class PostgresSubmissionRepository implements SubmissionRepository {
       params.push(query.problemId);
       clauses.push(`s.problem_id=$${params.length}`);
     }
+    if (query.problemSearch) {
+      params.push(`%${query.problemSearch}%`);
+      clauses.push(
+        `(s.problem_id ILIKE $${params.length} OR p.slug ILIKE $${params.length} OR p.title ILIKE $${params.length} OR ('P'||lpad(p.public_number::text,4,'0')) ILIKE $${params.length})`,
+      );
+    }
     if (query.languageId) {
       params.push(query.languageId);
       clauses.push(`s.language_id=$${params.length}`);
@@ -425,6 +557,9 @@ export class PostgresSubmissionRepository implements SubmissionRepository {
       params.push(query.verdict);
       clauses.push(`e.verdict=$${params.length}`);
     }
+    if (query.failed) clauses.push("e.verdict IN ('WA','CE','RE','TLE','MLE')");
+    const filterParams = [...params];
+    const filterWhere = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     if (cursor) {
       params.push(cursor.createdAt, cursor.id);
       clauses.push(
@@ -433,17 +568,152 @@ export class PostgresSubmissionRepository implements SubmissionRepository {
     }
     params.push(query.limit + 1);
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    const result = await this.pool.query(
-      `SELECT s.* FROM submissions s LEFT JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=true ${where} ORDER BY s.created_at DESC,s.id DESC LIMIT $${params.length}`,
-      params,
-    );
+    const limitParameter = params.length;
+    if (query.page) params.push((query.page - 1) * query.limit);
+    const [result, countResult] = await Promise.all([
+      this.pool.query(
+        `SELECT s.* FROM submissions s LEFT JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=true LEFT JOIN problems p ON p.id=s.problem_id ${where} ORDER BY s.created_at DESC,s.id DESC LIMIT $${limitParameter}${query.page ? ` OFFSET $${params.length}` : ''}`,
+        params,
+      ),
+      this.pool.query(
+        `SELECT count(*)::int AS total FROM submissions s LEFT JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=true LEFT JOIN problems p ON p.id=s.problem_id ${filterWhere}`,
+        filterParams,
+      ),
+    ]);
     const page = result.rows.map(mapRow);
     const items = page.slice(0, query.limit);
     return {
       items,
+      total: Number(countResult.rows[0]?.total ?? 0),
       ...(page.length > query.limit && items.length
         ? { nextCursor: encodeGlobalCursor(items.at(-1)!) }
         : {}),
+    };
+  }
+
+  async statistics(ownerUserId?: string): Promise<EvaluationStatistics> {
+    const params = ownerUserId ? [ownerUserId] : [];
+    const where = ownerUserId ? 'WHERE s.owner_user_id=$1' : '';
+    const summaryResult = await this.pool.query(
+      `WITH clock AS (
+           SELECT date_trunc('day',now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai' AS today
+         ), filtered AS (
+           SELECT s.owner_user_id,s.created_at,e.status,e.verdict
+           FROM submissions s
+           LEFT JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=true
+           ${where}
+         )
+         SELECT
+           count(*)::int AS total,
+           count(*) FILTER (WHERE verdict='AC')::int AS accepted,
+           count(*) FILTER (WHERE verdict IN ('WA','CE','RE','TLE','MLE'))::int AS failed,
+           count(*) FILTER (WHERE status IN ('QUEUED','RUNNING','REJUDGE_PENDING','REJUDGING'))::int AS judging,
+           count(*) FILTER (WHERE created_at>=clock.today)::int AS today_submissions,
+           count(*) FILTER (WHERE created_at>=clock.today AND verdict='AC')::int AS today_accepted,
+           count(DISTINCT owner_user_id) FILTER (WHERE created_at>=clock.today)::int AS today_active_users,
+           count(*) FILTER (WHERE created_at>=clock.today-interval '1 day' AND created_at<clock.today)::int AS yesterday_submissions,
+           count(*) FILTER (WHERE created_at>=clock.today-interval '1 day' AND created_at<clock.today AND verdict='AC')::int AS yesterday_accepted,
+           count(DISTINCT owner_user_id) FILTER (WHERE created_at>=clock.today-interval '1 day' AND created_at<clock.today)::int AS yesterday_active_users
+         FROM filtered CROSS JOIN clock
+         GROUP BY clock.today`,
+      params,
+    );
+    const verdictResult = await this.pool.query(
+      `SELECT e.verdict,count(*)::int AS count
+         FROM submissions s
+         JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=true
+         ${where}${where ? ' AND' : ' WHERE'} e.verdict IN ('AC','WA','CE','RE','TLE','MLE')
+         GROUP BY e.verdict`,
+      params,
+    );
+    const trendResult = await this.pool.query(
+      `WITH clock AS (
+           SELECT (now() AT TIME ZONE 'Asia/Shanghai')::date AS today
+         ), days AS (
+           SELECT generate_series(clock.today-6,clock.today,'1 day')::date AS day FROM clock
+         ), filtered AS (
+           SELECT (s.created_at AT TIME ZONE 'Asia/Shanghai')::date AS local_day,e.verdict
+           FROM submissions s
+           LEFT JOIN submission_evaluations e ON e.submission_id=s.id AND e.current=true
+           ${where}
+         )
+         SELECT days.day::text AS date,
+           count(filtered.local_day)::int AS total,
+           count(*) FILTER (WHERE filtered.verdict='AC')::int AS accepted,
+           count(*) FILTER (WHERE filtered.verdict IN ('WA','CE','RE','TLE','MLE'))::int AS failed
+         FROM days
+         LEFT JOIN filtered ON filtered.local_day=days.day
+         GROUP BY days.day ORDER BY days.day`,
+      params,
+    );
+    const row = summaryResult.rows[0] ?? {};
+    const value = (key: string) => Number(row[key] ?? 0);
+    const verdicts: EvaluationStatistics['verdicts'] = {
+      AC: 0,
+      WA: 0,
+      CE: 0,
+      RE: 0,
+      TLE: 0,
+      MLE: 0,
+    };
+    for (const item of verdictResult.rows) {
+      const verdict = String(item.verdict) as keyof typeof verdicts;
+      if (verdict in verdicts) verdicts[verdict] = Number(item.count ?? 0);
+    }
+    const delta = (current: number, previous: number) =>
+      previous > 0 ? ((current - previous) / previous) * 100 : undefined;
+    const total = value('total');
+    const accepted = value('accepted');
+    const todaySubmissions = value('today_submissions');
+    const todayAccepted = value('today_accepted');
+    const todayActiveUsers = value('today_active_users');
+    return {
+      total,
+      accepted,
+      failed: value('failed'),
+      judging: value('judging'),
+      passRate: total ? (accepted / total) * 100 : 0,
+      today: {
+        submissions: todaySubmissions,
+        accepted: todayAccepted,
+        activeUsers: todayActiveUsers,
+        passRate: todaySubmissions
+          ? (todayAccepted / todaySubmissions) * 100
+          : 0,
+        ...(delta(todaySubmissions, value('yesterday_submissions')) !==
+        undefined
+          ? {
+              submissionDeltaPercent: delta(
+                todaySubmissions,
+                value('yesterday_submissions'),
+              ),
+            }
+          : {}),
+        ...(delta(todayAccepted, value('yesterday_accepted')) !== undefined
+          ? {
+              acceptedDeltaPercent: delta(
+                todayAccepted,
+                value('yesterday_accepted'),
+              ),
+            }
+          : {}),
+        ...(delta(todayActiveUsers, value('yesterday_active_users')) !==
+        undefined
+          ? {
+              activeUserDeltaPercent: delta(
+                todayActiveUsers,
+                value('yesterday_active_users'),
+              ),
+            }
+          : {}),
+      },
+      verdicts,
+      trend: trendResult.rows.map((item) => ({
+        date: String(item.date),
+        total: Number(item.total ?? 0),
+        accepted: Number(item.accepted ?? 0),
+        failed: Number(item.failed ?? 0),
+      })),
     };
   }
   async getEvaluation(submissionId: string) {

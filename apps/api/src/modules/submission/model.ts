@@ -148,11 +148,14 @@ export type SubmissionListQuery = {
 export type GlobalSubmissionListQuery = {
   limit: number;
   cursor?: string;
+  page?: number;
   ownerUserId?: string;
   problemId?: string;
+  problemSearch?: string;
   languageId?: string;
   evaluationStatus?: SubmissionEvaluationStatus;
   verdict?: SubmissionVerdict;
+  failed?: boolean;
 };
 export type GlobalEvaluationListItem = {
   submissionId: string;
@@ -166,6 +169,33 @@ export type GlobalEvaluationListItem = {
   completedAt?: string;
   totalTimeMs?: number;
   peakMemoryBytes?: number;
+  sourceBytes: number;
+};
+
+export type EvaluationTrendPoint = {
+  date: string;
+  total: number;
+  accepted: number;
+  failed: number;
+};
+
+export type EvaluationStatistics = {
+  total: number;
+  accepted: number;
+  failed: number;
+  judging: number;
+  passRate: number;
+  today: {
+    submissions: number;
+    accepted: number;
+    activeUsers: number;
+    passRate: number;
+    submissionDeltaPercent?: number | undefined;
+    acceptedDeltaPercent?: number | undefined;
+    activeUserDeltaPercent?: number | undefined;
+  };
+  verdicts: Record<SubmissionVerdict, number>;
+  trend: EvaluationTrendPoint[];
 };
 
 export type AuthContext = {

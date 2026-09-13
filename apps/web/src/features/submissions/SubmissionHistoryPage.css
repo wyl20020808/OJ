@@ -147,7 +147,7 @@
 .submission-hero__content {
   position: relative;
   z-index: 1;
-  width: min(1410px, calc(100% - 48px));
+  width: min(1432px, calc(100% - 40px));
   height: 100%;
   margin: 0 auto;
   padding: 32px 42px;
@@ -200,7 +200,7 @@
 }
 
 .submission-page__content {
-  width: min(1410px, calc(100% - 48px));
+  width: min(1432px, calc(100% - 40px));
   margin: 0 auto;
 }
 
@@ -210,6 +210,7 @@
   gap: 34px;
   align-items: stretch;
   border-bottom: 1px solid var(--submission-line);
+  padding-left: 36px;
 }
 
 .submission-section-tabs button {
@@ -258,7 +259,7 @@
   gap: 10px;
 }
 
-.submission-summary-card {
+.submission-history-summary-card {
   position: relative;
   min-width: 0;
   min-height: 112px;
@@ -274,7 +275,7 @@
   box-shadow: 0 4px 14px rgba(32, 77, 149, 0.025);
 }
 
-.submission-summary-card__icon,
+.submission-history-summary-card__icon,
 .submission-side-card h2 > span,
 .submission-mini-metric > span {
   display: grid;
@@ -282,14 +283,14 @@
   border-radius: 50%;
 }
 
-.submission-summary-card__icon {
+.submission-history-summary-card__icon {
   width: 42px;
   height: 42px;
   background: #eaf3ff;
   color: var(--submission-blue);
 }
 
-.submission-summary-card__icon svg,
+.submission-history-summary-card__icon svg,
 .submission-side-card h2 svg,
 .submission-mini-metric svg {
   width: 22px;
@@ -301,25 +302,28 @@
   stroke-linejoin: round;
 }
 
-.submission-summary-card.tone-green .submission-summary-card__icon {
+.submission-history-summary-card.tone-green
+  .submission-history-summary-card__icon {
   background: #e2f8ef;
   color: #16b777;
 }
-.submission-summary-card.tone-red .submission-summary-card__icon {
+.submission-history-summary-card.tone-red
+  .submission-history-summary-card__icon {
   background: #ffe9ed;
   color: #ff4354;
 }
-.submission-summary-card.tone-purple .submission-summary-card__icon {
+.submission-history-summary-card.tone-purple
+  .submission-history-summary-card__icon {
   background: #ecf0ff;
   color: #6c55f7;
 }
 
-.submission-summary-card > div {
+.submission-history-summary-card > div {
   min-width: 0;
 }
 
-.submission-summary-card__label,
-.submission-summary-card small {
+.submission-history-summary-card__label,
+.submission-history-summary-card small {
   display: block;
   overflow: hidden;
   color: #46639f;
@@ -329,7 +333,7 @@
   white-space: nowrap;
 }
 
-.submission-summary-card strong {
+.submission-history-summary-card strong {
   display: block;
   margin: -1px 0;
   color: #051d66;
@@ -338,7 +342,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.submission-summary-card small {
+.submission-history-summary-card small {
   color: #7589b7;
   font-size: 11px;
   font-weight: 400;
@@ -356,6 +360,11 @@
   fill: none;
   stroke: currentColor;
   stroke-width: 1.5;
+}
+
+.submission-sparkline polygon {
+  fill: currentColor;
+  opacity: 0.08;
 }
 
 .submission-sparkline.tone-blue {
@@ -390,7 +399,8 @@
 }
 
 .submission-filter-group button,
-.submission-side-card__heading button {
+.submission-side-card__heading button,
+.submission-more-filter summary {
   min-height: 35px;
   padding: 7px 15px;
   border: 0;
@@ -410,7 +420,8 @@
 }
 
 .submission-filter-group button svg,
-.submission-side-card__heading button svg {
+.submission-side-card__heading button svg,
+.submission-more-filter summary svg {
   display: inline-block;
   width: 14px;
   height: 14px;
@@ -418,6 +429,49 @@
   stroke: currentColor;
   stroke-width: 2;
   vertical-align: -3px;
+}
+
+.submission-more-filter {
+  position: relative;
+  z-index: 4;
+}
+
+.submission-more-filter summary {
+  min-height: 35px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.submission-more-filter summary::-webkit-details-marker {
+  display: none;
+}
+
+.submission-more-filter[open] summary {
+  background: #e9f3ff;
+  color: var(--submission-blue);
+}
+
+.submission-more-filter > div {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 162px;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid #dce7f5;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(18, 54, 112, 0.16);
+}
+
+.submission-more-filter > div button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .submission-filter-group button:disabled,
@@ -487,7 +541,7 @@
 
 .submission-table th,
 .submission-table td {
-  height: 42px;
+  height: 38px;
   padding: 7px 12px;
   overflow: hidden;
   border-bottom: 1px solid #e8eef7;
@@ -502,6 +556,39 @@
   color: #153878;
   font-size: 12px;
   font-weight: 700;
+}
+
+.submission-list-card.is-loading .submission-table-wrap {
+  opacity: 0.58;
+}
+
+.submission-table-skeleton {
+  min-height: 422px;
+  padding-top: 41px;
+  background: linear-gradient(#f3f6fa 0 41px, transparent 41px);
+}
+
+.submission-table-skeleton i {
+  height: 38px;
+  display: block;
+  border-bottom: 1px solid #e8eef7;
+  background: linear-gradient(
+    90deg,
+    transparent 0,
+    rgba(232, 239, 248, 0.72) 48%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  animation: submission-skeleton 1.4s ease-in-out infinite;
+}
+
+@keyframes submission-skeleton {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
 }
 
 .submission-table th:nth-child(1) {
@@ -651,6 +738,13 @@
   gap: 5px;
 }
 
+.submission-pagination__ellipsis {
+  min-width: 22px;
+  display: inline-grid;
+  place-items: center;
+  color: #6680b2;
+}
+
 .submission-pagination button {
   min-width: 30px;
   height: 30px;
@@ -688,6 +782,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+}
+
+.submission-page-jump label {
   white-space: nowrap;
 }
 
@@ -748,6 +846,18 @@
   padding: 5px 10px;
   background: #eef5ff;
   color: #277ae7;
+}
+
+.submission-period-pill {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #eef5ff;
+  color: #277ae7;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
 }
 
 .submission-today-grid {
@@ -869,17 +979,27 @@
   display: grid;
   place-content: center;
   justify-items: center;
-  border: 18px solid #e5edf8;
   border-radius: 50%;
+  background: #e5edf8;
 }
 
-.submission-donut strong {
+.submission-donut__center {
+  width: 92px;
+  height: 92px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.submission-donut__center strong {
   color: #112e70;
   font-size: 25px;
   line-height: 1.15;
 }
 
-.submission-donut span {
+.submission-donut__center small {
   color: #7c8fb5;
   font-size: 11px;
 }
@@ -895,7 +1015,7 @@
 
 .submission-donut-card li {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) 26px 28px;
+  grid-template-columns: 10px minmax(0, 1fr) 46px 36px;
   gap: 5px;
   align-items: center;
 }
@@ -980,6 +1100,22 @@
   stroke-linejoin: round;
 }
 
+.submission-trend-chart circle {
+  fill: currentColor;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.submission-trend-chart g.tone-blue {
+  color: #277feb;
+}
+.submission-trend-chart g.tone-green {
+  color: #18b778;
+}
+.submission-trend-chart g.tone-red {
+  color: #f44052;
+}
+
 .submission-trend-chart polyline.tone-blue {
   color: #277feb;
 }
@@ -1008,14 +1144,14 @@
   .submission-dashboard {
     grid-template-columns: minmax(0, 1fr) 330px;
   }
-  .submission-summary-card {
+  .submission-history-summary-card {
     grid-template-columns: 38px minmax(0, 1fr);
   }
-  .submission-summary-card__icon {
+  .submission-history-summary-card__icon {
     width: 36px;
     height: 36px;
   }
-  .submission-summary-card .submission-sparkline {
+  .submission-history-summary-card .submission-sparkline {
     display: none;
   }
   .submission-toolbar {
@@ -1068,7 +1204,7 @@
   .submission-summary-grid {
     grid-template-columns: 1fr 1fr;
   }
-  .submission-summary-card {
+  .submission-history-summary-card {
     min-height: 98px;
   }
   .submission-filter-group {
@@ -1092,16 +1228,13 @@
 }
 
 @media (max-width: 440px) {
-  .submission-summary-grid {
+  .submission-today-grid {
     grid-template-columns: 1fr;
   }
-  .submission-summary-card {
-    grid-template-columns: 40px minmax(0, 1fr) 58px;
-  }
-  .submission-summary-card .submission-sparkline {
-    display: block;
-  }
-  .submission-today-grid {
+}
+
+@media (max-width: 340px) {
+  .submission-summary-grid {
     grid-template-columns: 1fr;
   }
 }
