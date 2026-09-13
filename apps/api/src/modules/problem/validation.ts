@@ -1,6 +1,7 @@
 import {
   ProblemValidationError,
   problemDifficulties,
+  problemProviders,
   type ProblemCreateInput,
   type ProblemSample,
   type ProblemUpdateInput,
@@ -170,6 +171,9 @@ export function validateCreate(input: unknown): ProblemCreateInput {
     ].includes(String(sourceType))
   )
     throw new ProblemValidationError({ sourceType: 'invalid value' });
+  const provider = value.provider ?? 'OTHER';
+  if (!problemProviders.includes(provider as never))
+    throw new ProblemValidationError({ provider: 'invalid value' });
   const parsedTagIds = tagIds(value.tagIds);
   const result: ProblemCreateInput = {
     slug,
@@ -198,6 +202,13 @@ export function validateCreate(input: unknown): ProblemCreateInput {
     tags: tags(value.tags),
     ...(parsedTagIds === undefined ? {} : { tagIds: parsedTagIds }),
     sourceType: sourceType as NonNullable<ProblemCreateInput['sourceType']>,
+    provider: provider as NonNullable<ProblemCreateInput['provider']>,
+    providerProblemId:
+      value.providerProblemId === undefined ||
+      value.providerProblemId === null ||
+      value.providerProblemId === ''
+        ? null
+        : text(value.providerProblemId, 'providerProblemId', 64),
     provenance:
       value.provenance && typeof value.provenance === 'object'
         ? (value.provenance as Record<string, unknown>)
@@ -229,6 +240,8 @@ export function validateUpdate(input: unknown): ProblemUpdateInput {
     'testdataVersion',
     'tags',
     'tagIds',
+    'provider',
+    'providerProblemId',
   ];
   const unknown = Object.keys(source).find((key) => !allowed.includes(key));
   if (unknown)
@@ -272,6 +285,16 @@ export function validateUpdate(input: unknown): ProblemUpdateInput {
     result.examples = examples(normalized);
   }
   if ('difficulty' in source) result.difficulty = difficulty(source.difficulty);
+  if ('provider' in source) {
+    if (!problemProviders.includes(source.provider as never))
+      throw new ProblemValidationError({ provider: 'invalid value' });
+    result.provider = source.provider;
+  }
+  if ('providerProblemId' in source)
+    result.providerProblemId =
+      source.providerProblemId === null || source.providerProblemId === ''
+        ? null
+        : text(source.providerProblemId, 'providerProblemId', 64);
   if ('tags' in source) result.tags = tags(source.tags);
   if ('tagIds' in source) result.tagIds = tagIds(source.tagIds);
   if (

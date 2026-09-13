@@ -8,6 +8,16 @@ export const problemDifficulties = [
   '专家',
 ] as const;
 export type ProblemDifficulty = (typeof problemDifficulties)[number];
+export const problemProviders = [
+  'LUOGU',
+  'CODEFORCES',
+  'ATCODER',
+  'LEETCODE',
+  'ACWING',
+  'SPOJ',
+  'OTHER',
+] as const;
+export type ProblemProvider = (typeof problemProviders)[number];
 export const problemSourceTypes = [
   'CREATOR',
   'EXTERNAL',
@@ -69,6 +79,8 @@ export type Problem = {
   authorId: string | null;
   source?: string | null;
   sourceType?: ProblemSourceType;
+  provider?: ProblemProvider;
+  providerProblemId?: string | null;
   statistics?: ProblemStatistics;
   tags: string[];
   tagDetails?: ProblemTag[];

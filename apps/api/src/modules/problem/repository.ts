@@ -14,6 +14,7 @@ import {
   type ProblemDifficulty,
   type ProblemListOrder,
   type ProblemListSort,
+  type ProblemProvider,
   type ProblemSourceType,
   type ProblemUpdateInput,
 } from './model.js';
@@ -37,6 +38,7 @@ export type ProblemListQuery = {
   difficulty?: ProblemDifficulty;
   tagIds?: number[];
   sourceType?: ProblemSourceType;
+  provider?: ProblemProvider;
   sort?: ProblemListSort;
   order?: ProblemListOrder;
   status?: Problem['status'];
@@ -45,6 +47,7 @@ export type ProblemListQuery = {
 export type ProblemFacets = {
   difficulty: Partial<Record<ProblemDifficulty, number>>;
   sourceType: Partial<Record<ProblemSourceType, number>>;
+  provider: Partial<Record<ProblemProvider, number>>;
   tags: Array<{ id: number; count: number }>;
 };
 export interface ProblemRepository {
@@ -86,6 +89,7 @@ export class InMemoryProblemRepository implements ProblemRepository {
       publicId: '',
       tags: input.tags ?? [],
       tagDetails: (input as Problem).tagDetails ?? [],
+      provider: input.provider ?? 'OTHER',
       createdAt: timestamp,
       updatedAt: timestamp,
     } as Problem;
@@ -140,6 +144,7 @@ export class InMemoryProblemRepository implements ProblemRepository {
         (!query.visibility || p.visibility === query.visibility) &&
         (!query.difficulty || p.difficulty === query.difficulty) &&
         (!query.sourceType || p.sourceType === query.sourceType) &&
+        (!query.provider || p.provider === query.provider) &&
         (!query.tagIds?.length ||
           query.tagIds.some((tagId) =>
             p.tagDetails?.some((tag) => tag.id === tagId),
@@ -195,6 +200,7 @@ export class InMemoryProblemRepository implements ProblemRepository {
   async facets(query: ProblemListQuery): Promise<ProblemFacets> {
     const difficulty: ProblemFacets['difficulty'] = {};
     const sourceType: ProblemFacets['sourceType'] = {};
+    const provider: ProblemFacets['provider'] = {};
     const tags = new Map<number, number>();
     for (const problem of this.matchingRows(query)) {
       if (problem.difficulty)
@@ -203,12 +209,15 @@ export class InMemoryProblemRepository implements ProblemRepository {
       if (problem.sourceType)
         sourceType[problem.sourceType] =
           (sourceType[problem.sourceType] ?? 0) + 1;
+      if (problem.provider)
+        provider[problem.provider] = (provider[problem.provider] ?? 0) + 1;
       for (const tag of problem.tagDetails ?? [])
         tags.set(tag.id, (tags.get(tag.id) ?? 0) + 1);
     }
     return {
       difficulty,
       sourceType,
+      provider,
       tags: [...tags.entries()]
         .map(([id, count]) => ({ id, count }))
         .sort((left, right) => right.count - left.count || left.id - right.id),
@@ -317,7 +326,7 @@ export class PostgresProblemRepository implements ProblemRepository {
     return this.transaction(async (executor) => {
       const id = input.id ?? randomUUID();
       const result = await executor.query(
-        'INSERT INTO problems (id, slug, title, background, statement, input_description, output_description, examples, constraints, notes, time_limit_ms, memory_limit_bytes, visibility, difficulty, status, testdata_version, author_id, source_type, provenance) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *',
+        'INSERT INTO problems (id, slug, title, background, statement, input_description, output_description, examples, constraints, notes, time_limit_ms, memory_limit_bytes, visibility, difficulty, status, testdata_version, author_id, source_type, provider, provider_problem_id, provenance) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *',
         [
           id,
           input.slug,
@@ -337,6 +346,8 @@ export class PostgresProblemRepository implements ProblemRepository {
           input.testdataVersion,
           input.authorId,
           input.sourceType ?? 'CREATOR',
+          input.provider ?? 'OTHER',
+          input.providerProblemId ?? null,
           input.provenance ? JSON.stringify(input.provenance) : null,
         ],
       );
@@ -351,7 +362,7 @@ export class PostgresProblemRepository implements ProblemRepository {
       problem.tags = problem.tagDetails.map((tag) => tag.name);
       const revisionId = randomUUID();
       await executor.query(
-        'INSERT INTO problem_revisions (id,problem_id,public_number,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)',
+        'INSERT INTO problem_revisions (id,problem_id,public_number,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by,provider,provider_problem_id) VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)',
         [
           revisionId,
           problem.id,
@@ -373,6 +384,8 @@ export class PostgresProblemRepository implements ProblemRepository {
           problem.testdataVersion,
           problem.authorId,
           problem.authorId ?? 'system',
+          problem.provider ?? 'OTHER',
+          problem.providerProblemId ?? null,
         ],
       );
       await executor.query(
@@ -454,7 +467,7 @@ export class PostgresProblemRepository implements ProblemRepository {
     if (query.search) {
       params.push(`%${query.search}%`);
       clauses.push(
-        `(p.slug ILIKE $${params.length} OR p.title ILIKE $${params.length} OR p.statement ILIKE $${params.length})`,
+        `(p.slug ILIKE $${params.length} OR p.title ILIKE $${params.length} OR p.statement ILIKE $${params.length} OR p.provider_problem_id ILIKE $${params.length})`,
       );
     }
     if (query.difficulty) {
@@ -464,6 +477,10 @@ export class PostgresProblemRepository implements ProblemRepository {
     if (query.sourceType) {
       params.push(query.sourceType);
       clauses.push(`p.source_type = $${params.length}`);
+    }
+    if (query.provider) {
+      params.push(query.provider);
+      clauses.push(`p.provider = $${params.length}`);
     }
     if (query.tagIds?.length) {
       params.push(query.tagIds);
@@ -510,13 +527,17 @@ export class PostgresProblemRepository implements ProblemRepository {
   async facets(query: ProblemListQuery): Promise<ProblemFacets> {
     const { where, params } = this.listWhere(query);
     const scoped = (condition: string) => `${where} AND ${condition}`;
-    const [difficulty, sourceType, tags] = await Promise.all([
+    const [difficulty, sourceType, provider, tags] = await Promise.all([
       this.pool.query(
         `SELECT p.difficulty, count(*)::int count FROM problems p ${scoped('p.difficulty IS NOT NULL')} GROUP BY p.difficulty`,
         params,
       ),
       this.pool.query(
         `SELECT p.source_type, count(*)::int count FROM problems p ${scoped('p.source_type IS NOT NULL')} GROUP BY p.source_type`,
+        params,
+      ),
+      this.pool.query(
+        `SELECT p.provider, count(*)::int count FROM problems p ${scoped('p.provider IS NOT NULL')} GROUP BY p.provider`,
         params,
       ),
       this.pool.query(
@@ -537,6 +558,9 @@ export class PostgresProblemRepository implements ProblemRepository {
           Number(row.count),
         ]),
       ) as ProblemFacets['sourceType'],
+      provider: Object.fromEntries(
+        provider.rows.map((row) => [String(row.provider), Number(row.count)]),
+      ) as ProblemFacets['provider'],
       tags: tags.rows.map((row) => ({
         id: Number(row.id),
         count: Number(row.count),
@@ -630,7 +654,7 @@ export class PostgresProblemRepository implements ProblemRepository {
     const revs = await this.revisions(key);
     const revisionId = randomUUID();
     await this.pool.query(
-      'INSERT INTO problem_revisions (id,problem_id,public_number,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)',
+      'INSERT INTO problem_revisions (id,problem_id,public_number,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by,provider,provider_problem_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)',
       [
         revisionId,
         row.id,
@@ -653,6 +677,8 @@ export class PostgresProblemRepository implements ProblemRepository {
         next.testdataVersion,
         next.authorId,
         createdBy,
+        next.provider ?? 'OTHER',
+        next.providerProblemId ?? null,
       ],
     );
     await this.pool.query(
@@ -762,6 +788,11 @@ function mapRow(row: Record<string, unknown>): Problem {
     sourceType: String(row.source_type ?? 'CREATOR') as NonNullable<
       Problem['sourceType']
     >,
+    provider: String(row.provider ?? 'OTHER') as NonNullable<
+      Problem['provider']
+    >,
+    providerProblemId:
+      row.provider_problem_id == null ? null : String(row.provider_problem_id),
     statistics: {
       submissionCount: Number(row.submission_count ?? 0),
       acceptedCount: Number(row.accepted_count ?? 0),

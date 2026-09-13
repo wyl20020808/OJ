@@ -115,6 +115,7 @@ export function TagSelector({
         <button
           type="button"
           className="tag-selector-trigger"
+          aria-label="选择标签"
           aria-expanded={open}
           aria-controls={popoverId}
           onMouseEnter={show}

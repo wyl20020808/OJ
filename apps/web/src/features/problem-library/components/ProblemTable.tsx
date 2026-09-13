@@ -1,27 +1,26 @@
 import type { MouseEvent } from 'react';
 import type { Problem } from '../../../services/api.js';
+import {
+  problemDifficultyLabel,
+  problemDisplayId,
+  problemProviderLabel,
+} from '../problemLibrarySemantics.js';
 import { ProblemLibraryIcon as Icon } from './ProblemLibraryIcon.js';
-
-const sourceLabels = {
-  CREATOR: '平台创建',
-  EXTERNAL: '外部题源',
-  IMPORT: '导入题目',
-  TEST_FIXTURE: '测试数据',
-  API_AUTOMATION: 'API 自动创建',
-} as const;
 
 export function ProblemTable({
   items,
   loading,
+  viewMode,
   navigate,
 }: {
   items: Problem[];
   loading: boolean;
+  viewMode: 'list' | 'grid';
   navigate: (path: string) => void;
 }) {
   return (
     <div
-      className={`problem-table problem-list-modern${loading ? ' is-loading' : ''}`}
+      className={`problem-table problem-list-modern is-${viewMode}${loading ? ' is-loading' : ''}`}
       role="list"
       aria-label="题目列表"
     >
@@ -37,6 +36,7 @@ export function ProblemTable({
         <span>操作</span>
       </div>
       {items.map((problem) => {
+        const displayId = problemDisplayId(problem);
         const tags =
           problem.tagDetails?.map((item) => item.name) ?? problem.tags ?? [];
         const statistics = problem.statistics ?? {
@@ -52,22 +52,20 @@ export function ProblemTable({
             <a
               href={path}
               className="problem-row"
-              aria-label={`${problem.publicId ?? '编号不可用'} ${problem.title}`}
+              aria-label={`${displayId} ${problem.title}`}
               onClick={(event: MouseEvent<HTMLAnchorElement>) => {
                 event.preventDefault();
                 navigate(path);
               }}
             >
-              <span className="problem-id">
-                {problem.publicId ?? '编号不可用'}
-              </span>
+              <span className="problem-id">{displayId}</span>
               <span className="problem-title" title={problem.title}>
                 {problem.title}
               </span>
               <span
                 className={`problem-difficulty-chip difficulty-${problem.difficulty ?? 'unknown'}`}
               >
-                {problem.difficulty ?? '未提供'}
+                {problemDifficultyLabel(problem.difficulty)}
               </span>
               <span className="tag-row" aria-label="题目标签">
                 {tags.length ? (
@@ -81,7 +79,7 @@ export function ProblemTable({
                 )}
               </span>
               <span className="problem-source">
-                {problem.sourceType ? sourceLabels[problem.sourceType] : '—'}
+                {problemProviderLabel(problem.provider)}
               </span>
               <span className="problem-rate" title="当前判题结果聚合">
                 {acceptanceRate}
