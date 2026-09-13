@@ -5,19 +5,22 @@ import {
   type AuthenticatedUser,
   type EvaluationFilters,
   type EvaluationListItem,
-  type ProfileActivity,
-  type ProfileOverview,
+  type EvaluationStatistics,
+  type EvaluationTrendPoint,
 } from '../../services/api.js';
 import './SubmissionHistoryPage.css';
 
 type SubmissionScope = 'all' | 'mine';
 type ResultFilter = 'all' | 'AC' | 'FAILED' | 'RUNNING';
+type Tone = 'blue' | 'green' | 'red' | 'purple';
+
 type SubmissionHistoryPageProps = {
   api: ApiClient;
   user: AuthenticatedUser | null;
   navigate: (path: string) => void;
 };
 
+const failureVerdicts = new Set(['WA', 'CE', 'RE', 'TLE', 'MLE']);
 const verdictLabels: Record<string, string> = {
   AC: '通过',
   WA: '答案错误',
@@ -34,8 +37,14 @@ const verdictLabels: Record<string, string> = {
   NO_VERDICT: '暂无结果',
   INCOMPLETE: '未完成',
 };
-
-const failureVerdicts = new Set(['WA', 'CE', 'RE', 'TLE', 'MLE']);
+const languageLabels: Record<string, string> = {
+  cpp20: 'C++',
+  'cpp20-gcc-13-v1': 'C++',
+  python: 'Python',
+  'python-3.12-v1': 'Python',
+  java: 'Java',
+  'java-21-v1': 'Java',
+};
 
 function Icon({
   name,
@@ -83,6 +92,11 @@ function percent(value: number | undefined) {
   return value === undefined ? '—' : `${value.toFixed(1)}%`;
 }
 
+function delta(value: number | undefined) {
+  if (value === undefined) return '较昨日暂无基线';
+  return `较昨日 ${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+}
+
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '时间未知';
@@ -124,7 +138,7 @@ function Sparkline({
   tone,
 }: {
   values?: number[] | undefined;
-  tone: 'blue' | 'green' | 'red' | 'purple';
+  tone: Tone;
 }) {
   const points = useMemo(() => {
     if (!values?.length) return '';
@@ -143,7 +157,10 @@ function Sparkline({
       aria-hidden="true"
     >
       {points ? (
-        <polyline points={points} />
+        <>
+          <polyline points={points} />
+          <polygon points={`0,28 ${points} 62,28`} />
+        </>
       ) : (
         <path className="submission-sparkline__empty" d="M2 24h60" />
       )}
@@ -163,16 +180,16 @@ function SummaryCard({
   label: string;
   value: string;
   note: string;
-  tone: 'blue' | 'green' | 'red' | 'purple';
+  tone: Tone;
   values?: number[] | undefined;
 }) {
   return (
-    <article className={`submission-summary-card tone-${tone}`}>
-      <span className="submission-summary-card__icon">
+    <article className={`submission-history-summary-card tone-${tone}`}>
+      <span className="submission-history-summary-card__icon">
         <Icon name={icon} />
       </span>
       <div>
-        <span className="submission-summary-card__label">{label}</span>
+        <span className="submission-history-summary-card__label">{label}</span>
         <strong>{value}</strong>
         <small>{note}</small>
       </div>
@@ -183,40 +200,20 @@ function SummaryCard({
 
 function SummaryCards({
   scope,
-  overview,
-  activity,
-  profileLoading,
+  statistics,
+  loading,
 }: {
   scope: SubmissionScope;
-  overview?: ProfileOverview | undefined;
-  activity?: ProfileActivity | undefined;
-  profileLoading: boolean;
+  statistics?: EvaluationStatistics | undefined;
+  loading: boolean;
 }) {
   const mine = scope === 'mine';
-  const total = mine ? overview?.submissionCount : undefined;
-  const accepted = mine ? overview?.acceptedSubmissionCount : undefined;
-  const failed =
-    total === undefined || accepted === undefined
-      ? undefined
-      : Math.max(total - accepted, 0);
-  const rate =
-    total === undefined || accepted === undefined
-      ? undefined
-      : total === 0
-        ? 0
-        : (accepted / total) * 100;
-  const values = activity?.days.slice(-7).map((day) => day.submissionCount);
-  const acceptedValues = activity?.days
-    .slice(-7)
-    .map((day) => day.acceptedCount);
-  const failedValues = activity?.days
-    .slice(-7)
-    .map((day) => Math.max(day.submissionCount - day.acceptedCount, 0));
-  const unavailable = mine
-    ? profileLoading
-      ? '正在读取统计…'
-      : '暂无可用统计'
-    : '等待全站汇总 API';
+  const values = statistics?.trend.map((day) => day.total);
+  const acceptedValues = statistics?.trend.map((day) => day.accepted);
+  const failedValues = statistics?.trend.map((day) => day.failed);
+  const judgingValues = statistics?.trend.map((day) =>
+    Math.max(day.total - day.accepted - day.failed, 0),
+  );
   return (
     <div
       className="submission-summary-grid"
@@ -225,35 +222,48 @@ function SummaryCards({
       <SummaryCard
         icon="file"
         label={mine ? '我的总提交数' : '总提交数'}
-        value={profileLoading && mine ? '…' : number(total)}
-        note={unavailable}
+        value={loading ? '…' : number(statistics?.total)}
+        note={
+          statistics
+            ? delta(statistics.today.submissionDeltaPercent)
+            : '正在汇总'
+        }
         tone="blue"
-        values={mine ? values : undefined}
+        values={values}
       />
       <SummaryCard
         icon="check"
         label={mine ? '我的通过提交' : '通过提交'}
-        value={profileLoading && mine ? '…' : number(accepted)}
-        note={rate === undefined ? unavailable : `通过率 ${percent(rate)}`}
+        value={loading ? '…' : number(statistics?.accepted)}
+        note={
+          statistics ? `通过率 ${percent(statistics.passRate)}` : '正在汇总'
+        }
         tone="green"
-        values={mine ? acceptedValues : undefined}
+        values={acceptedValues}
       />
       <SummaryCard
         icon="close"
         label={mine ? '我的未通过提交' : '未通过提交'}
-        value={profileLoading && mine ? '…' : number(failed)}
+        value={loading ? '…' : number(statistics?.failed)}
         note={
-          rate === undefined ? unavailable : `未通过率 ${percent(100 - rate)}`
+          statistics
+            ? `未通过率 ${percent(statistics.total ? (statistics.failed / statistics.total) * 100 : 0)}`
+            : '正在汇总'
         }
         tone="red"
-        values={mine ? failedValues : undefined}
+        values={failedValues}
       />
       <SummaryCard
         icon="clock"
         label={mine ? '我的评测中' : '评测中'}
-        value="—"
-        note="等待状态汇总 API"
+        value={loading ? '…' : number(statistics?.judging)}
+        note={
+          statistics
+            ? `占比 ${percent(statistics.total ? (statistics.judging / statistics.total) * 100 : 0)}`
+            : '正在汇总'
+        }
         tone="purple"
+        values={judgingValues}
       />
     </div>
   );
@@ -263,12 +273,14 @@ function MiniMetric({
   icon,
   label,
   value,
+  note,
   tone,
   bars = false,
 }: {
   icon: 'file' | 'check' | 'user' | 'percent';
   label: string;
   value: string;
+  note: string;
   tone: 'blue' | 'green' | 'purple';
   bars?: boolean;
 }) {
@@ -280,7 +292,7 @@ function MiniMetric({
       <div>
         <small>{label}</small>
         <strong>{value}</strong>
-        <em>{value === '—' ? '暂无汇总数据' : '来自真实统计'}</em>
+        <em>{note}</em>
       </div>
       {bars && (
         <i aria-hidden="true">
@@ -295,14 +307,29 @@ function MiniMetric({
   );
 }
 
-function DonutCard({ scope }: { scope: SubmissionScope }) {
-  const categories = [
-    ['答案错误', 'red'],
-    ['运行错误', 'orange'],
-    ['超时', 'amber'],
-    ['内存超限', 'purple'],
-    ['编译错误', 'blue'],
-  ];
+const verdictCategories = [
+  { verdict: 'WA', label: '答案错误', color: '#ff3f50', tone: 'red' },
+  { verdict: 'RE', label: '运行错误', color: '#f77b24', tone: 'orange' },
+  { verdict: 'TLE', label: '超时', color: '#f5a91b', tone: 'amber' },
+  { verdict: 'MLE', label: '内存超限', color: '#6f55ef', tone: 'purple' },
+  { verdict: 'CE', label: '编译错误', color: '#247be8', tone: 'blue' },
+] as const;
+
+function DonutCard({
+  scope,
+  statistics,
+}: {
+  scope: SubmissionScope;
+  statistics?: EvaluationStatistics | undefined;
+}) {
+  const total = statistics?.failed ?? 0;
+  let cursor = 0;
+  const segments = verdictCategories.map((category) => {
+    const count = statistics?.verdicts[category.verdict] ?? 0;
+    const start = cursor;
+    cursor += total ? (count / total) * 100 : 0;
+    return `${category.color} ${start}% ${cursor}%`;
+  });
   return (
     <section className="submission-side-card submission-donut-card">
       <h2>
@@ -312,19 +339,34 @@ function DonutCard({ scope }: { scope: SubmissionScope }) {
         {scope === 'mine' ? '我的错误类型分析' : '全站错误类型分析'}
       </h2>
       <div className="submission-donut-card__body">
-        <div className="submission-donut" aria-label="暂无错误类型汇总数据">
-          <strong>—</strong>
-          <span>未通过提交</span>
+        <div
+          className={`submission-donut${total ? ' has-data' : ''}`}
+          style={
+            total
+              ? { background: `conic-gradient(${segments.join(',')})` }
+              : undefined
+          }
+          aria-label={
+            total ? `未通过提交 ${number(total)} 次` : '暂无错误类型汇总数据'
+          }
+        >
+          <span className="submission-donut__center">
+            <strong>{number(total)}</strong>
+            <small>未通过提交</small>
+          </span>
         </div>
         <ul>
-          {categories.map(([label, tone]) => (
-            <li key={label}>
-              <i className={`tone-${tone}`} />
-              <span>{label}</span>
-              <b>—</b>
-              <em>—</em>
-            </li>
-          ))}
+          {verdictCategories.map((category) => {
+            const count = statistics?.verdicts[category.verdict] ?? 0;
+            return (
+              <li key={category.verdict}>
+                <i className={`tone-${category.tone}`} />
+                <span>{category.label}</span>
+                <b>{number(count)}</b>
+                <em>{percent(total ? (count / total) * 100 : 0)}</em>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </section>
@@ -332,20 +374,35 @@ function DonutCard({ scope }: { scope: SubmissionScope }) {
 }
 
 function TrendChart({
-  activity,
   scope,
+  statistics,
 }: {
-  activity?: ProfileActivity | undefined;
   scope: SubmissionScope;
+  statistics?: EvaluationStatistics | undefined;
 }) {
-  const days = activity?.days.slice(-7) ?? [];
-  const maximum = Math.max(...days.map((day) => day.submissionCount), 1);
-  const points = (pick: (day: ProfileActivity['days'][number]) => number) =>
-    days
-      .map(
-        (day, index) => `${10 + index * 47},${88 - (pick(day) / maximum) * 66}`,
-      )
-      .join(' ');
+  const days = statistics?.trend ?? [];
+  const maximum = Math.max(...days.map((day) => day.total), 1);
+  const x = (index: number) => 33 + index * 45;
+  const y = (value: number) => 102 - (value / maximum) * 72;
+  const points = (pick: (day: EvaluationTrendPoint) => number) =>
+    days.map((day, index) => `${x(index)},${y(pick(day))}`).join(' ');
+  const lines = [
+    {
+      tone: 'blue',
+      label: '总提交数',
+      pick: (day: EvaluationTrendPoint) => day.total,
+    },
+    {
+      tone: 'green',
+      label: 'AC 数',
+      pick: (day: EvaluationTrendPoint) => day.accepted,
+    },
+    {
+      tone: 'red',
+      label: '错误数',
+      pick: (day: EvaluationTrendPoint) => day.failed,
+    },
+  ] as const;
   return (
     <section className="submission-side-card submission-trend-card">
       <div className="submission-side-card__heading">
@@ -355,61 +412,57 @@ function TrendChart({
           </span>
           {scope === 'mine' ? '我的提交趋势' : '全站提交趋势'}
         </h2>
-        <button type="button" disabled>
-          最近7天 <Icon name="chevron" />
-        </button>
+        <span className="submission-period-pill">最近7天</span>
       </div>
       <div className="submission-chart-legend">
-        <span className="tone-blue">总提交数</span>
-        <span className="tone-green">AC 数</span>
-        <span className="tone-red">未通过数</span>
+        {lines.map((line) => (
+          <span key={line.tone} className={`tone-${line.tone}`}>
+            {line.label}
+          </span>
+        ))}
       </div>
       <svg
         className="submission-trend-chart"
-        viewBox="0 0 306 118"
+        viewBox="0 0 330 142"
         role="img"
         aria-label={days.length ? '最近七天提交趋势' : '暂无趋势数据'}
       >
         <g className="submission-trend-chart__grid">
-          <path d="M10 22H296M10 44H296M10 66H296M10 88H296M10 22V88M57 22V88M104 22V88M151 22V88M198 22V88M245 22V88M296 22V88" />
+          <path d="M33 30H310M33 54H310M33 78H310M33 102H310M33 30V102M78 30V102M123 30V102M168 30V102M213 30V102M258 30V102M303 30V102" />
         </g>
+        {[maximum, Math.round(maximum / 2), 0].map((value, index) => (
+          <text
+            key={`${value}-${index}`}
+            x="27"
+            y={34 + index * 36}
+            textAnchor="end"
+          >
+            {number(value)}
+          </text>
+        ))}
         {days.length > 0 && (
           <>
-            <polyline
-              className="tone-blue"
-              points={points((day) => day.submissionCount)}
-            />
-            <polyline
-              className="tone-green"
-              points={points((day) => day.acceptedCount)}
-            />
-            <polyline
-              className="tone-red"
-              points={points((day) =>
-                Math.max(day.submissionCount - day.acceptedCount, 0),
-              )}
-            />
+            {lines.map((line) => (
+              <g key={line.tone} className={`tone-${line.tone}`}>
+                <polyline points={points(line.pick)} />
+                {days.map((day, index) => (
+                  <circle
+                    key={day.date}
+                    cx={x(index)}
+                    cy={y(line.pick(day))}
+                    r="3"
+                  >
+                    <title>{`${day.date} · ${line.label} ${number(line.pick(day))}`}</title>
+                  </circle>
+                ))}
+              </g>
+            ))}
             {days.map((day, index) => (
-              <text
-                key={day.date}
-                x={10 + index * 47}
-                y="108"
-                textAnchor="middle"
-              >
+              <text key={day.date} x={x(index)} y="125" textAnchor="middle">
                 {day.date.slice(5)}
               </text>
             ))}
           </>
-        )}
-        {days.length === 0 && (
-          <text
-            className="submission-trend-chart__empty"
-            x="153"
-            y="62"
-            textAnchor="middle"
-          >
-            等待趋势汇总 API
-          </text>
         )}
       </svg>
     </section>
@@ -418,17 +471,12 @@ function TrendChart({
 
 function AnalyticsSidebar({
   scope,
-  activity,
+  statistics,
 }: {
   scope: SubmissionScope;
-  activity?: ProfileActivity | undefined;
+  statistics?: EvaluationStatistics | undefined;
 }) {
-  const today = activity?.days.at(-1);
-  const todayRate = today?.submissionCount
-    ? (today.acceptedCount / today.submissionCount) * 100
-    : today?.submissionCount === 0
-      ? 0
-      : undefined;
+  const today = statistics?.today;
   return (
     <aside className="submission-analytics" aria-label="评测数据分析">
       <section className="submission-side-card submission-today-card">
@@ -439,45 +487,46 @@ function AnalyticsSidebar({
             </span>
             {scope === 'mine' ? '我的今日数据' : '全站数据'}
           </h2>
-          <button type="button" disabled>
-            今日 <Icon name="chevron" />
-          </button>
+          <span className="submission-period-pill">今日</span>
         </div>
         <div className="submission-today-grid">
           <MiniMetric
             icon="file"
             label="今日提交数"
-            value={scope === 'mine' ? number(today?.submissionCount) : '—'}
+            value={number(today?.submissions)}
+            note={delta(today?.submissionDeltaPercent)}
             tone="blue"
             bars
           />
           <MiniMetric
             icon="check"
             label="今日 AC 数"
-            value={scope === 'mine' ? number(today?.acceptedCount) : '—'}
+            value={number(today?.accepted)}
+            note={delta(today?.acceptedDeltaPercent)}
             tone="green"
             bars
           />
           <MiniMetric
             icon="user"
-            label={scope === 'mine' ? '活跃时长' : '活跃用户'}
-            value="—"
+            label="活跃用户"
+            value={number(today?.activeUsers)}
+            note={delta(today?.activeUserDeltaPercent)}
             tone="purple"
             bars
           />
           <MiniMetric
             icon="percent"
             label={scope === 'mine' ? '今日通过率' : '全站通过率'}
-            value={scope === 'mine' ? percent(todayRate) : '—'}
+            value={percent(
+              scope === 'mine' ? today?.passRate : statistics?.passRate,
+            )}
+            note="按全部提交计算"
             tone="blue"
           />
         </div>
       </section>
-      <DonutCard scope={scope} />
-      <TrendChart
-        activity={scope === 'mine' ? activity : undefined}
-        scope={scope}
-      />
+      <DonutCard scope={scope} statistics={statistics} />
+      <TrendChart scope={scope} statistics={statistics} />
     </aside>
   );
 }
@@ -532,7 +581,7 @@ function SubmissionTable({
                       event.preventDefault();
                       navigate(detailPath);
                     }}
-                    aria-label={`查看评测 ${row.publicNumber !== undefined ? `#${row.publicNumber}` : row.submissionId}`}
+                    aria-label={`查看评测 #${row.publicNumber ?? row.submissionId}`}
                   >
                     #{row.publicNumber ?? row.submissionId}
                   </a>
@@ -543,13 +592,17 @@ function SubmissionTable({
                   </time>
                 </td>
                 <td>
-                  <span className="submission-user">
+                  <span
+                    className="submission-user"
+                    title={row.submitter.displayName}
+                  >
                     {row.submitter.displayName}
                   </span>
                 </td>
                 <td>
                   <a
                     href={`/problems/${encodeURIComponent(row.problem.id)}`}
+                    title={`${row.problem.publicId || row.problem.slug} ${row.problem.title}`}
                     onClick={(event) => {
                       event.preventDefault();
                       navigate(
@@ -561,13 +614,16 @@ function SubmissionTable({
                     <span>{row.problem.title}</span>
                   </a>
                 </td>
-                <td>{row.languageProfileId}</td>
+                <td title={row.languageProfileId}>
+                  {languageLabels[row.languageProfileId] ??
+                    row.languageProfileId}
+                </td>
                 <td>
                   <ResultBadge row={row} />
                 </td>
                 <td>{formatMilliseconds(row.totalTimeMs)}</td>
                 <td>{formatBytes(row.peakMemoryBytes)}</td>
-                <td>—</td>
+                <td>{formatBytes(row.sourceBytes)}</td>
                 <td>
                   <a
                     href={detailPath}
@@ -588,6 +644,21 @@ function SubmissionTable({
   );
 }
 
+function paginationItems(current: number, total: number) {
+  const candidates = new Set([1, total, current - 1, current, current + 1]);
+  const pages = [...candidates]
+    .filter((page) => page >= 1 && page <= total)
+    .sort((a, b) => a - b);
+  const result: Array<number | string> = [];
+  for (const page of pages) {
+    const previous = result.at(-1);
+    if (typeof previous === 'number' && page - previous > 1)
+      result.push(`ellipsis-${page}`);
+    result.push(page);
+  }
+  return result;
+}
+
 export function SubmissionHistoryPage({
   api,
   user,
@@ -597,35 +668,30 @@ export function SubmissionHistoryPage({
     new URLSearchParams(window.location.search).get('scope') === 'mine'
       ? 'mine'
       : 'all';
-  const initialScope = requestedScope;
-  const [scope, setScope] = useState<SubmissionScope>(initialScope);
+  const [scope, setScope] = useState<SubmissionScope>(requestedScope);
   const [items, setItems] = useState<EvaluationListItem[] | null>(null);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [cursorHistory, setCursorHistory] = useState<Array<string | undefined>>(
-    [undefined],
-  );
+  const [total, setTotal] = useState(0);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  const [jumpInput, setJumpInput] = useState('1');
   const [resultFilter, setResultFilter] = useState<ResultFilter>('all');
   const [languageFilter, setLanguageFilter] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [problemFilter, setProblemFilter] = useState('');
   const [error, setError] = useState('');
-  const [overview, setOverview] = useState<ProfileOverview>();
-  const [activity, setActivity] = useState<ProfileActivity>();
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [statistics, setStatistics] = useState<EvaluationStatistics>();
+  const [statisticsLoading, setStatisticsLoading] = useState(true);
   const [reloadToken, setReloadToken] = useState(0);
   const requestVersion = useRef(0);
-  const cursor = cursorHistory[pageIndex];
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const filters = useMemo<EvaluationFilters>(
     () => ({
       ...(resultFilter === 'AC' ? { verdict: 'AC' } : {}),
-      ...(resultFilter === 'FAILED'
-        ? { status: 'COMPLETED_WITH_VERDICT' }
-        : {}),
+      ...(resultFilter === 'FAILED' ? { failed: true } : {}),
       ...(resultFilter === 'RUNNING' ? { status: 'RUNNING' } : {}),
-      ...(problemFilter ? { problemId: problemFilter } : {}),
+      ...(problemFilter ? { problemSearch: problemFilter } : {}),
       ...(scope === 'mine' && user ? { submitterId: user.id } : {}),
       ...(languageFilter ? { languageId: languageFilter } : {}),
     }),
@@ -633,79 +699,72 @@ export function SubmissionHistoryPage({
   );
 
   const resetPagination = () => {
-    setCursorHistory([undefined]);
     setPageIndex(0);
+    setJumpInput('1');
   };
 
   useEffect(() => {
     if (requestedScope === scope) return;
     setScope(requestedScope);
-    setCursorHistory([undefined]);
-    setPageIndex(0);
+    resetPagination();
   }, [requestedScope, scope]);
 
   useEffect(() => {
     if (scope === 'mine' && !user) {
       setItems([]);
-      setNextCursor(null);
+      setTotal(0);
       setError('');
+      setLoading(false);
       return;
     }
     const version = ++requestVersion.current;
-    setItems(null);
+    setLoading(true);
     setError('');
     void api
-      .evaluations(cursor, pageSize, filters)
+      .evaluations(pageIndex + 1, pageSize, filters)
       .then((data) => {
-        if (version !== requestVersion.current) return;
-        setItems(
-          resultFilter === 'FAILED'
-            ? data.items.filter((row) => failureVerdicts.has(row.verdict ?? ''))
-            : data.items,
-        );
-        setNextCursor(data.nextCursor);
+        if (version === requestVersion.current) {
+          setItems(data.items);
+          setTotal(data.total);
+        }
       })
       .catch((cause) => {
-        if (version !== requestVersion.current) return;
-        setError(
-          cause instanceof ApiError ? cause.message : '无法加载评测列表。',
-        );
+        if (version === requestVersion.current)
+          setError(
+            cause instanceof ApiError ? cause.message : '无法加载评测列表。',
+          );
+      })
+      .finally(() => {
+        if (version === requestVersion.current) setLoading(false);
       });
     return () => {
       requestVersion.current += 1;
     };
-  }, [api, cursor, filters, pageSize, reloadToken, resultFilter, scope, user]);
+  }, [api, filters, pageIndex, pageSize, reloadToken, scope, user]);
 
   useEffect(() => {
-    if (scope !== 'mine' || !user) {
-      setOverview(undefined);
-      setActivity(undefined);
-      setProfileLoading(false);
+    if (scope === 'mine' && !user) {
+      setStatistics(undefined);
+      setStatisticsLoading(false);
       return;
     }
     let active = true;
-    setProfileLoading(true);
-    void Promise.all([
-      api.profileOverview(user.username),
-      api.profileActivity(user.username),
-    ])
-      .then(([nextOverview, nextActivity]) => {
-        if (!active) return;
-        setOverview(nextOverview);
-        setActivity(nextActivity);
+    setStatisticsLoading(true);
+    void api
+      .evaluationStatistics(scope === 'mine' ? user?.id : undefined)
+      .then((data) => {
+        if (active) setStatistics(data);
       })
       .catch(() => {
-        if (!active) return;
-        setOverview(undefined);
-        setActivity(undefined);
+        if (active) setStatistics(undefined);
       })
       .finally(() => {
-        if (active) setProfileLoading(false);
+        if (active) setStatisticsLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [api, scope, user]);
+  }, [api, reloadToken, scope, user]);
 
   const selectScope = (nextScope: SubmissionScope) => {
     if (nextScope === 'mine' && !user) {
@@ -720,7 +779,6 @@ export function SubmissionHistoryPage({
       nextScope === 'mine' ? '/submissions?scope=mine' : '/submissions',
     );
   };
-
   const setResult = (value: ResultFilter) => {
     setResultFilter(value);
     resetPagination();
@@ -734,13 +792,11 @@ export function SubmissionHistoryPage({
     setProblemFilter(searchInput.trim());
     resetPagination();
   };
-  const goNext = () => {
-    if (!nextCursor) return;
-    setCursorHistory((history) => [
-      ...history.slice(0, pageIndex + 1),
-      nextCursor,
-    ]);
-    setPageIndex((index) => index + 1);
+  const submitJump = (event: FormEvent) => {
+    event.preventDefault();
+    const nextPage = Math.min(Math.max(Number(jumpInput) || 1, 1), totalPages);
+    setPageIndex(nextPage - 1);
+    setJumpInput(String(nextPage));
   };
 
   return (
@@ -770,44 +826,29 @@ export function SubmissionHistoryPage({
 
       <div className="submission-page__content">
         <nav className="submission-section-tabs" aria-label="评测记录视图">
-          {scope === 'all' ? (
-            <>
-              <button
-                type="button"
-                className="active"
-                aria-current="page"
-                onClick={() => selectScope('all')}
-              >
-                全部记录
-              </button>
-              <button type="button" onClick={() => selectScope('mine')}>
-                我的记录
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" onClick={() => navigate('/profile')}>
-                我的总览
-              </button>
-              <button
-                type="button"
-                className="active"
-                aria-current="page"
-                onClick={() => selectScope('mine')}
-              >
-                我的记录
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            className={scope === 'all' ? 'active' : ''}
+            aria-current={scope === 'all' ? 'page' : undefined}
+            onClick={() => selectScope('all')}
+          >
+            全部记录
+          </button>
+          <button
+            type="button"
+            className={scope === 'mine' ? 'active' : ''}
+            aria-current={scope === 'mine' ? 'page' : undefined}
+            onClick={() => selectScope('mine')}
+          >
+            我的记录
+          </button>
         </nav>
-
         <div className="submission-dashboard">
           <div className="submission-dashboard__main">
             <SummaryCards
               scope={scope}
-              overview={overview}
-              activity={activity}
-              profileLoading={profileLoading}
+              statistics={statistics}
+              loading={statisticsLoading}
             />
             <div className="submission-toolbar" aria-label="评测筛选">
               <div className="submission-filter-group" aria-label="结果筛选">
@@ -837,9 +878,9 @@ export function SubmissionHistoryPage({
                 {(
                   [
                     ['', '全部语言'],
-                    ['cpp20', 'C++'],
-                    ['python', 'Python'],
-                    ['java', 'Java'],
+                    ['cpp20-gcc-13-v1', 'C++'],
+                    ['python-3.12-v1', 'Python'],
+                    ['java-21-v1', 'Java'],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -852,9 +893,31 @@ export function SubmissionHistoryPage({
                     {label}
                   </button>
                 ))}
-                <button type="button" disabled>
-                  更多 <Icon name="chevron" />
-                </button>
+                <details className="submission-more-filter">
+                  <summary>
+                    更多 <Icon name="chevron" />
+                  </summary>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setLanguage('cpp20-gcc-13-v1')}
+                    >
+                      C++20 (GCC 13)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLanguage('python-3.12-v1')}
+                    >
+                      Python 3.12
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLanguage('java-21-v1')}
+                    >
+                      Java 21
+                    </button>
+                  </div>
+                </details>
               </div>
               <form
                 className="submission-search"
@@ -866,16 +929,14 @@ export function SubmissionHistoryPage({
                   aria-label="搜索评测题目"
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder={
-                    scope === 'mine' ? '搜索我的题目 ID…' : '搜索题目 ID…'
-                  }
+                  placeholder="搜索题目 ID…"
                 />
               </form>
             </div>
 
             <section
-              className="submission-list-card"
-              aria-busy={items === null}
+              className={`submission-list-card${loading ? ' is-loading' : ''}`}
+              aria-busy={loading}
             >
               {scope === 'mine' && !user ? (
                 <div className="submission-list-state">
@@ -900,9 +961,13 @@ export function SubmissionHistoryPage({
                   </button>
                 </div>
               ) : items === null ? (
-                <div className="submission-list-state">
-                  <strong>正在加载评测列表</strong>
-                  <span>正在获取最新评测记录…</span>
+                <div
+                  className="submission-table-skeleton"
+                  aria-label="正在加载评测列表"
+                >
+                  {Array.from({ length: 10 }, (_, index) => (
+                    <i key={index} />
+                  ))}
                 </div>
               ) : items.length === 0 ? (
                 <div className="submission-list-state">
@@ -913,39 +978,54 @@ export function SubmissionHistoryPage({
                 <SubmissionTable items={items} navigate={navigate} />
               )}
               <footer className="submission-pagination">
-                <span>本页 {items?.length ?? 0} 条提交记录</span>
+                <span>共 {number(total)} 条记录</span>
                 <div>
                   <button
                     type="button"
                     aria-label="上一页"
-                    disabled={pageIndex === 0 || items === null}
-                    onClick={() =>
-                      setPageIndex((index) => Math.max(0, index - 1))
-                    }
+                    disabled={pageIndex === 0 || loading}
+                    onClick={() => {
+                      const next = Math.max(0, pageIndex - 1);
+                      setPageIndex(next);
+                      setJumpInput(String(next + 1));
+                    }}
                   >
                     ‹
                   </button>
-                  {cursorHistory.map((_, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      className={pageIndex === index ? 'active' : ''}
-                      aria-current={pageIndex === index ? 'page' : undefined}
-                      onClick={() => setPageIndex(index)}
-                    >
-                      {index + 1}
-                    </button>
-                  ))}
-                  {nextCursor && (
-                    <button type="button" onClick={goNext}>
-                      {pageIndex + 2}
-                    </button>
+                  {paginationItems(pageIndex + 1, totalPages).map((item) =>
+                    typeof item === 'number' ? (
+                      <button
+                        key={item}
+                        type="button"
+                        className={pageIndex + 1 === item ? 'active' : ''}
+                        aria-current={
+                          pageIndex + 1 === item ? 'page' : undefined
+                        }
+                        onClick={() => {
+                          setPageIndex(item - 1);
+                          setJumpInput(String(item));
+                        }}
+                      >
+                        {item}
+                      </button>
+                    ) : (
+                      <span
+                        key={item}
+                        className="submission-pagination__ellipsis"
+                      >
+                        …
+                      </span>
+                    ),
                   )}
                   <button
                     type="button"
                     aria-label="下一页"
-                    disabled={!nextCursor || items === null}
-                    onClick={goNext}
+                    disabled={pageIndex + 1 >= totalPages || loading}
+                    onClick={() => {
+                      const next = Math.min(totalPages, pageIndex + 2);
+                      setPageIndex(next - 1);
+                      setJumpInput(String(next));
+                    }}
                   >
                     ›
                   </button>
@@ -965,20 +1045,23 @@ export function SubmissionHistoryPage({
                     <option value={100}>100 条/页</option>
                   </select>
                 </label>
-                <label className="submission-page-jump">
-                  跳至{' '}
+                <form className="submission-page-jump" onSubmit={submitJump}>
+                  <label htmlFor="submission-page-number">跳至</label>
                   <input
+                    id="submission-page-number"
                     aria-label="跳转页码"
-                    value={pageIndex + 1}
-                    readOnly
-                    disabled
-                  />{' '}
-                  页
-                </label>
+                    inputMode="numeric"
+                    value={jumpInput}
+                    onChange={(event) =>
+                      setJumpInput(event.target.value.replace(/\D/g, ''))
+                    }
+                  />
+                  <span>页</span>
+                </form>
               </footer>
             </section>
           </div>
-          <AnalyticsSidebar scope={scope} activity={activity} />
+          <AnalyticsSidebar scope={scope} statistics={statistics} />
         </div>
       </div>
     </section>

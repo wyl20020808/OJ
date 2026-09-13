@@ -547,17 +547,46 @@ export type EvaluationListItem = {
   completedAt?: string;
   totalTimeMs?: number;
   peakMemoryBytes?: number;
+  sourceBytes: number;
 };
 export type EvaluationList = {
   items: EvaluationListItem[];
   nextCursor: string | null;
+  total: number;
+  page: number;
+};
+export type EvaluationTrendPoint = {
+  date: string;
+  total: number;
+  accepted: number;
+  failed: number;
+};
+export type EvaluationStatistics = {
+  total: number;
+  accepted: number;
+  failed: number;
+  judging: number;
+  passRate: number;
+  today: {
+    submissions: number;
+    accepted: number;
+    activeUsers: number;
+    passRate: number;
+    submissionDeltaPercent?: number | undefined;
+    acceptedDeltaPercent?: number | undefined;
+    activeUserDeltaPercent?: number | undefined;
+  };
+  verdicts: Record<'AC' | 'WA' | 'CE' | 'RE' | 'TLE' | 'MLE', number>;
+  trend: EvaluationTrendPoint[];
 };
 export type EvaluationFilters = {
   verdict?: string;
   status?: string;
   problemId?: string;
+  problemSearch?: string;
   submitterId?: string;
   languageId?: string;
+  failed?: boolean;
 };
 export type ProblemInput = Omit<
   Problem,
@@ -1972,14 +2001,17 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         undefined,
         fetcher,
       ),
-    evaluations: (
-      cursor?: string,
-      limit = 20,
-      filters: EvaluationFilters = {},
-    ) =>
+    evaluations: (page = 1, limit = 20, filters: EvaluationFilters = {}) =>
       request<EvaluationList>(
         baseUrl,
-        `/api/evaluations?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${filters.verdict ? `&verdict=${encodeURIComponent(filters.verdict)}` : ''}${filters.status ? `&status=${encodeURIComponent(filters.status)}` : ''}${filters.problemId ? `&problemId=${encodeURIComponent(filters.problemId)}` : ''}${filters.submitterId ? `&submitterId=${encodeURIComponent(filters.submitterId)}` : ''}${filters.languageId ? `&language=${encodeURIComponent(filters.languageId)}` : ''}`,
+        `/api/evaluations?limit=${limit}&page=${page}${filters.verdict ? `&verdict=${encodeURIComponent(filters.verdict)}` : ''}${filters.status ? `&status=${encodeURIComponent(filters.status)}` : ''}${filters.problemId ? `&problemId=${encodeURIComponent(filters.problemId)}` : ''}${filters.problemSearch ? `&problemSearch=${encodeURIComponent(filters.problemSearch)}` : ''}${filters.submitterId ? `&submitterId=${encodeURIComponent(filters.submitterId)}` : ''}${filters.languageId ? `&language=${encodeURIComponent(filters.languageId)}` : ''}${filters.failed ? '&failed=true' : ''}`,
+        undefined,
+        fetcher,
+      ),
+    evaluationStatistics: (submitterId?: string) =>
+      request<EvaluationStatistics>(
+        baseUrl,
+        `/api/evaluations/statistics${submitterId ? `?submitterId=${encodeURIComponent(submitterId)}` : ''}`,
         undefined,
         fetcher,
       ),

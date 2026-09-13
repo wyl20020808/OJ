@@ -82,6 +82,13 @@ export class SubmissionService {
     if (query.cursor && !/^[A-Za-z0-9_-]+$/.test(query.cursor))
       throw new Error('VALIDATION_ERROR');
     if (
+      (query.page !== undefined &&
+        (!Number.isSafeInteger(query.page) || query.page < 1)) ||
+      (query.page !== undefined && query.cursor) ||
+      (query.problemSearch !== undefined && query.problemSearch.length > 100)
+    )
+      throw new Error('VALIDATION_ERROR');
+    if (
       context &&
       !(await (this.policy.canListGlobalSubmissions?.(context) ??
         this.policy.listOwnSubmissions(context)))
@@ -94,6 +101,15 @@ export class SubmissionService {
         throw new Error('VALIDATION_ERROR');
       throw error;
     }
+  }
+  async statistics(ownerUserId: string | undefined, context?: AuthContext) {
+    if (
+      context &&
+      !(await (this.policy.canListGlobalSubmissions?.(context) ??
+        this.policy.listOwnSubmissions(context)))
+    )
+      throw new Error('FORBIDDEN');
+    return this.repository.statistics(ownerUserId);
   }
   async problemHistory(
     problemId: string,
