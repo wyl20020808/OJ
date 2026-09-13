@@ -75,6 +75,8 @@ import { AssignmentPage } from '../features/assignment/AssignmentPage.js';
 import { SubmissionHistoryPage } from '../features/submissions/SubmissionHistoryPage.js';
 import { SubmissionDetailPage } from '../features/submissions/SubmissionDetailPage.js';
 export { SubmissionDetailPage as SubmissionDetail } from '../features/submissions/SubmissionDetailPage.js';
+import { HomeIcon } from '../features/home/HomeIcon.js';
+import '../features/home/HomePage.css';
 import { TagSelector } from '../components/TagSelector.js';
 import {
   DiscussionEditor,
@@ -915,7 +917,7 @@ function HomeReference({
           <section className="reference-card reference-announcements">
             <div className="reference-card-title">
               <h2>
-                <span aria-hidden="true">⚑</span> 公告
+                <HomeIcon name="announcement" /> 公告
               </h2>
               <Link to="/discussion">更多 →</Link>
             </div>
@@ -937,7 +939,7 @@ function HomeReference({
           <section className="reference-card reference-contests">
             <div className="reference-card-title">
               <h2 aria-label="比赛与排名">
-                <span aria-hidden="true">♛</span> 近期比赛
+                <HomeIcon name="trophy" /> 近期比赛
               </h2>
               <Link to="/contests">更多 →</Link>
             </div>
@@ -965,7 +967,7 @@ function HomeReference({
           <section className="reference-card reference-daily">
             <div className="reference-card-title">
               <h2>
-                <span aria-hidden="true">▣</span> 每日一题
+                <HomeIcon name="calendar" /> 每日一题
               </h2>
               <Link to="/problems">往期题目 →</Link>
             </div>
@@ -1007,7 +1009,7 @@ function HomeReference({
           <section className="reference-card reference-recommendations">
             <div className="reference-card-title">
               <h2>
-                <span>▰</span> 推荐题单
+                <HomeIcon name="recommendations" /> 推荐题单
               </h2>
               <Link to="/problems">更多 →</Link>
             </div>
@@ -1034,7 +1036,7 @@ function HomeReference({
           <section className="reference-card reference-calendar">
             <div className="reference-card-title">
               <h2>
-                <span>▣</span> 学习日历
+                <HomeIcon name="calendar" /> 学习日历
               </h2>
               <div>
                 <button type="button" aria-label="上个月">
@@ -1087,7 +1089,7 @@ function HomeReference({
           <section className="reference-card reference-progress">
             <div className="reference-card-title">
               <h2>
-                <span>▥</span> 学习进度
+                <HomeIcon name="chart" /> 学习进度
               </h2>
               <Link to="/profile">详情 →</Link>
             </div>
@@ -1110,7 +1112,7 @@ function HomeReference({
           <section className="reference-card reference-homework">
             <div className="reference-card-title">
               <h2>
-                <span aria-hidden="true">▤</span> 我的作业
+                <HomeIcon name="clipboard" /> 我的作业
               </h2>
               <Link to="/homework">全部 →</Link>
             </div>
@@ -1121,7 +1123,7 @@ function HomeReference({
           <section className="reference-card reference-wrong">
             <div className="reference-card-title">
               <h2>
-                <span>×</span> 错题集
+                <HomeIcon name="close" /> 错题集
               </h2>
               <Link to="/wrong-book">查看 →</Link>
             </div>
@@ -1139,7 +1141,7 @@ function HomeReference({
           </section>
           <section className="reference-fortune">
             <div>
-              <span aria-hidden="true">★</span>
+              <HomeIcon name="star" />
               <small>好运相伴</small>
             </div>
             <h2>今日运势</h2>
