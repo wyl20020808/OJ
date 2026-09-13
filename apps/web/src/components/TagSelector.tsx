@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ApiClient, Problem } from '../services/api.js';
+import './TagSelector.css';
 
 type Tag = NonNullable<Problem['tagDetails']>[number];
 
@@ -8,13 +9,17 @@ export function TagSelector({
   value,
   onChange,
   disabled = false,
+  catalog: catalogOverride,
+  selectionMode = 'multiple',
 }: {
   api: ApiClient;
   value: number[];
   onChange: (ids: number[]) => void;
   disabled?: boolean;
+  catalog?: Tag[];
+  selectionMode?: 'single' | 'multiple';
 }) {
-  const [catalog, setCatalog] = useState<Tag[]>([]);
+  const [loadedCatalog, setLoadedCatalog] = useState<Tag[]>([]);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -22,12 +27,15 @@ export function TagSelector({
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const popoverId = useId();
   useEffect(() => {
+    if (catalogOverride) return;
     const loader = api.tags?.();
     if (loader)
       void loader
-        .then((tags) => setCatalog(Array.isArray(tags) ? tags : []))
-        .catch(() => setCatalog([]));
-  }, [api]);
+        .then((tags) => setLoadedCatalog(Array.isArray(tags) ? tags : []))
+        .catch(() => setLoadedCatalog([]));
+  }, [api, catalogOverride]);
+
+  const catalog = catalogOverride ?? loadedCatalog;
 
   useEffect(() => {
     if (!open) return;
@@ -156,13 +164,20 @@ export function TagSelector({
                       key={tag.id}
                       className={selected.has(tag.id) ? 'selected' : ''}
                       aria-pressed={selected.has(tag.id)}
-                      onClick={() =>
+                      onClick={() => {
                         onChange(
                           selected.has(tag.id)
                             ? value.filter((id) => id !== tag.id)
-                            : [...value, tag.id],
-                        )
-                      }
+                            : selectionMode === 'single'
+                              ? [tag.id]
+                              : [...value, tag.id],
+                        );
+                        if (selectionMode === 'single') {
+                          setOpen(false);
+                          setPinned(false);
+                          setQuery('');
+                        }
+                      }}
                     >
                       {tag.name}
                     </button>
