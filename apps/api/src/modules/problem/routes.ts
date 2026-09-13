@@ -10,6 +10,7 @@ import {
   type Problem,
   problemDifficulties,
   problemListSorts,
+  problemProviders,
   problemSourceTypes,
 } from './model.js';
 import {
@@ -114,8 +115,8 @@ export async function registerProblemModule(
       typeof q.difficulty === 'string' ? q.difficulty : undefined;
     const sourceType =
       typeof q.sourceType === 'string' ? q.sourceType : undefined;
+    const provider = typeof q.provider === 'string' ? q.provider : undefined;
     const tagIdsValue = typeof q.tagIds === 'string' ? q.tagIds : undefined;
-    const tagId = tagIdsValue === undefined ? undefined : Number(tagIdsValue);
     const sort = typeof q.sort === 'string' ? q.sort : undefined;
     const order = typeof q.order === 'string' ? q.order : undefined;
     if (
@@ -148,18 +149,23 @@ export async function registerProblemModule(
         'VALIDATION_ERROR',
         'Invalid source type',
       );
+    if (provider && !problemProviders.includes(provider as never))
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid provider');
     if (sort && !problemListSorts.includes(sort as never))
       return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid sort');
     if (order && order !== 'asc' && order !== 'desc')
       return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid order');
+    const tagIdParts = tagIdsValue?.split(',') ?? [];
+    const tagIds = tagIdParts.map(Number);
     if (
       tagIdsValue !== undefined &&
-      (!Number.isSafeInteger(tagId) ||
-        (tagId ?? 0) < 1 ||
-        !/^\d+$/.test(tagIdsValue))
+      (!tagIdParts.length ||
+        tagIdParts.length > 50 ||
+        tagIdParts.some((part) => !/^\d+$/.test(part)) ||
+        tagIds.some((id) => !Number.isSafeInteger(id) || id < 1) ||
+        new Set(tagIds).size !== tagIds.length)
     )
-      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid tag ID');
-    const tagIds = tagIdsValue === undefined ? undefined : [tagId as number];
+      return error(reply, request, 400, 'VALIDATION_ERROR', 'Invalid tag IDs');
     const contextValue = await auth(request);
     try {
       const result = await service.list(
@@ -183,11 +189,16 @@ export async function registerProblemModule(
                       difficulty as (typeof problemDifficulties)[number],
                   }
                 : {}),
-              ...(tagIds ? { tagIds } : {}),
+              ...(tagIds.length ? { tagIds } : {}),
               ...(sourceType
                 ? {
                     sourceType:
                       sourceType as (typeof problemSourceTypes)[number],
+                  }
+                : {}),
+              ...(provider
+                ? {
+                    provider: provider as (typeof problemProviders)[number],
                   }
                 : {}),
               ...(sort
@@ -205,11 +216,16 @@ export async function registerProblemModule(
                       difficulty as (typeof problemDifficulties)[number],
                   }
                 : {}),
-              ...(tagIds ? { tagIds } : {}),
+              ...(tagIds.length ? { tagIds } : {}),
               ...(sourceType
                 ? {
                     sourceType:
                       sourceType as (typeof problemSourceTypes)[number],
+                  }
+                : {}),
+              ...(provider
+                ? {
+                    provider: provider as (typeof problemProviders)[number],
                   }
                 : {}),
               ...(sort

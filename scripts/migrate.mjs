@@ -48,6 +48,8 @@ try {
     '0031_profile_media_save_v2',
     '0032_submission_integration_fixture_cleanup',
     '0033_blog_full_experience',
+    '0034_problem_provider_semantics',
+    '0035_problem_revision_source_type',
   ];
   if (requestedMigration && !migrations.includes(requestedMigration))
     throw new Error(`Unknown migration: ${requestedMigration}`);

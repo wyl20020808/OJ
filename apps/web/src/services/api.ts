@@ -85,6 +85,8 @@ export type Example = { input: string; output: string; note?: string };
 export type ProblemDifficulty = '入门' | '简单' | '中等' | '困难' | '专家';
 export type ProblemSourceType =
   'CREATOR' | 'EXTERNAL' | 'IMPORT' | 'TEST_FIXTURE' | 'API_AUTOMATION';
+export type ProblemProvider =
+  'LUOGU' | 'CODEFORCES' | 'ATCODER' | 'LEETCODE' | 'ACWING' | 'SPOJ' | 'OTHER';
 export type ProblemListSort =
   'publicNumber' | 'title' | 'difficulty' | 'updatedAt' | 'createdAt';
 export type ProblemListOrder = 'asc' | 'desc';
@@ -128,6 +130,9 @@ export type Problem = {
   }>;
   source?: string;
   sourceType?: ProblemSourceType;
+  provider?: ProblemProvider;
+  providerProblemId?: string | null;
+  provenance?: Record<string, unknown> | null;
   statistics?: {
     submissionCount: number;
     acceptedCount: number;
@@ -210,6 +215,7 @@ export type Page = { limit: number; offset: number; total: number };
 export type ProblemFacets = {
   difficulty: Partial<Record<ProblemDifficulty, number>>;
   sourceType: Partial<Record<ProblemSourceType, number>>;
+  provider: Partial<Record<ProblemProvider, number>>;
   tags: Array<{ id: number; count: number }>;
 };
 export type ProblemList = {
@@ -1268,7 +1274,9 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         search?: string;
         difficulty?: ProblemDifficulty;
         tagId?: number;
+        tagIds?: number[];
         sourceType?: ProblemSourceType;
+        provider?: ProblemProvider;
         sort?: ProblemListSort;
         order?: ProblemListOrder;
       } = {},
@@ -1279,8 +1287,11 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       });
       if (options.search) params.set('search', options.search);
       if (options.difficulty) params.set('difficulty', options.difficulty);
-      if (options.tagId) params.set('tagIds', String(options.tagId));
+      if (options.tagIds?.length)
+        params.set('tagIds', options.tagIds.join(','));
+      else if (options.tagId) params.set('tagIds', String(options.tagId));
       if (options.sourceType) params.set('sourceType', options.sourceType);
+      if (options.provider) params.set('provider', options.provider);
       if (options.sort) params.set('sort', options.sort);
       if (options.order) params.set('order', options.order);
       return request<ProblemList>(

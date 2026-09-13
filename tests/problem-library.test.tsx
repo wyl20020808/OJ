@@ -29,6 +29,22 @@ const tags: NonNullable<Problem['tagDetails']> = [
     displayOrder: 2,
     isActive: true,
   },
+  {
+    id: 3,
+    slug: 'linked-list',
+    name: '链表',
+    category: '数据结构',
+    displayOrder: 3,
+    isActive: true,
+  },
+  {
+    id: 4,
+    slug: 'binary-tree',
+    name: '二叉树',
+    category: '树',
+    displayOrder: 4,
+    isActive: true,
+  },
 ];
 
 const problem: Problem = {
@@ -49,6 +65,8 @@ const problem: Problem = {
   authorId: null,
   difficulty: '入门',
   sourceType: 'TEST_FIXTURE',
+  provider: 'LUOGU',
+  providerProblemId: 'P1000',
   tagDetails: tags,
   statistics: { submissionCount: 25, acceptedCount: 18 },
   createdAt: '2026-09-01T00:00:00.000Z',
@@ -62,6 +80,7 @@ describe('Problem Library', () => {
     facets: {
       difficulty: { 入门: 12 },
       sourceType: { TEST_FIXTURE: 30 },
+      provider: { LUOGU: 10 },
       tags: [
         { id: 1, count: 18 },
         { id: 2, count: 11 },
@@ -71,6 +90,9 @@ describe('Problem Library', () => {
   const api = {
     problems,
     tags: vi.fn().mockResolvedValue(tags),
+    profileOverview: vi
+      .fn()
+      .mockRejectedValue(new Error('fixture unavailable')),
   } as unknown as ApiClient;
 
   beforeEach(() => {
@@ -123,5 +145,22 @@ describe('Problem Library', () => {
       ),
     );
     expect(window.location.search).toContain('tagIds=2');
+  });
+
+  it('maps first-level categories to canonical tag ids', async () => {
+    render(<ProblemLibraryPage api={api} user={null} navigate={vi.fn()} />);
+    await screen.findByText('A + B Problem');
+
+    fireEvent.click(screen.getByRole('button', { name: '数据结构' }));
+
+    await waitFor(() =>
+      expect(problems).toHaveBeenLastCalledWith(
+        0,
+        15,
+        expect.objectContaining({ tagIds: [3, 4] }),
+      ),
+    );
+    expect(window.location.search).toContain('category=data-structure');
+    expect(window.location.search).not.toContain('tagIds=');
   });
 });

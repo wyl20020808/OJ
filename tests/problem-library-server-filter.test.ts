@@ -44,6 +44,8 @@ describe('problem library server-side filters', () => {
         title: 'Binary tree medium',
         difficulty: '中等',
         sourceType: 'EXTERNAL',
+        provider: 'CODEFORCES',
+        providerProblemId: 'CF100A',
         tagIds: [1, 24],
       },
       { userId: 'author' },
@@ -55,6 +57,8 @@ describe('problem library server-side filters', () => {
         title: 'Binary tree medium follow-up',
         difficulty: '中等',
         sourceType: 'EXTERNAL',
+        provider: 'CODEFORCES',
+        providerProblemId: 'CF100B',
         tagIds: [1],
       },
       { userId: 'author' },
@@ -66,6 +70,8 @@ describe('problem library server-side filters', () => {
         title: 'Binary tree easy',
         difficulty: '简单',
         sourceType: 'IMPORT',
+        provider: 'ATCODER',
+        providerProblemId: 'AT_ABC_100_A',
         tagIds: [2],
       },
       { userId: 'author' },
@@ -79,7 +85,7 @@ describe('problem library server-side filters', () => {
 
     const first = await app.inject({
       method: 'GET',
-      url: '/api/problems?search=binary&difficulty=%E4%B8%AD%E7%AD%89&tagIds=1&sourceType=EXTERNAL&limit=1',
+      url: '/api/problems?search=binary&difficulty=%E4%B8%AD%E7%AD%89&tagIds=1&sourceType=EXTERNAL&provider=CODEFORCES&limit=1',
     });
     expect(first.statusCode).toBe(200);
     expect(first.json()).toMatchObject({
@@ -94,13 +100,23 @@ describe('problem library server-side filters', () => {
 
     const second = await app.inject({
       method: 'GET',
-      url: '/api/problems?search=binary&difficulty=%E4%B8%AD%E7%AD%89&tagIds=1&sourceType=EXTERNAL&limit=1&offset=1',
+      url: '/api/problems?search=binary&difficulty=%E4%B8%AD%E7%AD%89&tagIds=1&sourceType=EXTERNAL&provider=CODEFORCES&limit=1&offset=1',
     });
     expect(second.statusCode).toBe(200);
     expect(second.json()).toMatchObject({
       items: [{ slug: 'same-filter-second' }],
       page: { total: 2, limit: 1, offset: 1 },
     });
+    const category = await app.inject({
+      method: 'GET',
+      url: '/api/problems?tagIds=2,24&limit=10',
+    });
+    expect(category.statusCode).toBe(200);
+    expect(
+      category.json().items.map((item: { slug: string }) => item.slug),
+    ).toEqual(
+      expect.arrayContaining(['outside-first-page', 'different-filter']),
+    );
     await app.close();
   });
 
@@ -126,10 +142,37 @@ describe('problem library server-side filters', () => {
         ).statusCode,
       ).toBe(200);
     }
+    for (const provider of [
+      'LUOGU',
+      'CODEFORCES',
+      'ATCODER',
+      'LEETCODE',
+      'ACWING',
+      'SPOJ',
+      'OTHER',
+    ]) {
+      expect(
+        (
+          await app.inject({
+            method: 'GET',
+            url: `/api/problems?provider=${provider}`,
+          })
+        ).statusCode,
+      ).toBe(200);
+    }
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/problems?tagIds=1,2',
+        })
+      ).statusCode,
+    ).toBe(200);
     for (const url of [
       '/api/problems?difficulty=unknown',
       '/api/problems?sourceType=unknown',
-      '/api/problems?tagIds=1,2',
+      '/api/problems?provider=unknown',
+      '/api/problems?tagIds=1,1',
       '/api/problems?tagIds=999999',
     ]) {
       const response = await app.inject({ method: 'GET', url });
@@ -157,6 +200,7 @@ describe('problem library server-side filters', () => {
         title: 'Binary Alpha',
         difficulty: '简单',
         sourceType: 'IMPORT',
+        provider: 'ATCODER',
         tagIds: [1],
       },
       { userId: 'author' },
@@ -168,6 +212,7 @@ describe('problem library server-side filters', () => {
         title: 'Binary Zeta',
         difficulty: '中等',
         sourceType: 'EXTERNAL',
+        provider: 'CODEFORCES',
         tagIds: [1, 2],
       },
       { userId: 'author' },
@@ -190,6 +235,7 @@ describe('problem library server-side filters', () => {
       facets: {
         difficulty: { 简单: 1, 中等: 1 },
         sourceType: { IMPORT: 1, EXTERNAL: 1 },
+        provider: { ATCODER: 1, CODEFORCES: 1 },
       },
     });
     expect(first.json().facets.tags).toEqual(
@@ -243,6 +289,8 @@ describe('problem library server-side filters', () => {
               testdata_version: null,
               author_id: 'author',
               source_type: 'TEST_FIXTURE',
+              provider: 'SPOJ',
+              provider_problem_id: 'SPOJ_AGGREGATE',
               tags: [],
               tag_details: [],
               submission_count: 20,
@@ -266,6 +314,10 @@ describe('problem library server-side filters', () => {
     expect(result.items[0]?.statistics).toEqual({
       submissionCount: 20,
       acceptedCount: 13,
+    });
+    expect(result.items[0]).toMatchObject({
+      provider: 'SPOJ',
+      providerProblemId: 'SPOJ_AGGREGATE',
     });
   });
 });

@@ -207,9 +207,23 @@
 
 .sidebar-heading a,
 .right-card-heading a,
-.right-card-heading > span {
+.right-card-heading > span,
+.right-card-more {
   color: #3280e6;
   font-size: 11px;
+}
+
+.problem-library .right-card-more {
+  min-height: 24px;
+  padding: 2px 5px;
+  border-color: transparent;
+  background: transparent;
+  color: #3280e6;
+  font-weight: 600;
+}
+
+.problem-library .right-card-more:hover {
+  background: #edf5ff;
 }
 
 .sidebar-list {
@@ -265,23 +279,31 @@
   color: #6481aa;
 }
 
-.source-button-creator .problem-library-icon {
+.source-button-luogu .problem-library-icon {
   color: #2f86ed;
 }
 
-.source-button-external .problem-library-icon {
+.source-button-codeforces .problem-library-icon {
   color: #f0a329;
 }
 
-.source-button-import .problem-library-icon {
+.source-button-atcoder .problem-library-icon {
+  color: #273b60;
+}
+
+.source-button-leetcode .problem-library-icon {
+  color: #f39a24;
+}
+
+.source-button-acwing .problem-library-icon {
   color: #27af86;
 }
 
-.source-button-test-fixture .problem-library-icon {
+.source-button-spoj .problem-library-icon {
   color: #8658d6;
 }
 
-.source-button-api-automation .problem-library-icon {
+.source-button-other .problem-library-icon {
   color: #e35f68;
 }
 
@@ -652,8 +674,8 @@
 .problem-row {
   display: grid;
   grid-template-columns:
-    64px minmax(130px, 1.8fr) 56px minmax(100px, 1.25fr)
-    74px 64px 64px 42px 50px;
+    88px minmax(130px, 1.75fr) 56px minmax(92px, 1.1fr)
+    82px 60px 64px 38px 48px;
   gap: 7px;
   align-items: center;
   min-width: 760px;

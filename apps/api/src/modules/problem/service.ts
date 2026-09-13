@@ -50,6 +50,7 @@ export class ProblemService {
     difficulty?: Problem['difficulty'];
     tagIds?: number[];
     sourceType?: NonNullable<Problem['sourceType']>;
+    provider?: NonNullable<Problem['provider']>;
     sort?: ProblemListSort;
     order?: ProblemListOrder;
     status?: Problem['status'];
@@ -75,6 +76,7 @@ export class ProblemService {
       ...(query.difficulty ? { difficulty: query.difficulty } : {}),
       ...(query.tagIds?.length ? { tagIds: query.tagIds } : {}),
       ...(query.sourceType ? { sourceType: query.sourceType } : {}),
+      ...(query.provider ? { provider: query.provider } : {}),
       ...(query.sort ? { sort: query.sort } : {}),
       ...(query.order ? { order: query.order } : {}),
       ...(query.context && query.status ? { status: query.status } : {}),
@@ -88,6 +90,7 @@ export class ProblemService {
       ...(query.difficulty ? { difficulty: query.difficulty } : {}),
       ...(query.tagIds?.length ? { tagIds: query.tagIds } : {}),
       ...(query.sourceType ? { sourceType: query.sourceType } : {}),
+      ...(query.provider ? { provider: query.provider } : {}),
       ...(query.context && query.status ? { status: query.status } : {}),
       ...(query.context && query.visibility
         ? { visibility: query.visibility }

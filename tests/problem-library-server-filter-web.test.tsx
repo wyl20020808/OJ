@@ -29,7 +29,7 @@ describe('problem library server filter integration', () => {
     window.history.replaceState(
       {},
       '',
-      '/problems?page=3&q=binary&difficulty=%E4%B8%AD%E7%AD%89&tagIds=1&sourceType=EXTERNAL',
+      '/problems?page=3&q=binary&difficulty=%E4%B8%AD%E7%AD%89&tagIds=1&provider=CODEFORCES',
     );
     vi.stubGlobal(
       'fetch',
@@ -59,6 +59,7 @@ describe('problem library server filter integration', () => {
                 title: 'Binary tree',
                 difficulty: '中等',
                 sourceType: 'EXTERNAL',
+                provider: 'CODEFORCES',
                 tags: ['枚举'],
                 createdAt: '2026-09-10T00:00:00.000Z',
                 updatedAt: '2026-09-10T00:00:00.000Z',
@@ -76,25 +77,25 @@ describe('problem library server filter integration', () => {
       expect(
         requests.some((url) =>
           url.includes(
-            'offset=20&limit=10&search=binary&difficulty=%E4%B8%AD%E7%AD%89&tagIds=1&sourceType=EXTERNAL',
+            'offset=30&limit=15&search=binary&difficulty=%E4%B8%AD%E7%AD%89&tagIds=1&provider=CODEFORCES',
           ),
         ),
       ).toBe(true),
     );
 
-    fireEvent.click(screen.getByLabelText('简单'));
+    fireEvent.click(screen.getByLabelText('普及'));
     await waitFor(() =>
       expect(
         requests.some((url) =>
           url.includes(
-            'offset=0&limit=10&search=binary&difficulty=%E7%AE%80%E5%8D%95&tagIds=1&sourceType=EXTERNAL',
+            'offset=0&limit=15&search=binary&difficulty=%E7%AE%80%E5%8D%95&tagIds=1&provider=CODEFORCES',
           ),
         ),
       ).toBe(true),
     );
     expect(window.location.search).not.toContain('page=3');
     expect(window.location.search).toContain('tagIds=1');
-    expect(window.location.search).toContain('sourceType=EXTERNAL');
+    expect(window.location.search).toContain('provider=CODEFORCES');
   });
 
   it('uses the sort selection in the server request and disables unsupported filters', async () => {
@@ -111,7 +112,7 @@ describe('problem library server filter integration', () => {
           return response({
             items: [],
             page: { total: 0, offset: 0, limit: 10 },
-            facets: { difficulty: {}, sourceType: {}, tags: [] },
+            facets: { difficulty: {}, sourceType: {}, provider: {}, tags: [] },
           });
         return response({}, 404);
       }),
@@ -135,16 +136,16 @@ describe('problem library server filter integration', () => {
     );
 
     fireEvent.change(screen.getByLabelText('题目排序'), {
-      target: { value: 'updatedAt:desc' },
+      target: { value: 'title:asc' },
     });
     await waitFor(() =>
       expect(
         requests.some(
-          (url) => url.includes('sort=updatedAt') && url.includes('order=desc'),
+          (url) => url.includes('sort=title') && url.includes('order=asc'),
         ),
       ).toBe(true),
     );
-    expect(window.location.search).toContain('sort=updatedAt');
+    expect(window.location.search).toContain('sort=title');
   });
 
   it('searches canonical tags, selects one, updates URL state, and resets page', async () => {
@@ -180,7 +181,7 @@ describe('problem library server filter integration', () => {
           return response({
             items: [],
             page: { total: 25, offset: 10, limit: 10 },
-            facets: { difficulty: {}, sourceType: {}, tags: [] },
+            facets: { difficulty: {}, sourceType: {}, provider: {}, tags: [] },
           });
         return response({}, 404);
       }),
@@ -202,7 +203,7 @@ describe('problem library server filter integration', () => {
       expect(
         requests.some(
           (url) =>
-            url.includes('offset=0&limit=10') && url.includes('tagIds=2'),
+            url.includes('offset=0&limit=15') && url.includes('tagIds=2'),
         ),
       ).toBe(true),
     );
