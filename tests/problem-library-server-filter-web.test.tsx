@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../apps/web/src/app/App.js';
@@ -63,7 +64,7 @@ describe('problem library server filter integration', () => {
                 updatedAt: '2026-09-10T00:00:00.000Z',
               },
             ],
-            page: { total: 41, offset: 40, limit: 20 },
+            page: { total: 41, offset: 20, limit: 10 },
           });
         return response({}, 404);
       }),
@@ -75,7 +76,7 @@ describe('problem library server filter integration', () => {
       expect(
         requests.some((url) =>
           url.includes(
-            'offset=40&limit=20&search=binary&difficulty=%E4%B8%AD%E7%AD%89&tagIds=1&sourceType=EXTERNAL',
+            'offset=20&limit=10&search=binary&difficulty=%E4%B8%AD%E7%AD%89&tagIds=1&sourceType=EXTERNAL',
           ),
         ),
       ).toBe(true),
@@ -86,7 +87,7 @@ describe('problem library server filter integration', () => {
       expect(
         requests.some((url) =>
           url.includes(
-            'offset=0&limit=20&search=binary&difficulty=%E7%AE%80%E5%8D%95&tagIds=1&sourceType=EXTERNAL',
+            'offset=0&limit=10&search=binary&difficulty=%E7%AE%80%E5%8D%95&tagIds=1&sourceType=EXTERNAL',
           ),
         ),
       ).toBe(true),
@@ -109,7 +110,7 @@ describe('problem library server filter integration', () => {
         if (url.includes('/api/problems?'))
           return response({
             items: [],
-            page: { total: 0, offset: 0, limit: 20 },
+            page: { total: 0, offset: 0, limit: 10 },
             facets: { difficulty: {}, sourceType: {}, tags: [] },
           });
         return response({}, 404);
@@ -144,5 +145,70 @@ describe('problem library server filter integration', () => {
       ).toBe(true),
     );
     expect(window.location.search).toContain('sort=updatedAt');
+  });
+
+  it('searches canonical tags, selects one, updates URL state, and resets page', async () => {
+    const requests: string[] = [];
+    window.history.replaceState({}, '', '/problems?page=2');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.endsWith('/api/auth/me')) return response({}, 401);
+        if (url.endsWith('/ready')) return response({ status: 'ok' });
+        if (url.endsWith('/api/tags'))
+          return response([
+            {
+              id: 1,
+              slug: 'enumeration',
+              name: '枚举',
+              category: '基础算法',
+              displayOrder: 1,
+              isActive: true,
+            },
+            {
+              id: 2,
+              slug: 'dynamic-programming',
+              name: '动态规划',
+              category: '动态规划',
+              displayOrder: 2,
+              isActive: true,
+            },
+          ]);
+        if (url.includes('/api/problems?'))
+          return response({
+            items: [],
+            page: { total: 25, offset: 10, limit: 10 },
+            facets: { difficulty: {}, sourceType: {}, tags: [] },
+          });
+        return response({}, 404);
+      }),
+    );
+
+    render(<App />);
+    await screen.findByText('暂无题目');
+    fireEvent.click(screen.getByRole('button', { name: /选择标签/ }));
+    const dialog = screen.getByRole('dialog', { name: '选择标签' });
+    fireEvent.change(
+      within(dialog).getByRole('textbox', { name: '搜索标签' }),
+      {
+        target: { value: 'dynamic-programming' },
+      },
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: '动态规划' }));
+
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (url) =>
+            url.includes('offset=0&limit=10') && url.includes('tagIds=2'),
+        ),
+      ).toBe(true),
+    );
+    expect(window.location.search).toBe('?tagIds=2');
+    expect(
+      screen.queryByRole('dialog', { name: '选择标签' }),
+    ).not.toBeInTheDocument();
   });
 });

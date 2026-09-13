@@ -81,7 +81,7 @@ describe('Web V4 R3 layout and information architecture contract', () => {
     },
   );
 
-  it('removes the problem heading while preserving breadcrumb, modern rows, and pagination', async () => {
+  it('preserves the reference hero heading, breadcrumb, modern rows, and pagination', async () => {
     window.history.replaceState({}, '', '/problems');
     vi.stubGlobal(
       'fetch',
@@ -102,7 +102,7 @@ describe('Web V4 R3 layout and information architecture contract', () => {
                 source: '内部来源不应展示',
               },
             ],
-            page: { total: 41, offset: 0, limit: 20 },
+            page: { total: 41, offset: 0, limit: 10 },
           });
         }
         return jsonResponse({}, 404);
@@ -112,13 +112,11 @@ describe('Web V4 R3 layout and information architecture contract', () => {
     expect(
       await screen.findByRole('navigation', { name: '面包屑' }),
     ).toHaveTextContent('题库');
-    expect(
-      screen.queryByRole('heading', { name: '题库' }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '题库' })).toBeInTheDocument();
     expect(
       document.querySelector('.problem-list-modern .problem-row'),
     ).toBeTruthy();
-    expect(screen.getByText('P0001')).toHaveClass('problem-id');
+    expect(document.querySelector('.problem-id')).toHaveTextContent('P0001');
     expect(
       document.querySelector('.problem-list-modern .tag-row'),
     ).toHaveTextContent('数组');

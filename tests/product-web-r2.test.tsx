@@ -94,7 +94,7 @@ describe('Web V4 R2 problem library and guest contracts', () => {
           );
           return response(200, {
             items: [{ ...problem, id: `p-${offset}` }],
-            page: { total: 180, offset, limit: 20 },
+            page: { total: 180, offset, limit: 10 },
           });
         }
         return response(404, {});
@@ -109,12 +109,14 @@ describe('Web V4 R2 problem library and guest contracts', () => {
       'page',
     );
     expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '第 9 页' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '第 18 页' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('…')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '第 2 页' }));
     await waitFor(() => expect(window.location.search).toBe('?page=2'));
     await waitFor(() =>
-      expect(requests.some((url) => url.includes('offset=20'))).toBe(true),
+      expect(requests.some((url) => url.includes('offset=10'))).toBe(true),
     );
     window.history.back();
     window.dispatchEvent(new PopStateEvent('popstate'));
@@ -140,14 +142,14 @@ describe('Web V4 R2 problem library and guest contracts', () => {
           const offset = Number(
             new URL(url, window.location.origin).searchParams.get('offset'),
           );
-          if (offset === 20) {
+          if (offset === 10) {
             return new Promise((resolve) => {
               resolveNextPage = resolve;
             });
           }
           return response(200, {
             items: [{ ...problem, id: `p-${offset}` }],
-            page: { total: 40, offset, limit: 20 },
+            page: { total: 20, offset, limit: 10 },
           });
         }
         return response(404, {});
@@ -163,19 +165,19 @@ describe('Web V4 R2 problem library and guest contracts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '下一页' }));
     await waitFor(() =>
-      expect(requests.filter((url) => url.includes('offset=20'))).toHaveLength(
+      expect(requests.filter((url) => url.includes('offset=10'))).toHaveLength(
         1,
       ),
     );
     expect(pagination).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '下一页' }));
-    expect(requests.filter((url) => url.includes('offset=20'))).toHaveLength(1);
+    expect(requests.filter((url) => url.includes('offset=10'))).toHaveLength(1);
 
     resolveNextPage(
       response(200, {
-        items: [{ ...problem, id: 'p-20' }],
-        page: { total: 40, offset: 20, limit: 20 },
+        items: [{ ...problem, id: 'p-10' }],
+        page: { total: 20, offset: 10, limit: 10 },
       }),
     );
     await waitFor(() =>
