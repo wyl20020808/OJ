@@ -140,6 +140,7 @@ export function ProblemLibraryPage({
     submissionCount: number;
     favoriteCount?: number;
   } | null>(null);
+  const [libraryTotal, setLibraryTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const requestId = useRef(0);
@@ -232,7 +233,11 @@ export function ProblemLibraryPage({
         order: order as ProblemListOrder,
       })
       .then((nextData) => {
-        if (activeRequest === requestId.current) setData(nextData);
+        if (activeRequest === requestId.current) {
+          setData(nextData);
+          if (!query && !difficulty && !tagId && !category && !provider)
+            setLibraryTotal(nextData.page.total);
+        }
       })
       .catch(() => {
         if (activeRequest === requestId.current) setError(true);
@@ -357,7 +362,7 @@ export function ProblemLibraryPage({
   const tagCounts = new Map(
     facets.tags.map((facet) => [facet.id, facet.count]),
   );
-  const totalPages = Math.ceil(data.page.total / data.page.limit);
+  const totalPages = Math.max(1, Math.ceil(data.page.total / data.page.limit));
   const selectedCategory = category
     ? problemCategoryOptions.find((option) => option.value === category)
     : undefined;
@@ -375,15 +380,16 @@ export function ProblemLibraryPage({
     profileOverview?.favoriteCount ??
     (usingDevelopmentFixtureProfile ? 18 : null);
   const recentViewedCount = usingDevelopmentFixtureProfile ? 36 : null;
+  const personalProblemTotal = libraryTotal ?? data.page.total;
   const practiceCount = profileOverview
-    ? Math.max(data.page.total - profileOverview.solvedProblemCount, 0)
+    ? Math.max(personalProblemTotal - profileOverview.solvedProblemCount, 0)
     : null;
   const solvedPercent =
-    profileOverview && data.page.total
+    profileOverview && personalProblemTotal
       ? Math.min(
           100,
           Math.round(
-            (profileOverview.solvedProblemCount / data.page.total) * 100,
+            (profileOverview.solvedProblemCount / personalProblemTotal) * 100,
           ),
         )
       : null;
@@ -682,7 +688,14 @@ export function ProblemLibraryPage({
                   type="button"
                   className="filter-reset"
                   disabled={
-                    !query && !difficulty && !tagId && !category && !provider
+                    !query &&
+                    !difficulty &&
+                    !tagId &&
+                    !category &&
+                    !provider &&
+                    sort === DEFAULT_SORT &&
+                    order === DEFAULT_ORDER &&
+                    page === 1
                   }
                   onClick={clearFilters}
                   aria-label="清除筛选"
@@ -816,10 +829,10 @@ export function ProblemLibraryPage({
                 </div>
                 <div>
                   <dt>总题目</dt>
-                  <dd>{data.page.total.toLocaleString('zh-CN')}</dd>
+                  <dd>{personalProblemTotal.toLocaleString('zh-CN')}</dd>
                 </div>
                 <div>
-                  <dt>正在努力中</dt>
+                  <dt>提交记录</dt>
                   <dd>{profileOverview?.submissionCount ?? '—'}</dd>
                 </div>
               </dl>
@@ -834,6 +847,7 @@ export function ProblemLibraryPage({
             <div className="hot-tags">
               {tagCatalog.length ? (
                 [...tagCatalog]
+                  .filter((tag) => (tagCounts.get(tag.id) ?? 0) > 0)
                   .sort(
                     (a, b) =>
                       (tagCounts.get(b.id) ?? 0) - (tagCounts.get(a.id) ?? 0),
