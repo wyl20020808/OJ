@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 190" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="qsky" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#f9fdff"/>
+      <stop offset="1" stop-color="#dbeeff"/>
+    </linearGradient>
+    <linearGradient id="qmount" x1="0" x2="0" y1="0" y2="1">
+      <stop stop-color="#6eb4f5"/>
+      <stop offset="1" stop-color="#dcefff"/>
+    </linearGradient>
+  </defs>
+  <rect width="380" height="190" rx="12" fill="url(#qsky)"/>
+  <path d="M0 155 46 129l42 16 54-24 47 27 47-30 39 21 57-79 48 82v48H0Z" fill="#cce7ff" opacity=".72"/>
+  <path d="m135 175 52-56 30 24 54-42 31 26 30-67 48 82v48H135Z" fill="url(#qmount)" opacity=".82"/>
+  <path d="m271 101 31-41 13 23-12-5-11 20Z" fill="#fff" opacity=".85"/>
+  <path d="M0 170c77-18 132 9 209-2 78-11 121-5 171 3v19H0Z" fill="#f9fdff" opacity=".8"/>
+</svg>
