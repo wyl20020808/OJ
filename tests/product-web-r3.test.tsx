@@ -81,7 +81,7 @@ describe('Web V4 R3 layout and information architecture contract', () => {
     },
   );
 
-  it('preserves the reference hero heading, breadcrumb, modern rows, and pagination', async () => {
+  it('preserves the reference hero heading, breadcrumb-free layout, modern rows, and pagination', async () => {
     window.history.replaceState({}, '', '/problems');
     vi.stubGlobal(
       'fetch',
@@ -110,9 +110,11 @@ describe('Web V4 R3 layout and information architecture contract', () => {
     );
     render(<App />);
     expect(
-      await screen.findByRole('navigation', { name: '面包屑' }),
-    ).toHaveTextContent('题库');
-    expect(screen.getByRole('heading', { name: '题库' })).toBeInTheDocument();
+      await screen.findByRole('heading', { name: '题库' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('navigation', { name: '面包屑' }),
+    ).not.toBeInTheDocument();
     expect(
       document.querySelector('.problem-list-modern .problem-row'),
     ).toBeTruthy();

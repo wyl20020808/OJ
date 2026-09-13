@@ -80,17 +80,17 @@
     center -65px;
   background-size:
     100% 100%,
-    1448px auto;
+    100% 1086px;
 }
 
 .problem-library-hero-inner,
 .problem-library-layout {
-  width: min(1404px, calc(100% - 44px));
+  width: min(1800px, calc(100% - 44px));
   margin-inline: auto;
 }
 
 .problem-library-hero-inner {
-  padding: 27px 48px 0;
+  padding: 34px 48px 0;
 }
 
 .problem-library-hero p {
@@ -132,7 +132,7 @@
   grid-template-columns: 216px minmax(0, 1fr) 272px;
   gap: 12px;
   align-items: start;
-  padding-top: 14px;
+  padding-top: 15px;
 }
 
 .problem-library-main,
@@ -148,7 +148,7 @@
 }
 
 .problem-sidebar {
-  min-height: 738px;
+  min-height: 808px;
   padding: 12px 13px;
   border: 1px solid #e1e8f0;
   border-radius: 8px;
@@ -265,6 +265,26 @@
   color: #6481aa;
 }
 
+.source-button-creator .problem-library-icon {
+  color: #2f86ed;
+}
+
+.source-button-external .problem-library-icon {
+  color: #f0a329;
+}
+
+.source-button-import .problem-library-icon {
+  color: #27af86;
+}
+
+.source-button-test-fixture .problem-library-icon {
+  color: #8658d6;
+}
+
+.source-button-api-automation .problem-library-icon {
+  color: #e35f68;
+}
+
 .difficulty-dot {
   width: 12px;
   height: 12px;
@@ -290,7 +310,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-  min-height: 286px;
+  min-height: 294px;
   margin: 0 0 10px;
   padding: 13px 18px 14px;
   overflow: visible;
@@ -345,6 +365,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px 22px;
+}
+
+.source-options {
+  flex: 1;
+  justify-content: space-between;
+  gap: 8px 18px;
 }
 
 .check-options label,
@@ -736,20 +762,13 @@
 }
 
 .problem-list-pagination {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
   display: grid;
   grid-template-columns: minmax(150px, 1fr) auto minmax(70px, 1fr);
   align-items: center;
-  min-height: 58px;
-  margin-top: 14px;
-  padding: 8px 12px;
-  border: 1px solid #e1e8f0;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 -4px 14px rgba(32, 53, 83, 0.05);
-  backdrop-filter: blur(8px);
+  min-height: 46px;
+  margin-top: 8px;
+  padding: 6px 2px;
+  background: #fff;
 }
 
 .pagination-summary,
@@ -1027,6 +1046,9 @@
     background-position:
       center,
       60% -65px;
+    background-size:
+      100% 100%,
+      1448px auto;
   }
   .problem-library-hero-inner,
   .problem-library-layout {

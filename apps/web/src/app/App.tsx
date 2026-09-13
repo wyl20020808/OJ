@@ -2815,6 +2815,7 @@ export function App() {
       }
       breadcrumbs={
         current.name !== 'home' &&
+        current.name !== 'problems' &&
         current.name !== 'problem' &&
         current.name !== 'discussion' &&
         current.name !== 'discussion-post' &&

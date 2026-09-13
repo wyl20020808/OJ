@@ -475,9 +475,9 @@ export function ProblemLibraryPage({
                 <div key={item}>
                   <button
                     type="button"
-                    className={
+                    className={`source-button source-button-${item.toLowerCase().replace('_', '-')} ${
                       sourceType === item ? 'sidebar-filter-active' : ''
-                    }
+                    }`}
                     onClick={() =>
                       updateFilter(
                         'sourceType',
@@ -506,7 +506,7 @@ export function ProblemLibraryPage({
             }}
           >
             <div className="filter-row category-filter-row">
-              <strong>题目标签</strong>
+              <strong>题目分类</strong>
               <div className="category-tabs">
                 {categoryOptions.map((item) => (
                   <button
@@ -540,7 +540,7 @@ export function ProblemLibraryPage({
 
             <div className="filter-row">
               <strong>题目来源</strong>
-              <div className="check-options">
+              <div className="check-options source-options">
                 {sourceOptions.map((item) => (
                   <label key={item}>
                     <input
