@@ -90,7 +90,7 @@
 }
 
 .problem-library-hero-inner {
-  padding: 34px 48px 0;
+  padding: 36px 48px 0;
 }
 
 .problem-library-hero p {
@@ -105,7 +105,7 @@
   margin: 0;
   color: #112243;
   font-family: Georgia, 'Times New Roman', 'Noto Serif SC', 'Songti SC', serif;
-  font-size: 42px;
+  font-size: 44px;
   font-weight: 700;
   line-height: 1.14;
   letter-spacing: 0.08em;
@@ -130,7 +130,7 @@
 .problem-library-layout {
   display: grid;
   grid-template-columns: 216px minmax(0, 1fr) 272px;
-  gap: 12px;
+  gap: 13px;
   align-items: start;
   padding-top: 15px;
 }
@@ -423,11 +423,19 @@
   padding: 2px 5px;
   border: 1px solid #dce5ef;
   border-radius: 6px;
-  background: #fff;
+  background: #f8fafc;
 }
 
 .problem-tag-filter .tag-selector-selected {
+  flex: 1;
   min-width: 0;
+}
+
+.problem-tag-filter .tag-selector-selected:empty::before {
+  padding-left: 7px;
+  color: #9aa7ba;
+  content: '选择标签（可搜索）';
+  font-size: 12px;
 }
 
 .problem-tag-filter .tag-selected-chip,
@@ -438,10 +446,25 @@
 }
 
 .problem-tag-filter .tag-selector-trigger {
+  width: 30px;
+  min-width: 30px;
   margin-left: auto;
+  padding-inline: 0;
   border-color: transparent;
   border-radius: 5px;
-  background: #eff5fd;
+  background: transparent;
+  color: #6d809c;
+  font-size: 0;
+}
+
+.problem-tag-filter .tag-selector-trigger span {
+  display: none;
+}
+
+.problem-tag-filter .tag-selector-trigger::after {
+  content: '⌄';
+  font-size: 16px;
+  line-height: 1;
 }
 
 .problem-tag-filter .tag-selector-popover {
@@ -628,10 +651,9 @@
 .problem-table-header,
 .problem-row {
   display: grid;
-  grid-template-columns: 64px minmax(130px, 1.8fr) 56px minmax(
-      100px,
-      1.25fr
-    ) 74px 64px 64px 42px 50px;
+  grid-template-columns:
+    64px minmax(130px, 1.8fr) 56px minmax(100px, 1.25fr)
+    74px 64px 64px 42px 50px;
   gap: 7px;
   align-items: center;
   min-width: 760px;
@@ -647,12 +669,75 @@
 }
 
 .problem-row {
-  min-height: 37px;
+  min-height: 30px;
   color: #314361;
   font-family: Georgia, 'Times New Roman', 'Noto Serif SC', 'Songti SC', serif;
   font-size: 12px;
   line-height: 1.25;
   text-decoration: none;
+}
+
+.problem-table.is-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.problem-table.is-grid .problem-table-header {
+  display: none;
+}
+
+.problem-table.is-grid > [role='listitem'] {
+  overflow: hidden;
+  border: 1px solid #e1e8f0;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.problem-table.is-grid .problem-row {
+  grid-template-areas:
+    'id title difficulty'
+    'tags tags tags'
+    'source rate submissions'
+    'star star action';
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px 8px;
+  min-width: 0;
+  min-height: 150px;
+  padding: 14px;
+}
+
+.problem-table.is-grid .problem-id {
+  grid-area: id;
+}
+.problem-table.is-grid .problem-title {
+  grid-area: title;
+}
+.problem-table.is-grid .problem-difficulty-chip {
+  grid-area: difficulty;
+}
+.problem-table.is-grid .tag-row {
+  grid-area: tags;
+}
+.problem-table.is-grid .problem-source {
+  grid-area: source;
+}
+.problem-table.is-grid .problem-rate {
+  grid-area: rate;
+}
+.problem-table.is-grid .problem-submissions {
+  grid-area: submissions;
+  justify-self: end;
+}
+.problem-table.is-grid .problem-star {
+  grid-area: star;
+  justify-self: start;
+}
+.problem-table.is-grid .problem-action {
+  grid-area: action;
 }
 
 .problem-row:hover,
@@ -1098,6 +1183,9 @@
   .problem-list-pagination {
     grid-template-columns: 1fr;
     gap: 7px;
+  }
+  .problem-table.is-grid {
+    grid-template-columns: 1fr;
   }
   .pagination-summary {
     text-align: center;

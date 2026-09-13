@@ -22,7 +22,20 @@ import { ProblemPagination } from './components/ProblemPagination.js';
 import { ProblemTable } from './components/ProblemTable.js';
 import './ProblemLibraryPage.css';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
+const DEFAULT_SORT: ProblemListSort = import.meta.env.DEV
+  ? 'updatedAt'
+  : 'publicNumber';
+const DEFAULT_ORDER: ProblemListOrder = import.meta.env.DEV ? 'desc' : 'asc';
+
+const featuredTagSlugs = [
+  'enumeration',
+  'linked-list',
+  'dynamic-programming',
+  'shortest-path',
+  'string-matching',
+  'number-theory',
+] as const;
 
 const problemSourceLabels = {
   CREATOR: '平台创建',
@@ -103,8 +116,8 @@ export function ProblemLibraryPage({
       difficulty: params.get('difficulty') ?? '',
       tagId: params.get('tagIds') ?? '',
       sourceType: params.get('sourceType') ?? '',
-      sort: params.get('sort') ?? 'publicNumber',
-      order: params.get('order') ?? 'asc',
+      sort: params.get('sort') ?? DEFAULT_SORT,
+      order: params.get('order') ?? DEFAULT_ORDER,
     };
   }, []);
   const [page, setPage] = useState(initialState.page);
@@ -115,6 +128,7 @@ export function ProblemLibraryPage({
   const [sourceType, setSourceType] = useState(initialState.sourceType);
   const [sort, setSort] = useState(initialState.sort);
   const [order, setOrder] = useState(initialState.order);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [data, setData] = useState<{
     items: Problem[];
     page: { total: number; offset: number; limit: number };
@@ -156,8 +170,8 @@ export function ProblemLibraryPage({
       if (
         value &&
         !(
-          (key === 'sort' && value === 'publicNumber') ||
-          (key === 'order' && value === 'asc')
+          (key === 'sort' && value === DEFAULT_SORT) ||
+          (key === 'order' && value === DEFAULT_ORDER)
         )
       )
         params.set(key === 'tagId' ? 'tagIds' : key, value);
@@ -182,8 +196,8 @@ export function ProblemLibraryPage({
     setDifficulty('');
     setTagId('');
     setSourceType('');
-    setSort('publicNumber');
-    setOrder('asc');
+    setSort(DEFAULT_SORT);
+    setOrder(DEFAULT_ORDER);
     setPage(1);
     window.history.replaceState({}, '', '/problems');
   };
@@ -284,8 +298,8 @@ export function ProblemLibraryPage({
       setDifficulty(params.get('difficulty') ?? '');
       setTagId(params.get('tagIds') ?? '');
       setSourceType(params.get('sourceType') ?? '');
-      setSort(params.get('sort') ?? 'publicNumber');
-      setOrder(params.get('order') ?? 'asc');
+      setSort(params.get('sort') ?? DEFAULT_SORT);
+      setOrder(params.get('order') ?? DEFAULT_ORDER);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -324,10 +338,10 @@ export function ProblemLibraryPage({
   const totalPages = Math.ceil(data.page.total / data.page.limit);
   const categoryOptions = [
     { label: '全部题目', value: '' },
-    ...tagCatalog.slice(0, 6).map((tag) => ({
-      label: tag.name,
-      value: String(tag.id),
-    })),
+    ...featuredTagSlugs
+      .map((slug) => tagCatalog.find((tag) => tag.slug === slug))
+      .filter((tag): tag is NonNullable<typeof tag> => Boolean(tag))
+      .map((tag) => ({ label: tag.name, value: String(tag.id) })),
   ];
   const solvedPercent =
     profileOverview && data.page.total
@@ -675,17 +689,19 @@ export function ProblemLibraryPage({
               </select>
               <button
                 type="button"
-                className="view-toggle active"
+                className={`view-toggle${viewMode === 'list' ? ' active' : ''}`}
                 aria-label="列表视图"
-                aria-pressed="true"
+                aria-pressed={viewMode === 'list'}
+                onClick={() => setViewMode('list')}
               >
                 <Icon name="list" />
               </button>
               <button
                 type="button"
-                className="view-toggle"
-                aria-label="网格视图暂不可用"
-                disabled
+                className={`view-toggle${viewMode === 'grid' ? ' active' : ''}`}
+                aria-label="网格视图"
+                aria-pressed={viewMode === 'grid'}
+                onClick={() => setViewMode('grid')}
               >
                 <Icon name="grid" />
               </button>
@@ -720,6 +736,7 @@ export function ProblemLibraryPage({
             <ProblemTable
               items={data.items}
               loading={loading}
+              viewMode={viewMode}
               navigate={navigate}
             />
           )}

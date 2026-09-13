@@ -787,3 +787,5 @@ architecture changed. Focused detail tests 15/15, Web regression tests 12/12,
 typecheck, changed-file lint, Web build, architecture, and diff checks pass.
 Manual visual acceptance remains PENDING USER. See
 `Docs/reports/OJPLATFORM_EVALUATION_SUBMISSION_DETAIL_UI_ITERATION_V1_REPORT.md`.
+
+Problem Library Screenshot Repair Pass V2 (2026-09-13): PASS for feature implementation and browser verification on branch `codex/problem-library-screenshot-repair-v2`. Real `1448×1086` before/after capture now matches the reference structure more closely: denser 15-row table, working list/grid modes, refined Hero/filter/tag-selector geometry, populated right rail, and responsive no-overflow behavior. Local-only opt-in fixtures provide 30 provenance-marked problems plus 8,535 deterministic demo submission/evaluation rows; production semantics/startup remain unchanged. Focused tests 2/2, typecheck, Web build, and diff check pass. Manual final review remains PENDING USER. See `Docs/reports/PROBLEM_LIBRARY_SCREENSHOT_REPAIR_V2_REPORT.md`.

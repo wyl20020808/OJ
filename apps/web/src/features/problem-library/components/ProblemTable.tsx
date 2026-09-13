@@ -13,15 +13,17 @@ const sourceLabels = {
 export function ProblemTable({
   items,
   loading,
+  viewMode,
   navigate,
 }: {
   items: Problem[];
   loading: boolean;
+  viewMode: 'list' | 'grid';
   navigate: (path: string) => void;
 }) {
   return (
     <div
-      className={`problem-table problem-list-modern${loading ? ' is-loading' : ''}`}
+      className={`problem-table problem-list-modern is-${viewMode}${loading ? ' is-loading' : ''}`}
       role="list"
       aria-label="题目列表"
     >

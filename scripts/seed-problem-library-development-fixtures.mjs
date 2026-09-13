@@ -22,21 +22,21 @@ const fixtureOwner = {
 };
 
 const problems = [
-  ['array-dedup', '数组去重与排序', '入门', ['sorting', 'hash-table'], '练习排序与集合去重的基本使用。'],
-  ['prefix-sum-range', '静态区间和', '入门', ['prefix-sum'], '用前缀和快速回答多次区间查询。'],
-  ['string-palindrome', '回文串判定', '入门', ['two-pointers', 'string-matching'], '判断一个字符串是否左右对称。'],
-  ['prime-check', '素数判定', '入门', ['prime-numbers', 'enumeration'], '在平方根范围内完成素数判断。'],
-  ['binary-search-first', '第一个满足条件的位置', '入门', ['binary-search'], '练习二分边界和单调条件。'],
-  ['grid-bfs-shortest', '网格最短路', '入门', ['breadth-first-search'], '在障碍网格中寻找最少步数。'],
-  ['sliding-window-max', '滑动窗口最大值', '简单', ['heap'], '维护窗口内候选值并在线输出答案。'],
-  ['merge-intervals', '区间合并', '简单', ['sorting', 'greedy'], '按端点排序后合并重叠区间。'],
-  ['linked-list-reverse', '反转链表', '简单', ['linked-list'], '使用迭代指针完成链表翻转。'],
-  ['frequency-top-k', '高频元素 Top K', '简单', ['hash-table', 'heap'], '统计频率并选出出现次数最多的元素。'],
-  ['knapsack-01', '0/1 背包入门', '简单', ['dynamic-programming', 'knapsack'], '用一维动态规划安排有限容量。'],
-  ['gcd-lcm', '最大公约数与最小公倍数', '简单', ['gcd', 'number-theory'], '通过欧几里得算法处理整数关系。'],
-  ['tree-level-order', '二叉树层序遍历', '中等', ['binary-tree', 'breadth-first-search'], '按层收集二叉树节点。'],
-  ['dijkstra-routing', '单源最短路', '中等', ['shortest-path', 'dijkstra'], '在非负权图上计算最短距离。'],
-  ['union-find-connectivity', '动态连通性', '中等', ['disjoint-set-union'], '用并查集维护集合合并与查询。'],
+  ['array-dedup', 'Unique Array · 数组去重', '入门', ['sorting', 'hash-table'], '练习排序与集合去重的基本使用。'],
+  ['prefix-sum-range', 'Range Sum Query · 静态区间和', '入门', ['prefix-sum'], '用前缀和快速回答多次区间查询。'],
+  ['string-palindrome', 'Palindrome Check · 回文串判定', '入门', ['two-pointers', 'string-matching'], '判断一个字符串是否左右对称。'],
+  ['prime-check', 'Prime Check · 素数判定', '入门', ['prime-numbers', 'enumeration'], '在平方根范围内完成素数判断。'],
+  ['binary-search-first', 'First True · 二分边界', '入门', ['binary-search'], '练习二分边界和单调条件。'],
+  ['grid-bfs-shortest', 'Grid Shortest Path · 网格最短路', '入门', ['breadth-first-search'], '在障碍网格中寻找最少步数。'],
+  ['sliding-window-max', 'Sliding Window Maximum', '简单', ['heap'], '维护窗口内候选值并在线输出答案。'],
+  ['merge-intervals', 'Merge Intervals · 区间合并', '简单', ['sorting', 'greedy'], '按端点排序后合并重叠区间。'],
+  ['linked-list-reverse', 'Reverse Linked List · 反转链表', '简单', ['linked-list'], '使用迭代指针完成链表翻转。'],
+  ['frequency-top-k', 'Top K Frequent Elements', '简单', ['hash-table', 'heap'], '统计频率并选出出现次数最多的元素。'],
+  ['knapsack-01', '0/1 Knapsack · 背包入门', '简单', ['dynamic-programming', 'knapsack'], '用一维动态规划安排有限容量。'],
+  ['gcd-lcm', 'GCD & LCM · 最大公约数', '简单', ['gcd', 'number-theory'], '通过欧几里得算法处理整数关系。'],
+  ['tree-level-order', 'Binary Tree Level Order', '中等', ['binary-tree', 'breadth-first-search'], '按层收集二叉树节点。'],
+  ['dijkstra-routing', 'Dijkstra Routing · 单源最短路', '中等', ['shortest-path', 'dijkstra'], '在非负权图上计算最短距离。'],
+  ['union-find-connectivity', 'Dynamic Connectivity · 动态连通性', '中等', ['disjoint-set-union'], '用并查集维护集合合并与查询。'],
   ['longest-increasing-subsequence', '最长上升子序列', '中等', ['dynamic-programming', 'longest-increasing-subsequence'], '比较 n² DP 与贪心二分优化。'],
   ['kmp-pattern-search', '模式串匹配', '中等', ['string-matching', 'kmp'], '构造失败函数进行线性匹配。'],
   ['topological-schedule', '课程安排', '中等', ['topological-sort', 'breadth-first-search'], '判断依赖关系是否存在环。'],
@@ -93,7 +93,7 @@ try {
     const updatedAt = new Date(now - index * 6 * 60 * 60 * 1000);
     const provenance = JSON.stringify({
       kind: 'DEVELOPMENT_FIXTURE',
-      scenario: 'PROBLEM_LIBRARY_FULL_EXPERIENCE_V1',
+      scenario: 'PROBLEM_LIBRARY_FULL_EXPERIENCE_V2',
       fixture: 'local-only',
     });
     const statement = `${summary} ${fixtureNote}`;
@@ -116,8 +116,9 @@ try {
       ],
     );
     const row = result.rows[0];
-    if (!row.current_revision_id) {
-      const revisionId = `${id}-revision-1`;
+    let revisionId = row.current_revision_id;
+    if (!revisionId) {
+      revisionId = `${id}-revision-1`;
       await client.query(
         `INSERT INTO problem_revisions(id,problem_id,public_number,revision_number,slug,title,background,statement,input_description,output_description,examples,constraints,notes,time_limit_ms,memory_limit_bytes,visibility,difficulty,status,testdata_version,author_id,created_by,provenance,created_at)
          VALUES($1,$2,$3,1,$4,$5,'',$6,'标准输入。','标准输出。','[{"input":"1 2","output":"3"}]'::jsonb,'请根据题目要求完成实现。',$7,1000,268435456,'public',$8,'published',NULL,$9,$9,$10::jsonb,$11)
@@ -148,11 +149,29 @@ try {
        ON CONFLICT DO NOTHING`,
       [id, tags],
     );
+
+    const submissionCount = 96 + index * 13;
+    const acceptedPercent = 44 + ((index * 11) % 48);
+    await client.query(
+      `INSERT INTO submissions(id,owner_user_id,problem_id,problem_revision_id,testdata_version_ref,language_id,source,status,created_at,updated_at)
+       SELECT $1 || '-submission-' || lpad(series::text,4,'0'),$2,$1,$3,'development-fixture-v1','cpp20-gcc-13-v1','// DEVELOPMENT FIXTURE / DEMO DATA','QUEUED',$4::timestamptz + make_interval(mins => series),$4::timestamptz + make_interval(mins => series)
+       FROM generate_series(1,$5::int) AS series
+       ON CONFLICT (id) DO UPDATE SET problem_revision_id=EXCLUDED.problem_revision_id,updated_at=EXCLUDED.updated_at`,
+      [id, fixtureOwnerId, revisionId, createdAt, submissionCount],
+    );
+    await client.query(
+      `INSERT INTO submission_evaluations(submission_id,evaluation_generation,attempt_generation,judge_job_id,verdict_record_digest,evaluation_record_digest,status,verdict,current,detail,created_at,updated_at,completed_at)
+       SELECT s.id,1,0,'development-fixture-' || s.id,md5('verdict-' || s.id),md5('evaluation-' || s.id),'COMPLETED_WITH_VERDICT',CASE WHEN series % 100 < $2::int THEN 'AC' ELSE 'WA' END,TRUE,'{"fixture":"PROBLEM_LIBRARY_FULL_EXPERIENCE_V2"}'::jsonb,s.created_at,s.updated_at,s.updated_at
+       FROM generate_series(1,$3::int) AS series
+       JOIN submissions s ON s.id=$1 || '-submission-' || lpad(series::text,4,'0')
+       ON CONFLICT (submission_id,evaluation_generation) DO UPDATE SET status=EXCLUDED.status,verdict=EXCLUDED.verdict,current=TRUE,detail=EXCLUDED.detail,updated_at=EXCLUDED.updated_at,completed_at=EXCLUDED.completed_at`,
+      [id, acceptedPercent, submissionCount],
+    );
   }
 
   await client.query('COMMIT');
   console.log(
-    'PROBLEM LIBRARY DEVELOPMENT FIXTURES SEEDED: 30 TEST_FIXTURE problems, no submissions.',
+    'PROBLEM LIBRARY DEVELOPMENT FIXTURES SEEDED: 30 TEST_FIXTURE problems with deterministic demo submissions.',
   );
 } catch (error) {
   await client.query('ROLLBACK');
