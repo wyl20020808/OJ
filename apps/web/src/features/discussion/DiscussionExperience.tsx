@@ -1172,14 +1172,6 @@ export function DiscussionPostPage({
             className="blog-detail-comments-card"
             id="blog-detail-comments"
           >
-            <div className="blog-detail-comments-sort" aria-label="评论排序">
-              <button className="active" type="button" data-ui-only="true">
-                按热度
-              </button>
-              <button type="button" data-ui-only="true">
-                按时间
-              </button>
-            </div>
             <DiscussionComments
               api={api}
               navigate={navigate}
