@@ -2,14 +2,6 @@
   background: #f7fbff;
 }
 
-@media (min-width: 1181px) {
-  .homework-dashboard-view {
-    height: 100vh;
-    overflow: hidden;
-  }
-}
-
-.homework-dashboard-view > .app-navbar,
 .homework-dashboard-view > footer {
   display: none;
 }
