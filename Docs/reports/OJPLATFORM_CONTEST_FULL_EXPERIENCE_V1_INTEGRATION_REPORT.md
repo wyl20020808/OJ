@@ -37,6 +37,12 @@ PASS
 - Shared Runtime Manager retained existing mismatched runtime ownership; it was not force-switched.
 - Browser acceptance deferred to user. It is not an integration blocker.
 
+## Main Finalization and Workspace Preservation
+
+- `refs/heads/main` was fast-forwarded to the validated candidate after all code-level checks passed.
+- Canonical root `D:\OJPlatform` had five tracked user edits and preserved untracked work. To avoid overwriting or reinterpreting that work against the new Main tree, it remains detached at its pre-integration commit `21d6248`.
+- No user file, stash, unknown directory, or registered worktree was deleted or overwritten. Three stashes and 121 registered worktrees remain preserved.
+
 ## Qualification Labels
 
 - CONTEST V1 MERGE: PASS
