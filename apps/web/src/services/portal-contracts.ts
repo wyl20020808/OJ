@@ -41,6 +41,11 @@ export type ContestSummary = {
   format: ContestFormat;
   startsAt: string;
   endsAt: string;
+  description?: string;
+  organizer?: { id: string; username: string; displayName: string };
+  participantCount?: number;
+  problemCount?: number;
+  registrationState?: 'NOT_AUTHENTICATED' | 'NOT_REGISTERED' | 'REGISTERED';
   relationship?: 'CREATED' | 'MANAGED' | 'REGISTERED';
 };
 

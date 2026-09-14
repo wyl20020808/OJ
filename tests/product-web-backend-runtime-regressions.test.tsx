@@ -48,6 +48,16 @@ const contest = {
   format: 'ICPC',
   startsAt: '2026-09-02T10:00:00.000Z',
   endsAt: '2026-09-02T12:00:00.000Z',
+  registration: 'REGISTRATION_OPEN',
+  registrationState: 'NOT_REGISTERED',
+  canRegister: true,
+  participantCount: 42,
+  problemCount: 6,
+  organizer: {
+    id: 'owner-1',
+    username: 'contest-owner',
+    displayName: '比赛组委会',
+  },
   canManage: false,
   createdAt: '2026-09-01T00:00:00.000Z',
   updatedAt: '2026-09-01T00:00:00.000Z',
@@ -167,7 +177,9 @@ describe('Product Web Backend runtime regressions', () => {
       await screen.findByText('游客账号需要升级为正式账号后才能使用此能力。'),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
-    expect(await screen.findByText('我的创建比赛')).toBeInTheDocument();
+    expect((await screen.findAllByText('我的创建比赛')).length).toBeGreaterThan(
+      0,
+    );
     expect(
       fetcher.mock.calls.some(([url]) =>
         String(url).includes('/api/profile/contests?limit=20'),
@@ -273,7 +285,7 @@ describe('Product Web Backend runtime regressions', () => {
         return response(200, { status: 'ok', dependencies: {} });
       if (url.endsWith('/api/notifications/unread-count'))
         return response(200, { count: 0 });
-      if (url.includes('/api/contests?limit=20')) {
+      if (url.endsWith('/api/contests/home-summary')) {
         contestCalls += 1;
         return contestCalls === 1
           ? response(500, {
@@ -281,7 +293,12 @@ describe('Product Web Backend runtime regressions', () => {
               message: 'unavailable',
               requestId: 'contest',
             })
-          : response(200, { items: [contest] });
+          : response(200, {
+              running: [],
+              upcoming: [contest],
+              recentEnded: [],
+              counts: { running: 0, upcoming: 1, ended: 0 },
+            });
       }
       return response(404, {
         code: 'NOT_FOUND',
@@ -296,7 +313,7 @@ describe('Product Web Backend runtime regressions', () => {
       await screen.findByText('比赛列表暂时不可用，请稍后重试。'),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
-    expect(await screen.findByText('真实比赛')).toBeInTheDocument();
+    expect((await screen.findAllByText('真实比赛')).length).toBeGreaterThan(0);
     expect(contestCalls).toBe(2);
   });
 

@@ -236,6 +236,16 @@ export type BackendContest = {
   endsAt: string;
   registrationOpenAt?: string | null;
   registrationCloseAt?: string | null;
+  registration: 'REGISTRATION_OPEN' | 'REGISTRATION_CLOSED';
+  registrationState: 'NOT_AUTHENTICATED' | 'NOT_REGISTERED' | 'REGISTERED';
+  canRegister: boolean;
+  participantCount: number;
+  problemCount: number;
+  organizer: {
+    id: string;
+    username: string;
+    displayName: string;
+  };
   canManage: boolean;
   createdAt: string;
   updatedAt: string;
@@ -1591,6 +1601,7 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         running: BackendContest[];
         upcoming: BackendContest[];
         recentEnded: BackendContest[];
+        counts: { running: number; upcoming: number; ended: number };
       }>(baseUrl, '/api/contests/home-summary', undefined, fetcher),
     contestStandings: (id: string) =>
       request<

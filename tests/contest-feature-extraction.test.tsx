@@ -11,6 +11,17 @@ const contest: ContestListItem = {
   title: 'Contest extraction fixture',
   lifecycle: 'UPCOMING',
   visibility: 'PUBLIC',
+  description: '动态规划 · 背包与区间模型',
+  organizer: {
+    id: 'owner-1',
+    username: 'algorithm-club',
+    displayName: '算法训练营',
+  },
+  participantCount: 128,
+  problemCount: 6,
+  format: 'ICPC',
+  registration: 'REGISTRATION_OPEN',
+  registrationState: 'NOT_REGISTERED',
   startsAt: '2026-09-11T12:00:00.000Z',
   endsAt: '2026-09-11T14:00:00.000Z',
 };
@@ -29,8 +40,11 @@ describe('Contest feature extraction', () => {
       />,
     );
 
-    expect(screen.getByText(contest.title)).toBeInTheDocument();
+    expect(screen.getAllByText(contest.title).length).toBeGreaterThan(0);
     expect(screen.getByText('UPCOMING')).toBeInTheDocument();
+    expect(screen.getAllByText('算法训练营').length).toBeGreaterThan(0);
+    expect(screen.getByText('128 人')).toBeInTheDocument();
+    expect(screen.getByText('6 题')).toBeInTheDocument();
     const contestLink = document.querySelector<HTMLAnchorElement>(
       'a[href="/contests/contest-1"]',
     );
@@ -43,12 +57,7 @@ describe('Contest feature extraction', () => {
   it('preserves loading, error retry, and empty states', () => {
     const retry = vi.fn();
     const { rerender } = render(
-      <ContestPage
-        view="mine"
-        contests={[]}
-        navigate={vi.fn()}
-        loading
-      />,
+      <ContestPage view="mine" contests={[]} navigate={vi.fn()} loading />,
     );
     expect(document.querySelector('.contest-landing-state')).toHaveAttribute(
       'role',
@@ -76,18 +85,14 @@ describe('Contest feature extraction', () => {
         loading={false}
       />,
     );
-    expect(document.querySelector('.contest-showcase-grid')).toBeTruthy();
+    expect(screen.getByText('没有找到匹配的比赛。')).toBeInTheDocument();
   });
 
   it('keeps ContestExperience as the route-compatible feature entry', () => {
     render(
-      <ContestExperience
-        view="list"
-        contests={[contest]}
-        navigate={vi.fn()}
-      />,
+      <ContestExperience view="list" contests={[contest]} navigate={vi.fn()} />,
     );
     expect(document.querySelector('.contest-landing')).toBeTruthy();
-    expect(screen.getByText(contest.title)).toBeInTheDocument();
+    expect(screen.getAllByText(contest.title).length).toBeGreaterThan(0);
   });
 });

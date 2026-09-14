@@ -2315,13 +2315,15 @@ const contestSummary = (
   title: value.title,
   lifecycle: value.lifecycle,
   visibility: value.visibility,
-  registration:
-    value.lifecycle === 'UPCOMING'
-      ? 'REGISTRATION_OPEN'
-      : 'REGISTRATION_CLOSED',
+  registration: value.registration,
   format: value.format,
   startsAt: value.startsAt,
   endsAt: value.endsAt,
+  description: value.description,
+  organizer: value.organizer,
+  participantCount: value.participantCount,
+  problemCount: value.problemCount,
+  registrationState: value.registrationState,
 });
 
 const profileContestSummary = (value: ProfileContest): ContestListItem => ({
@@ -2400,7 +2402,15 @@ function ContestRoute({
           ? api
               .profileContests()
               .then((result) => result.items.map(profileContestSummary))
-          : api.contests().then((result) => result.items.map(contestSummary));
+          : api
+              .contestHomeSummary()
+              .then((result) =>
+                [
+                  ...result.running,
+                  ...result.upcoming,
+                  ...result.recentEnded,
+                ].map(contestSummary),
+              );
       void request
         .then((items) => {
           if (active) setContests(items);
@@ -2438,7 +2448,7 @@ function ContestRoute({
         setDetail({
           ...contestSummary(value),
           description: value.description,
-          canRegister: value.lifecycle === 'UPCOMING',
+          canRegister: value.canRegister,
           canManage: value.canManage,
         });
         setProblems(problemResult.items.map(contestProblemSummary));
