@@ -50,6 +50,7 @@ try {
     '0033_blog_full_experience',
     '0034_problem_provider_semantics',
     '0035_problem_revision_source_type',
+    '0036_contest_development_provenance',
   ];
   if (requestedMigration && !migrations.includes(requestedMigration))
     throw new Error(`Unknown migration: ${requestedMigration}`);

@@ -59,6 +59,16 @@ const state = (r: Row) =>
         : new Date(String(r.ends_at)) <= new Date()
           ? 'ENDED'
           : 'RUNNING';
+const registrationOpen = (r: Row) => {
+  const now = new Date();
+  return (
+    state(r) === 'UPCOMING' &&
+    (!r.registration_open_at ||
+      new Date(String(r.registration_open_at)) <= now) &&
+    (!r.registration_close_at ||
+      new Date(String(r.registration_close_at)) >= now)
+  );
+};
 const json = (r: Row, auth?: Auth) => ({
   id: String(r.id),
   title: String(r.title),
@@ -75,12 +85,44 @@ const json = (r: Row, auth?: Auth) => ({
   registrationCloseAt:
     r.registration_close_at &&
     new Date(String(r.registration_close_at)).toISOString(),
+  registration: registrationOpen(r)
+    ? 'REGISTRATION_OPEN'
+    : 'REGISTRATION_CLOSED',
+  registrationState: String(
+    r.registration_state ?? (auth ? 'NOT_REGISTERED' : 'NOT_AUTHENTICATED'),
+  ),
+  canRegister: registrationOpen(r),
+  participantCount: Number(r.participant_count ?? 0),
+  problemCount: Number(r.problem_count ?? 0),
+  organizer: {
+    id: String(r.owner_user_id),
+    username: String(r.organizer_username ?? ''),
+    displayName: String(r.organizer_display_name ?? ''),
+  },
   canManage: Boolean(
     auth && (String(r.owner_user_id) === auth.userId || r.can_manage),
   ),
   createdAt: new Date(String(r.created_at)).toISOString(),
   updatedAt: new Date(String(r.updated_at)).toISOString(),
 });
+const contestProjection = `
+  SELECT c.*,
+    owner.username AS organizer_username,
+    owner.display_name AS organizer_display_name,
+    (SELECT count(*)::int FROM contest_registrations registration
+      WHERE registration.contest_id=c.id AND registration.status='ACTIVE') AS participant_count,
+    (SELECT count(*)::int FROM contest_problems problem
+      WHERE problem.contest_id=c.id) AS problem_count,
+    CASE
+      WHEN $1::uuid IS NULL THEN 'NOT_AUTHENTICATED'
+      WHEN EXISTS(SELECT 1 FROM contest_registrations registration
+        WHERE registration.contest_id=c.id AND registration.user_id=$1 AND registration.status='ACTIVE') THEN 'REGISTERED'
+      ELSE 'NOT_REGISTERED'
+    END AS registration_state,
+    EXISTS(SELECT 1 FROM contest_roles role
+      WHERE role.contest_id=c.id AND role.user_id=$1 AND role.role IN ('OWNER','MANAGER')) AS can_manage
+  FROM contests c
+  JOIN users owner ON owner.id=c.owner_user_id`;
 const hash = (v: string) =>
   scryptSync(v, 'contest-access-code', 32).toString('base64');
 const row = (result: Query): Row => {
@@ -120,32 +162,23 @@ export async function registerContestModule(
   };
   const get = async (id: string, a?: Auth, manage = false) => {
     const validId = validContestId(id);
-    const x = await o.pool.query('SELECT * FROM contests WHERE id=$1', [
+    const x = await o.pool.query(`${contestProjection} WHERE c.id=$2`, [
+      a?.userId ?? null,
       validId,
     ]);
     const r = x.rows[0];
     if (!r) throw fail('CONTEST_NOT_FOUND');
     const own = a && String(r.owner_user_id) === a.userId;
-    const role =
-      a &&
-      (await o.pool.query(
-        "SELECT 1 FROM contest_roles WHERE contest_id=$1 AND user_id=$2 AND role IN ('OWNER','MANAGER')",
-        [validId, a.userId],
-      ));
-    const registered =
-      a &&
-      (await o.pool.query(
-        "SELECT 1 FROM contest_registrations WHERE contest_id=$1 AND user_id=$2 AND status='ACTIVE'",
-        [validId, a.userId],
-      ));
-    if (manage && !(own || role?.rowCount)) throw fail('CONTEST_FORBIDDEN');
+    const canManage = Boolean(own || r.can_manage);
+    const registered = r.registration_state === 'REGISTERED';
+    if (manage && !canManage) throw fail('CONTEST_FORBIDDEN');
     if (
       !manage &&
       !(r.visibility === 'PUBLIC' && r.lifecycle === 'PUBLISHED') &&
-      !(own || role?.rowCount || registered?.rowCount)
+      !(canManage || registered)
     )
       throw fail('CONTEST_FORBIDDEN');
-    return { ...r, can_manage: Boolean(own || role?.rowCount) } as Row;
+    return { ...r, can_manage: canManage } as Row;
   };
   const audit = async (
     a: Auth,
@@ -168,8 +201,13 @@ export async function registerContestModule(
         limit = page(q),
         a = await auth(r);
       const x = await o.pool.query(
-        "SELECT c.*,EXISTS(SELECT 1 FROM contest_roles cr WHERE cr.contest_id=c.id AND cr.user_id=$2 AND cr.role IN ('OWNER','MANAGER')) can_manage FROM contests c WHERE lifecycle='PUBLISHED' AND visibility='PUBLIC' ORDER BY starts_at ASC,id ASC LIMIT $1",
-        [limit, a?.userId ?? null],
+        `${contestProjection}
+         WHERE c.lifecycle='PUBLISHED' AND c.visibility='PUBLIC'
+         ORDER BY CASE WHEN c.starts_at <= now() AND c.ends_at > now() THEN 0 WHEN c.starts_at > now() THEN 1 ELSE 2 END,
+           CASE WHEN c.ends_at <= now() THEN c.starts_at END DESC,
+           c.starts_at ASC,c.id ASC
+         LIMIT $2`,
+        [a?.userId ?? null, limit],
       );
       return { items: x.rows.map((v: Row) => json(v, a)) };
     } catch (e) {
@@ -179,15 +217,33 @@ export async function registerContestModule(
   app.get('/api/contests/home-summary', async (r, reply) => {
     try {
       const a = await auth(r);
-      const x = await o.pool.query(
-        "SELECT c.*,EXISTS(SELECT 1 FROM contest_roles cr WHERE cr.contest_id=c.id AND cr.user_id=$1 AND cr.role IN ('OWNER','MANAGER')) can_manage FROM contests c WHERE lifecycle='PUBLISHED' AND visibility='PUBLIC' ORDER BY starts_at ASC,id ASC LIMIT 18",
-        [a?.userId ?? null],
-      );
-      const all = x.rows.map((v: Row) => json(v, a));
+      const values = [a?.userId ?? null, 15];
+      const [running, upcoming, recentEnded, counts] = await Promise.all([
+        o.pool.query(
+          `${contestProjection} WHERE c.lifecycle='PUBLISHED' AND c.visibility='PUBLIC' AND c.starts_at<=now() AND c.ends_at>now() ORDER BY c.ends_at,c.id LIMIT $2`,
+          values,
+        ),
+        o.pool.query(
+          `${contestProjection} WHERE c.lifecycle='PUBLISHED' AND c.visibility='PUBLIC' AND c.starts_at>now() ORDER BY c.starts_at,c.id LIMIT $2`,
+          [a?.userId ?? null, 6],
+        ),
+        o.pool.query(
+          `${contestProjection} WHERE c.lifecycle='PUBLISHED' AND c.visibility='PUBLIC' AND c.ends_at<=now() ORDER BY c.ends_at DESC,c.id LIMIT $2`,
+          values,
+        ),
+        o.pool.query(
+          `SELECT
+             count(*) FILTER (WHERE starts_at<=now() AND ends_at>now())::int AS running,
+             count(*) FILTER (WHERE starts_at>now())::int AS upcoming,
+             count(*) FILTER (WHERE ends_at<=now())::int AS ended
+           FROM contests WHERE lifecycle='PUBLISHED' AND visibility='PUBLIC'`,
+        ),
+      ]);
       return {
-        running: all.filter((v) => v.lifecycle === 'RUNNING').slice(0, 6),
-        upcoming: all.filter((v) => v.lifecycle === 'UPCOMING').slice(0, 6),
-        recentEnded: all.filter((v) => v.lifecycle === 'ENDED').slice(0, 6),
+        running: running.rows.map((v: Row) => json(v, a)),
+        upcoming: upcoming.rows.map((v: Row) => json(v, a)),
+        recentEnded: recentEnded.rows.map((v: Row) => json(v, a)),
+        counts: counts.rows[0] ?? { running: 0, upcoming: 0, ended: 0 },
       };
     } catch (e) {
       return err(e, reply, r);
@@ -237,7 +293,9 @@ export async function registerContestModule(
       );
       await client.query('COMMIT');
       await audit(a, 'contest:create', String(created.id), r);
-      return reply.status(201).send(json(created, a));
+      return reply
+        .status(201)
+        .send(json(await get(String(created.id), a, true), a));
     } catch (e) {
       await client.query('ROLLBACK');
       return err(e, reply, r);
@@ -300,7 +358,7 @@ export async function registerContestModule(
         ),
       );
       await audit(a, 'contest:update', String(old.id), r);
-      return json({ ...updated, can_manage: true }, a);
+      return json(await get(String(updated.id), a, true), a);
     } catch (e) {
       return err(e, reply, r);
     }
@@ -327,7 +385,7 @@ export async function registerContestModule(
         ),
       );
       await audit(a, 'contest:publish', String(c.id), r);
-      return json({ ...updated, can_manage: true }, a);
+      return json(await get(String(updated.id), a, true), a);
     } catch (e) {
       return err(e, reply, r);
     }
@@ -344,7 +402,7 @@ export async function registerContestModule(
         ),
       );
       await audit(a, 'contest:cancel', String(c.id), r);
-      return json({ ...updated, can_manage: true }, a);
+      return json(await get(String(updated.id), a, true), a);
     } catch (e) {
       return err(e, reply, r);
     }
@@ -480,7 +538,7 @@ export async function registerContestModule(
   app.get('/api/contests/:id/registration', async (r, reply) => {
     try {
       const a = await auth(r);
-      if (!a) throw fail('UNAUTHENTICATED');
+      if (!a) return { status: 'NOT_AUTHENTICATED' };
       const x = await o.pool.query(
         'SELECT * FROM contest_registrations WHERE contest_id=$1 AND user_id=$2',
         [contestId(r), a.userId],

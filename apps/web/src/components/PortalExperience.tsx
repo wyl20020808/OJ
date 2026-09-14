@@ -8,10 +8,7 @@ import {
   useEffect,
 } from 'react';
 import { ApiError } from '../services/api.js';
-import type {
-  ApiClient,
-  AuthenticatedUser,
-} from '../services/api.js';
+import type { ApiClient, BackendContest } from '../services/api.js';
 import type {
   ContestDetail,
   ContestListItem,
@@ -25,7 +22,10 @@ import type {
 } from '../services/portal-contracts.js';
 import './portal.css';
 import { ContestPage } from '../features/contest/ContestPage.js';
-export { ActivityHeatmap, ProfilePage as ProfileExperience } from '../features/profile/ProfilePage.js';
+export {
+  ActivityHeatmap,
+  ProfilePage as ProfileExperience,
+} from '../features/profile/ProfilePage.js';
 
 type Navigate = (path: string) => void;
 
@@ -165,17 +165,7 @@ function contestDateTimeValue(value?: string) {
     .slice(0, 16);
 }
 
-function contestDetailFromApi(value: {
-  id: string;
-  title: string;
-  description: string;
-  visibility: 'PUBLIC' | 'PRIVATE';
-  lifecycle: ContestDetail['lifecycle'];
-  format: ContestDetail['format'];
-  startsAt: string;
-  endsAt: string;
-  canManage: boolean;
-}): ContestDetail {
+function contestDetailFromApi(value: BackendContest): ContestDetail {
   return {
     id: value.id,
     title: value.title,
@@ -185,15 +175,15 @@ function contestDetailFromApi(value: {
     format: value.format,
     startsAt: value.startsAt,
     endsAt: value.endsAt,
-    registration:
-      value.lifecycle === 'UPCOMING'
-        ? 'REGISTRATION_OPEN'
-        : 'REGISTRATION_CLOSED',
-    canRegister: value.lifecycle === 'UPCOMING',
+    registration: value.registration,
+    registrationState: value.registrationState,
+    organizer: value.organizer,
+    participantCount: value.participantCount,
+    problemCount: value.problemCount,
+    canRegister: value.canRegister,
     canManage: value.canManage,
   };
 }
-
 
 export function ContestExperience({
   view,
@@ -229,7 +219,6 @@ export function ContestExperience({
         view={view}
         contests={contests}
         navigate={navigate}
-        api={api}
         loading={loading}
         error={error}
         onRetry={onRetry}
@@ -291,6 +280,7 @@ function ContestDetailExperience({
 
   useEffect(() => {
     setCurrentDetail(detail);
+    setRegistration(detail?.registrationState);
   }, [detail]);
 
   useEffect(() => {
@@ -331,6 +321,18 @@ function ContestDetailExperience({
     void request
       .then((status) => {
         setRegistration(status);
+        setCurrentDetail((current) =>
+          current
+            ? {
+                ...current,
+                participantCount: Math.max(
+                  0,
+                  (current.participantCount ?? 0) + (withdraw ? -1 : 1),
+                ),
+                registrationState: status as 'NOT_REGISTERED' | 'REGISTERED',
+              }
+            : current,
+        );
         setRegistrationMessage(withdraw ? '已取消报名。' : '报名成功。');
         setAccessCode('');
       })
@@ -362,6 +364,18 @@ function ContestDetailExperience({
           <p>
             {currentDetail?.description ?? `比赛标识：${contestId ?? '未知'}`}
           </p>
+          {currentDetail && (
+            <div className="contest-detail-facts" aria-label="比赛概览">
+              <span>
+                主办方：
+                {currentDetail.organizer?.displayName || 'OJPlatform'}
+              </span>
+              <span>
+                参赛人数：{currentDetail.participantCount ?? '统计中'}
+              </span>
+              <span>题目数量：{currentDetail.problemCount ?? '待公布'}</span>
+            </div>
+          )}
         </div>
         <div className="contest-state">
           <span>{currentDetail?.lifecycle ?? 'NOT_AVAILABLE'}</span>
@@ -398,7 +412,14 @@ function ContestDetailExperience({
           {registrationLoading ? (
             <small role="status">正在读取报名状态…</small>
           ) : registration ? (
-            <small>报名状态：{registration}</small>
+            <small>
+              报名状态：
+              {registration === 'REGISTERED'
+                ? '已报名'
+                : registration === 'NOT_AUTHENTICATED'
+                  ? '登录后可报名'
+                  : '未报名'}
+            </small>
           ) : null}
           {registrationMessage && (
             <small className="inline-notice" role="status">
@@ -482,8 +503,15 @@ function ContestDetailExperience({
           <h2>比赛信息</h2>
           <p>赛制：{currentDetail.format}</p>
           <p>可见性：{currentDetail.visibility}</p>
-          <p>开始时间：{currentDetail.startsAt}</p>
-          <p>结束时间：{currentDetail.endsAt}</p>
+          <p>
+            开始时间：{new Date(currentDetail.startsAt).toLocaleString('zh-CN')}
+          </p>
+          <p>
+            结束时间：{new Date(currentDetail.endsAt).toLocaleString('zh-CN')}
+          </p>
+          <p>主办方：{currentDetail.organizer?.displayName || 'OJPlatform'}</p>
+          <p>参赛人数：{currentDetail.participantCount ?? '统计中'}</p>
+          <p>题目数量：{currentDetail.problemCount ?? '待公布'}</p>
         </div>
       ) : (
         <CapabilityNotice

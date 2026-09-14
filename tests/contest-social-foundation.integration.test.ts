@@ -197,6 +197,33 @@ describe('contest and messaging foundation against PostgreSQL and Redis', () => 
         })
       ).json().canManage,
     ).toBe(false);
+    const publicList = await app.inject('/api/contests?limit=20');
+    expect(publicList.statusCode).toBe(200);
+    expect(publicList.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: contestId,
+          participantCount: 1,
+          problemCount: 1,
+          registrationState: 'NOT_AUTHENTICATED',
+          organizer: expect.objectContaining({
+            id: userA,
+            displayName: 'Contest A',
+          }),
+        }),
+      ]),
+    );
+    const homeSummary = await app.inject('/api/contests/home-summary');
+    expect(homeSummary.statusCode).toBe(200);
+    expect(homeSummary.json().upcoming.length).toBeGreaterThan(0);
+    expect(homeSummary.json().upcoming[0]).toEqual(
+      expect.objectContaining({
+        participantCount: expect.any(Number),
+        problemCount: expect.any(Number),
+        organizer: expect.objectContaining({ displayName: expect.any(String) }),
+      }),
+    );
+    expect(homeSummary.json().counts.upcoming).toBeGreaterThanOrEqual(1);
     expect(
       (await app.inject(`/api/contests/${contestId}`)).json().canManage,
     ).toBe(false);
