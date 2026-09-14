@@ -213,7 +213,9 @@ async function verifyHome(id: number) {
   if (id === 25) {
     renderApp('/homework');
     expect(
-      await screen.findByText('后端尚未提供作业、题目集合和完成进度数据。'),
+      await screen.findByRole('heading', {
+        name: '当前需要优先完成（本周作业）',
+      }),
     ).toBeInTheDocument();
     return;
   }

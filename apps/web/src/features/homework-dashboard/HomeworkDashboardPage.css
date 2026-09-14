@@ -1,0 +1,1183 @@
+.homework-dashboard-view {
+  background: #f7fbff;
+}
+
+.homework-dashboard-view > footer {
+  display: none;
+}
+
+.shell.shell-homework-dashboard {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.homework-dashboard {
+  --homework-blue: #087cf0;
+  --homework-navy: #082b83;
+  --homework-line: #d9e8f8;
+  --homework-soft-blue: #edf6ff;
+  display: grid;
+  grid-template-columns: 325px minmax(0, 1fr) 361px;
+  gap: 14px;
+  min-height: 100vh;
+  padding: 18px 15px;
+  color: var(--homework-navy);
+  background:
+    radial-gradient(
+      circle at 45% 0%,
+      rgba(211, 234, 255, 0.4),
+      transparent 29%
+    ),
+    #f8fcff;
+  font-family: 'Noto Serif SC', 'Songti SC', SimSun, serif;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.homework-dashboard button {
+  font-family: inherit;
+}
+
+.homework-icon {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.homework-course-card,
+.homework-banner,
+.homework-priority-section,
+.homework-overdue-section,
+.homework-overview,
+.homework-progress-nudge,
+.homework-reminders,
+.homework-motivation-quote {
+  border: 1px solid var(--homework-line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 7px 22px rgba(38, 101, 171, 0.045);
+}
+
+.homework-course-card {
+  min-width: 0;
+  height: calc(100vh - 36px);
+  overflow: hidden;
+  padding: 10px 14px 8px;
+}
+
+.homework-course-card h2 {
+  margin: 0 0 8px 4px;
+  color: #071f6c;
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.homework-course-select {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 56px;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid #cce0f7;
+  border-radius: 9px;
+  background: #fff;
+  color: #092979;
+  box-shadow: 0 3px 10px rgba(33, 112, 193, 0.04);
+  font-size: 17px;
+  text-align: left;
+}
+
+.homework-course-select:hover:not(:disabled) {
+  border-color: #9fc9f5;
+  background: #f7fbff;
+  transform: none;
+}
+
+.homework-course-select__icon {
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 35px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: #eaf5ff;
+  color: #1688f6;
+}
+
+.homework-course-select__arrow {
+  margin-left: auto;
+  color: #087df1;
+  font-family: Arial, sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(-3px);
+}
+
+.homework-course-progress {
+  padding: 17px 3px 9px;
+}
+
+.homework-course-progress > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  font-size: 16px;
+}
+
+.homework-progress-track {
+  height: 11px;
+  overflow: hidden;
+  margin-top: 6px;
+  border-radius: 10px;
+  background: #e9f1f9;
+}
+
+.homework-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #168cf5, #0879ea);
+}
+
+.homework-course-progress p {
+  margin: 4px 0 0;
+  color: #2b66b8;
+  font-size: 14px;
+  text-align: right;
+}
+
+.homework-lesson-list {
+  display: grid;
+  gap: 0;
+  margin: 0 -4px;
+  padding: 0;
+  list-style: none;
+}
+
+.homework-lesson {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px 60px minmax(0, 1fr) 34px;
+  align-items: center;
+  min-height: 30.25px;
+  gap: 5px;
+  padding: 2px 8px 2px 7px;
+  border-radius: 9px;
+  color: #164492;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.homework-lesson--current {
+  background: linear-gradient(90deg, #e8f3ff, #edf6ff);
+  color: #0b4ead;
+}
+
+.homework-lesson--current::before {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: -12px;
+  width: 3px;
+  border-radius: 3px;
+  background: #1688f5;
+  content: '';
+}
+
+.homework-lesson__status {
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #9fb6d8;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.homework-lesson--completed .homework-lesson__status {
+  background: #17bca7;
+}
+
+.homework-lesson--current .homework-lesson__status {
+  background: #1285ed;
+}
+
+.homework-lesson__title {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.homework-lesson__count {
+  color: #3975c1;
+  text-align: right;
+}
+
+.homework-dashboard__main,
+.homework-dashboard__aside {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 13px;
+}
+
+.homework-dashboard__aside {
+  gap: 0;
+}
+
+.homework-banner {
+  position: relative;
+  display: grid;
+  grid-template-columns: 112px 250px 452px;
+  align-items: center;
+  height: 160px;
+  overflow: hidden;
+  padding: 20px 20px 18px 25px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(234, 246, 255, 0.82),
+      rgba(222, 239, 255, 0.42) 56%,
+      rgba(186, 219, 252, 0.18)
+    ),
+    url('/homework-mountain-panorama.svg') center bottom / cover no-repeat;
+}
+
+.homework-banner::after {
+  position: absolute;
+  right: 17px;
+  bottom: 12px;
+  color: rgba(255, 255, 255, 0.94);
+  content: 'A HEIGHTER\A TOMORROW';
+  font-family: Arial, sans-serif;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.19em;
+  line-height: 1.7;
+  text-align: right;
+  white-space: pre;
+}
+
+.homework-banner__calendar {
+  position: relative;
+  width: 69px;
+  height: 76px;
+  margin-left: 6px;
+  border: 5px solid #1687ee;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 10px 18px rgba(13, 101, 195, 0.2);
+  transform: rotate(-8deg);
+}
+
+.homework-banner__calendar::before {
+  position: absolute;
+  top: 14px;
+  left: -5px;
+  width: 69px;
+  height: 10px;
+  background: #1687ee;
+  content: '';
+}
+
+.homework-banner__calendar span {
+  position: absolute;
+  top: -12px;
+  left: 14px;
+  width: 8px;
+  height: 18px;
+  border: 3px solid #1687ee;
+  border-radius: 7px;
+  background: #eff8ff;
+}
+
+.homework-banner__calendar span::after {
+  position: absolute;
+  top: -3px;
+  left: 27px;
+  width: 8px;
+  height: 18px;
+  border: 3px solid #1687ee;
+  border-radius: 7px;
+  background: #eff8ff;
+  content: '';
+}
+
+.homework-banner__calendar i,
+.homework-banner__calendar b {
+  position: absolute;
+  left: 12px;
+  width: 44px;
+  height: 6px;
+  border-radius: 4px;
+  background: #d5e9fd;
+}
+
+.homework-banner__calendar i:first-of-type {
+  top: 34px;
+}
+.homework-banner__calendar i:last-of-type {
+  top: 45px;
+  width: 34px;
+}
+.homework-banner__calendar b:first-of-type {
+  top: 57px;
+  width: 26px;
+}
+.homework-banner__calendar b:last-of-type {
+  display: none;
+}
+
+.homework-banner__copy {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  min-width: 0;
+}
+
+.homework-banner__copy h1 {
+  margin: 0 0 8px;
+  color: #061f70;
+  font-size: 32px;
+  line-height: 1.12;
+  letter-spacing: 0.02em;
+}
+
+.homework-banner__copy p {
+  margin: 0;
+  color: #2361b3;
+  font-size: 14px;
+}
+
+.homework-banner__metrics {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px;
+}
+
+.homework-banner-metric {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: start;
+  height: 114px;
+  gap: 13px;
+  padding: 15px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 24px rgba(45, 112, 183, 0.07);
+}
+
+.homework-banner-metric__icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #dceeff;
+  color: #147fe8;
+}
+
+.homework-banner-metric__icon .homework-icon {
+  width: 27px;
+  height: 27px;
+}
+
+.homework-banner-metric.is-danger .homework-banner-metric__icon {
+  background: #ffe6e9;
+  color: #f52342;
+}
+
+.homework-banner-metric > div > strong {
+  display: block;
+  margin: 0 0 2px;
+  color: #092674;
+  font-size: 16px;
+}
+
+.homework-banner-metric p {
+  margin: 0 0 3px;
+  color: #092674;
+  font-size: 17px;
+}
+
+.homework-banner-metric p b {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.homework-banner-metric.is-danger p b {
+  color: #f3213d;
+}
+
+.homework-banner-metric small {
+  color: #1d5cae;
+  font-size: 12px;
+}
+
+.homework-priority-section,
+.homework-overdue-section {
+  padding: 8px 11px 12px;
+}
+
+.homework-priority-section {
+  padding-bottom: 2px;
+}
+
+.homework-priority-section > .homework-section-heading {
+  min-height: 52px;
+}
+
+.homework-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  gap: 12px;
+  padding: 0 6px 5px 0;
+}
+
+.homework-section-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0;
+  color: #082a80;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.homework-section-heading h2 > span {
+  display: block;
+  width: 9px;
+  height: 25px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #1388f5;
+  color: transparent;
+}
+
+.homework-overdue-section .homework-section-heading h2 > span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  overflow: visible;
+  background: transparent;
+  color: #1185ee;
+}
+
+.homework-overdue-section .homework-section-heading h2 > span .homework-icon {
+  width: 29px;
+  height: 29px;
+}
+
+.homework-section-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  color: #123c91;
+}
+
+.homework-section-heading button,
+.homework-reminders > header button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: #057be9;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.homework-section-heading button:hover:not(:disabled),
+.homework-reminders > header button:hover:not(:disabled) {
+  background: transparent;
+  color: #075bb2;
+  transform: none;
+}
+
+.homework-section-heading button .homework-icon,
+.homework-reminders > header button .homework-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.homework-priority-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.homework-task-card,
+.homework-overdue-card {
+  display: grid;
+  min-width: 0;
+  border: 1px solid #cfdef0;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.93);
+  box-shadow: 0 6px 15px rgba(41, 100, 168, 0.035);
+}
+
+.homework-task-card {
+  grid-template-rows: 48px 35px 45px 1fr;
+  min-height: 207px;
+  padding: 11px 16px 14px;
+}
+
+.homework-task-card > header,
+.homework-overdue-card > header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  color: #0b4cac;
+  font-size: 15px;
+}
+
+.homework-task-card > header > strong,
+.homework-overdue-card > header > strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fff0f2;
+  color: #f02642;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.homework-task-card__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: #eaf5ff;
+  color: #0d85ef;
+}
+
+.homework-task-card__icon .homework-icon {
+  width: 25px;
+  height: 25px;
+}
+
+.homework-task-card h3,
+.homework-overdue-card h3 {
+  overflow: hidden;
+  margin: 7px 0 0;
+  color: #092779;
+  font-size: 20px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.homework-tags {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.homework-tags span {
+  padding: 6px 11px;
+  border-radius: 7px;
+  background: #edf5ff;
+  color: #1856a8;
+  font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.homework-task-card > footer,
+.homework-overdue-card > footer {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  color: #2364b8;
+  font-size: 13px;
+}
+
+.homework-task-card > footer > span,
+.homework-overdue-card > footer > span {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.homework-task-card > footer .homework-icon,
+.homework-overdue-card > footer .homework-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.homework-task-card > footer button,
+.homework-overdue-card > footer button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 101px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #087ff1;
+  border-radius: 8px;
+  background: #0b84f4;
+  color: #fff;
+  box-shadow: 0 5px 10px rgba(11, 132, 244, 0.18);
+  font-size: 14px;
+}
+
+.homework-task-card > footer button span,
+.homework-overdue-card > footer button span {
+  margin-left: 8px;
+}
+
+.homework-overdue-section {
+  padding-bottom: 13px;
+  min-height: 232px;
+}
+
+.homework-overdue-section > .homework-section-heading {
+  min-height: 44px;
+}
+
+.homework-overdue-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.homework-overdue-card {
+  grid-template-rows: 47px 53px 1fr;
+  min-height: 164px;
+  padding: 11px 17px 14px;
+}
+
+.homework-overdue-card > header > strong {
+  padding: 7px 12px;
+}
+
+.homework-overdue-card > header > strong .homework-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.homework-overdue-card__body {
+  display: flex;
+  align-items: start;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.homework-overdue-card__body h3 {
+  flex: 1 1 auto;
+  margin-top: 0;
+}
+
+.homework-overdue-card .homework-tags {
+  margin-top: 0;
+}
+
+.homework-overdue-card > footer > span b {
+  color: #ee2f47;
+  font-weight: 500;
+}
+
+.homework-overdue-card > footer button {
+  min-width: 126px;
+  background: #fff;
+  color: #147ce0;
+  box-shadow: none;
+}
+
+.homework-overview {
+  min-height: 231px;
+  padding: 16px 17px;
+}
+
+.homework-overview > header,
+.homework-reminders > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.homework-overview h2,
+.homework-reminders h2,
+.homework-progress-nudge h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: #082c82;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.homework-overview__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #edf6ff;
+  color: #087ff0;
+}
+
+.homework-overview__icon .homework-icon {
+  width: 25px;
+  height: 25px;
+}
+
+.homework-overview > header button {
+  padding: 7px 9px;
+  border: 1px solid #d4e4f4;
+  border-radius: 8px;
+  background: #fff;
+  color: #1574da;
+  font-size: 13px;
+}
+
+.homework-overview > header button:hover:not(:disabled) {
+  background: #f5faff;
+  transform: none;
+}
+
+.homework-overview__body {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding-top: 15px;
+}
+
+.homework-donut {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 136px;
+  height: 136px;
+  border-radius: 50%;
+  background: conic-gradient(
+    #11bca7 0 33.3%,
+    #0a7eed 33.3% 45.8%,
+    #9fb4d3 45.8% 91.6%,
+    #f34a68 91.6% 100%
+  );
+  transform: rotate(-13deg);
+}
+
+.homework-donut::after {
+  position: absolute;
+  inset: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #edf3fa;
+  content: '';
+}
+
+.homework-donut > div {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  transform: rotate(13deg);
+}
+
+.homework-donut strong {
+  color: #09297e;
+  font-size: 32px;
+  line-height: 1;
+}
+
+.homework-donut strong small {
+  font-size: 17px;
+}
+
+.homework-donut span {
+  margin-top: 7px;
+  color: #2166bb;
+  font-size: 14px;
+}
+
+.homework-overview ul {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.homework-overview li {
+  display: grid;
+  grid-template-columns: 14px 1fr 23px 48px;
+  align-items: center;
+  gap: 8px;
+  color: #1c55a3;
+  font-size: 14px;
+}
+
+.homework-overview li i,
+.homework-reminders li > i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #9fb4d3;
+}
+
+.homework-overview li i.is-complete {
+  background: #12bea8;
+}
+.homework-overview li i.is-active {
+  background: #0a7fed;
+}
+.homework-overview li i.is-pending {
+  background: #9fb4d3;
+}
+.homework-overview li i.is-overdue {
+  background: #f52c48;
+}
+
+.homework-overview li strong {
+  color: #143e90;
+}
+
+.homework-overview li b {
+  font-weight: 500;
+  text-align: right;
+}
+
+.homework-progress-nudge {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 90px;
+  margin-top: 13px;
+  overflow: hidden;
+  gap: 14px;
+  padding: 14px 17px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(250, 253, 255, 0.98) 0 58%,
+      rgba(234, 246, 255, 0.58)
+    ),
+    url('/homework-mountain-quote.svg') right center / 210px auto no-repeat;
+}
+
+.homework-progress-nudge::after {
+  position: absolute;
+  right: -14px;
+  bottom: -25px;
+  width: 150px;
+  height: 100px;
+  background: url('/homework-mountain-quote.svg') center bottom / cover
+    no-repeat;
+  content: '';
+  opacity: 0.7;
+}
+
+.homework-progress-nudge > span {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 43px;
+  height: 43px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: #e8f4ff;
+  color: #117fee;
+}
+
+.homework-progress-nudge > div {
+  position: relative;
+  z-index: 1;
+}
+
+.homework-progress-nudge h2 {
+  font-size: 18px;
+}
+
+.homework-progress-nudge p {
+  margin: 6px 0 0;
+  color: #2862ad;
+  font-size: 13px;
+}
+
+.homework-reminders {
+  min-height: 377px;
+  margin-top: 13px;
+  overflow: hidden;
+  padding: 14px 16px 9px;
+}
+
+.homework-reminders > header {
+  min-height: 42px;
+}
+
+.homework-reminders > header h2 > span {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  color: #ef2a44;
+}
+
+.homework-reminders > header h2 > span .homework-icon {
+  width: 27px;
+  height: 27px;
+}
+
+.homework-reminders > header button {
+  font-size: 14px;
+}
+
+.homework-reminders ul {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.homework-reminders li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 76px;
+  gap: 12px;
+  border-top: 1px solid #e6eef8;
+}
+
+.homework-reminders li > i.is-danger {
+  background: #f72f47;
+}
+.homework-reminders li > i.is-warning {
+  background: #ff7638;
+}
+.homework-reminders li > i.is-info {
+  background: #1684ed;
+}
+
+.homework-reminders li h3 {
+  overflow: hidden;
+  margin: 0 0 7px;
+  color: #092779;
+  font-size: 17px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.homework-reminders li p {
+  display: flex;
+  margin: 0;
+  gap: 12px;
+  color: #3372bd;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.homework-reminders li > strong {
+  padding: 10px 11px;
+  border-radius: 9px;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.homework-reminders li > strong.is-danger {
+  background: #fff0f2;
+  color: #f32640;
+}
+
+.homework-reminders li > strong.is-warning {
+  background: #fff4ec;
+  color: #f15d26;
+}
+
+.homework-reminders li > strong.is-info {
+  background: #edf6ff;
+  color: #0879e7;
+}
+
+.homework-motivation-quote {
+  position: relative;
+  min-height: 169px;
+  margin-top: 12px;
+  overflow: hidden;
+  padding: 19px 22px;
+  background: url('/homework-mountain-quote.svg') center bottom / cover
+    no-repeat;
+}
+
+.homework-motivation-quote > span {
+  position: absolute;
+  top: -2px;
+  left: 18px;
+  color: #acd8fa;
+  font-family: Georgia, serif;
+  font-size: 66px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.homework-motivation-quote blockquote {
+  position: relative;
+  z-index: 1;
+  margin: 15px 0 0 26px;
+  color: #0670dc;
+  font-size: 22px;
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.8;
+}
+
+.homework-motivation-quote > .homework-icon {
+  position: absolute;
+  top: 21px;
+  right: 22px;
+  width: 36px;
+  height: 36px;
+  color: #338ee3;
+}
+
+@media (max-width: 1380px) {
+  .homework-dashboard {
+    grid-template-columns: 285px minmax(0, 1fr) 320px;
+    padding-inline: 10px;
+  }
+  .homework-banner {
+    grid-template-columns: 90px minmax(190px, 1fr) minmax(365px, 1.3fr);
+    padding-inline: 15px;
+  }
+  .homework-task-card {
+    padding-inline: 12px;
+  }
+  .homework-task-card > header > strong {
+    padding-inline: 8px;
+  }
+  .homework-task-card > footer > span {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .homework-dashboard {
+    grid-template-columns: 275px minmax(0, 1fr);
+  }
+  .homework-dashboard__aside {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .homework-course-card {
+    grid-row: span 2;
+  }
+  .homework-priority-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .homework-banner {
+    grid-template-columns: 82px 1fr;
+  }
+  .homework-banner__metrics {
+    grid-column: 1 / -1;
+    margin-top: 14px;
+  }
+}
+
+@media (max-width: 760px) {
+  .homework-dashboard {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+  .homework-course-card {
+    height: auto;
+    min-height: 0;
+  }
+  .homework-lesson-list {
+    max-height: 310px;
+    overflow: auto;
+  }
+  .homework-priority-grid,
+  .homework-overdue-grid,
+  .homework-dashboard__aside {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .homework-banner {
+    grid-template-columns: 72px minmax(0, 1fr);
+    height: auto;
+    min-height: 265px;
+  }
+  .homework-section-heading {
+    align-items: flex-start;
+  }
+  .homework-section-heading h2 {
+    font-size: 18px;
+  }
+  .homework-section-heading > div > span {
+    display: none;
+  }
+  .homework-task-card {
+    min-height: 198px;
+  }
+}
+
+@media (max-width: 560px) {
+  .homework-banner__metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 440px) {
+  .homework-banner {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .homework-banner__copy h1 {
+    font-size: 27px;
+  }
+  .homework-banner__metrics {
+    width: 100%;
+  }
+  .homework-task-card > footer,
+  .homework-overdue-card > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .homework-task-card,
+  .homework-overdue-card {
+    grid-template-rows: none;
+    gap: 9px;
+  }
+  .homework-task-card > footer button,
+  .homework-overdue-card > footer button {
+    width: 100%;
+  }
+  .homework-overdue-card__body {
+    flex-direction: column;
+    gap: 7px;
+  }
+}

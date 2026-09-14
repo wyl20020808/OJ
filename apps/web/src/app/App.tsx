@@ -67,6 +67,7 @@ import {
 import { ProductSubmissionAdapter } from '../services/submission-adapter.js';
 import { TeamPage } from '../features/team/TeamPage.js';
 import { AssignmentPage } from '../features/assignment/AssignmentPage.js';
+import { HomeworkDashboardPage } from '../features/homework-dashboard/HomeworkDashboardPage.js';
 import { SubmissionHistoryPage } from '../features/submissions/SubmissionHistoryPage.js';
 import { SubmissionDetailPage } from '../features/submissions/SubmissionDetailPage.js';
 export { SubmissionDetailPage as SubmissionDetail } from '../features/submissions/SubmissionDetailPage.js';
@@ -2682,7 +2683,9 @@ export function App() {
         navigate={navigate}
         api={api}
       />
-    ) : current.name === 'homework' || current.name === 'homework-detail' ? (
+    ) : current.name === 'homework' ? (
+      <HomeworkDashboardPage navigate={navigate} />
+    ) : current.name === 'homework-detail' ? (
       <AssignmentPage
         api={api}
         navigate={navigate}
@@ -2797,7 +2800,7 @@ export function App() {
     );
   return (
     <AppLayout
-      className={`${current.name === 'submissions' ? 'submissions-view' : ''}${current.name === 'submission' ? ' submission-detail-view' : ''}`.trim()}
+      className={`${current.name === 'submissions' ? 'submissions-view' : ''}${current.name === 'submission' ? ' submission-detail-view' : ''}${current.name === 'homework' ? ' homework-dashboard-view' : ''}`.trim()}
       navbar={
         <AppNavbar
           Link={Link}
@@ -2821,7 +2824,8 @@ export function App() {
         current.name !== 'discussion-post' &&
         current.name !== 'teams' &&
         current.name !== 'submissions' &&
-        current.name !== 'submission' ? (
+        current.name !== 'submission' &&
+        current.name !== 'homework' ? (
           <Breadcrumbs current={current} />
         ) : undefined
       }
@@ -2842,7 +2846,9 @@ export function App() {
                       ? 'shell shell-submissions'
                       : current.name === 'submission'
                         ? 'shell shell-submission-detail'
-                        : 'shell'
+                        : current.name === 'homework'
+                          ? 'shell shell-homework-dashboard'
+                          : 'shell'
       }
     >
       {page}
