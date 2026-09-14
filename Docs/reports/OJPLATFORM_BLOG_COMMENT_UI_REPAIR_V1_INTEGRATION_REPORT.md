@@ -80,7 +80,7 @@
 
 ## Main After
 
-- Pending final fast-forward of the fully validated candidate to `refs/heads/main`.
+- `refs/heads/main` was fast-forwarded to the fully validated candidate after all validation passed.
 
 ## Canonical Root State
 
