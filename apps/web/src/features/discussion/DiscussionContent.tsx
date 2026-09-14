@@ -27,9 +27,11 @@ export function DiscussionTypeBadge({
 export function DiscussionAuthorLink({
   author,
   navigate,
+  avatarFallback = 'initial',
 }: {
   author: DiscussionAuthor | undefined;
   navigate: Navigate;
+  avatarFallback?: 'initial' | 'portrait';
 }) {
   const safe = author ?? {
     username: 'deleted-user',
@@ -45,18 +47,59 @@ export function DiscussionAuthorLink({
         navigate(href);
       }}
     >
-      <span className="discussion-author-avatar" aria-hidden="true">
-        {safe.avatarUrl ? (
-          <img src={safe.avatarUrl} alt="" />
-        ) : (
-          safe.displayName.slice(0, 1).toUpperCase()
-        )}
-      </span>
+      <DiscussionAvatar author={safe} fallback={avatarFallback} />
       <span className="discussion-author-identity">
         <strong>{safe.displayName}</strong>
         <small>@{safe.username}</small>
       </span>
     </a>
+  );
+}
+
+const avatarPalette = [
+  ['#386fa4', '#d8ebff'],
+  ['#5968a9', '#e2e5ff'],
+  ['#337f78', '#d8f3ed'],
+  ['#9a5f71', '#f8e2ea'],
+] as const;
+
+export function DiscussionAvatar({
+  author,
+  fallback = 'portrait',
+}: {
+  author: Pick<DiscussionAuthor, 'username' | 'displayName' | 'avatarUrl'>;
+  fallback?: 'initial' | 'portrait';
+}) {
+  const paletteIndex = Array.from(author.username).reduce(
+    (total, character) => total + character.charCodeAt(0),
+    0,
+  );
+  const [foreground, background] =
+    avatarPalette[paletteIndex % avatarPalette.length]!;
+
+  return (
+    <span
+      className="discussion-author-avatar"
+      aria-hidden="true"
+      title={author.displayName}
+    >
+      {author.avatarUrl ? (
+        <img src={author.avatarUrl} alt="" />
+      ) : fallback === 'initial' ? (
+        author.displayName.slice(0, 1).toUpperCase()
+      ) : (
+        <svg viewBox="0 0 36 36" focusable="false">
+          <rect width="36" height="36" rx="18" fill={background} />
+          <circle cx="18" cy="13" r="6.2" fill={foreground} opacity=".92" />
+          <path
+            d="M7.5 32c.8-7 4.8-10.5 10.5-10.5S27.7 25 28.5 32"
+            fill={foreground}
+            opacity=".92"
+          />
+          <circle cx="27.5" cy="8.5" r="3" fill="#fff" opacity=".72" />
+        </svg>
+      )}
+    </span>
   );
 }
 
