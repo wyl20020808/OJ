@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.compose.example
 
 node_modules/
 dist/
