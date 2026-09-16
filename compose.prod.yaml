@@ -2,6 +2,7 @@ services:
   postgres:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production}
+      PRODUCT_RUNTIME_DB_PASSWORD: ${PRODUCT_RUNTIME_DB_PASSWORD:?PRODUCT_RUNTIME_DB_PASSWORD must be set for production}
     restart: unless-stopped
 
   redis:
@@ -11,4 +12,16 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set for production}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set for production}
+    restart: unless-stopped
+
+  migrate-product:
+    environment:
+      DATABASE_URL: ${PRODUCT_MIGRATION_DATABASE_URL:?PRODUCT_MIGRATION_DATABASE_URL must be set for production}
+
+  api:
+    environment:
+      DATABASE_URL: ${PRODUCT_RUNTIME_DATABASE_URL:?PRODUCT_RUNTIME_DATABASE_URL must be set for production}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY must be set for production}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY must be set for production}
+      S3_BUCKET: ${S3_BUCKET:?S3_BUCKET must be set for production}
     restart: unless-stopped
