@@ -24,6 +24,9 @@ docker compose -f compose.yaml -f compose.dev.yaml up -d api
 ```
 
 Development publishes API only on `127.0.0.1:${OJPLATFORM_API_PORT:-3010}`.
+Only the development API joins the development ingress network required for that
+host binding; PostgreSQL, Redis, and MinIO remain on the internal infrastructure
+network only.
 
 ## Migration
 
