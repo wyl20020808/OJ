@@ -7,8 +7,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-ojplatform}
       POSTGRES_USER: ${POSTGRES_USER:-ojplatform}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      PRODUCT_RUNTIME_DB_USER: ${PRODUCT_RUNTIME_DB_USER:-ojplatform_runtime}
+      PRODUCT_RUNTIME_DB_PASSWORD: ${PRODUCT_RUNTIME_DB_PASSWORD:-change-me-runtime}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./deploy/docker/init-product-runtime-role.sh:/docker-entrypoint-initdb.d/10-product-runtime-role.sh:ro
     networks: [infrastructure]
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
@@ -46,6 +49,87 @@ services:
       timeout: 3s
       retries: 20
       start_period: 5s
+
+  migrate-product:
+    image: ${OJPLATFORM_API_IMAGE:-ojplatform/api:dev}
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ['node', 'scripts/migrate.mjs', 'up']
+    environment:
+      DATABASE_URL: ${PRODUCT_MIGRATION_DATABASE_URL:-postgres://ojplatform:change-me@postgres:5432/ojplatform}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [infrastructure]
+    restart: 'no'
+
+  api:
+    image: ${OJPLATFORM_API_IMAGE:-ojplatform/api:dev}
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: '3010'
+      OJPLATFORM_INFRA: 'true'
+      DATABASE_URL: ${PRODUCT_RUNTIME_DATABASE_URL:-postgres://ojplatform_runtime:change-me-runtime@postgres:5432/ojplatform}
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-ojplatform}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-change-me-minio}
+      S3_BUCKET: ${S3_BUCKET:-ojplatform-api}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate-product:
+        condition: service_completed_successfully
+    networks: [infrastructure]
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  judge-bootstrap:
+    image: ${OJPLATFORM_API_IMAGE:-ojplatform/api:dev}
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ['node', 'scripts/judge-service-bootstrap.mjs']
+    environment:
+      JUDGE_DATABASE_ADMIN_URL: ${JUDGE_DATABASE_ADMIN_URL:-}
+      JUDGE_DATABASE_NAME: ${JUDGE_DATABASE_NAME:-ojplatform_judge}
+      JUDGE_DATABASE_ROLE: ${JUDGE_DATABASE_ROLE:-ojplatform_judge_runtime}
+      JUDGE_DATABASE_PASSWORD: ${JUDGE_DATABASE_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [infrastructure]
+    profiles: [judge]
+    restart: 'no'
+
+  migrate-judge:
+    image: ${OJPLATFORM_API_IMAGE:-ojplatform/api:dev}
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ['node', 'scripts/judge-service-migrate.mjs', 'up']
+    environment:
+      JUDGE_DATABASE_URL: ${JUDGE_DATABASE_URL:-}
+      JUDGE_DATABASE_ROLE: ${JUDGE_DATABASE_ROLE:-ojplatform_judge_runtime}
+    depends_on:
+      judge-bootstrap:
+        condition: service_completed_successfully
+    networks: [infrastructure]
+    profiles: [judge]
+    restart: 'no'
 
 networks:
   infrastructure:

@@ -11,3 +11,11 @@ services:
     ports:
       - '127.0.0.1:${OJPLATFORM_MINIO_PORT:-59000}:9000'
       - '127.0.0.1:${OJPLATFORM_MINIO_CONSOLE_PORT:-59001}:9001'
+
+  api:
+    ports:
+      - '127.0.0.1:${OJPLATFORM_API_PORT:-3010}:3010'
+    networks: [infrastructure, dev-ingress]
+
+networks:
+  dev-ingress:
