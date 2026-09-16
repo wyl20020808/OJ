@@ -100,8 +100,10 @@ Canonical root is not refreshed because that would overwrite its user work.
 ## Canonical Root State
 
 Canonical root stays on symbolic branch `main`, but is not clean because its
-pre-existing user modifications remain protected. It is not safe to force its
-working tree to candidate content.
+pre-existing user modifications remain protected. Its unchanged working tree
+therefore shows newly tracked merge files as absent relative to advanced `main`;
+this state is intentional until the user resolves the local audit change. It is
+not safe to force candidate content into that working tree.
 
 ## Remaining Stashes / Worktrees / User Files
 
