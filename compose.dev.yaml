@@ -17,5 +17,9 @@ services:
       - '127.0.0.1:${OJPLATFORM_API_PORT:-3010}:3010'
     networks: [infrastructure, dev-ingress]
 
+  web:
+    ports:
+      - '127.0.0.1:${OJPLATFORM_WEB_PORT:-5173}:8080'
+
 networks:
   dev-ingress:

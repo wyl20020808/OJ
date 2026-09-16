@@ -1762,7 +1762,9 @@ function ProblemDetail({
   useEffect(() => {
     void api
       .judgeData(id)
-      .then((data) => setChecker(data.defaults.checker))
+      .then((data) => {
+        if (data) setChecker(data.defaults.checker);
+      })
       .catch((e) =>
         console.error('[ProblemDetail] judge checker unavailable', e),
       );

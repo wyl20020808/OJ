@@ -96,6 +96,41 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3010/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  web:
+    image: ${OJPLATFORM_WEB_IMAGE:-ojplatform/web:dev}
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      additional_contexts:
+        online-code-editor: ${OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT:?OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT must point to the OnlineCodeEditor checkout}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [infrastructure, web-ingress]
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:8080/']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   judge-bootstrap:
     image: ${OJPLATFORM_API_IMAGE:-ojplatform/api:dev}
@@ -134,6 +169,7 @@ services:
 networks:
   infrastructure:
     internal: true
+  web-ingress:
 
 volumes:
   postgres-data:

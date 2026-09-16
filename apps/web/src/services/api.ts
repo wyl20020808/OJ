@@ -1813,15 +1813,15 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
         { method: 'POST', body: JSON.stringify(transition) },
         fetcher,
       ),
-    judgeData: async (problemId: string) =>
-      normalizeJudgeDraft(
-        await request<BackendJudgeDraft>(
-          baseUrl,
-          `/api/problems/${encodeURIComponent(problemId)}/judge-data`,
-          undefined,
-          fetcher,
-        ),
-      ),
+    judgeData: async (problemId: string) => {
+      const data = await request<BackendJudgeDraft | null>(
+        baseUrl,
+        `/api/problems/${encodeURIComponent(problemId)}/judge-data`,
+        undefined,
+        fetcher,
+      );
+      return data ? normalizeJudgeDraft(data) : null;
+    },
     judgeDraft: async (problemId: string) => {
       const draft = await request<BackendJudgeDraft | null>(
         baseUrl,
