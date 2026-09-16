@@ -1,66 +1,32 @@
-import { readFile } from 'node:fs/promises';
-import pg from 'pg';
+import { fileURLToPath } from 'node:url';
+import { runMigrationCommand } from './migration-runner.mjs';
+import { productMigrationManifest } from './migrations/product-manifest.mjs';
 
-const direction = process.argv[2] ?? 'up';
-const requestedMigration = process.argv[3];
-const client = new pg.Client({
-  connectionString:
-    process.env.DATABASE_URL ??
-    'postgres://ojplatform:ojplatform_dev@127.0.0.1:55432/ojplatform',
-  connectionTimeoutMillis: 3000,
-});
-await client.connect();
+const command = process.argv[2] ?? 'up';
+const argumentsAfterCommand = process.argv.slice(3);
+const json = argumentsAfterCommand.includes('--json');
+const positional = argumentsAfterCommand.filter(
+  (argument) => !argument.startsWith('--'),
+);
+if (positional.length > 1 || (positional.length && command !== 'down')) {
+  throw new Error('Only down accepts one explicit latest migration id');
+}
+
+const directory = fileURLToPath(
+  new URL('../packages/database/migrations/', import.meta.url),
+);
+
 try {
-  const migrations = [
-    '0000_platform_metadata',
-    '0001_auth_foundation',
-    '0002_problem_foundation',
-    '0003_authz_foundation',
-    '0004_problem_authoring_revision',
-    '0005_submission_intake',
-    '0006_submission_evaluation_history',
-    '0007_submission_status_lifecycle',
-    '0006_auth_identity_verification_social',
-    '0007_contest_foundation',
-    '0008_social_messaging_foundation',
-    '0009_notifications_foundation',
-    '0010_guest_auth',
-    '0011_profile_favorites',
-    '0012_product_judge_admin_audit',
-    '0013_problem_judge_data',
-    '0014_problem_judge_data_integrity',
-    '0015_submission_judge_data_binding',
-    '0016_submission_evaluation_detail',
-    '0017_problem_authoring_v2',
-    '0018_problem_public_metadata',
-    '0019_editor_code_drafts',
-    '0020_judge_artifacts',
-    '0021_submission_dispatch',
-    '0022_problem_delete_provenance',
-    '0023_team_core_v1',
-    '0024_problem_tag_catalog',
-    '0025_discussion_core',
-    '0026_submission_source_permission',
-    '0027_profile_experience',
-    '0028_discussion_comment_likes',
-    '0029_team_assignment_v1',
-    '0030_discussion_announcement_capability',
-    '0031_profile_media_save_v2',
-    '0032_submission_integration_fixture_cleanup',
-    '0033_blog_full_experience',
-    '0034_problem_provider_semantics',
-    '0035_problem_revision_source_type',
-    '0036_contest_development_provenance',
-  ];
-  if (requestedMigration && !migrations.includes(requestedMigration))
-    throw new Error(`Unknown migration: ${requestedMigration}`);
-  const selected = requestedMigration ? [requestedMigration] : migrations;
-  const ordered = direction === 'down' ? [...selected].reverse() : selected;
-  for (const name of ordered) {
-    const file = `packages/database/migrations/${name}${direction === 'down' ? '.down' : ''}.sql`;
-    await client.query(await readFile(file, 'utf8'));
-  }
-  console.log(`migration ${direction} PASS`);
-} finally {
-  await client.end();
+  await runMigrationCommand({
+    databaseUrl: process.env.DATABASE_URL,
+    directory,
+    label: 'product',
+    manifest: productMigrationManifest,
+    command,
+    json,
+    requestedId: positional[0],
+  });
+} catch (error) {
+  console.error(`Product migration failed: ${error.message}`);
+  process.exitCode = 1;
 }

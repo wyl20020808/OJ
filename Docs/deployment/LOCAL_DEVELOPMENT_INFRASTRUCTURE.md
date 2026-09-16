@@ -8,6 +8,7 @@ The canonical local container backend is WSL2 Ubuntu 24.04 with the official Doc
 pnpm install --frozen-lockfile
 pnpm infra:up
 pnpm infra:wait
+$env:DATABASE_URL = '<development Product DB URL from local secret configuration>'
 pnpm db:migrate
 pnpm infra:status
 pnpm integration

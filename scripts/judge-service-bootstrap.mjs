@@ -45,13 +45,18 @@ try {
 }
 
 const target = new pg.Client({
-  connectionString: adminUrl.replace(/\/[^/]+$/, `/${databaseName}`),
+  connectionString: (() => {
+    const url = new URL(adminUrl);
+    url.pathname = `/${databaseName}`;
+    return url.toString();
+  })(),
 });
 await target.connect();
 try {
   const role = quoteIdentifier(roleName);
   await target.query('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
-  await target.query(`GRANT USAGE, CREATE ON SCHEMA public TO ${role}`);
+  await target.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
+  await target.query(`REVOKE CREATE ON SCHEMA public FROM ${role}`);
   // Repair pre-existing Judge tables as well as objects created after this
   // bootstrap. Default privileges alone only cover one owner's future DDL.
   await target.query(
