@@ -13,6 +13,24 @@ Development Model = Goal / Phase Driven
 
 OJPlatform is a long-lived, maintainable Online Judge platform, not a one-off demo.
 
+## Project Context Bootstrap
+
+Repository documentation is the durable project memory. Chat/session memory is supplemental only; "the assistant should remember" is never a project recovery mechanism.
+
+Before any substantial OJPlatform task, Codex MUST:
+
+1. live-check Git (`git branch --show-current`, `git rev-parse HEAD`, `git rev-parse refs/heads/main`, `git status --short`);
+2. read `Docs/OJPLATFORM_CURRENT_HANDOFF.md` and `Docs/PROJECT_STATUS.md`;
+3. read only the latest reports that the handoff names as relevant;
+4. confirm completed work, deferred work, current blockers, next action, and the recommended model;
+5. only then modify code, Docker configuration, migrations, reports, or documentation.
+
+Git hashes recorded in `Docs/` are `LAST KNOWN STATE` only. They MUST NOT be treated as current `main`; every task MUST live-check `git rev-parse refs/heads/main`.
+
+If the user says "继续", "继续 OJPlatform", "下一步", "接着做", "之前做到哪里了", "我忘了做到哪了", "Mac 是不是还没测试", or anything similar, Codex MUST NOT ask the user to recall or restate project state. Read the handoff and status, then report the current state and the next action.
+
+Maintenance: when a major phase becomes PASS, merged, blocked, deferred, or resumed, the Feature/Integration Lead updates `Docs/OJPLATFORM_CURRENT_HANDOFF.md` (current state, deferred items, next action, relevant reports, model recommendation) and records the formal status in `Docs/PROJECT_STATUS.md`. Routine commits MUST NOT edit the handoff.
+
 ## Frontend Architecture
 
 All web frontend changes must follow:
@@ -49,6 +67,8 @@ User instructions do not authorize silently breaking safety, architecture, data 
 
 Primary references:
 
+- [Current Handoff](Docs/OJPLATFORM_CURRENT_HANDOFF.md) — durable project memory and first entry point for any new session
+- [Project Status](Docs/PROJECT_STATUS.md)
 - [Architecture Baseline](Docs/OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
@@ -128,7 +148,7 @@ GOAL -> PHASE -> READ -> PLAN -> IMPLEMENT -> TEST -> REVIEW
       -> RUNTIME VALIDATION -> REPORT -> PASS / PARTIAL / FAIL
 ```
 
-Before a new Phase, read this file, the nearest scoped `AGENTS.md`, the Architecture Baseline, and the current Goal; check Git status; understand Scope and Non-goals; then write.
+Before a new Phase, read this file, the nearest scoped `AGENTS.md`, `Docs/OJPLATFORM_CURRENT_HANDOFF.md`, `Docs/PROJECT_STATUS.md`, the Architecture Baseline, and the current Goal; check Git status; understand Scope and Non-goals; then write.
 
 Complete local Runtime startup, shutdown, and status MUST use `scripts/dev-runtime.ps1`
 or its `OJPlatform-*.bat` entry points. Unless the Runtime Manager itself is broken,
