@@ -29,10 +29,11 @@ git status --short
 
 - Any Git hash written anywhere in `Docs/` is `LAST KNOWN STATE`, never current
   truth. Every task MUST live-check `git rev-parse refs/heads/main` before acting.
-- Last known state at the time of writing: `main` = `b7dad60`
-  (`docs: correct worktree count in Docker Phase 4 integration report`).
-  Docker Phase 4 is integrated in `main`; Docker Phase 5 work is documented on
-  branch `codex/docker-phase5-cross-platform-v1` and is NOT in `main`.
+- Last known state at the time of writing: `main` = `7f49d1c`
+  (`merge: integrate Durable Project Memory Bootstrap V1`). Docker Phase 4 and
+  this memory bootstrap are integrated in `main`; Docker Phase 5 work is
+  documented on branch `codex/docker-phase5-cross-platform-v1` and is NOT in
+  `main`.
 
 ## Current Product State
 
@@ -269,6 +270,7 @@ Docker design docs:
 
 Judge boundary and governance:
 
+- `Docs/reports/OJPLATFORM_DURABLE_PROJECT_MEMORY_BOOTSTRAP_V1_INTEGRATION_REPORT.md`
 - `Docs/parallel/JUDGE_SERVICE_WORKER_SUPERVISOR_HANDOFF_CONTRACT_V1.md`
 - `Docs/parallel/JUDGE_SERVICE_DEPLOYMENT_BOUNDARY_V1.md`
 - `Docs/PROJECT_STATUS.md`
