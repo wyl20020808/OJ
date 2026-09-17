@@ -9,7 +9,7 @@ Live inspection at task start on 2026-09-17:
 - `git rev-parse refs/heads/main` = `5868c72bf2b6db53e8420932cff8a363b7435aed`
 - `git status --short` = clean (no tracked or untracked changes)
 - `git stash list` = 3 pre-existing stashes, preserved untouched
-- `git worktree list` = 123 registered worktrees, all preserved
+- `git worktree list` = 131 registered worktrees before this task, all preserved
 
 No historical `main` hash was used as truth. Phase 1, 2, and 3 were already integrated.
 
@@ -426,7 +426,7 @@ Scope was not expanded to repair `SubmissionHistoryPage`, `code-run/routes.ts`, 
 ## Remaining Stashes / Worktrees / User Files
 
 - 3 pre-existing stashes preserved unchanged: `codex-preserve-user-infra-before-wave4f-merge`, `codex-preserve-user-project-status-before-discussion-hub-merge`, `codex-preserve-user-project-status-before-team-merge`.
-- All 123 pre-existing worktrees preserved, including the Phase 4 feature worktree at `D:\OJPlatform-worktrees\docker-phase4-web-container-v1` and the new integration candidate at `D:\OJPlatform-worktrees\docker-phase4-web-container-v1-integration-v1`.
+- All 131 pre-existing worktrees preserved, including the Phase 4 feature worktree at `D:\OJPlatform-worktrees\docker-phase4-web-container-v1` and the new integration candidate at `D:\OJPlatform-worktrees\docker-phase4-web-container-v1-integration-v1`.
 - Real development containers `ojplatform-local-postgres-1`, `ojplatform-local-redis-1`, `ojplatform-local-minio-1` are preserved in their original exited state. No `ojplatform-local` volume was touched.
 - Qualification images `ojplatform/web:ojplatform-phase4-integration-qualification` and `ojplatform/api:ojplatform-phase4-integration-qualification` were left in place, consistent with how the Phase 2 and Phase 3 qualification images were previously retained. The task scoped cleanup to containers, networks, and volumes.
 - `scripts/dev-runtime.ps1` was not modified and the real Runtime Manager was not started.
