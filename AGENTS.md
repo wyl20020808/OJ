@@ -17,19 +17,30 @@ OJPlatform is a long-lived, maintainable Online Judge platform, not a one-off de
 
 Repository documentation is the durable project memory. Chat/session memory is supplemental only; "the assistant should remember" is never a project recovery mechanism.
 
-Before any substantial OJPlatform task, Codex MUST:
+Before any substantial OJPlatform task:
 
 1. live-check Git (`git branch --show-current`, `git rev-parse HEAD`, `git rev-parse refs/heads/main`, `git status --short`);
-2. read `Docs/OJPLATFORM_CURRENT_HANDOFF.md` and `Docs/PROJECT_STATUS.md`;
-3. read only the latest reports that the handoff names as relevant;
-4. confirm completed work, deferred work, current blockers, next action, and the recommended model;
-5. only then modify code, Docker configuration, migrations, reports, or documentation.
+2. read `Docs/OJPLATFORM_CURRENT_HANDOFF.md`.
 
-Git hashes recorded in `Docs/` are `LAST KNOWN STATE` only. They MUST NOT be treated as current `main`; every task MUST live-check `git rev-parse refs/heads/main`.
+If the handoff already answers current state, blockers, deferred work, next action, task boundary, and the recommended model, start work immediately. Do NOT preload `Docs/PROJECT_STATUS.md` or historical reports.
 
-If the user says "继续", "继续 OJPlatform", "下一步", "接着做", "之前做到哪里了", "我忘了做到哪了", "Mac 是不是还没测试", or anything similar, Codex MUST NOT ask the user to recall or restate project state. Read the handoff and status, then report the current state and the next action.
+Read history only when one of these applies:
 
-Maintenance: when a major phase becomes PASS, merged, blocked, deferred, or resumed, the Feature/Integration Lead updates `Docs/OJPLATFORM_CURRENT_HANDOFF.md` (current state, deferred items, next action, relevant reports, model recommendation) and records the formal status in `Docs/PROJECT_STATUS.md`. Routine commits MUST NOT edit the handoff.
+- A. The handoff names a report and the task genuinely needs its details.
+- B. Live code or Git conflicts with the handoff.
+- C. The user asks for historical reasoning, e.g. "why was Phase 2 designed this way?".
+- D. An old decision, security boundary, or acceptance evidence must be verified.
+- E. The task modifies a historical feature and the handoff is insufficient.
+
+`Docs/PROJECT_STATUS.md` is a HISTORICAL PROJECT LOG, not default startup context. When history is needed: search it for the keyword, read that section, and only then open at most one matching `Docs/reports/` file. Do not read the whole log or several reports by default. Historical reports are lazily loaded evidence, not preloaded context.
+
+Git hashes recorded in `Docs/` are `LAST KNOWN STATE` only. They MUST NOT be treated as current `main`; every task MUST live-check `git rev-parse refs/heads/main`. If the handoff conflicts with live code or Git, LIVE CODE / GIT WINS, and the handoff must be corrected.
+
+If the user says "继续", "继续 OJPlatform", "下一步", "接着做", "之前做到哪里了", "我忘了做到哪了", "Mac 是不是还没测试", or anything similar, Codex MUST NOT ask the user to recall project state or history. Live-check Git, read the handoff, then report unfinished work, deferred items, and the next action. Summarize earlier phases only when explicitly asked.
+
+Context budget: read `Docs/OJPLATFORM_CURRENT_HANDOFF.md` first; never preload historical docs; read only the smallest relevant section or report; prefer search/find over whole-file reads for long history docs; stop retrieving context once enough exists to act safely.
+
+Maintenance: on a major phase PASS / merged / blocked / deferred / resumed, update `Docs/OJPLATFORM_CURRENT_HANDOFF.md` and record the formal status in `Docs/PROJECT_STATUS.md`. When an item becomes PASS + merged, compress it in the handoff to `NAME = PASS / MERGED` so the handoff stays hot and small. Routine commits MUST NOT edit the handoff.
 
 ## Frontend Architecture
 
@@ -67,8 +78,8 @@ User instructions do not authorize silently breaking safety, architecture, data 
 
 Primary references:
 
-- [Current Handoff](Docs/OJPLATFORM_CURRENT_HANDOFF.md) — durable project memory and first entry point for any new session
-- [Project Status](Docs/PROJECT_STATUS.md)
+- [Current Handoff](Docs/OJPLATFORM_CURRENT_HANDOFF.md) — HOT STATE; the first and normally only startup read
+- [Project Status](Docs/PROJECT_STATUS.md) — historical log; read sections on demand, never as default startup context
 - [Architecture Baseline](Docs/OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
@@ -148,7 +159,7 @@ GOAL -> PHASE -> READ -> PLAN -> IMPLEMENT -> TEST -> REVIEW
       -> RUNTIME VALIDATION -> REPORT -> PASS / PARTIAL / FAIL
 ```
 
-Before a new Phase, read this file, the nearest scoped `AGENTS.md`, `Docs/OJPLATFORM_CURRENT_HANDOFF.md`, `Docs/PROJECT_STATUS.md`, the Architecture Baseline, and the current Goal; check Git status; understand Scope and Non-goals; then write.
+Before a new Phase, read this file, the nearest scoped `AGENTS.md`, `Docs/OJPLATFORM_CURRENT_HANDOFF.md`, the Architecture Baseline, and the current Goal (load `Docs/PROJECT_STATUS.md` sections only when history is actually needed); check Git status; understand Scope and Non-goals; then write.
 
 Complete local Runtime startup, shutdown, and status MUST use `scripts/dev-runtime.ps1`
 or its `OJPlatform-*.bat` entry points. Unless the Runtime Manager itself is broken,
