@@ -271,6 +271,12 @@ For large files, inspect relevant sections first.
 
 For completed work, report the delta, not the entire history.
 
+### Agent Runtime Token Optimization
+
+- Prefer RTK-backed shell output for noisy supported commands when RTK integration is available.
+- Do not preload token-optimization skill bodies; rely on Pi extension / skill discovery.
+- For long outputs, prefer existing token/context optimization skills when applicable.
+
 ## Balance Between Conciseness and Completeness
 
 Concise output does not mean incomplete verification.
