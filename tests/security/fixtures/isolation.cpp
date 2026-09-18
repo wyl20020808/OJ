@@ -15,6 +15,7 @@
 #include <sys/ptrace.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -126,6 +127,13 @@ int main() {
 
   result("mount_denied", mount("none", "/tmp", "tmpfs", 0, nullptr) != 0);
   result("ptrace_denied", ptrace(PTRACE_ATTACH, 1, nullptr, nullptr) == -1);
+  bool dangerousDenied = true;
+  for (long number : {long(SYS_bpf), long(SYS_perf_event_open), long(SYS_userfaultfd), long(SYS_keyctl), long(SYS_add_key), long(SYS_request_key), long(SYS_open_by_handle_at)}) {
+    errno = 0;
+    syscall(number, -1, nullptr, 0, 0, 0, 0);
+    dangerousDenied = dangerousDenied && errno == EPERM;
+  }
+  result("dangerous_syscalls_denied", dangerousDenied);
   result("proc_sys", !exists("/sys/kernel") && access("/proc/sys/kernel/hostname", W_OK) != 0);
 
   utsname identity {};

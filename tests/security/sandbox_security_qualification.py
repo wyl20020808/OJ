@@ -23,6 +23,8 @@ BASE_URL = os.environ["OJ_PHASE6B5_SUPERVISOR_URL"]
 FIXTURE_ROOT = pathlib.Path(os.environ["OJ_PHASE6B5_FIXTURE_ROOT"])
 RUN_ID = os.environ["OJ_PHASE6B5_RUN_ID"]
 PROFILE = "cpp20-gcc-13-v1"
+SUPERVISOR_UID = int(os.environ["OJ_PHASE6B5_SUPERVISOR_UID"])
+SUPERVISOR_GID = int(os.environ["OJ_PHASE6B5_SUPERVISOR_GID"])
 
 
 def require(condition: bool, message: str) -> None:
@@ -280,7 +282,7 @@ def local_listener(stop: threading.Event, ready: threading.Event) -> None:
 def main() -> None:
     status, health = request_json("/v1/health")
     require(status == 200 and health.get("real_submission_execution") is True, "isolated Supervisor unavailable")
-    require(health.get("supervisor_uid") == 1000 and health.get("supervisor_gid") == 1000, "Supervisor identity drift")
+    require(health.get("supervisor_uid") == SUPERVISOR_UID and health.get("supervisor_gid") == SUPERVISOR_GID, "Supervisor identity drift")
     capability_status, capabilities = request_json("/v1/executions/capabilities")
     require(capability_status == 200 and capabilities.get("real_submission_execution") is True, "execution capability preflight failed")
 
@@ -337,7 +339,7 @@ def main() -> None:
     required_isolation = {
         "guest_identity", "pid_namespace", "capabilities", "no_new_privs", "seccomp", "credentials",
         "filesystem", "rootfs_readonly", "symlink_escape", "path_traversal", "host_canary_network",
-        "qualification_supervisor", "supervisor_loopback", "service_network", "dns", "mount_denied", "ptrace_denied", "proc_sys", "uts_namespace",
+        "qualification_supervisor", "supervisor_loopback", "service_network", "dns", "mount_denied", "ptrace_denied", "dangerous_syscalls_denied", "proc_sys", "uts_namespace",
     }
     require(required_isolation <= isolation_checks.keys(), "isolation fixture evidence incomplete")
     require(all(isolation_checks[name] == "PASS" for name in required_isolation), f"isolation fixture failed: {isolation_checks}")
@@ -356,6 +358,17 @@ def main() -> None:
     require(crash["runtime"]["exit_code"] != 0 and crash["runtime"]["raw_facts"]["process_exited"] is True, "crash classification failed")
     recovery = run_execution("recovery", fixture("normal.cpp"))
     require(recovery["runtime"]["stdout"] == "PHASE6B5_OK\n", "post-crash recovery failed")
+
+    nofile = run_execution("nofile", fixture("nofile.cpp"))
+    nofile_values = parse_fixture_output(nofile["runtime"]["stdout"])
+    nofile_opened = int(nofile_values.get("NOFILE_OPENED", "0"))
+    require(32 <= nofile_opened < 80 and nofile["runtime"]["exit_code"] == 0, "RLIMIT_NOFILE enforcement failed")
+    file_size = run_execution("file-size", fixture("file-size.cpp"))
+    require(file_size["runtime"]["exit_code"] == 0 and file_size["runtime"]["clean"] is True, "RLIMIT_FSIZE enforcement failed")
+    workspace_files = run_execution("workspace-files", fixture("workspace-files.cpp"))
+    require(workspace_files["runtime"]["exit_code"] == 0 and workspace_files["runtime"]["clean"] is True, "bounded multi-file workspace failed")
+    post_limit_recovery = run_execution("post-limit-recovery", fixture("normal.cpp"))
+    require(post_limit_recovery["runtime"]["stdout"] == "PHASE6B5_OK\n", "post file/descriptor limit recovery failed")
 
     invalid = run_execution("invalid", fixture("invalid.cpp"))
     require(invalid["compile"]["outcome"] == "COMPILE_FAILED" and invalid.get("runtime") is None, "invalid source handling failed")
@@ -384,9 +397,9 @@ def main() -> None:
     summary = {
         "status": "PASS",
         "run_id": RUN_ID,
-        "supervisor_identity": "1000:1000",
+        "supervisor_identity": f"{SUPERVISOR_UID}:{SUPERVISOR_GID}",
         "trusted_probes": len(probe_results) + 3,
-        "untrusted_fixture_sources": 11,
+        "untrusted_fixture_sources": 14,
         "compiler_rootfs_identity": capabilities["compiler_rootfs_identity"],
         "cpu_max": cpu_evidence["cpu_max"],
         "cpu_nr_throttled": event_value(cpu_evidence["cpu_stat"], "nr_throttled"),
@@ -412,9 +425,9 @@ def main() -> None:
         "compile_isolation": "PASS",
         "rootfs_readonly": "PASS",
         "no_new_privs": "PASS",
-        "seccomp": "PARTIAL_DENYLIST_X86_64",
-        "open_file_limit": "NOT_IMPLEMENTED_MEDIUM_GAP",
-        "file_size_limit": "PARTIAL_WORKSPACE_BOUND",
+        "seccomp": "ACCEPTED_COMPENSATING_CONTROLS_AMD64_DENYLIST",
+        "open_file_limit": "PASS_RLIMIT_NOFILE",
+        "file_size_limit": "PASS_RLIMIT_FSIZE_WITH_ACCOUNTED_WORKSPACE",
         "production_judge_qualified": False,
     }
     print(json.dumps(summary, indent=2, sort_keys=True))

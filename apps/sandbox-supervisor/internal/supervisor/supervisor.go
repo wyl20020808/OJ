@@ -39,6 +39,7 @@ type Supervisor struct {
 	Runc                 string
 	ProbeBinary          string
 	qualificationProfile string
+	workspaceAvailable   func(string) (int64, error)
 	systemdCgroup        bool
 	rootlessMode         string
 	cgroupSlice          string
@@ -80,7 +81,7 @@ func (s *Supervisor) ociConfig(sid, workspace string, r model.Request, env []str
 		mappingHostID = uint32(os.Geteuid())
 		mappingHostGID = uint32(os.Getgid())
 	}
-	return bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: env, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostID, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostGID, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: cgroupPath, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
+	return bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: env, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Rlimits: sandboxRlimits(runtimeOpenFileLimit, runtimeFileSizeLimit)}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostID, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": mappingHostGID, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: cgroupPath, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, Seccomp: sandboxSeccomp(), MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
 }
 
 func (s *Supervisor) effectiveCgroupSlice() string {
@@ -107,7 +108,13 @@ type bundleProcess struct {
 	NoNewPrivileges bool                `json:"noNewPrivileges"`
 	User            bundleUser          `json:"user"`
 	Capabilities    map[string][]string `json:"capabilities"`
+	Rlimits         []bundleRlimit      `json:"rlimits"`
 	Seccomp         bundleSeccomp       `json:"-"`
+}
+type bundleRlimit struct {
+	Type string `json:"type"`
+	Hard uint64 `json:"hard"`
+	Soft uint64 `json:"soft"`
 }
 type bundleUser struct {
 	UID uint32 `json:"uid"`
@@ -158,6 +165,32 @@ type bundleSeccomp struct {
 type bundleSyscall struct {
 	Names  []string `json:"names"`
 	Action string   `json:"action"`
+}
+
+const (
+	compileOpenFileLimit = uint64(128)
+	runtimeOpenFileLimit = uint64(64)
+	compileFileSizeLimit = uint64(16 << 20)
+	runtimeFileSizeLimit = uint64(512 << 10)
+	minimumWorkspaceFree = int64(64 << 20)
+)
+
+var deniedDangerousSyscalls = []string{
+	"mount", "umount2", "pivot_root", "ptrace", "kexec_load", "init_module",
+	"finit_module", "delete_module", "reboot", "swapon", "swapoff", "setns",
+	"unshare", "bpf", "perf_event_open", "open_by_handle_at", "userfaultfd",
+	"keyctl", "add_key", "request_key",
+}
+
+func sandboxSeccomp() bundleSeccomp {
+	return bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: append([]string(nil), deniedDangerousSyscalls...), Action: "SCMP_ACT_ERRNO"}}}
+}
+
+func sandboxRlimits(openFiles, fileBytes uint64) []bundleRlimit {
+	return []bundleRlimit{
+		{Type: "RLIMIT_NOFILE", Hard: openFiles, Soft: openFiles},
+		{Type: "RLIMIT_FSIZE", Hard: fileBytes, Soft: fileBytes},
+	}
 }
 
 func New(root, runc, probeBinary string) *Supervisor {
@@ -216,8 +249,8 @@ func newWithNonRootUserBusProfile(root, runc, probeBinary, profile string, hostI
 // qualification. It intentionally fails before runc when the Supervisor is
 // root or when the delegated user-manager environment is unavailable.
 func (s *Supervisor) Preflight(ctx context.Context) error {
-	if os.Geteuid() == 0 {
-		return fmt.Errorf("%w: euid=0", ErrSupervisorUnqualified)
+	if err := validateSupervisorIdentity(os.Geteuid()); err != nil {
+		return err
 	}
 	if !s.systemdCgroup {
 		return fmt.Errorf("%w: systemd cgroup driver is required", ErrSandboxPreflight)
@@ -266,6 +299,13 @@ func (s *Supervisor) Preflight(ctx context.Context) error {
 	}
 	if _, err := exec.LookPath(s.Runc); err != nil {
 		return fmt.Errorf("%w: runc unavailable: %v", ErrSandboxPreflight, err)
+	}
+	return nil
+}
+
+func validateSupervisorIdentity(euid int) error {
+	if euid == 0 {
+		return fmt.Errorf("%w: euid=0", ErrSupervisorUnqualified)
 	}
 	return nil
 }
@@ -404,7 +444,7 @@ func (s *Supervisor) Run(ctx context.Context, r model.Request) (model.Result, er
 	if s.qualificationProfile != "" {
 		guestEnv = append(guestEnv, "OJPLATFORM_TRUSTED_PROFILE="+s.qualificationProfile)
 	}
-	config := bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: guestEnv, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Seccomp: bundleSeccomp{DefaultAction: "SCMP_ACT_ALLOW", Architectures: []string{"SCMP_ARCH_X86_64"}, Syscalls: []bundleSyscall{{Names: []string{"mount", "umount2", "pivot_root", "setns", "unshare", "ptrace", "bpf", "perf_event_open"}, Action: "SCMP_ACT_ERRNO"}}}}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "noexec", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: "phase2b/" + sid, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
+	config := bundleConfig{OciVersion: "1.0.2", Process: bundleProcess{Args: []string{"/probe"}, Cwd: "/workspace", Env: guestEnv, NoNewPrivileges: true, User: bundleUser{UID: 0, GID: 0}, Capabilities: map[string][]string{"bounding": {}, "effective": {}, "inheritable": {}, "permitted": {}, "ambient": {}}, Rlimits: sandboxRlimits(runtimeOpenFileLimit, runtimeFileSizeLimit)}, Root: bundleRoot{Path: "rootfs", Readonly: false}, Mounts: []bundleMount{{Destination: "/dev", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "noexec", "nodev", "size=64k", "mode=755"}}, {Destination: "/proc", Type: "proc", Source: "proc", Options: []string{"nosuid", "noexec", "nodev"}}, {Destination: "/tmp", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "noexec", "size=1m", "mode=1777"}}, {Destination: "/workspace", Type: "tmpfs", Source: "tmpfs", Options: []string{"nosuid", "nodev", "size=1m", "mode=1777"}}}, Linux: bundleLinux{Namespaces: []map[string]string{{"type": "pid"}, {"type": "mount"}, {"type": "network"}, {"type": "ipc"}, {"type": "uts"}, {"type": "user"}}, UIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, GIDMappings: []map[string]uint32{{"containerID": 0, "hostID": 65534, "size": 1}}, RootfsPropagation: "rslave", CgroupsPath: "phase2b/" + sid, Resources: bundleResources{CPU: bundleCPU{Quota: int64(r.CPUMillis) * 1000, Period: 100000}, Memory: bundleMemory{Limit: r.MemoryBytes}, Pids: bundlePids{Limit: int64(r.Pids)}}, Seccomp: sandboxSeccomp(), MaskedPaths: []string{"/proc/kcore", "/proc/keys", "/proc/timer_list", "/proc/latency_stats", "/proc/timer_stats"}, ReadonlyPaths: []string{"/proc/sys", "/proc/sysrq-trigger", "/proc/irq", "/proc/bus", "/proc/fs"}}}
 	config = s.ociConfig(sid, workspace, r, guestEnv)
 	config.Linux.Resources.Unified = map[string]string{"memory.max": fmt.Sprintf("%d", r.MemoryBytes), "pids.max": fmt.Sprintf("%d", r.Pids)}
 	if s.systemdCgroup && !s.omitCgroupPath {

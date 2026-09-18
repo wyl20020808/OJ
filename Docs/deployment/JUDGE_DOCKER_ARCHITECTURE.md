@@ -370,10 +370,12 @@ attach the sandbox namespace to a Docker bridge.
 Sibling job roots are mode `0700`; the shared sandbox root is traversal-only
 `0711`. More importantly, no sibling host directory is mounted into a guest.
 
-`MEDIUM`: compile workspace size is enforced by a 10 ms userspace directory
-monitor, not a kernel filesystem quota or `RLIMIT_FSIZE`; overshoot is possible.
-Runtime tmpfs is kernel-size-bounded. Phase 6B must decide and qualify a hard
-workspace/file-size strategy.
+Phase 6B-6 adds OCI `RLIMIT_FSIZE` (compile 16 MiB; runtime 512 KiB), retains
+the 32 MiB aggregate compile-workspace monitor, makes accounting errors fail
+closed, requires 64 MiB free-space preflight, and verifies bounded cleanup.
+Runtime remains on a 1 MiB kernel-sized tmpfs. A kernel aggregate compile quota
+is not deployed; its residual short monitor-window overshoot is formally accepted
+with compensating controls in `Docs/security/JUDGE_PHASE6B6_COMPENSATING_CONTROLS.md`.
 
 ## Process Isolation
 
@@ -388,9 +390,10 @@ workspace/file-size strategy.
 - compile and every testcase runtime use separate lifecycles, preventing a
   background process from becoming the next testcase process.
 
-`MEDIUM`: OCI `RLIMIT_NOFILE` and `RLIMIT_FSIZE` are not configured. Memory,
-pids, tmpfs/workspace, output, and wall controls reduce impact but do not replace
-explicit descriptor/file limits.
+Phase 6B-6 configures hard=soft OCI limits in every compile/runtime process:
+`RLIMIT_NOFILE` 128/64 and `RLIMIT_FSIZE` 16 MiB/512 KiB. Bounded qualification
+proved descriptor and file writes stop at the configured limits and later jobs
+remain healthy.
 
 ## Resource Limits
 
@@ -406,8 +409,9 @@ explicit descriptor/file limits.
 | artifact | 16 MiB | n/a | Supervisor file validation |
 | testcase input | 100 MiB each | 100 MiB each | contract + bounded transfer |
 | source | 256 KiB | n/a | contract + hash validation |
-| open files | not explicit | not explicit | inherited host limit; Phase 6B gap |
-| file size | not explicit | tmpfs/workspace bounds only | Phase 6B gap |
+| open files | 128 | 64 | OCI `RLIMIT_NOFILE`, hard=soft |
+| file size | 16 MiB | 512 KiB | OCI `RLIMIT_FSIZE`, hard=soft |
+| free-space preflight | 64 MiB | 64 MiB | Supervisor fail-closed host filesystem check |
 
 JudgeData contains per-testcase logical time/memory values, but the current
 artifact execution path enforces the fixed Supervisor profile above. `MEDIUM`:
@@ -421,15 +425,21 @@ Current OCI policy:
 - empty bounding/effective/inheritable/permitted/ambient capabilities;
 - `noNewPrivileges=true`;
 - user namespace and non-root host mapping;
-- seccomp exists with default allow and explicit denial of `mount`, `umount2`,
-  `pivot_root`, `setns`, `unshare`, `ptrace`, `bpf`, and `perf_event_open`;
+- amd64 seccomp uses default allow but explicitly denies `mount`, `umount2`,
+  `pivot_root`, `ptrace`, `kexec_load`, module load/unload, `reboot`, swap control,
+  `setns`, `unshare`, `bpf`, `perf_event_open`, `open_by_handle_at`, `userfaultfd`,
+  and kernel keyring operations;
 - masked/read-only sensitive `/proc` paths;
 - no host devices or Docker socket mounted.
 
-`MEDIUM`: current seccomp is a narrow denylist, not a production-qualified
-allowlist, and names only `SCMP_ARCH_X86_64`. `clone` remains available subject
-to namespaces and `pids.max`. Phase 6B must derive policy from observed compiler
-and static-runtime workloads; it must not paste an Internet profile blindly.
+Phase 6B-6 disposition is
+`ACCEPTED_WITH_DOCUMENTED_COMPENSATING_CONTROL`: the policy remains an amd64-only
+default-allow denylist because the supported GCC/glibc/static-C++ compile surface
+is broad and a traced allowlist on WSL cannot qualify native kernels. Empty
+capabilities, user/PID/mount/network/IPC/UTS namespaces, no-new-privileges,
+rootless runc, cgroups, immutable rootfs, and explicit high-risk syscall denials
+remain mandatory. This acceptance does not qualify ARM64 or native production
+Linux; see the compensating-control record.
 
 ## Compiler Rootfs
 
@@ -577,9 +587,11 @@ qualification.
 
 ### Required
 
-- native Linux kernel with namespaces and cgroup v2;
-- `linux/amd64` for current qualified toolchain;
-- rootless-capable runc compatible with current OCI config;
+- native Linux amd64, kernel 6.8 or newer with user/PID/mount/network/IPC/UTS
+  namespaces, seccomp, and unified cgroup v2;
+- runc 1.4.3 or newer with OCI 1.3 and libseccomp 2.5.5 or newer;
+- systemd 255 or newer with a lingering user manager and delegated cpu/memory/
+  pids controllers;
 - dedicated non-root Supervisor identity with no broad groups;
 - user namespace support and the current one-entry UID/GID map;
 - systemd user manager, user bus, linger where needed, and delegated memory/pids
@@ -646,15 +658,15 @@ rootfs; no host-execution fallback exists. Controlled missing-runc, missing-root
 cgroup-delegation, workspace-setup, and network-namespace launch failures remained
 fail-closed.
 
-Qualification limitations remain `MEDIUM`: seccomp is an amd64-only denylist,
-not a production-derived allowlist; no explicit `RLIMIT_NOFILE` exists; compile
-workspace/file size uses a bounded userspace monitor rather than kernel quota or
-`RLIMIT_FSIZE`. These are recorded gaps, not hidden PASS claims. No `CRITICAL` or
-`HIGH` finding was found.
+Phase 6B-6 expanded this to 14 bounded C++ sources. Explicit NOFILE is resolved;
+per-file FSIZE is enabled; aggregate compile quota and the amd64 default-allow
+seccomp policy are formally accepted with documented controls. Safe syscall,
+descriptor, file, multi-file, low-disk, and post-limit recovery evidence passed.
+No `CRITICAL`, `HIGH`, or OPEN `MEDIUM` finding remains.
 
-`WINDOWS_WSL_SANDBOX_SECURITY_REGRESSION = PASS`. Full Linux amd64 Judge remains
-`PARTIAL` pending Phase 6B-6 production-like native Linux qualification. Linux
-ARM64 remains `NOT QUALIFIED`; Production Judge remains `NO`.
+`WINDOWS_WSL_PRODUCTION_PREQUALIFICATION = PASS`. Full Linux amd64 Judge remains
+`PARTIAL` because no native Linux host was available. Linux ARM64 remains
+`NOT QUALIFIED`; Production Judge remains `NO`.
 
 ## macOS Boundary
 
@@ -770,15 +782,14 @@ Options for a future container Worker:
 | Supervisor | HTTP process alive | record/staging roots usable | non-root, user bus/systemd, runc, cgroup delegation, rootfs integrity, cleanup preflight |
 | Host Agent | HTTP process alive | state readable and no unresolved ownership error | enabled template executable/hash valid and host capacity available |
 
-Current gaps:
-
-- Worker preflights Supervisor only at startup; `/ready` can become stale.
-- Supervisor combines capability in `/v1/health` and lacks a distinct `/ready`.
-- Host Agent `/health` does not prove persisted state/template readiness.
-
-These are `MEDIUM` operational risks. Actual execution still reruns Supervisor
-preflight and fails closed; health semantics must be fixed before orchestration
-uses them for scheduling.
+Judge Service now exposes authenticated `/v1/execution-readiness`, derived from
+its DB/Redis dependency state and durable Judge-node records. It distinguishes
+`ONLINE`, `EXECUTION_READY`, `DEGRADED`, and `UNAVAILABLE`; only current qualified
+nodes with free slots produce `EXECUTION_READY`. Worker and Supervisor continue
+to fail closed at execution time. Remaining operational debt: Worker readiness
+can become stale between heartbeat checks, Supervisor capability remains combined
+in `/v1/health`, and Host Agent health does not prove every template. Therefore
+the end-to-end execution readiness model remains `PARTIAL`, not scheduler HA.
 
 ## Fail-Closed Rules
 

@@ -30,7 +30,7 @@ const (
 	DefaultTestdataVersionID = "testdata-v1"
 	FilesystemPolicyID       = "rootfs-workspace-v1"
 	NetworkPolicyID          = "deny-all-v1"
-	SeccompPolicyID          = "default-seccomp-v1"
+	SeccompPolicyID          = "amd64-dangerous-syscalls-deny-v2"
 	EnvironmentAllowlistID   = "runtime-c-v1"
 
 	PipelineCompleted     = "PIPELINE_COMPLETED"
@@ -86,22 +86,23 @@ type CompilerRootfs struct {
 }
 
 type stageRun struct {
-	ExitCode          int
-	Signal            string
-	Stdout            string
-	Stderr            string
-	StdoutBytes       []byte
-	StderrBytes       []byte
-	StdoutTruncated   bool
-	StderrTruncated   bool
-	WallTimeMS        int64
-	SetupTimeMS       int64
-	TimedOut          bool
-	Cancelled         bool
-	WorkspaceExceeded bool
-	Clean             bool
-	Evidence          *model.RuntimeEvidence
-	Err               error
+	ExitCode                  int
+	Signal                    string
+	Stdout                    string
+	Stderr                    string
+	StdoutBytes               []byte
+	StderrBytes               []byte
+	StdoutTruncated           bool
+	StderrTruncated           bool
+	WallTimeMS                int64
+	SetupTimeMS               int64
+	TimedOut                  bool
+	Cancelled                 bool
+	WorkspaceExceeded         bool
+	WorkspaceAccountingFailed bool
+	Clean                     bool
+	Evidence                  *model.RuntimeEvidence
+	Err                       error
 }
 
 func CompilerCommandTemplateSHA256() string {
@@ -413,6 +414,12 @@ func (s *Supervisor) ExecuteCPP20(ctx context.Context, request model.RealExecuti
 		result.Clean = true
 		return result, err
 	}
+	if err := s.preflightWorkspaceCapacity(); err != nil {
+		result.PipelineOutcome = PipelineInfraFailure
+		result.Compile = model.StageResult{Outcome: CompileInfraFailure, DiagnosticCode: "WORKSPACE_CAPACITY_UNAVAILABLE", Clean: true, Facts: model.RawExecutionFacts{SandboxSetupFailed: true, RuntimeInfraFailed: true, CleanupVerified: true}}
+		result.Clean = true
+		return result, err
+	}
 
 	jobRoot, err := os.MkdirTemp(s.Root, "c2c2-")
 	if err != nil {
@@ -599,6 +606,11 @@ func (s *Supervisor) runExecutionStageReader(ctx context.Context, bundle, rootfs
 	config := s.ociConfig(sid, "", request, env)
 	config.Process.Args = append([]string(nil), args...)
 	config.Process.Cwd = cwd
+	if watchedWorkspace != "" {
+		config.Process.Rlimits = sandboxRlimits(compileOpenFileLimit, compileFileSizeLimit)
+	} else {
+		config.Process.Rlimits = sandboxRlimits(runtimeOpenFileLimit, runtimeFileSizeLimit)
+	}
 	config.Root = bundleRoot{Path: rootfs, Readonly: readonly}
 	config.Mounts = mounts
 	config.Linux.Resources.Unified = map[string]string{
@@ -614,7 +626,7 @@ func (s *Supervisor) runExecutionStageReader(ctx context.Context, bundle, rootfs
 	defer cancelStage()
 	commandCtx, cancelTimeout := context.WithTimeout(stageCtx, time.Duration(limits.WallTimeMS)*time.Millisecond)
 	defer cancelTimeout()
-	var workspaceExceeded atomic.Bool
+	var workspaceExceeded, workspaceAccountingFailed atomic.Bool
 	monitorWorkspaceDone := make(chan struct{})
 	if watchedWorkspace != "" {
 		go func() {
@@ -622,7 +634,13 @@ func (s *Supervisor) runExecutionStageReader(ctx context.Context, bundle, rootfs
 			ticker := time.NewTicker(10 * time.Millisecond)
 			defer ticker.Stop()
 			for {
-				if directorySize(watchedWorkspace) > limits.WorkspaceBytes {
+				size, sizeErr := directorySize(watchedWorkspace)
+				if sizeErr != nil {
+					workspaceAccountingFailed.Store(true)
+					cancelStage()
+					return
+				}
+				if size > limits.WorkspaceBytes {
 					workspaceExceeded.Store(true)
 					cancelStage()
 					return
@@ -688,7 +706,7 @@ func (s *Supervisor) runExecutionStageReader(ctx context.Context, bundle, rootfs
 		ExitCode: exitCode, Signal: signal, Stdout: stdout.String(), Stderr: stderr.String(), StdoutBytes: stdout.Bytes(), StderrBytes: stderr.Bytes(),
 		StdoutTruncated: stdout.Exceeded(), StderrTruncated: stderr.Exceeded(),
 		WallTimeMS: wallTimeMS, SetupTimeMS: executionStarted.Sub(setupStarted).Milliseconds(), TimedOut: errors.Is(commandCtx.Err(), context.DeadlineExceeded),
-		Cancelled: ctx.Err() != nil, WorkspaceExceeded: workspaceExceeded.Load(), Clean: clean,
+		Cancelled: ctx.Err() != nil, WorkspaceExceeded: workspaceExceeded.Load(), WorkspaceAccountingFailed: workspaceAccountingFailed.Load(), Clean: clean,
 		Evidence: evidence, Err: err,
 	}
 }
@@ -700,6 +718,8 @@ func classifyCompile(run stageRun, rootfs, workspace string) model.StageResult {
 	switch {
 	case run.Cancelled:
 		result.Outcome, result.DiagnosticCode = CompileCancelled, "CANCELLED"
+	case run.WorkspaceAccountingFailed:
+		result.Outcome, result.DiagnosticCode = CompileInfraFailure, "WORKSPACE_ACCOUNTING_FAILED"
 	case run.Err != nil && !qualifiedSandboxEvidence(run.Evidence):
 		// An exit status from runc is not evidence that the compiler ran. In
 		// particular, rootless cgroup/user-bus setup failures may exit 1. CE is
@@ -731,6 +751,8 @@ func classifyRuntime(run stageRun) model.StageResult {
 	switch {
 	case run.Cancelled:
 		result.Outcome, result.DiagnosticCode = ExecutionCancelled, "CANCELLED"
+	case run.WorkspaceAccountingFailed:
+		result.Outcome, result.DiagnosticCode = ExecutionInfraFailure, "WORKSPACE_ACCOUNTING_FAILED"
 	case run.Err != nil && !qualifiedSandboxEvidence(run.Evidence):
 		result.Outcome, result.DiagnosticCode = ExecutionInfraFailure, "RUNTIME_SANDBOX_UNPROVEN"
 	case resourceLimitHit(run.Evidence):
@@ -943,19 +965,36 @@ func firstLine(value string) string {
 	return strings.TrimSpace(value)
 }
 
-func directorySize(root string) int64 {
+func (s *Supervisor) preflightWorkspaceCapacity() error {
+	available := s.workspaceAvailable
+	if available == nil {
+		available = workspaceAvailableBytes
+	}
+	bytes, err := available(s.Root)
+	if err != nil {
+		return fmt.Errorf("%w: workspace capacity unavailable: %v", ErrSandboxPreflight, err)
+	}
+	if bytes < minimumWorkspaceFree {
+		return fmt.Errorf("%w: workspace free space below %d bytes", ErrSandboxPreflight, minimumWorkspaceFree)
+	}
+	return nil
+}
+
+func directorySize(root string) (int64, error) {
 	var total int64
-	_ = filepath.WalkDir(root, func(_ string, entry fs.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(_ string, entry fs.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return err
 		}
 		if !entry.Type().IsRegular() {
 			return nil
 		}
-		if info, infoErr := entry.Info(); infoErr == nil {
-			total += info.Size()
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			return infoErr
 		}
+		total += info.Size()
 		return nil
 	})
-	return total
+	return total, err
 }

@@ -25,7 +25,9 @@ Phase 6B-2 execution-cell integration  PASS / MERGED
 Phase 6B-3 Redis ACL isolation ........ PASS / MERGED
 Phase 6B-4 sandbox privilege hardening  PASS / MERGED
 Phase 6B-5 sandbox security regression  PASS / MERGED
-Phase 6B-6 ............................ NEXT / NOT STARTED
+Phase 6B-6 production hardening ....... PASS / FEATURE COMPLETE
+  WSL production-like prequalification  PASS
+  Native Linux amd64 qualification .... PENDING
 Phase 7–9 ............................. NOT STARTED
 ```
 
@@ -34,17 +36,14 @@ Phase 7–9 ............................. NOT STARTED
 - Phase 6B-1/2/3 = PASS / MERGED.
 - Phase 6B-4 sandbox privilege hardening = PASS / MERGED.
 - Phase 6B-5 WSL sandbox security regression = PASS / MERGED.
-- Redis uses isolated Product/Judge/Worker/health/admin ACL identities; default
-  user is disabled. `oj-sandbox` has only its primary group and cannot access
-  Docker socket/API.
-- Opt-in isolated Supervisor qualification passed bounded adversarial C++
-  fixtures for network/filesystem/credential/process/resource/cleanup/testcase/
-  concurrency and fail-closed boundaries. No CRITICAL/HIGH finding exists.
-- MEDIUM findings (3; 6B-6 acceptance inputs): amd64 default-allow seccomp
-  denylist, missing `RLIMIT_NOFILE`, and missing kernel compile-workspace quota/
-  `RLIMIT_FSIZE`. They are OPEN; none is silently accepted or resolved.
-- No real user Submission, user DB, rootfs, shared runtime, Worker, Supervisor,
-  or Host Agent was modified. Qualification-owned runc/cgroups were cleaned.
+- Phase 6B-6 hardening + WSL production-like prequalification = PASS / FEATURE
+  COMPLETE; native Linux amd64 final qualification = PENDING.
+- MEDIUM dispositions: seccomp default-allow amd64 denylist = formally accepted
+  with controls; `RLIMIT_NOFILE` = RESOLVED; per-file `RLIMIT_FSIZE` = enabled
+  and aggregate compile quota = formally accepted with fail-closed controls.
+- Fresh isolated production Compose, second startup, restart/crash recovery,
+  Redis ACL, Docker privilege, 14 bounded C++ fixtures, and cleanup passed.
+  CRITICAL/HIGH/OPEN MEDIUM = 0. No real user data/runtime was modified.
 
 ## Judge Architecture
 
@@ -59,9 +58,10 @@ still a MEDIUM observability gap; Worker itself fails closed.
 
 ## Production Boundary
 
-Worker Redis ACL and `oj-sandbox` Docker-group HIGH blockers are RESOLVED; all
-known HIGH production blockers remain resolved. Production Judge remains
-unqualified pending Phase 6B-6 production-like Linux qualification.
+All known HIGH production blockers remain resolved. Production hardening is
+PASS, but Production Judge remains NO until the native Linux checklist passes.
+Execution readiness is reportable (`ONLINE`/`EXECUTION_READY`/`DEGRADED`/
+`UNAVAILABLE`) but end-to-end model remains PARTIAL.
 
 ## Critical Boundaries
 
@@ -78,7 +78,7 @@ unqualified pending Phase 6B-6 production-like Linux qualification.
 
 ## Next Action
 
-1. Phase 6B-6: production-like native Linux amd64 qualification.
+1. Run `JUDGE_NATIVE_LINUX_QUALIFICATION_HANDOFF.md` on native Linux amd64.
 2. Resume Mac only with real hardware.
 
 ## Model
@@ -93,4 +93,4 @@ unqualified pending Phase 6B-6 production-like Linux qualification.
   `Docs/reports/OJPLATFORM_DOCKER_PHASE6B5_SANDBOX_SECURITY_REGRESSION_V1_REPORT.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-18 (Docker Phase 6B-5 PASS / MERGED)
+Last Updated: 2026-09-18 (Docker Phase 6B-6 hardening PASS / native pending)

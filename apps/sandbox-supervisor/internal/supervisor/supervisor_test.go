@@ -1,7 +1,6 @@
 package supervisor
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -59,8 +58,15 @@ func TestOCIConfigCarriesFiniteResources(t *testing.T) {
 	if cfg.Linux.Resources.Memory.Limit != 8<<20 || cfg.Linux.Resources.Pids.Limit != 4 {
 		t.Fatalf("finite limits lost: %+v", cfg.Linux.Resources)
 	}
-	if cfg.Linux.CgroupsPath != "system.slice:phase2b:sbx-test" {
+	expectedSlice := "system.slice"
+	if os.Geteuid() != 0 {
+		expectedSlice = "user.slice"
+	}
+	if cfg.Linux.CgroupsPath != expectedSlice+":phase2b:sbx-test" {
 		t.Fatalf("unexpected systemd cgroup path: %q", cfg.Linux.CgroupsPath)
+	}
+	if len(cfg.Process.Rlimits) != 2 || cfg.Process.Rlimits[0] != (bundleRlimit{Type: "RLIMIT_NOFILE", Hard: runtimeOpenFileLimit, Soft: runtimeOpenFileLimit}) || cfg.Process.Rlimits[1] != (bundleRlimit{Type: "RLIMIT_FSIZE", Hard: runtimeFileSizeLimit, Soft: runtimeFileSizeLimit}) {
+		t.Fatalf("finite process limits lost: %+v", cfg.Process.Rlimits)
 	}
 	encoded, err := json.Marshal(cfg)
 	if err != nil {
@@ -101,11 +107,27 @@ func TestRootlessSystemdPathDiagnostics(t *testing.T) {
 }
 
 func TestProductionSupervisorRejectsRootQualification(t *testing.T) {
-	r := valid(t)
-	s := New(t.TempDir(), "/usr/bin/runc", "/trusted/probe")
-	result, err := s.Run(context.Background(), r)
-	if err == nil || result.Outcome != UnqualifiedOutcome || result.Clean == false {
-		t.Fatalf("expected UID0 qualification gate: result=%+v err=%v", result, err)
+	if err := validateSupervisorIdentity(0); err == nil || !errors.Is(err, ErrSupervisorUnqualified) {
+		t.Fatalf("expected deterministic UID0 rejection: %v", err)
+	}
+	if err := validateSupervisorIdentity(1000); err != nil {
+		t.Fatalf("dedicated non-root identity rejected: %v", err)
+	}
+}
+
+func TestSeccompDeniesMandatoryDangerousSyscalls(t *testing.T) {
+	policy := sandboxSeccomp()
+	if policy.DefaultAction != "SCMP_ACT_ALLOW" || len(policy.Architectures) != 1 || policy.Architectures[0] != "SCMP_ARCH_X86_64" || len(policy.Syscalls) != 1 || policy.Syscalls[0].Action != "SCMP_ACT_ERRNO" {
+		t.Fatalf("seccomp contract drift: %+v", policy)
+	}
+	actual := map[string]bool{}
+	for _, name := range policy.Syscalls[0].Names {
+		actual[name] = true
+	}
+	for _, name := range []string{"mount", "umount2", "pivot_root", "ptrace", "kexec_load", "init_module", "finit_module", "delete_module", "reboot", "swapon", "swapoff", "setns", "unshare", "bpf", "perf_event_open", "open_by_handle_at", "userfaultfd", "keyctl", "add_key", "request_key"} {
+		if !actual[name] {
+			t.Fatalf("dangerous syscall missing from deny policy: %s", name)
+		}
 	}
 }
 

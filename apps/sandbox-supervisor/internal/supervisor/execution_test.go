@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -176,6 +178,33 @@ func TestCompilerProfileIsFixedAndFinite(t *testing.T) {
 		if limits.CPUMillis < 1 || limits.WallTimeMS < 1 || limits.MemoryBytes < 1 || limits.OutputBytes < 1 || limits.Pids < 1 || limits.WorkspaceBytes < 1 {
 			t.Fatalf("%s limits are not finite: %+v", name, limits)
 		}
+	}
+	if compileOpenFileLimit != 128 || runtimeOpenFileLimit != 64 || compileFileSizeLimit != 16<<20 || runtimeFileSizeLimit != 512<<10 {
+		t.Fatalf("process limits drifted: compile nofile=%d fsize=%d runtime nofile=%d fsize=%d", compileOpenFileLimit, compileFileSizeLimit, runtimeOpenFileLimit, runtimeFileSizeLimit)
+	}
+}
+
+func TestWorkspaceCapacityAndAccountingFailClosed(t *testing.T) {
+	s := New(t.TempDir(), "/usr/bin/runc", "/trusted/probe")
+	s.workspaceAvailable = func(string) (int64, error) { return minimumWorkspaceFree - 1, nil }
+	if err := s.preflightWorkspaceCapacity(); err == nil || !errors.Is(err, ErrSandboxPreflight) {
+		t.Fatalf("low disk capacity accepted: %v", err)
+	}
+	s.workspaceAvailable = func(string) (int64, error) { return minimumWorkspaceFree, nil }
+	if err := s.preflightWorkspaceCapacity(); err != nil {
+		t.Fatalf("minimum disk capacity rejected: %v", err)
+	}
+	root := t.TempDir()
+	for index := 0; index < 64; index++ {
+		if err := os.WriteFile(filepath.Join(root, fmt.Sprintf("small-%03d", index)), make([]byte, 1024), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if size, err := directorySize(root); err != nil || size != 64<<10 {
+		t.Fatalf("bounded aggregate accounting failed: size=%d err=%v", size, err)
+	}
+	if _, err := directorySize(filepath.Join(root, "missing")); err == nil {
+		t.Fatal("workspace accounting error was swallowed")
 	}
 }
 

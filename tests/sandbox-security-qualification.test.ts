@@ -24,6 +24,8 @@ describe('sandbox security qualification safety gate', () => {
     expect(runner).toContain('OJ_ACK_BOUNDED_UNTRUSTED_FIXTURES');
     expect(runner).toContain('id -un)" != "oj-sandbox"');
     expect(runner).toContain('id -u)" == "0"');
+    expect(runner).toContain('sandbox_uid=$(id -u)');
+    expect(client).toContain('OJ_PHASE6B5_SUPERVISOR_UID');
   });
 
   it('uses only task-owned paths and alternate loopback ports', () => {
@@ -35,7 +37,7 @@ describe('sandbox security qualification safety gate', () => {
   });
 
   it('keeps adversarial fixtures short, bounded, and local-only', () => {
-    expect(fixtures.length).toBe(11);
+    expect(fixtures.length).toBe(14);
     for (const fixture of fixtures) {
       expect(fixture.source.length, fixture.name).toBeLessThan(8_000);
       expect(fixture.source, fixture.name).not.toMatch(
@@ -44,6 +46,9 @@ describe('sandbox security qualification safety gate', () => {
     }
     expect(client).toContain('timeout=35');
     expect(client).toContain('max_workers=2');
+    expect(client).toContain('RLIMIT_NOFILE enforcement failed');
+    expect(client).toContain('RLIMIT_FSIZE enforcement failed');
+    expect(client).toContain('bounded multi-file workspace failed');
   });
 
   it('keeps qualification out of default test execution', () => {
