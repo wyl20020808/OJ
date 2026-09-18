@@ -25,8 +25,8 @@ Phase 6B-2 execution-cell integration  PASS / MERGED
 Phase 6B-3 Redis ACL isolation ........ PASS / MERGED
 Phase 6B-4 sandbox privilege hardening  PASS / MERGED
 Phase 6B-5 sandbox security regression  PASS / MERGED
-Phase 6B-6 production hardening ....... PASS / FEATURE COMPLETE
-  WSL production-like prequalification  PASS
+Phase 6B-6 production hardening ....... PARTIAL / MERGED
+  Hardening + WSL prequalification ..... PASS
   Native Linux amd64 qualification .... PENDING
 Phase 7–9 ............................. NOT STARTED
 ```
@@ -36,8 +36,8 @@ Phase 7–9 ............................. NOT STARTED
 - Phase 6B-1/2/3 = PASS / MERGED.
 - Phase 6B-4 sandbox privilege hardening = PASS / MERGED.
 - Phase 6B-5 WSL sandbox security regression = PASS / MERGED.
-- Phase 6B-6 hardening + WSL production-like prequalification = PASS / FEATURE
-  COMPLETE; native Linux amd64 final qualification = PENDING.
+- Phase 6B-6 hardening + WSL production-like prequalification = PASS / MERGED;
+  overall = PARTIAL pending native Linux amd64 final qualification.
 - MEDIUM dispositions: seccomp default-allow amd64 denylist = formally accepted
   with controls; `RLIMIT_NOFILE` = RESOLVED; per-file `RLIMIT_FSIZE` = enabled
   and aggregate compile quota = formally accepted with fail-closed controls.
@@ -54,7 +54,7 @@ Host:   optional Host Agent -> Worker -> 127.0.0.1:19092 Supervisor -> runc
 
 Container API uses `judge-service:3100`; same-host Worker uses loopback. Worker,
 Host Agent, and Supervisor stay host-native. Durable execution-ready state is
-still a MEDIUM observability gap; Worker itself fails closed.
+reportable; end-to-end readiness remains PARTIAL and Worker fails closed.
 
 ## Production Boundary
 
@@ -89,8 +89,9 @@ Execution readiness is reportable (`ONLINE`/`EXECUTION_READY`/`DEGRADED`/
 ## References
 
 - Binding design: `Docs/deployment/JUDGE_DOCKER_ARCHITECTURE.md`.
-- Phase 6B-5 evidence:
-  `Docs/reports/OJPLATFORM_DOCKER_PHASE6B5_SANDBOX_SECURITY_REGRESSION_V1_REPORT.md`.
+- Phase 6B-6 evidence:
+  `Docs/reports/OJPLATFORM_DOCKER_PHASE6B6_PRODUCTION_JUDGE_QUALIFICATION_V1_REPORT.md`.
+- Native checklist: `Docs/deployment/JUDGE_NATIVE_LINUX_QUALIFICATION_HANDOFF.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-18 (Docker Phase 6B-6 hardening PASS / native pending)
+Last Updated: 2026-09-18 (Docker Phase 6B-6 PARTIAL / MERGED; native pending)
