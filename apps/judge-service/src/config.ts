@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 export type JudgeServiceConfig = {
   host: string;
   port: number;
@@ -26,10 +28,10 @@ export function loadJudgeServiceConfig(
     throw new Error(
       'JUDGE_SERVICE_PORT must be an integer between 1 and 65535',
     );
-  const token = env.JUDGE_SERVICE_TOKEN;
+  const token = secret(env, 'JUDGE_SERVICE_TOKEN');
   if (!token || token.length < 16)
     throw new Error('JUDGE_SERVICE_TOKEN must be at least 16 characters');
-  const nodeToken = env.JUDGE_NODE_TOKEN;
+  const nodeToken = secret(env, 'JUDGE_NODE_TOKEN');
   if (!nodeToken || nodeToken.length < 16)
     throw new Error('JUDGE_NODE_TOKEN must be at least 16 characters');
   if (nodeToken === token)
@@ -48,11 +50,11 @@ export function loadJudgeServiceConfig(
     port,
     databaseUrl: validUrl(
       'JUDGE_DATABASE_URL',
-      required(env, 'JUDGE_DATABASE_URL'),
+      requiredSecret(env, 'JUDGE_DATABASE_URL'),
     ),
     redisUrl: validUrl(
       'JUDGE_REDIS_URL',
-      env.JUDGE_REDIS_URL ?? 'redis://127.0.0.1:56379',
+      secret(env, 'JUDGE_REDIS_URL') ?? 'redis://127.0.0.1:56379',
     ),
     redisPrefix: env.JUDGE_REDIS_PREFIX ?? 'oj:judge-service',
     serviceToken: token,
@@ -61,8 +63,17 @@ export function loadJudgeServiceConfig(
   };
 }
 
-function required(env: NodeJS.ProcessEnv, name: string) {
-  const value = env[name];
+function secret(env: NodeJS.ProcessEnv, name: string) {
+  const file = env[`${name}_FILE`];
+  const direct = env[name];
+  if (file && direct)
+    throw new Error(`${name} and ${name}_FILE must not both be set`);
+  if (file) return readFileSync(file, 'utf8').trimEnd();
+  return direct;
+}
+
+function requiredSecret(env: NodeJS.ProcessEnv, name: string) {
+  const value = secret(env, name);
   if (!value) throw new Error(`${name} is required`);
   return value;
 }

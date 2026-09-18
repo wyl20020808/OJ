@@ -81,6 +81,8 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-ojplatform}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-change-me-minio}
       S3_BUCKET: ${S3_BUCKET:-ojplatform-api}
+      JUDGE_SERVICE_URL: ${JUDGE_SERVICE_URL:-http://judge-service:3100}
+      JUDGE_SERVICE_TOKEN: ${JUDGE_SERVICE_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -133,10 +135,11 @@ services:
       start_period: 5s
 
   judge-bootstrap:
-    image: ${OJPLATFORM_API_IMAGE:-ojplatform/api:dev}
+    image: ${OJPLATFORM_JUDGE_MIGRATION_IMAGE:-ojplatform/judge-migration:dev}
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile.judge-service
+      target: migration
     command: ['node', 'scripts/judge-service-bootstrap.mjs']
     environment:
       JUDGE_DATABASE_ADMIN_URL: ${JUDGE_DATABASE_ADMIN_URL:-}
@@ -148,27 +151,85 @@ services:
         condition: service_healthy
     networks: [infrastructure]
     profiles: [judge]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: 'no'
 
   migrate-judge:
-    image: ${OJPLATFORM_API_IMAGE:-ojplatform/api:dev}
+    image: ${OJPLATFORM_JUDGE_MIGRATION_IMAGE:-ojplatform/judge-migration:dev}
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile.judge-service
+      target: migration
     command: ['node', 'scripts/judge-service-migrate.mjs', 'up']
     environment:
-      JUDGE_DATABASE_URL: ${JUDGE_DATABASE_URL:-}
+      JUDGE_DATABASE_URL: ${JUDGE_MIGRATION_DATABASE_URL:-}
       JUDGE_DATABASE_ROLE: ${JUDGE_DATABASE_ROLE:-ojplatform_judge_runtime}
     depends_on:
       judge-bootstrap:
         condition: service_completed_successfully
     networks: [infrastructure]
     profiles: [judge]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: 'no'
+
+  judge-service:
+    image: ${OJPLATFORM_JUDGE_SERVICE_IMAGE:-ojplatform/judge-service:dev}
+    build:
+      context: .
+      dockerfile: Dockerfile.judge-service
+      target: runtime
+    environment:
+      NODE_ENV: production
+      JUDGE_SERVICE_HOST: 0.0.0.0
+      JUDGE_SERVICE_PORT: '3100'
+      JUDGE_DATABASE_URL: ${JUDGE_RUNTIME_DATABASE_URL:-}
+      JUDGE_REDIS_URL: redis://redis:6379
+      JUDGE_REDIS_PREFIX: ${JUDGE_REDIS_PREFIX:-oj:judge-service}
+      JUDGE_SERVICE_TOKEN: ${JUDGE_SERVICE_TOKEN:-}
+      JUDGE_NODE_TOKEN: ${JUDGE_NODE_TOKEN:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate-judge:
+        condition: service_completed_successfully
+    networks: [infrastructure, judge-host]
+    profiles: [judge]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3100/ready').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
 networks:
   infrastructure:
     internal: true
+  judge-host:
   web-ingress:
 
 volumes:

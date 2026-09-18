@@ -39,9 +39,17 @@ const app = await buildJudgeService({
       }
     : {}),
   ready: async () => {
-    if (redis.status !== 'ready') await redis.connect();
-    await Promise.all([checkDatabase(database.pool), checkCache(redis)]);
-    return true;
+    const [judgeDatabase, redisDependency] = await Promise.allSettled([
+      checkDatabase(database.pool),
+      (async () => {
+        if (redis.status === 'wait') await redis.connect();
+        await checkCache(redis);
+      })(),
+    ]);
+    return {
+      judgeDatabase: judgeDatabase.status === 'fulfilled',
+      redis: redisDependency.status === 'fulfilled',
+    };
   },
   autoscalerIntervalMs: Number(
     process.env.JUDGE_AUTOSCALER_INTERVAL_MS ?? 5000,
