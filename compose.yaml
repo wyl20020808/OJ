@@ -20,11 +20,52 @@ services:
       retries: 20
       start_period: 5s
 
+  redis-acl-bootstrap:
+    image: redis:7.4.1-alpine
+    entrypoint: ['/bin/sh', '/opt/ojplatform/bootstrap-redis-acl.sh']
+    environment:
+      REDIS_ADMIN_USERNAME: ${REDIS_ADMIN_USERNAME:-oj-admin}
+      REDIS_ADMIN_PASSWORD: ${REDIS_ADMIN_PASSWORD:-dev-only-redis-admin}
+      REDIS_PRODUCT_USERNAME: ${REDIS_PRODUCT_USERNAME:-oj-product}
+      REDIS_PRODUCT_PASSWORD: ${REDIS_PRODUCT_PASSWORD:-dev-only-redis-product}
+      REDIS_JUDGE_USERNAME: ${REDIS_JUDGE_USERNAME:-oj-judge-service}
+      REDIS_JUDGE_PASSWORD: ${REDIS_JUDGE_PASSWORD:-dev-only-redis-judge}
+      REDIS_WORKER_USERNAME: ${REDIS_WORKER_USERNAME:-oj-judge-worker}
+      REDIS_WORKER_PASSWORD: ${REDIS_WORKER_PASSWORD:-dev-only-redis-worker}
+      REDIS_HEALTH_USERNAME: ${REDIS_HEALTH_USERNAME:-oj-redis-health}
+      REDIS_HEALTH_PASSWORD: ${REDIS_HEALTH_PASSWORD:-dev-only-redis-health}
+      JUDGE_REDIS_PREFIX: ${JUDGE_REDIS_PREFIX:-oj:judge-service}
+    volumes:
+      - redis-acl:/redis-acl
+      - ./deploy/docker/bootstrap-redis-acl.sh:/opt/ojplatform/bootstrap-redis-acl.sh:ro
+    restart: 'no'
+
   redis:
     image: redis:7.4.1-alpine
+    command:
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--aclfile',
+        '/etc/redis-acl/users.acl',
+      ]
+    environment:
+      REDIS_HEALTH_USERNAME: ${REDIS_HEALTH_USERNAME:-oj-redis-health}
+      REDIS_HEALTH_PASSWORD: ${REDIS_HEALTH_PASSWORD:-dev-only-redis-health}
+    volumes:
+      - redis-data:/data
+      - redis-acl:/etc/redis-acl:ro
+    depends_on:
+      redis-acl-bootstrap:
+        condition: service_completed_successfully
     networks: [infrastructure]
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test:
+        [
+          'CMD-SHELL',
+          'REDISCLI_AUTH="$$REDIS_HEALTH_PASSWORD" redis-cli --user "$$REDIS_HEALTH_USERNAME" ping | grep -qx PONG',
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -75,7 +116,7 @@ services:
       PORT: '3010'
       OJPLATFORM_INFRA: 'true'
       DATABASE_URL: ${PRODUCT_RUNTIME_DATABASE_URL:-postgres://ojplatform_runtime:change-me-runtime@postgres:5432/ojplatform}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://${REDIS_PRODUCT_USERNAME:-oj-product}:${REDIS_PRODUCT_PASSWORD:-dev-only-redis-product}@redis:6379/0
       S3_ENDPOINT: http://minio:9000
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-ojplatform}
@@ -195,7 +236,7 @@ services:
       JUDGE_SERVICE_HOST: 0.0.0.0
       JUDGE_SERVICE_PORT: '3100'
       JUDGE_DATABASE_URL: ${JUDGE_RUNTIME_DATABASE_URL:-}
-      JUDGE_REDIS_URL: redis://redis:6379
+      JUDGE_REDIS_URL: redis://${REDIS_JUDGE_USERNAME:-oj-judge-service}:${REDIS_JUDGE_PASSWORD:-dev-only-redis-judge}@redis:6379/0
       JUDGE_REDIS_PREFIX: ${JUDGE_REDIS_PREFIX:-oj:judge-service}
       JUDGE_SERVICE_TOKEN: ${JUDGE_SERVICE_TOKEN:-}
       JUDGE_NODE_TOKEN: ${JUDGE_NODE_TOKEN:-}
@@ -234,4 +275,6 @@ networks:
 
 volumes:
   postgres-data:
+  redis-data:
+  redis-acl:
   minio-data:

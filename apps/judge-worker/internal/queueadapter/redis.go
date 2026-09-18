@@ -507,18 +507,29 @@ type Lease struct {
 	AssignmentID string
 }
 type Client struct {
-	addr   string
-	mu     sync.Mutex
-	conn   net.Conn
-	reader *bufio.Reader
+	addr     string
+	username string
+	password string
+	mu       sync.Mutex
+	conn     net.Conn
+	reader   *bufio.Reader
 }
 
 func New(redisURL string) (*Client, error) {
 	u, err := url.Parse(redisURL)
-	if err != nil || u.Host == "" {
+	if err != nil || u.Scheme != "redis" || u.Host == "" || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/" && u.Path != "/0") {
 		return nil, errors.New("invalid redis url")
 	}
-	return &Client{addr: u.Host}, nil
+	client := &Client{addr: u.Host}
+	if u.User != nil {
+		client.username = u.User.Username()
+		password, supplied := u.User.Password()
+		if !supplied || password == "" {
+			return nil, errors.New("invalid redis credentials")
+		}
+		client.password = password
+	}
+	return client, nil
 }
 func (c *Client) Connect(ctx context.Context) error {
 	c.mu.Lock()
@@ -533,6 +544,18 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 	c.conn = conn
 	c.reader = bufio.NewReader(conn)
+	if c.password != "" {
+		if c.username != "" {
+			_, err = c.command("AUTH", c.username, c.password)
+		} else {
+			_, err = c.command("AUTH", c.password)
+		}
+		if err != nil {
+			_ = conn.Close()
+			c.conn = nil
+			return err
+		}
+	}
 	if _, err = c.command("PING"); err != nil {
 		_ = conn.Close()
 		c.conn = nil
