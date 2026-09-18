@@ -623,9 +623,38 @@ Phase 6A found the account in `docker`. Phase 6B-4 current evidence is:
 - no shared Worker, Supervisor, Host Agent, user DB, rootfs, or cgroup
   configuration was modified.
 
-Windows/WSL sandbox privilege hardening is `PASS`. Full Linux amd64 Judge remains
-`PARTIAL` pending Phase 6B-5 security regression and Phase 6B-6 production
-qualification. Windows native execution is not a sandbox target.
+Windows/WSL sandbox privilege hardening is `PASS`. Windows native execution is
+not a sandbox target.
+
+### Security Qualification Status
+
+Phase 6B-5 ran an explicit opt-in, task-owned security suite on Ubuntu 24.04.4
+WSL2 `x86_64`. It used an alternate loopback Supervisor, isolated execution
+records/workspaces/job IDs, fake canaries, fixed bounded trusted probes, and 11
+short repository-owned adversarial C++ fixture sources. It did not use a real
+user Submission, Product/Judge database, shared Worker/Supervisor/Host Agent,
+external scan, public exploit, or real credential.
+
+Runtime evidence passed network/DNS/host-loopback denial (including the active
+qualification Supervisor), host/sibling/credential/Docker-socket filesystem
+denial, read-only runtime rootfs, private testcase lifecycles, process/PID/user/
+mount/network/IPC/UTS namespaces, empty capabilities, `no_new_privs`, active
+seccomp, finite cgroup v2 CPU/memory/pids controls, wall/output/workspace bounds,
+concurrency, malformed/crash behavior, and process/runc/cgroup/workspace cleanup.
+Compile and runtime both used rootless runc and the verified immutable compiler
+rootfs; no host-execution fallback exists. Controlled missing-runc, missing-rootfs,
+cgroup-delegation, workspace-setup, and network-namespace launch failures remained
+fail-closed.
+
+Qualification limitations remain `MEDIUM`: seccomp is an amd64-only denylist,
+not a production-derived allowlist; no explicit `RLIMIT_NOFILE` exists; compile
+workspace/file size uses a bounded userspace monitor rather than kernel quota or
+`RLIMIT_FSIZE`. These are recorded gaps, not hidden PASS claims. No `CRITICAL` or
+`HIGH` finding was found.
+
+`WINDOWS_WSL_SANDBOX_SECURITY_REGRESSION = PASS`. Full Linux amd64 Judge remains
+`PARTIAL` pending Phase 6B-6 production-like native Linux qualification. Linux
+ARM64 remains `NOT QUALIFIED`; Production Judge remains `NO`.
 
 ## macOS Boundary
 

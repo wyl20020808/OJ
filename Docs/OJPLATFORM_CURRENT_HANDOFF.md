@@ -24,26 +24,26 @@ Phase 5 cross-platform ................ PARTIAL
 Phase 6B-2 execution-cell integration  PASS / MERGED
 Phase 6B-3 Redis ACL isolation ........ PASS / MERGED
 Phase 6B-4 sandbox privilege hardening  PASS / MERGED
-Phase 6B-5 onward ..................... NEXT / NOT STARTED
-Phase 7–9 ............................ NOT STARTED
+Phase 6B-5 sandbox security regression  PASS / FEATURE COMPLETE
+Phase 6B-6 ............................ NEXT / NOT STARTED
+Phase 7–9 ............................. NOT STARTED
 ```
 
 ## Docker Judge Result
 
 - Phase 6B-1/2/3 = PASS / MERGED.
 - Phase 6B-4 sandbox privilege hardening = PASS / MERGED.
-- Redis 7.4.1 uses isolated Product/Judge/Worker/health/admin ACL identities;
-  default user is disabled and fail-closed tests passed.
-- WSL `oj-sandbox` now has only its primary group. Fresh process and systemd-user
-  contexts cannot access the Docker socket/API; trusted runc preflight/probe passed.
-- Isolated WSL2 runtime proved API Compose DNS, host loopback Judge/Redis,
-  registration, heartbeat, trusted fixture lease/resolve, auth rejection,
-  Judge/API/Redis restart recovery, Supervisor-protocol fail-closed behavior,
-  incarnation fencing, graceful shutdown, loopback binds, and cleanup.
-- Worker readiness now requires Judge control plane, Redis, and Supervisor
-  preflight. Judge Service reconnects Redis after dependency restart.
-- No user Submission, untrusted code, real Supervisor/runc, rootfs, cgroup,
-  shared runtime, or real user DB was touched.
+- Phase 6B-5 WSL sandbox security regression = PASS / FEATURE COMPLETE.
+- Redis uses isolated Product/Judge/Worker/health/admin ACL identities; default
+  user is disabled. `oj-sandbox` has only its primary group and cannot access
+  Docker socket/API.
+- Opt-in isolated Supervisor qualification passed bounded adversarial C++
+  fixtures for network/filesystem/credential/process/resource/cleanup/testcase/
+  concurrency and fail-closed boundaries. No CRITICAL/HIGH finding exists.
+- MEDIUM gaps: amd64 seccomp denylist, no `RLIMIT_NOFILE`, and no kernel compile
+  workspace quota/`RLIMIT_FSIZE`.
+- No real user Submission, user DB, rootfs, shared runtime, Worker, Supervisor,
+  or Host Agent was modified. Qualification-owned runc/cgroups were cleaned.
 
 ## Judge Architecture
 
@@ -58,9 +58,9 @@ still a MEDIUM observability gap; Worker itself fails closed.
 
 ## Production Boundary
 
-Worker Redis ACL and `oj-sandbox` Docker-group HIGH blockers are RESOLVED.
-Production Judge remains unqualified pending Phase 6B-5 full sandbox security
-regression and Phase 6B-6 production qualification.
+Worker Redis ACL and `oj-sandbox` Docker-group HIGH blockers are RESOLVED; all
+known HIGH production blockers remain resolved. Production Judge remains
+unqualified pending Phase 6B-6 production-like Linux qualification.
 
 ## Critical Boundaries
 
@@ -77,8 +77,8 @@ regression and Phase 6B-6 production qualification.
 
 ## Next Action
 
-1. Phase 6B-5: disposable-host full sandbox security regression.
-2. Phase 6B-6: production qualification. Resume Mac only with real hardware.
+1. Phase 6B-6: production-like native Linux amd64 qualification.
+2. Resume Mac only with real hardware.
 
 ## Model
 
@@ -88,8 +88,8 @@ regression and Phase 6B-6 production qualification.
 ## References
 
 - Binding design: `Docs/deployment/JUDGE_DOCKER_ARCHITECTURE.md`.
-- Phase 6B-4 evidence:
-  `Docs/reports/OJPLATFORM_DOCKER_PHASE6B4_SANDBOX_PRIVILEGE_HARDENING_V1_REPORT.md`.
+- Phase 6B-5 evidence:
+  `Docs/reports/OJPLATFORM_DOCKER_PHASE6B5_SANDBOX_SECURITY_REGRESSION_V1_REPORT.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-18 (Docker Phase 6B-4 PASS / MERGED)
+Last Updated: 2026-09-18 (Docker Phase 6B-5 PASS / FEATURE COMPLETE)
