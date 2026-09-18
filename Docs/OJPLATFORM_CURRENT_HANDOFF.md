@@ -21,16 +21,15 @@ Phase 5 cross-platform ................ PARTIAL
   Windows/WSL2 amd64 Docker .......... PASS
   Mac Intel / Apple Silicon .......... DEFERRED (no real Mac)
   Native ARM64 API/Web images ........ NOT QUALIFIED
-Phase 6B-2 execution-cell integration  PASS / FEATURE BRANCH
-Phase 6B-3 onward ..................... NOT STARTED
+Phase 6B-2 execution-cell integration  PASS / MERGED
+Phase 6B-3 onward ..................... NEXT / NOT STARTED
 Phase 7–9 ............................ NOT STARTED
 ```
 
 ## Docker Judge Result
 
 - Phase 6B-1 Judge Service control plane = PASS / MERGED.
-- Phase 6B-2 = PASS on `codex/docker-phase6b2-execution-cell-integration-v1`;
-  main merge NOT performed.
+- Phase 6B-2 execution-cell bridge = PASS / MERGED.
 - Isolated WSL2 runtime proved API Compose DNS, host loopback Judge/Redis,
   registration, heartbeat, trusted fixture lease/resolve, auth rejection,
   Judge/API/Redis restart recovery, Supervisor-protocol fail-closed behavior,
@@ -74,10 +73,9 @@ qualification. Execution-cell security regression also remains pending.
 
 ## Next Action
 
-1. Integrate the Phase 6B-2 feature commit through a fresh latest-main candidate.
-2. Phase 6B-3: dedicated Redis ACL/credential isolation or remove direct Worker
+1. Phase 6B-3: dedicated Redis ACL/credential isolation or remove direct Worker
    Redis in service mode.
-3. Phase 6B-4/5: remove Docker-group privilege, then run disposable-host sandbox
+2. Phase 6B-4/5: remove Docker-group privilege, then run disposable-host sandbox
    security regression. Resume Mac only with real hardware.
 
 ## Model
@@ -92,4 +90,4 @@ qualification. Execution-cell security regression also remains pending.
   `Docs/reports/OJPLATFORM_DOCKER_PHASE6B2_EXECUTION_CELL_INTEGRATION_V1_REPORT.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-18 (Docker Phase 6B-2 PASS / feature branch)
+Last Updated: 2026-09-18 (Docker Phase 6B-2 PASS / MERGED)
