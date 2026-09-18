@@ -1,12 +1,59 @@
 package queueadapter
 
 import (
+	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ojplatform/judge-worker/internal/verdict"
 )
+
+func TestRedisURLSupportsACLUsernameAndPassword(t *testing.T) {
+	client, err := New("redis://oj-judge-worker:p%40ssword-value@127.0.0.1:56379/0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.addr != "127.0.0.1:56379" || client.username != "oj-judge-worker" || client.password != "p@ssword-value" {
+		t.Fatal("Redis ACL URL was not parsed correctly")
+	}
+	for _, raw := range []string{
+		"rediss://oj-judge-worker:password-value@127.0.0.1:56379/0",
+		"redis://oj-judge-worker@127.0.0.1:56379/0",
+		"redis://oj-judge-worker:password-value@127.0.0.1:56379/1",
+		"redis://oj-judge-worker:password-value@127.0.0.1:56379/0?fallback=true",
+	} {
+		if _, err := New(raw); err == nil {
+			t.Fatalf("invalid Redis URL accepted: %s", raw)
+		}
+	}
+}
+
+func TestRedisACLConnectionIntegration(t *testing.T) {
+	rawURL := os.Getenv("REDIS_ACL_TEST_URL")
+	prefix := os.Getenv("REDIS_ACL_TEST_PREFIX")
+	if rawURL == "" || prefix == "" {
+		t.Skip("REDIS_ACL_TEST_URL and REDIS_ACL_TEST_PREFIX are required")
+	}
+	client, err := New(rawURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err = client.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = client.Set(ctx, prefix+":workers:acl-integration", "ok", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = client.Get(ctx, prefix+":workers:acl-integration"); err == nil || !strings.Contains(err.Error(), "NOPERM") {
+		t.Fatal("Worker credential read outside its command scope was not denied")
+	}
+}
 
 func sealDigest(value map[string]any) {
 	delete(value, "digest")

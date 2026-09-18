@@ -22,7 +22,8 @@ Phase 5 cross-platform ................ PARTIAL
   Mac Intel / Apple Silicon .......... DEFERRED (no real Mac)
   Native ARM64 API/Web images ........ NOT QUALIFIED
 Phase 6B-2 execution-cell integration  PASS / MERGED
-Phase 6B-3 onward ..................... NEXT / NOT STARTED
+Phase 6B-3 Redis ACL isolation ........ PASS / FEATURE COMMITTED
+Phase 6B-4 onward ..................... NEXT / NOT STARTED
 Phase 7–9 ............................ NOT STARTED
 ```
 
@@ -30,6 +31,12 @@ Phase 7–9 ............................ NOT STARTED
 
 - Phase 6B-1 Judge Service control plane = PASS / MERGED.
 - Phase 6B-2 execution-cell bridge = PASS / MERGED.
+- Phase 6B-3 Redis ACL/credential isolation = PASS on feature branch.
+- Redis 7.4.1 now disables the default user and separates Product, Judge
+  Service, Worker, health, and admin roles. Worker is limited to `PING` and
+  expiring heartbeat `SET` under the configured Worker namespace.
+- Cross-identity, administrative denial, wrong/no/disabled credential,
+  revocation, restart persistence, and Worker/Judge fail-closed tests passed.
 - Isolated WSL2 runtime proved API Compose DNS, host loopback Judge/Redis,
   registration, heartbeat, trusted fixture lease/resolve, auth rejection,
   Judge/API/Redis restart recovery, Supervisor-protocol fail-closed behavior,
@@ -53,10 +60,9 @@ still a MEDIUM observability gap; Worker itself fails closed.
 ## Production Blockers (HIGH, OPEN)
 
 1. Live WSL `oj-sandbox` belongs to the `docker` group.
-2. Service-mode Worker uses shared Redis without ACL isolation.
 
-These do not block controlled Phase 6B work. They block production Judge
-qualification. Execution-cell security regression also remains pending.
+Worker Redis ACL blocker is RESOLVED. Production Judge remains unqualified;
+Docker-group hardening and full execution-cell security regression remain.
 
 ## Critical Boundaries
 
@@ -73,10 +79,9 @@ qualification. Execution-cell security regression also remains pending.
 
 ## Next Action
 
-1. Phase 6B-3: dedicated Redis ACL/credential isolation or remove direct Worker
-   Redis in service mode.
-2. Phase 6B-4/5: remove Docker-group privilege, then run disposable-host sandbox
-   security regression. Resume Mac only with real hardware.
+1. Phase 6B-4: remove and qualify `oj-sandbox` Docker-group privilege.
+2. Then run disposable-host sandbox security regression. Resume Mac only with
+   real hardware.
 
 ## Model
 
@@ -90,4 +95,4 @@ qualification. Execution-cell security regression also remains pending.
   `Docs/reports/OJPLATFORM_DOCKER_PHASE6B2_EXECUTION_CELL_INTEGRATION_V1_REPORT.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-18 (Docker Phase 6B-2 PASS / MERGED)
+Last Updated: 2026-09-18 (Docker Phase 6B-3 PASS / FEATURE COMMITTED)

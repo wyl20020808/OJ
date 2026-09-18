@@ -231,15 +231,38 @@ no inherited database, Redis, S3, Judge, or Docker variables.
 - Give Worker a Judge-only Redis ACL if direct Redis remains. Preferred 6B design
   removes direct Redis use from service-mode Worker.
 
-### Finding: shared Redis scope
+### Redis identity / ACL boundary
 
-`MEDIUM` for the current development topology; `HIGH` if copied to production.
-The current service-mode Worker still constructs and connects a Redis client and
-the Runtime Manager gives API, Judge Service, and Worker the same Redis endpoint.
-No Redis ACL separates Product keys from Judge keys. Contestant code cannot reach
-that credential, but a compromised Worker has broader Redis access than required.
-Phase 6B must either remove Worker Redis access in Judge-Service mode or provision
-a dedicated Judge Redis identity/instance and ACL.
+Phase 6B-3 uses Redis 7.4.1 ACLs on the shared Compose Redis instance. Logical DB
+0 is an operational choice, not a security boundary. The default user is disabled.
+A one-shot, idempotent bootstrap writes password hashes to the persistent ACL
+volume, preserves unknown maintenance users, and starts Redis only after success.
+Runtime users receive no `ACL`, `CONFIG`, `MODULE`, `DEBUG`, persistence,
+shutdown, database-flush, or other administrative permission.
+
+| Identity | Key scope | Command / channel scope |
+| --- | --- | --- |
+| Product API | Product rate-limit keys and legacy `oj:judge:*` Product-owned queue keys | exact read/write/list/rate-limit/Lua commands; publish/subscribe only on evaluation and Judge-progress channels |
+| Judge Service | `${JUDGE_REDIS_PREFIX}:*` | exact queue/lock/list commands plus `PING`; publish only on `oj:judge-progress-events:v1` |
+| Worker | `${JUDGE_REDIS_PREFIX}:workers:*` | `PING` and expiring `SET` only; no read, queue, lease, Pub/Sub, or administration |
+| Redis health | no keys or channels | `PING` only |
+| Redis admin | all | bootstrap and controlled maintenance only; never injected into API, Judge Service, or Worker |
+
+All Workers currently share one role-level Worker identity. This limits a leaked
+Worker credential to heartbeat writes but does not provide per-node attribution.
+Passwords are runtime environment inputs and must be distinct, strong, and
+URI-safe because Compose forms authenticated Redis URLs. Committed values are
+explicit development-only defaults; the production overlay requires external
+values. Rotation is environment update plus affected service restart. Immediate
+revocation also requires `ACL SETUSER <user> off` and administrative
+`CLIENT KILL USER <user>` so already-authenticated connections are closed.
+
+Development publishes Redis on host loopback for the native Worker. Its
+`judge-host` attachment remains required because Docker does not realize the host
+publication from an internal-only network. Production publishes no Redis port;
+a production execution host needs a separately approved private/loopback Redis
+endpoint using the Worker URL and credential, never public ingress. Redis ACLs
+are the enforcement boundary; application prefixes alone are not.
 
 ## Product/Judge Isolation
 
