@@ -548,14 +548,30 @@ Production recommendation is separate Judge execution hosts from Web/API/DB.
 Colocation is a development/small-install option, not preferred production
 isolation.
 
-### Current host privilege finding
+### Sandbox Account Privilege Boundary
 
-`HIGH`: Phase 6A live WSL inspection found `oj-sandbox` in group `docker`. This
-grants the trusted Supervisor account broad Docker-daemon capability on that
-host even though code does not use the socket and sandboxes do not mount it.
-It contradicts least privilege and blocks production qualification. Phase 6A
-does not alter the host. Phase 6B qualification must use a dedicated execution
-identity with no Docker-group membership and prove the Supervisor still works.
+Phase 6B-4 resolved the WSL host finding from Phase 6A. The dedicated
+`oj-sandbox` account has only its primary group: no `docker`, `sudo`, `root`,
+`disk`, or other broad host group. It cannot open `/var/run/docker.sock` or
+reach the Docker API. Worker, Host Agent, and Supervisor production source has
+no Docker CLI, API, socket, containerd, nerdctl, or podman dependency; an
+automated gate protects this boundary and rejects provisioning that adds
+`oj-sandbox` to `docker`.
+
+Supervisor execution remains direct rootless `runc`. Cgroup v2 comes from the
+systemd user manager and `Delegate=yes`; PID/mount/network/IPC/UTS/user
+namespaces come from runc and the Linux kernel; the compiler rootfs is a
+root-owned read-only filesystem tree. None depends on Docker-group membership.
+Fresh host provisioning must create `oj-sandbox` without privileged
+supplementary groups and must use a separate trusted operator identity for any
+Docker-based infrastructure or offline compiler-rootfs build step.
+
+On the Windows/WSL qualification host, fresh login and fresh systemd-user
+processes had no Docker group, socket/API access was denied, real-execution
+preflight passed, and one fixed trusted qualification probe completed through a
+loopback-only Supervisor with cleanup verified. This resolves the Docker-group
+`HIGH` blocker only; it is not full sandbox regression or production Linux
+qualification.
 
 ## Linux Requirements
 
@@ -595,21 +611,21 @@ Historical real evidence exists for Ubuntu 24.04 WSL2 on `linux/amd64`:
 rootless runc, namespaces, cgroup v2 memory/pids, network/filesystem/process
 attacks, cleanup, and GCC 13 rootfs were qualified in earlier phases.
 
-Phase 6A live read-only evidence:
+Phase 6A found the account in `docker`. Phase 6B-4 current evidence is:
 
-- Ubuntu 24.04.4 LTS, `x86_64`;
-- cgroup v2 with cpu/memory/pids controllers;
-- `runc 1.4.3`;
-- nonzero user namespace capacity;
-- rootfs identity/manifest match and no writable/non-root-owned path;
-- current Supervisor/Worker/Judge services were not running;
-- current `oj-sandbox` user bus could not be contacted;
-- `oj-sandbox` currently belongs to `docker` group.
+- Ubuntu 24.04.4 LTS, WSL2 `x86_64`, cgroup v2, and `runc 1.4.3`;
+- `oj-sandbox` UID/GID 1000/1000 with only primary group 1000;
+- fresh process and refreshed lingering systemd user manager without Docker GID;
+- Docker socket/API denied while socket stayed `root:docker` mode `0660`;
+- delegated cpu/memory/pids controllers and required namespaces available;
+- rootfs identity/manifest match, root ownership, and no writable path;
+- loopback Supervisor real-execution preflight and one fixed trusted probe PASS;
+- no shared Worker, Supervisor, Host Agent, user DB, rootfs, or cgroup
+  configuration was modified.
 
-Thus WSL is `PARTIAL`: historically qualified development evidence, not current
-Phase 6 runtime qualification and not equivalent to a production Linux server.
-Windows native execution is not a sandbox target; Windows may run Core and host
-the qualified WSL development environment.
+Windows/WSL sandbox privilege hardening is `PASS`. Full Linux amd64 Judge remains
+`PARTIAL` pending Phase 6B-5 security regression and Phase 6B-6 production
+qualification. Windows native execution is not a sandbox target.
 
 ## macOS Boundary
 
