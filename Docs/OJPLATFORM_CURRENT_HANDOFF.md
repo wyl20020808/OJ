@@ -13,7 +13,7 @@
 - Docker Phase 0 readiness audit: DONE; original verdict PARTIAL.
 - Docker Phase 1–4: PASS / MERGED.
 - Docker Phase 6A Judge architecture/security audit: PASS / MERGED.
-- Docker Phase 6B-1 Judge control plane: PASS on feature branch; merge pending.
+- Docker Phase 6B-1 Judge Service control plane: PASS / MERGED.
 
 ## Active / Deferred
 ```text
@@ -25,20 +25,19 @@ Phase 6B-2 onward ..................... NOT STARTED
 Phase 7–9 ............................ NOT STARTED
 ```
 
-## Phase 6B-1 Result
+## Phase 6B-1 Result (MERGED)
 
-- Added non-root `Dockerfile.judge-service` runtime and migration targets.
-- Added profile `judge`: `judge-bootstrap`, `migrate-judge`, `judge-service`.
-- Fresh start, second no-op migration, failure gate, health/readiness, runtime
-  security inspection, API Compose DNS, host loopback bridge, and Core no-profile
-  regression passed on Windows/WSL2 `linux/amd64` using isolated volumes.
+- Non-root `Dockerfile.judge-service` runtime + migration targets; profile
+  `judge` = `judge-bootstrap` -> `migrate-judge` -> `judge-service`.
+- Validated on Windows/WSL2 `linux/amd64` with isolated volumes: fresh start,
+  second no-op migration, failure gate, health/readiness, runtime security
+  inspection, API Compose DNS, loopback bridge, Core no-profile regression.
 - Judge Service gets Judge DB/Redis/service/node settings only; no Product DB,
   MinIO, Docker socket, runc, compiler rootfs, or execution path.
-- Production publishes Judge Service on `127.0.0.1` only for host-native Worker;
-  no public Judge ingress.
-- ARM64 image attempt hit machine-local BuildKit/Docker Hub TLS timeout; no ARM64
-  qualification claim.
-- Report: `Docs/reports/OJPLATFORM_DOCKER_PHASE6B1_JUDGE_SERVICE_V1_REPORT.md`.
+- Production publishes Judge Service on `127.0.0.1` only; no public Judge
+  ingress. Judge Service `linux/arm64` image = NOT VERIFIED (machine-local
+  BuildKit TLS timeout), so no ARM64 claim.
+- Evidence: `Docs/reports/OJPLATFORM_DOCKER_PHASE6B1_JUDGE_SERVICE_V1_REPORT.md`.
 
 ## Judge Architecture
 
@@ -76,13 +75,11 @@ qualification. Execution-cell security regression also remains pending.
 
 ## Next Action
 
-1. Integrate Phase 6B-1 feature through a fresh Integration Lead branch; Feature
-   Worker must not merge main.
-2. Start Phase 6B-2: keep Worker host-native and remove direct Redis from service
-   mode or implement dedicated Judge Redis ACL isolation.
-3. Then qualify Supervisor connectivity, disposable Linux amd64 execution host,
-   and full sandbox security regression. Do not claim production readiness early.
-4. Resume Phase 5 Mac only when real Mac hardware exists.
+1. Phase 6B-2: keep Worker host-native and remove direct Redis from service mode
+   or implement dedicated Judge Redis ACL isolation.
+2. Then qualify Supervisor connectivity, a disposable Linux amd64 execution host,
+   and the full sandbox security regression. Do not claim production readiness early.
+3. Resume Phase 5 Mac only when real Mac hardware exists.
 
 ## Model
 
@@ -96,4 +93,4 @@ qualification. Execution-cell security regression also remains pending.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open at most one
   matching report.
 
-Last Updated: 2026-09-18 (Docker Phase 6B-1 PASS on feature branch; merge pending)
+Last Updated: 2026-09-18 (Docker Phase 6B-1 PASS / MERGED)
