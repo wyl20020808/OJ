@@ -22,7 +22,7 @@ Phase 5 cross-platform ................ PARTIAL
   Mac Intel / Apple Silicon .......... DEFERRED (no real Mac)
   Native ARM64 API/Web images ........ NOT QUALIFIED
 Phase 6B-2 execution-cell integration  PASS / MERGED
-Phase 6B-3 Redis ACL isolation ........ PASS / FEATURE COMMITTED
+Phase 6B-3 Redis ACL isolation ........ PASS / MERGED
 Phase 6B-4 onward ..................... NEXT / NOT STARTED
 Phase 7–9 ............................ NOT STARTED
 ```
@@ -31,7 +31,7 @@ Phase 7–9 ............................ NOT STARTED
 
 - Phase 6B-1 Judge Service control plane = PASS / MERGED.
 - Phase 6B-2 execution-cell bridge = PASS / MERGED.
-- Phase 6B-3 Redis ACL/credential isolation = PASS on feature branch.
+- Phase 6B-3 Redis ACL/credential isolation = PASS / MERGED.
 - Redis 7.4.1 now disables the default user and separates Product, Judge
   Service, Worker, health, and admin roles. Worker is limited to `PING` and
   expiring heartbeat `SET` under the configured Worker namespace.
@@ -91,8 +91,8 @@ Docker-group hardening and full execution-cell security regression remain.
 ## References
 
 - Binding design: `Docs/deployment/JUDGE_DOCKER_ARCHITECTURE.md`.
-- Phase 6B-2 evidence:
-  `Docs/reports/OJPLATFORM_DOCKER_PHASE6B2_EXECUTION_CELL_INTEGRATION_V1_REPORT.md`.
+- Phase 6B-3 integration evidence:
+  `Docs/reports/OJPLATFORM_DOCKER_PHASE6B3_REDIS_ACL_INTEGRATION_V1_REPORT.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-18 (Docker Phase 6B-3 PASS / FEATURE COMMITTED)
+Last Updated: 2026-09-18 (Docker Phase 6B-3 PASS / MERGED)
