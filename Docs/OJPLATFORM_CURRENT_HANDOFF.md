@@ -24,7 +24,7 @@ Phase 5 cross-platform ................ PARTIAL
 Phase 6B-2 execution-cell integration  PASS / MERGED
 Phase 6B-3 Redis ACL isolation ........ PASS / MERGED
 Phase 6B-4 sandbox privilege hardening  PASS / MERGED
-Phase 6B-5 sandbox security regression  PASS / FEATURE COMPLETE
+Phase 6B-5 sandbox security regression  PASS / MERGED
 Phase 6B-6 ............................ NEXT / NOT STARTED
 Phase 7–9 ............................. NOT STARTED
 ```
@@ -33,15 +33,16 @@ Phase 7–9 ............................. NOT STARTED
 
 - Phase 6B-1/2/3 = PASS / MERGED.
 - Phase 6B-4 sandbox privilege hardening = PASS / MERGED.
-- Phase 6B-5 WSL sandbox security regression = PASS / FEATURE COMPLETE.
+- Phase 6B-5 WSL sandbox security regression = PASS / MERGED.
 - Redis uses isolated Product/Judge/Worker/health/admin ACL identities; default
   user is disabled. `oj-sandbox` has only its primary group and cannot access
   Docker socket/API.
 - Opt-in isolated Supervisor qualification passed bounded adversarial C++
   fixtures for network/filesystem/credential/process/resource/cleanup/testcase/
   concurrency and fail-closed boundaries. No CRITICAL/HIGH finding exists.
-- MEDIUM gaps: amd64 seccomp denylist, no `RLIMIT_NOFILE`, and no kernel compile
-  workspace quota/`RLIMIT_FSIZE`.
+- MEDIUM findings (3; 6B-6 acceptance inputs): amd64 default-allow seccomp
+  denylist, missing `RLIMIT_NOFILE`, and missing kernel compile-workspace quota/
+  `RLIMIT_FSIZE`. They are OPEN; none is silently accepted or resolved.
 - No real user Submission, user DB, rootfs, shared runtime, Worker, Supervisor,
   or Host Agent was modified. Qualification-owned runc/cgroups were cleaned.
 
@@ -92,4 +93,4 @@ unqualified pending Phase 6B-6 production-like Linux qualification.
   `Docs/reports/OJPLATFORM_DOCKER_PHASE6B5_SANDBOX_SECURITY_REGRESSION_V1_REPORT.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-18 (Docker Phase 6B-5 PASS / FEATURE COMPLETE)
+Last Updated: 2026-09-18 (Docker Phase 6B-5 PASS / MERGED)
