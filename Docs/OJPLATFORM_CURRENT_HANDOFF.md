@@ -26,7 +26,8 @@ Phase 5 Docker cross-platform qualification ..... PARTIAL
   Mac Intel / Apple Silicon .................... PENDING (NOT TESTED)
   Native ARM64 API / Web images ................ NOT TESTED
   OnlineCodeEditor acquisition/distribution .... PARTIAL
-Phase 6 Judge Docker architecture/security ...... NOT STARTED
+Phase 6A Judge architecture/security audit ...... PASS / NOT MERGED
+Phase 6B Judge Docker implementation ............ NOT STARTED
 Phase 7-9 (bootstrap / prod Compose / CI-GHCR) .. NOT STARTED
 ```
 
@@ -40,9 +41,9 @@ Phase 5 evidence + Mac steps: see References (branch-only, not in `main`).
 ## Next Action
 
 1. Phase 5 Mac lane stays DEFERRED until a real Mac is available.
-2. Phase 6 Judge Docker architecture/security audit MAY proceed now on
-   Windows + WSL2, using the Phase 6 model below.
-3. Do not mark Phase 5 PASS or claim Phase 6 started before that is true.
+2. Review/merge Phase 6A branch, then start Phase 6B from latest live `main`.
+3. Phase 6B follows the audited split: containerized Judge control plane;
+   native Linux amd64 Worker/Supervisor execution cell; no Docker socket.
 
 ## Model
 
@@ -81,6 +82,9 @@ tasks: `/blog` route gap (discussion lives at `/discussion`), and the
 
 - Phase 5 report / Mac qualification handoff / Mac setup plan — branch
   `codex/docker-phase5-cross-platform-v1` (live-check its tip), NOT in `main`.
+- Phase 6A: `Docs/deployment/JUDGE_DOCKER_ARCHITECTURE.md` and
+  `Docs/reports/OJPLATFORM_DOCKER_PHASE6A_JUDGE_ARCHITECTURE_SECURITY_AUDIT_V1_REPORT.md`
+  on branch `codex/docker-phase6a-judge-architecture-v1` until merged.
 - Judge boundary: `Docs/parallel/JUDGE_SERVICE_WORKER_SUPERVISOR_HANDOFF_CONTRACT_V1.md`,
   `JUDGE_SERVICE_DEPLOYMENT_BOUNDARY_V1.md`.
 - Docker design: `Docs/deployment/DOCKER_INFRASTRUCTURE.md`, `DOCKER_API.md`,
@@ -97,4 +101,4 @@ matching `Docs/reports/` file. Never preload the full status log.
 - Compress anything that becomes PASS + merged to `NAME = PASS / MERGED`.
   Routine commits MUST NOT edit this file.
 
-Last Updated: 2026-09-17
+Last Updated: 2026-09-18 (Docker Phase 6A PASS / NOT MERGED)
