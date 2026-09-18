@@ -42,6 +42,54 @@ This phase did not execute a Submission or alter the host execution cell. The
 `HIGH` production blockers. Therefore Judge control-plane Docker is implemented,
 but the production Judge remains unqualified.
 
+## Phase 6B-2 Integration Status
+
+Phase 6B-2 validated the control-plane boundary on the Windows/WSL2
+`linux/amd64` development lane with an isolated Compose project, Judge database,
+Redis prefix, node identities, ports, and temporary workspace:
+
+- Product API uses `JUDGE_SERVICE_INTERNAL_URL` to populate its container-only
+  `JUDGE_SERVICE_URL=http://judge-service:3100`; host Worker uses a separate
+  `JUDGE_SERVICE_URL=http://127.0.0.1:<published-port>` contract.
+- Development Redis and Judge Service host bridges are bound to `127.0.0.1`.
+  Redis joins `judge-host` only in the development overlay because the current
+  service-mode Worker still writes a liveness key. Production Redis ACL and
+  credential isolation remain `HIGH` / open.
+- Host-native Worker registered, heartbeated, claimed, and resolved an isolated
+  trusted `SAFE_FIXTURE_QUALIFICATION` job through Dockerized Judge Service.
+  No user Submission, source compilation, runc lifecycle, or sandbox payload ran.
+- Worker readiness now requires current Judge control-plane, Redis, and
+  Supervisor protocol preflight status. Dependency loss pauses new claims;
+  Judge Service, Redis, and Supervisor-protocol loss and recovery were tested.
+- Judge Service readiness now reconnects its intentionally non-retrying Redis
+  client after a dependency restart instead of remaining permanently not-ready.
+- Supervisor stayed loopback-only. Validation used an isolated protocol harness
+  on an alternate loopback port, with all execution endpoints disabled, to prove
+  Worker preflight and fail-closed scheduling without touching shared Supervisor,
+  rootfs, cgroups, or runc.
+- Re-registering the same node ID with a new host-owned incarnation replaced the
+  current incarnation and fenced the stale Worker. Delivery remains at-least-once;
+  durable lease/incarnation checks reject stale result publication.
+
+Judge Service `/ready` still means Judge DB + Redis readiness, not execution
+capacity. Worker `/ready` reports its three direct dependencies. Judge node
+records still derive scheduling health mainly from authenticated heartbeat and
+capabilities; they do not expose a separate durable `executionReady` field. This
+is a `MEDIUM` observability gap, not permission to schedule outside Worker-side
+fail-closed checks.
+
+The tested same-host development endpoints are:
+
+```text
+container: Product API -> http://judge-service:3100
+host:      Worker -> http://127.0.0.1:<Judge port>
+host:      Worker -> redis://127.0.0.1:<development Redis port>
+host:      Worker -> http://127.0.0.1:19092 (production contract)
+```
+
+A future remote execution host must use authenticated private TLS endpoints; it
+must not reinterpret `127.0.0.1`, use Compose DNS, or use host networking.
+
 ## Trust Boundaries
 
 ```text
@@ -810,11 +858,16 @@ security qualification plan. Phase 6A runs none.
 
 ### 6B-2: Worker host/container decision implementation
 
-- Scope: implement recommended host-native Worker mode; remove direct Redis from
-  service-mode Worker; define versioned host unit and artifact/Judge TLS routes.
-- Risk: queue/heartbeat regression or credential expansion.
-- Acceptance: Worker has no DB/MinIO/Product Redis credential, durable assignment
-  path passes, current loopback Supervisor contract remains intact.
+- Status: implemented and controlled-runtime validated on Windows/WSL2 amd64.
+- Scope: host-native Worker, explicit container/host endpoint domains,
+  dependency-aware Worker readiness, Redis/Judge restart recovery, and preserved
+  loopback Supervisor contract.
+- Current debt: service-mode Worker still uses Redis for liveness; removal was
+  not mixed with this integration phase, so dedicated ACL/credential isolation
+  remains the next `HIGH` blocker.
+- Acceptance: Worker has no DB/MinIO credential; current shared Redis access is
+  explicit debt. Durable assignment and incarnation fencing pass, and the
+  loopback Supervisor contract remains.
 - Model: GPT-5.6 Sol + High.
 
 ### 6B-3: Supervisor connectivity

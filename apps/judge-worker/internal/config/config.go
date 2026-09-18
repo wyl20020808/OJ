@@ -47,6 +47,7 @@ func Load(env map[string]string) (Config, error) {
 		return d
 	}
 	redis := get("REDIS_URL", "redis://127.0.0.1:56379")
+	queuePrefix := get("QUEUE_PREFIX", "oj:judge")
 	u, err := url.Parse(redis)
 	if err != nil || u.Scheme != "redis" || u.Host == "" {
 		return Config{}, fmt.Errorf("invalid REDIS_URL")
@@ -112,7 +113,7 @@ func Load(env map[string]string) (Config, error) {
 			return Config{}, fmt.Errorf("invalid artifact data plane configuration")
 		}
 	}
-	return Config{RedisURL: redis, QueuePrefix: get("QUEUE_PREFIX", "oj:judge"), WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", "oj:judge:workers"), LivenessTimeoutMS: liveness, RealSubmissionExecution: realExecution, SupervisorURL: supervisorURL, JudgeServiceURL: judgeServiceURL, JudgeNodeToken: nodeToken, NodeIncarnation: incarnation, ArtifactDataURL: artifactURL, ArtifactReadToken: artifactToken, SupervisorArtifactToken: supervisorToken}, nil
+	return Config{RedisURL: redis, QueuePrefix: queuePrefix, WorkerID: worker, BuildVersion: get("BUILD_VERSION", "dev"), MaxConcurrency: max, HeartbeatIntervalMS: hb, ShutdownTimeoutMS: shutdown, LeaseMS: lease, HealthAddr: get("HEALTH_ADDR", "127.0.0.1:18080"), HeartbeatPrefix: get("HEARTBEAT_PREFIX", queuePrefix+":workers"), LivenessTimeoutMS: liveness, RealSubmissionExecution: realExecution, SupervisorURL: supervisorURL, JudgeServiceURL: judgeServiceURL, JudgeNodeToken: nodeToken, NodeIncarnation: incarnation, ArtifactDataURL: artifactURL, ArtifactReadToken: artifactToken, SupervisorArtifactToken: supervisorToken}, nil
 }
 
 func FromEnv() (Config, error) {

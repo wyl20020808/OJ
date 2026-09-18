@@ -48,6 +48,9 @@ type Worker struct {
 	Artifacts                     *artifact.Client
 	state                         atomic.Value
 	active                        atomic.Int32
+	controlPlaneReady             atomic.Bool
+	redisReady                    atomic.Bool
+	supervisorReady               atomic.Bool
 	shutdownOnce                  sync.Once
 	stopOnce                      sync.Once
 	drain                         chan struct{}
@@ -80,7 +83,23 @@ func New(cfg config.Config, redis *queueadapter.Client, logger *log.Logger) *Wor
 	}
 	w := &Worker{Config: cfg, WorkerID: cfg.WorkerID, InstanceID: instance, Capabilities: protocol.NewCapabilities(cfg.WorkerID, instance, cfg.BuildVersion, cfg.MaxConcurrency, cfg.RealSubmissionExecution), Queue: queueadapter.Queue{Redis: redis, Prefix: cfg.QueuePrefix}, Executor: fixture.Executor{}, Supervisor: supervisor, NodeClient: nodeService, drain: make(chan struct{}), stop: make(chan struct{}), logger: logger, cancelJobs: make(map[string]context.CancelFunc), cancellationObservationErrors: make(map[string]struct{})}
 	w.state.Store(State(Starting))
+	w.controlPlaneReady.Store(nodeService == nil)
+	w.supervisorReady.Store(!cfg.RealSubmissionExecution)
 	return w
+}
+
+type DependencyReadiness struct {
+	ControlPlane bool `json:"control_plane"`
+	Redis        bool `json:"redis"`
+	Supervisor   bool `json:"supervisor"`
+}
+
+func (w *Worker) Readiness() DependencyReadiness {
+	return DependencyReadiness{ControlPlane: w.controlPlaneReady.Load(), Redis: w.redisReady.Load(), Supervisor: w.supervisorReady.Load()}
+}
+func (w *Worker) dependenciesReady() bool {
+	readiness := w.Readiness()
+	return readiness.ControlPlane && readiness.Redis && readiness.Supervisor
 }
 func (w *Worker) State() State {
 	if v := w.state.Load(); v != nil {
@@ -91,6 +110,26 @@ func (w *Worker) State() State {
 func (w *Worker) setState(s State) {
 	w.state.Store(s)
 	w.logger.Printf(`{"event":"worker_state","state":%q,"worker_id":%q,"worker_instance_id":%q,"active":%d}`, s, w.WorkerID, w.InstanceID, w.active.Load())
+}
+func (w *Worker) setStateIfChanged(s State) {
+	if w.State() != s {
+		w.setState(s)
+	}
+}
+func (w *Worker) refreshDependencyState() {
+	state := w.State()
+	if state == Draining || state == Stopping || state == Stopped {
+		return
+	}
+	if !w.dependenciesReady() {
+		w.setStateIfChanged(Degraded)
+		return
+	}
+	if w.active.Load() > 0 {
+		w.setStateIfChanged(Busy)
+		return
+	}
+	w.setStateIfChanged(Claiming)
 }
 func (w *Worker) Heartbeat() protocol.Capabilities { return w.Capabilities }
 func (w *Worker) Start(ctx context.Context) error {
@@ -104,13 +143,21 @@ func (w *Worker) Start(ctx context.Context) error {
 		err := w.Supervisor.Preflight(preflightCtx)
 		cancel()
 		if err != nil {
+			w.supervisorReady.Store(false)
 			w.setState(Degraded)
 			return fmt.Errorf("real execution preflight failed: %w", err)
 		}
+		w.supervisorReady.Store(true)
+	}
+	if w.Queue.Redis == nil {
+		w.setState(Degraded)
+		return errors.New("Worker Redis unavailable")
 	}
 	if err := w.Queue.Redis.Connect(ctx); err != nil {
+		w.redisReady.Store(false)
 		w.setState(Degraded)
 	} else {
+		w.redisReady.Store(true)
 		w.setState(Ready)
 	}
 	if w.NodeClient != nil {
@@ -125,10 +172,13 @@ func (w *Worker) Start(ctx context.Context) error {
 			}
 		}
 		if err := w.NodeClient.Register(ctx, nodeclient.Registration{NodeID: w.WorkerID, Incarnation: w.InstanceID, RuntimeVersion: w.Config.BuildVersion, MaxConcurrentJobs: w.Config.MaxConcurrency, RealExecution: w.Config.RealSubmissionExecution, ArtifactExecution: w.Artifacts != nil}); err != nil {
+			w.controlPlaneReady.Store(false)
 			w.setState(Degraded)
 			return fmt.Errorf("judge node registration failed: %w", err)
 		}
+		w.controlPlaneReady.Store(true)
 	}
+	w.refreshDependencyState()
 	go w.heartbeat(ctx)
 	go w.claimLoop(ctx)
 	return nil
@@ -151,9 +201,21 @@ func (w *Worker) heartbeat(ctx context.Context) {
 func (w *Worker) emitHeartbeat() {
 	if w.NodeClient != nil {
 		if err := w.NodeClient.Heartbeat(context.Background(), w.WorkerID, w.InstanceID, int(w.active.Load())); err != nil {
-			w.setState(Degraded)
+			w.controlPlaneReady.Store(false)
 			w.logger.Printf(`{"event":"node_heartbeat_error","worker_id":%q}`, w.WorkerID)
-			return
+		} else {
+			w.controlPlaneReady.Store(true)
+		}
+	}
+	if w.Config.RealSubmissionExecution && w.Supervisor != nil {
+		preflightCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := w.Supervisor.Preflight(preflightCtx)
+		cancel()
+		if err != nil {
+			w.supervisorReady.Store(false)
+			w.logger.Printf(`{"event":"worker_supervisor_preflight_error","worker_id":%q}`, w.WorkerID)
+		} else {
+			w.supervisorReady.Store(true)
 		}
 	}
 	payload := map[string]any{"worker_id": w.WorkerID, "worker_instance_id": w.InstanceID, "protocol_version": protocol.Version, "build_version": w.Config.BuildVersion, "state": w.State(), "max_concurrency": w.Config.MaxConcurrency, "active_job_count": w.active.Load(), "safe_fixture": true, "real_sandboxed_execution": w.Capabilities.RealSandboxedExecution, "sandbox_qualified": w.Capabilities.SandboxQualified, "language_capabilities": w.Capabilities.LanguageCapabilities, "execution_modes": w.Capabilities.ExecutionModes, "heartbeat_at": time.Now().UTC().Format(time.RFC3339Nano)}
@@ -163,19 +225,17 @@ func (w *Worker) emitHeartbeat() {
 	if w.Queue.Redis != nil {
 		encoded, _ := json.Marshal(payload)
 		if err := w.Queue.Redis.Set(context.Background(), w.Config.HeartbeatPrefix+":"+w.WorkerID+":"+w.InstanceID, string(encoded), time.Duration(w.Config.LivenessTimeoutMS)*time.Millisecond); err != nil {
-			w.setState(Degraded)
+			w.redisReady.Store(false)
 			_ = w.Queue.Redis.Close()
 			w.logger.Printf(`{"event":"worker_heartbeat_error","worker_id":%q,"worker_instance_id":%q}`, w.WorkerID, w.InstanceID)
-			return
-		}
-		if w.State() == Degraded {
-			w.setState(Ready)
+		} else {
+			w.redisReady.Store(true)
 		}
 	}
+	w.refreshDependencyState()
 	w.logger.Printf(`{"event":"worker_heartbeat","worker_id":%q,"worker_instance_id":%q,"protocol_version":%q,"build_version":%q,"state":%q,"max_concurrency":%d,"active":%d,"safe_fixture":true}`, w.WorkerID, w.InstanceID, protocol.Version, w.Config.BuildVersion, w.State(), w.Config.MaxConcurrency, w.active.Load())
 }
 func (w *Worker) claimLoop(ctx context.Context) {
-	w.setState(Claiming)
 	backoff := 25 * time.Millisecond
 	for {
 		select {
@@ -187,10 +247,16 @@ func (w *Worker) claimLoop(ctx context.Context) {
 			return
 		default:
 		}
+		if !w.dependenciesReady() {
+			w.setStateIfChanged(Degraded)
+			time.Sleep(backoff)
+			continue
+		}
 		if int(w.active.Load()) >= w.Config.MaxConcurrency {
 			time.Sleep(backoff)
 			continue
 		}
+		w.setStateIfChanged(Claiming)
 		var lease *queueadapter.Lease
 		var err error
 		if w.NodeClient != nil {
@@ -203,17 +269,27 @@ func (w *Worker) claimLoop(ctx context.Context) {
 			lease, err = w.Queue.Claim(ctx, w.InstanceID, time.Duration(w.Config.LeaseMS)*time.Millisecond)
 		}
 		if err != nil {
-			w.setState(Degraded)
-			if w.Queue.Redis != nil {
-				_ = w.Queue.Redis.Close()
+			if w.NodeClient != nil {
+				w.controlPlaneReady.Store(false)
+			} else {
+				w.redisReady.Store(false)
+				if w.Queue.Redis != nil {
+					_ = w.Queue.Redis.Close()
+				}
 			}
+			w.refreshDependencyState()
 			w.logger.Printf(`{"event":"worker_queue_error","worker_id":%q,"error":%q}`, w.WorkerID, err.Error())
 			time.Sleep(backoff)
-			if w.Queue.Redis.Connect(ctx) == nil {
-				w.setState(Ready)
-				w.setState(Claiming)
+			if w.NodeClient == nil && w.Queue.Redis != nil && w.Queue.Redis.Connect(ctx) == nil {
+				w.redisReady.Store(true)
+				w.refreshDependencyState()
 			}
 			continue
+		}
+		if w.NodeClient != nil {
+			w.controlPlaneReady.Store(true)
+		} else {
+			w.redisReady.Store(true)
 		}
 		if lease == nil {
 			time.Sleep(backoff)
@@ -576,12 +652,15 @@ func (w *Worker) ServeHealth(ctx context.Context) (*http.Server, error) {
 	})
 	mux.HandleFunc("/ready", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.Header().Set("content-type", "application/json")
-		if w.State() != Ready && w.State() != Claiming && w.State() != Busy {
-			rw.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = rw.Write([]byte(`{"status":"degraded"}`))
-			return
+		readiness := w.Readiness()
+		status := "ok"
+		code := http.StatusOK
+		if !w.dependenciesReady() || (w.State() != Ready && w.State() != Claiming && w.State() != Busy) {
+			status = "degraded"
+			code = http.StatusServiceUnavailable
 		}
-		_, _ = rw.Write([]byte(`{"status":"ok"}`))
+		rw.WriteHeader(code)
+		_ = json.NewEncoder(rw).Encode(map[string]any{"status": status, "dependencies": readiness})
 	})
 	server := &http.Server{Addr: w.Config.HealthAddr, Handler: mux}
 	go func() { <-ctx.Done(); _ = server.Shutdown(context.Background()) }()
