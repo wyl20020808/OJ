@@ -1,0 +1,41 @@
+# Judge Service is a trusted control-plane process. Untrusted submissions run
+# only in the separate host-native Worker/Supervisor/runc execution cell.
+FROM node:22.20.0-alpine AS build
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+WORKDIR /workspace
+
+RUN corepack enable && corepack install -g pnpm@11.19.0
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm build:judge-service:container && pnpm build:judge-migration:container
+RUN pnpm deploy --legacy --filter @ojplatform/judge-service --prod /runtime
+
+# One-shot bootstrap and migration target. It is intentionally separate from
+# the long-lived, minimal Judge Service runtime target.
+FROM node:22.20.0-alpine AS migration
+
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup -S ojplatform && adduser -S -G ojplatform ojplatform
+
+COPY --from=build --chown=ojplatform:ojplatform /runtime/node_modules ./node_modules
+COPY --from=build --chown=ojplatform:ojplatform /workspace/dist/scripts/judge-service-bootstrap.js ./scripts/judge-service-bootstrap.mjs
+COPY --from=build --chown=ojplatform:ojplatform /workspace/dist/scripts/judge-service-migrate.js ./scripts/judge-service-migrate.mjs
+COPY --from=build --chown=ojplatform:ojplatform /workspace/packages/judge-runtime/migrations ./packages/judge-runtime/migrations
+
+USER ojplatform
+
+FROM node:22.20.0-alpine AS runtime
+
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup -S ojplatform && adduser -S -G ojplatform ojplatform
+
+COPY --from=build --chown=ojplatform:ojplatform /runtime/node_modules ./node_modules
+COPY --from=build --chown=ojplatform:ojplatform /workspace/dist/docker/judge-service-server.mjs ./dist/judge-service-server.mjs
+
+USER ojplatform
+EXPOSE 3100
+CMD ["node", "dist/judge-service-server.mjs"]

@@ -28,13 +28,18 @@ import {
   type JudgePoolSnapshot,
 } from './pool-autoscaler.js';
 
+export type JudgeServiceDependencyReadiness = {
+  judgeDatabase: boolean;
+  redis: boolean;
+};
+
 export type JudgeServiceAppOptions = {
   queue: JudgeJobRepository;
   state: JudgeServiceStateRepository;
   serviceToken: string;
   nodeToken?: string;
   nodes?: JudgeNodeRepository;
-  ready?: () => Promise<boolean>;
+  ready?: () => Promise<boolean | JudgeServiceDependencyReadiness>;
   logger?: boolean;
   /** Judge-side safe lifecycle events; transport ownership stays outside queue. */
   progressEvents?: JudgeProgressSink;
@@ -236,12 +241,22 @@ export async function buildJudgeService(
 
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/ready', async (_request, reply) => {
-    const ready = (await options.ready?.()) ?? true;
+    let dependencies: JudgeServiceDependencyReadiness;
+    try {
+      const result = (await options.ready?.()) ?? true;
+      dependencies =
+        typeof result === 'boolean'
+          ? { judgeDatabase: result, redis: result }
+          : result;
+    } catch {
+      dependencies = { judgeDatabase: false, redis: false };
+    }
+    const ready = dependencies.judgeDatabase && dependencies.redis;
     return reply.code(ready ? 200 : 503).send({
       status: ready ? 'ok' : 'not_ready',
       dependencies: {
-        judgeDatabase: ready ? 'ok' : 'unavailable',
-        redis: ready ? 'ok' : 'unavailable',
+        judgeDatabase: dependencies.judgeDatabase ? 'ok' : 'unavailable',
+        redis: dependencies.redis ? 'ok' : 'unavailable',
       },
     });
   });

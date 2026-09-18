@@ -47,6 +47,8 @@
     "build:web": "pnpm --filter @ojplatform/web build",
     "build:api": "pnpm --filter @ojplatform/api build",
     "build:api:container": "esbuild apps/api/src/server.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/docker/api-server.mjs",
+    "build:judge-service:container": "esbuild apps/judge-service/src/server.ts --bundle --platform=node --format=esm --target=node22 --external:fastify --external:ioredis --external:pg --external:pg-native --outfile=dist/docker/judge-service-server.mjs",
+    "build:judge-migration:container": "esbuild scripts/judge-service-bootstrap.mjs scripts/judge-service-migrate.mjs --bundle --platform=node --format=esm --target=node22 --external:pg --external:pg-native --outdir=dist/scripts",
     "test:web": "vitest run tests/web.test.tsx",
     "test:api": "vitest run tests/api.test.ts",
     "ci:check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:architecture && pnpm build",

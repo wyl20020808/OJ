@@ -13,6 +13,35 @@ database or Docker volume.
 
 Risk terms are `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, and `INFO`.
 
+## Phase 6B-1 Implementation Status
+
+Phase 6B-1 implements and validates the Dockerized Judge control plane on the
+Windows/WSL2 `linux/amd64` lane:
+
+- `Dockerfile.judge-service` has separate non-root migration and minimal runtime
+  targets, pinned Node 22.20.0 and pnpm 11.19.0, and no runc, compiler rootfs,
+  Docker CLI, or submission execution path.
+- Compose profile `judge` now orders `judge-bootstrap`, `migrate-judge`, and
+  `judge-service` with health/completion gates. Judge Service receives only its
+  runtime Judge DB URL, Judge Redis URL, and service/node tokens; it receives no
+  Product DB or MinIO credential.
+- Product API uses private Compose DNS `http://judge-service:3100`. Host-native
+  Worker/Host Agent can use the loopback-only published port. No public Judge
+  ingress, host network/PID, privileged mode, capability, device, or Docker
+  socket is added.
+- Runtime inspection confirmed UID 100, read-only rootfs, `/tmp` tmpfs,
+  `no-new-privileges`, zero effective capabilities, fresh migration, safe second
+  startup, dependency-aware readiness, and migration failure gating on isolated
+  volumes. Core startup without the profile also passed.
+- Judge Service `linux/amd64` image build passed. A `linux/arm64` build attempt
+  was blocked by the machine-local Docker Hub/BuildKit TLS timeout and is not
+  qualified. This does not change full Judge ARM64 status: `NOT QUALIFIED`.
+
+This phase did not execute a Submission or alter the host execution cell. The
+`oj-sandbox` Docker-group and shared ACL-less Worker Redis findings remain open
+`HIGH` production blockers. Therefore Judge control-plane Docker is implemented,
+but the production Judge remains unqualified.
+
 ## Trust Boundaries
 
 ```text

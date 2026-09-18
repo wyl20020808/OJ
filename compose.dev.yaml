@@ -21,5 +21,9 @@ services:
     ports:
       - '127.0.0.1:${OJPLATFORM_WEB_PORT:-5173}:8080'
 
+  judge-service:
+    ports:
+      - '127.0.0.1:${OJPLATFORM_JUDGE_SERVICE_PORT:-3100}:3100'
+
 networks:
   dev-ingress:
