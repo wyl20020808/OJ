@@ -31,6 +31,7 @@
     "migrate:judge:adopt": "node scripts/judge-service-migrate.mjs adopt",
     "test:migrations": "vitest run tests/migration-architecture.test.ts",
     "qualify:migrations": "node scripts/qualify-migration-architecture.mjs",
+    "qualify:sandbox-security": "bash tests/security/run-sandbox-security-qualification.sh",
     "db:migrate": "pnpm migrate:product",
     "db:rollback": "node scripts/migrate.mjs down",
     "seed:home-development": "node scripts/seed-home-development-fixtures.mjs",
