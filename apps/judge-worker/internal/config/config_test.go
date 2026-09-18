@@ -39,6 +39,17 @@ func TestConfigValidation(t *testing.T) {
 	}
 }
 
+func TestIsolatedQueuePrefixAlsoScopesHeartbeatByDefault(t *testing.T) {
+	c, err := Load(map[string]string{"QUEUE_PREFIX": "phase6b2:isolated"})
+	if err != nil || c.HeartbeatPrefix != "phase6b2:isolated:workers" {
+		t.Fatalf("isolated heartbeat prefix was not derived: %+v err=%v", c, err)
+	}
+	c, err = Load(map[string]string{"QUEUE_PREFIX": "phase6b2:isolated", "HEARTBEAT_PREFIX": "phase6b2:heartbeats"})
+	if err != nil || c.HeartbeatPrefix != "phase6b2:heartbeats" {
+		t.Fatalf("explicit heartbeat prefix was not retained: %+v err=%v", c, err)
+	}
+}
+
 func TestHostAgentIdentityOverridesTemplateWorkerID(t *testing.T) {
 	c, err := Load(map[string]string{
 		"WORKER_ID":                 "template-worker",

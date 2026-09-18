@@ -4,6 +4,9 @@ services:
       - '127.0.0.1:${OJPLATFORM_POSTGRES_PORT:-55432}:5432'
 
   redis:
+    # Development-only host bridge for the native Worker's current Redis
+    # heartbeat contract. Production remains blocked on dedicated Redis ACLs.
+    networks: [infrastructure, judge-host]
     ports:
       - '127.0.0.1:${OJPLATFORM_REDIS_PORT:-56379}:6379'
 

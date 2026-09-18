@@ -42,7 +42,8 @@ const app = await buildJudgeService({
     const [judgeDatabase, redisDependency] = await Promise.allSettled([
       checkDatabase(database.pool),
       (async () => {
-        if (redis.status === 'wait') await redis.connect();
+        if (redis.status === 'wait' || redis.status === 'end')
+          await redis.connect();
         await checkCache(redis);
       })(),
     ]);

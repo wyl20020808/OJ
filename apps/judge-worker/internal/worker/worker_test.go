@@ -40,6 +40,61 @@ func TestHostAgentIncarnationIsUsedWhenConfigured(t *testing.T) {
 		t.Fatalf("instance id = %q", w.InstanceID)
 	}
 }
+func TestDependencyReadinessFailsClosed(t *testing.T) {
+	w := testWorker()
+	w.controlPlaneReady.Store(true)
+	w.redisReady.Store(true)
+	w.supervisorReady.Store(true)
+	if !w.dependenciesReady() {
+		t.Fatal("healthy dependencies reported unavailable")
+	}
+	w.controlPlaneReady.Store(false)
+	w.refreshDependencyState()
+	if w.dependenciesReady() || w.State() != Degraded {
+		t.Fatalf("control-plane loss did not degrade Worker: readiness=%+v state=%s", w.Readiness(), w.State())
+	}
+	w.controlPlaneReady.Store(true)
+	w.redisReady.Store(false)
+	w.refreshDependencyState()
+	if w.dependenciesReady() || w.State() != Degraded {
+		t.Fatalf("Redis loss did not degrade Worker: readiness=%+v state=%s", w.Readiness(), w.State())
+	}
+	w.redisReady.Store(true)
+	w.supervisorReady.Store(false)
+	w.refreshDependencyState()
+	if w.dependenciesReady() || w.State() != Degraded {
+		t.Fatalf("Supervisor loss did not degrade Worker: readiness=%+v state=%s", w.Readiness(), w.State())
+	}
+}
+
+func TestHeartbeatRechecksSupervisorWithoutExecutionFallback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, request *http.Request) {
+		rw.Header().Set("content-type", "application/json")
+		switch request.URL.Path {
+		case "/v1/health":
+			_, _ = rw.Write([]byte(`{"execution_contract_version":"2C.3","real_submission_execution":true,"supervisor_uid":1000}`))
+		case "/v1/executions/capabilities":
+			_, _ = rw.Write([]byte(`{"protocol_version":"2C.3","real_submission_execution":true,"language_profiles":["cpp20-gcc-13-v1"],"compiler_rootfs_identity":"test-rootfs","compiler_version":"test-compiler","command_template_sha256":"test-template"}`))
+		default:
+			http.NotFound(rw, request)
+		}
+	}))
+	cfg, err := config.Load(map[string]string{"REAL_SUBMISSION_EXECUTION": "true", "OJPLATFORM_SANDBOX_SUPERVISOR_URL": server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := New(cfg, nil, log.New(&bytes.Buffer{}, "", 0))
+	w.emitHeartbeat()
+	if !w.supervisorReady.Load() {
+		t.Fatal("Supervisor protocol preflight did not become ready")
+	}
+	server.Close()
+	w.emitHeartbeat()
+	if w.supervisorReady.Load() || w.State() != Degraded {
+		t.Fatalf("Supervisor loss did not fail closed: readiness=%+v state=%s", w.Readiness(), w.State())
+	}
+}
+
 func TestHeartbeatSafePayload(t *testing.T) {
 	var output bytes.Buffer
 	c, _ := config.Load(map[string]string{})
