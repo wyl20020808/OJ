@@ -141,6 +141,12 @@ func (s *Supervisor) executeCPP20Set(ctx context.Context, request model.RealExec
 		result.Clean = true
 		return result, err
 	}
+	if err := s.preflightWorkspaceCapacity(); err != nil {
+		result.Compile = model.StageResult{Outcome: CompileInfraFailure, DiagnosticCode: "WORKSPACE_CAPACITY_UNAVAILABLE", Clean: true, Facts: model.RawExecutionFacts{SandboxSetupFailed: true, RuntimeInfraFailed: true, CleanupVerified: true}}
+		result.PipelineOutcome = PipelineInfraFailure
+		result.Clean = true
+		return result, err
+	}
 
 	jobRoot, err := os.MkdirTemp(s.Root, "c2c4-")
 	if err != nil {

@@ -32,6 +32,7 @@
     "test:migrations": "vitest run tests/migration-architecture.test.ts",
     "qualify:migrations": "node scripts/qualify-migration-architecture.mjs",
     "qualify:sandbox-security": "bash tests/security/run-sandbox-security-qualification.sh",
+    "qualify:production-judge-config": "node scripts/qualify-production-judge-config.mjs",
     "db:migrate": "pnpm migrate:product",
     "db:rollback": "node scripts/migrate.mjs down",
     "seed:home-development": "node scripts/seed-home-development-fixtures.mjs",

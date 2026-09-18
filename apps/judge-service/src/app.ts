@@ -239,18 +239,20 @@ export async function buildJudgeService(
     });
   };
 
-  app.get('/health', async () => ({ status: 'ok' }));
-  app.get('/ready', async (_request, reply) => {
-    let dependencies: JudgeServiceDependencyReadiness;
-    try {
-      const result = (await options.ready?.()) ?? true;
-      dependencies =
-        typeof result === 'boolean'
+  const dependencyReadiness =
+    async (): Promise<JudgeServiceDependencyReadiness> => {
+      try {
+        const result = (await options.ready?.()) ?? true;
+        return typeof result === 'boolean'
           ? { judgeDatabase: result, redis: result }
           : result;
-    } catch {
-      dependencies = { judgeDatabase: false, redis: false };
-    }
+      } catch {
+        return { judgeDatabase: false, redis: false };
+      }
+    };
+  app.get('/health', async () => ({ status: 'ok' }));
+  app.get('/ready', async (_request, reply) => {
+    const dependencies = await dependencyReadiness();
     const ready = dependencies.judgeDatabase && dependencies.redis;
     return reply.code(ready ? 200 : 503).send({
       status: ready ? 'ok' : 'not_ready',
@@ -259,6 +261,63 @@ export async function buildJudgeService(
         redis: dependencies.redis ? 'ok' : 'unavailable',
       },
     });
+  });
+  app.get('/v1/execution-readiness', async (request, reply) => {
+    if (!(await deny(request, reply))) return;
+    const dependencies = await dependencyReadiness();
+    if (!dependencies.judgeDatabase || !dependencies.redis || !nodes)
+      return reply.code(503).send({
+        state: 'UNAVAILABLE',
+        reason: !nodes
+          ? 'NODE_REGISTRY_UNAVAILABLE'
+          : 'CONTROL_PLANE_UNAVAILABLE',
+        dependencies,
+        schedulableNodes: 0,
+        availableSlots: 0,
+      });
+    try {
+      const registered = await nodes.list();
+      const executionNodes = registered.filter((node) =>
+        node.capabilities.executionModes.includes('REAL_SANDBOXED_EXECUTION'),
+      );
+      const healthy = executionNodes.filter(
+        (node) =>
+          (node.desiredState ?? 'ONLINE') === 'ONLINE' &&
+          ['ONLINE', 'BUSY'].includes(node.observedState ?? node.state),
+      );
+      const availableSlots = healthy.reduce(
+        (total, node) =>
+          total + Math.max(0, node.maxConcurrentJobs - node.activeJobs),
+        0,
+      );
+      const state =
+        availableSlots > 0
+          ? 'EXECUTION_READY'
+          : executionNodes.length === 0
+            ? 'ONLINE'
+            : 'DEGRADED';
+      return reply.code(state === 'EXECUTION_READY' ? 200 : 503).send({
+        state,
+        reason:
+          state === 'EXECUTION_READY'
+            ? 'QUALIFIED_CAPACITY_AVAILABLE'
+            : state === 'ONLINE'
+              ? 'NO_EXECUTION_NODE_REGISTERED'
+              : 'NO_SCHEDULABLE_CAPACITY',
+        dependencies,
+        registeredNodes: executionNodes.length,
+        schedulableNodes: healthy.length,
+        availableSlots,
+      });
+    } catch {
+      return reply.code(503).send({
+        state: 'UNAVAILABLE',
+        reason: 'NODE_REGISTRY_QUERY_FAILED',
+        dependencies,
+        schedulableNodes: 0,
+        availableSlots: 0,
+      });
+    }
   });
   const defaultPoolPolicy: JudgePoolPolicy = {
     mode: 'MANUAL' as const,

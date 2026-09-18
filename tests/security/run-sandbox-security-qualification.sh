@@ -34,10 +34,12 @@ sibling_canary="$qualification_root/sibling-workspace-canary"
 supervisor_log="$qualification_root/supervisor.log"
 scopes_before="$qualification_root/scopes-before"
 supervisor_pid=""
+sandbox_uid=$(id -u)
+sandbox_gid=$(id -g)
 : >"$scopes_before"
 
 phase2b_scopes() {
-  find /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service -type d -name 'phase2b-*.scope' -print 2>/dev/null | sort || true
+  find "/sys/fs/cgroup/user.slice/user-${sandbox_uid}.slice/user@${sandbox_uid}.service" -type d -name 'phase2b-*.scope' -print 2>/dev/null | sort || true
 }
 
 cleanup() {
@@ -124,6 +126,8 @@ OJ_PHASE6B5_FIXTURE_ROOT="$fixture_root" \
 OJ_PHASE6B5_RUN_ID="$run_id" \
 OJ_PHASE6B5_HOST_CANARY="$host_canary" \
 OJ_PHASE6B5_SIBLING_CANARY="$sibling_canary" \
+OJ_PHASE6B5_SUPERVISOR_UID="$sandbox_uid" \
+OJ_PHASE6B5_SUPERVISOR_GID="$sandbox_gid" \
 python3 "$repository_root/tests/security/sandbox_security_qualification.py"
 
 [[ -z "$(find "$sandbox_root" -mindepth 1 -print -quit)" ]] || { echo "Sandbox workspace residue remains" >&2; exit 72; }

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { buildJudgeService } from '../apps/judge-service/src/app.js';
 import { loadJudgeServiceConfig } from '../apps/judge-service/src/config.js';
 import { InMemoryJudgeServiceStateRepository } from '../apps/judge-service/src/repository.js';
+import { InMemoryJudgeNodeRepository } from '../apps/judge-service/src/node-repository.js';
 import { InMemoryJudgeJobRepository } from '@ojplatform/judge-runtime';
 
 const directories: string[] = [];
@@ -107,6 +108,77 @@ describe('Judge Service container contract', () => {
     expect(ready.json()).toEqual({
       status: 'not_ready',
       dependencies: { judgeDatabase: 'ok', redis: 'unavailable' },
+    });
+    await app.close();
+  });
+
+  it('reports durable execution readiness separately from dependency readiness', async () => {
+    const nodes = new InMemoryJudgeNodeRepository();
+    const app = await buildJudgeService({
+      queue: new InMemoryJudgeJobRepository(),
+      state: new InMemoryJudgeServiceStateRepository(),
+      serviceToken: 'service-token-1234',
+      nodes,
+      ready: async () => ({ judgeDatabase: true, redis: true }),
+      logger: false,
+    });
+    const headers = { 'x-judge-service-token': 'service-token-1234' };
+    const online = await app.inject({
+      url: '/v1/execution-readiness',
+      headers,
+    });
+    expect(online.statusCode).toBe(503);
+    expect(online.json()).toMatchObject({
+      state: 'ONLINE',
+      reason: 'NO_EXECUTION_NODE_REGISTERED',
+      availableSlots: 0,
+    });
+    await nodes.register({
+      nodeId: 'node-1',
+      incarnation: 'incarnation-1',
+      runtimeVersion: 'v1',
+      maxConcurrentJobs: 2,
+      capabilities: {
+        languageProfiles: ['cpp20-gcc-13-v1'],
+        checkers: ['EXACT_BYTES'],
+        executionModes: ['REAL_SANDBOXED_EXECUTION'],
+        sandboxContractVersion: '2C.3',
+        architecture: 'amd64',
+        resourceClass: 'standard-v1',
+      },
+    });
+    const executionReady = await app.inject({
+      url: '/v1/execution-readiness',
+      headers,
+    });
+    expect(executionReady.statusCode).toBe(200);
+    expect(executionReady.json()).toMatchObject({
+      state: 'EXECUTION_READY',
+      reason: 'QUALIFIED_CAPACITY_AVAILABLE',
+      schedulableNodes: 1,
+      availableSlots: 2,
+    });
+    await app.close();
+  });
+
+  it('fails execution readiness closed with unavailable dependencies', async () => {
+    const app = await buildJudgeService({
+      queue: new InMemoryJudgeJobRepository(),
+      state: new InMemoryJudgeServiceStateRepository(),
+      serviceToken: 'service-token-1234',
+      nodes: new InMemoryJudgeNodeRepository(),
+      ready: async () => ({ judgeDatabase: true, redis: false }),
+      logger: false,
+    });
+    const response = await app.inject({
+      url: '/v1/execution-readiness',
+      headers: { 'x-judge-service-token': 'service-token-1234' },
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      state: 'UNAVAILABLE',
+      reason: 'CONTROL_PLANE_UNAVAILABLE',
+      availableSlots: 0,
     });
     await app.close();
   });

@@ -1,8 +1,15 @@
+x-production-logging: &production-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
 services:
   postgres:
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set for production}
       PRODUCT_RUNTIME_DB_PASSWORD: ${PRODUCT_RUNTIME_DB_PASSWORD:?PRODUCT_RUNTIME_DB_PASSWORD must be set for production}
+    logging: *production-logging
     restart: unless-stopped
 
   redis-acl-bootstrap:
@@ -22,12 +29,14 @@ services:
     environment:
       REDIS_HEALTH_USERNAME: ${REDIS_HEALTH_USERNAME:?REDIS_HEALTH_USERNAME must be set for production}
       REDIS_HEALTH_PASSWORD: ${REDIS_HEALTH_PASSWORD:?REDIS_HEALTH_PASSWORD must be set for production}
+    logging: *production-logging
     restart: unless-stopped
 
   minio:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set for production}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set for production}
+    logging: *production-logging
     restart: unless-stopped
 
   migrate-product:
@@ -41,16 +50,32 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY must be set for production}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY must be set for production}
       S3_BUCKET: ${S3_BUCKET:?S3_BUCKET must be set for production}
+      JUDGE_SERVICE_TOKEN: ${JUDGE_SERVICE_TOKEN:?JUDGE_SERVICE_TOKEN must be set for production}
+    logging: *production-logging
     restart: unless-stopped
 
   web:
     ports:
       - '${OJPLATFORM_WEB_PORT:-8080}:8080'
+    logging: *production-logging
     restart: unless-stopped
+
+  judge-bootstrap:
+    environment:
+      JUDGE_DATABASE_ADMIN_URL: ${JUDGE_DATABASE_ADMIN_URL:?JUDGE_DATABASE_ADMIN_URL must be set for production}
+      JUDGE_DATABASE_PASSWORD: ${JUDGE_DATABASE_PASSWORD:?JUDGE_DATABASE_PASSWORD must be set for production}
+
+  migrate-judge:
+    environment:
+      JUDGE_DATABASE_URL: ${JUDGE_MIGRATION_DATABASE_URL:?JUDGE_MIGRATION_DATABASE_URL must be set for production}
 
   judge-service:
     environment:
+      JUDGE_DATABASE_URL: ${JUDGE_RUNTIME_DATABASE_URL:?JUDGE_RUNTIME_DATABASE_URL must be set for production}
       JUDGE_REDIS_URL: redis://${REDIS_JUDGE_USERNAME:?REDIS_JUDGE_USERNAME must be set for production}:${REDIS_JUDGE_PASSWORD:?REDIS_JUDGE_PASSWORD must be set for production}@redis:6379/0
+      JUDGE_SERVICE_TOKEN: ${JUDGE_SERVICE_TOKEN:?JUDGE_SERVICE_TOKEN must be set for production}
+      JUDGE_NODE_TOKEN: ${JUDGE_NODE_TOKEN:?JUDGE_NODE_TOKEN must be set for production}
     ports:
       - '127.0.0.1:${OJPLATFORM_JUDGE_SERVICE_PORT:-3100}:3100'
+    logging: *production-logging
     restart: unless-stopped
