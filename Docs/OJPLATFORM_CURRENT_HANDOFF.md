@@ -23,20 +23,19 @@ Phase 5 cross-platform ................ PARTIAL
   Native ARM64 API/Web images ........ NOT QUALIFIED
 Phase 6B-2 execution-cell integration  PASS / MERGED
 Phase 6B-3 Redis ACL isolation ........ PASS / MERGED
-Phase 6B-4 onward ..................... NEXT / NOT STARTED
+Phase 6B-4 sandbox privilege hardening  PASS / FEATURE COMPLETE
+Phase 6B-5 onward ..................... NEXT / NOT STARTED
 Phase 7–9 ............................ NOT STARTED
 ```
 
 ## Docker Judge Result
 
-- Phase 6B-1 Judge Service control plane = PASS / MERGED.
-- Phase 6B-2 execution-cell bridge = PASS / MERGED.
-- Phase 6B-3 Redis ACL/credential isolation = PASS / MERGED.
-- Redis 7.4.1 now disables the default user and separates Product, Judge
-  Service, Worker, health, and admin roles. Worker is limited to `PING` and
-  expiring heartbeat `SET` under the configured Worker namespace.
-- Cross-identity, administrative denial, wrong/no/disabled credential,
-  revocation, restart persistence, and Worker/Judge fail-closed tests passed.
+- Phase 6B-1/2/3 = PASS / MERGED.
+- Phase 6B-4 sandbox privilege hardening = PASS / FEATURE COMPLETE.
+- Redis 7.4.1 uses isolated Product/Judge/Worker/health/admin ACL identities;
+  default user is disabled and fail-closed tests passed.
+- WSL `oj-sandbox` now has only its primary group. Fresh process and systemd-user
+  contexts cannot access the Docker socket/API; trusted runc preflight/probe passed.
 - Isolated WSL2 runtime proved API Compose DNS, host loopback Judge/Redis,
   registration, heartbeat, trusted fixture lease/resolve, auth rejection,
   Judge/API/Redis restart recovery, Supervisor-protocol fail-closed behavior,
@@ -57,12 +56,11 @@ Container API uses `judge-service:3100`; same-host Worker uses loopback. Worker,
 Host Agent, and Supervisor stay host-native. Durable execution-ready state is
 still a MEDIUM observability gap; Worker itself fails closed.
 
-## Production Blockers (HIGH, OPEN)
+## Production Boundary
 
-1. Live WSL `oj-sandbox` belongs to the `docker` group.
-
-Worker Redis ACL blocker is RESOLVED. Production Judge remains unqualified;
-Docker-group hardening and full execution-cell security regression remain.
+Worker Redis ACL and `oj-sandbox` Docker-group HIGH blockers are RESOLVED.
+Production Judge remains unqualified pending Phase 6B-5 full sandbox security
+regression and Phase 6B-6 production qualification.
 
 ## Critical Boundaries
 
@@ -79,9 +77,8 @@ Docker-group hardening and full execution-cell security regression remain.
 
 ## Next Action
 
-1. Phase 6B-4: remove and qualify `oj-sandbox` Docker-group privilege.
-2. Then run disposable-host sandbox security regression. Resume Mac only with
-   real hardware.
+1. Phase 6B-5: disposable-host full sandbox security regression.
+2. Phase 6B-6: production qualification. Resume Mac only with real hardware.
 
 ## Model
 
@@ -91,8 +88,8 @@ Docker-group hardening and full execution-cell security regression remain.
 ## References
 
 - Binding design: `Docs/deployment/JUDGE_DOCKER_ARCHITECTURE.md`.
-- Phase 6B-3 integration evidence:
-  `Docs/reports/OJPLATFORM_DOCKER_PHASE6B3_REDIS_ACL_INTEGRATION_V1_REPORT.md`.
+- Phase 6B-4 evidence:
+  `Docs/reports/OJPLATFORM_DOCKER_PHASE6B4_SANDBOX_PRIVILEGE_HARDENING_V1_REPORT.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-18 (Docker Phase 6B-3 PASS / MERGED)
+Last Updated: 2026-09-18 (Docker Phase 6B-4 PASS / FEATURE COMPLETE)

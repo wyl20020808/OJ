@@ -561,7 +561,8 @@ function Invoke-Wsl([string[]]$Arguments, [int]$TimeoutMs = 30000) { return ((In
 function Get-ComposePath { return '/mnt/' + ($ProjectRoot.Substring(0,1).ToLower()) + $ProjectRoot.Substring(2).Replace('\','/') + '/deploy/docker/compose.yml' }
 function Invoke-Compose([string[]]$Arguments, [int]$TimeoutMs = 120000) {
   $compose = Get-ComposePath
-  return Invoke-Wsl (@('-d',$Config.WslDistro,'--','docker','compose','-p',$Config.ComposeProjectName,'-f',$compose) + $Arguments) $TimeoutMs
+  # Docker daemon access belongs to the trusted WSL operator, never oj-sandbox.
+  return Invoke-Wsl (@('-d',$Config.WslDistro,'--user','root','--','docker','compose','-p',$Config.ComposeProjectName,'-f',$compose) + $Arguments) $TimeoutMs
 }
 function Ensure-DockerPreflight($state) {
   if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { throw 'WSL_PREFLIGHT_FAILED: wsl.exe is unavailable.' }
@@ -579,22 +580,22 @@ function Ensure-DockerPreflight($state) {
     } catch { throw "WSL_PREFLIGHT_FAILED: could not keep $($Config.WslDistro) alive: $($_.Exception.Message)" }
   }
   $dockerReady = $false
-  try { Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','info') 15000 | Out-Null; $dockerReady = $true } catch {}
+  try { Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','info') 15000 | Out-Null; $dockerReady = $true } catch {}
   if (-not $dockerReady) {
-    foreach ($startArgs in @(@('systemctl','start','docker'),@('sudo','-n','systemctl','start','docker'),@('service','docker','start'))) {
-      try { Invoke-Wsl (@('-d',$Config.WslDistro,'--') + $startArgs) 15000 | Out-Null; break } catch {}
+    foreach ($startArgs in @(@('systemctl','start','docker'),@('service','docker','start'))) {
+      try { Invoke-Wsl (@('-d',$Config.WslDistro,'--user','root','--') + $startArgs) 15000 | Out-Null; break } catch {}
     }
-    try { Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','info') 15000 | Out-Null; $dockerReady = $true } catch {}
+    try { Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','info') 15000 | Out-Null; $dockerReady = $true } catch {}
   }
   if (-not $dockerReady) { throw 'DOCKER_DAEMON_UNAVAILABLE: Docker daemon is not reachable in WSL.' }
-  try { Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','compose','version') 15000 | Out-Null } catch { throw "COMPOSE_UNAVAILABLE: Docker Compose is unavailable in $($Config.WslDistro)." }
+  try { Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','compose','version') 15000 | Out-Null } catch { throw "COMPOSE_UNAVAILABLE: Docker Compose is unavailable in $($Config.WslDistro)." }
   Write-Host "Docker preflight PASS ($($Config.WslDistro), WSL-native Docker)"
 }
 function Get-ComposeInspection([string]$Service) {
   $container = "$($Config.ComposeProjectName)-$Service-1"
   try {
     $format = '{"State":{"Status":"{{.State.Status}}","Health":{"Status":"{{if .State.Health}}{{.State.Health.Status}}{{end}}"}},"HostConfig":{"PortBindings":{{json .HostConfig.PortBindings}}},"NetworkSettings":{"Networks":{{if index .NetworkSettings.Networks "ojplatform-local"}}{"ojplatform-local":{}}{{else}}{}{{end}}},"Config":{"Labels":{"com.docker.compose.project":"{{index .Config.Labels "com.docker.compose.project"}}","com.docker.compose.service":"{{index .Config.Labels "com.docker.compose.service"}}"}}}'
-    return (ConvertFrom-Json -InputObject (Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','inspect','--format',$format,$container) 15000))
+    return (ConvertFrom-Json -InputObject (Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','inspect','--format',$format,$container) 15000))
   } catch { return $null }
 }
 function Get-ContainerLabel($Inspection, [string]$Name) {
@@ -833,7 +834,7 @@ function Ensure-Infrastructure($state) {
           if ($ownedRecoveryContainer -and [string]$recoveryInspection.State.Status -ne 'running') {
             # Compose rm can leave a Created container's port reservation behind; remove exact stale container, never its volume.
             $container = "$($Config.ComposeProjectName)-$($status.service)-1"
-            try { Invoke-Wsl @('-d',$Config.WslDistro,'--','docker','rm','-f',$container) 30000 | Out-Null }
+            try { Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','rm','-f',$container) 30000 | Out-Null }
             catch { if ($_.Exception.Message -notmatch 'No such container') { throw } }
             Start-Sleep -Milliseconds 500
           }

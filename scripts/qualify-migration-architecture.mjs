@@ -1,3 +1,4 @@
+/* global URL, console, process */
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -35,6 +36,8 @@ async function resolveAdminUrl(urlValue) {
       [
         '-d',
         distribution,
+        '--user',
+        'root',
         '--',
         'docker',
         'exec',
