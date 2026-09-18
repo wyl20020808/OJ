@@ -23,7 +23,7 @@ Phase 5 cross-platform ................ PARTIAL
   Native ARM64 API/Web images ........ NOT QUALIFIED
 Phase 6B-2 execution-cell integration  PASS / MERGED
 Phase 6B-3 Redis ACL isolation ........ PASS / MERGED
-Phase 6B-4 sandbox privilege hardening  PASS / FEATURE COMPLETE
+Phase 6B-4 sandbox privilege hardening  PASS / MERGED
 Phase 6B-5 onward ..................... NEXT / NOT STARTED
 Phase 7–9 ............................ NOT STARTED
 ```
@@ -31,7 +31,7 @@ Phase 7–9 ............................ NOT STARTED
 ## Docker Judge Result
 
 - Phase 6B-1/2/3 = PASS / MERGED.
-- Phase 6B-4 sandbox privilege hardening = PASS / FEATURE COMPLETE.
+- Phase 6B-4 sandbox privilege hardening = PASS / MERGED.
 - Redis 7.4.1 uses isolated Product/Judge/Worker/health/admin ACL identities;
   default user is disabled and fail-closed tests passed.
 - WSL `oj-sandbox` now has only its primary group. Fresh process and systemd-user
@@ -92,4 +92,4 @@ regression and Phase 6B-6 production qualification.
   `Docs/reports/OJPLATFORM_DOCKER_PHASE6B4_SANDBOX_PRIVILEGE_HARDENING_V1_REPORT.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-18 (Docker Phase 6B-4 PASS / FEATURE COMPLETE)
+Last Updated: 2026-09-18 (Docker Phase 6B-4 PASS / MERGED)
