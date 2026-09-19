@@ -1,5 +1,9 @@
 .git
 .git/*
+# The OnlineCodeEditor checkout is a separate repository. It is never part of the
+# main build context; the Web image receives it through its own named
+# `online-code-editor` additional context.
+plugins
 node_modules
 **/node_modules
 .env

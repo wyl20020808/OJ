@@ -62,6 +62,17 @@ describe('Phase 7A deployment contract', () => {
     expect(guide).toContain('Core-only and Judge-only Compose');
   });
 
+  it('keeps the OnlineCodeEditor checkout out of the main build context', () => {
+    // The plugin is a separate repository. Treating it as a pnpm workspace
+    // package or copying it into the main Docker context breaks
+    // `--frozen-lockfile` builds the moment a checkout exists.
+    const workspace = readFileSync('pnpm-workspace.yaml', 'utf8');
+    expect(workspace).not.toMatch(/^\s*-\s*plugins\/\*\s*$/m);
+    const dockerignore = readFileSync('.dockerignore', 'utf8');
+    expect(dockerignore).toMatch(/^plugins$/m);
+    expect(compose).toContain('online-code-editor:');
+  });
+
   it('exposes exactly one host provisioning script for non-Compose resources', () => {
     expect(install.startsWith('#!/usr/bin/env bash')).toBe(true);
     expect(install).toContain('set -euo pipefail');
