@@ -10,14 +10,15 @@
 3. Do not preload `Docs/PROJECT_STATUS.md` or historical reports.
 4. Keep this file at 60–100 lines; hard ceiling 120.
 
-## Phase 7 Definition
+## Phase Definitions
 
-`Phase 7 = Fresh-Machine Deployment & Bootstrap` (defined 2026-09-19).
-`Phase 7A = Standard Docker Compose Deployment + Linux Host Provisioning`.
+`Phase 7 = Fresh-Machine Deployment & Bootstrap`.
+`Phase 7A = Standard Docker Compose Deployment + Linux Host Provisioning` (PASS / MERGED).
+`Phase 7B = Production Publication + One-Command Fresh Host Deployment` (in progress).
 
 ## Completed Baseline
 
-- Docker Phase 0 readiness audit: DONE; original verdict PARTIAL.
+- Docker Phase 0 audit: DONE (original verdict PARTIAL).
 - Docker Phase 1–4: PASS / MERGED.
 - Docker Phase 6A + 6B-1 … 6B-6: PASS / MERGED.
 - Linux amd64 Judge + Production Judge: QUALIFIED / MERGED.
@@ -30,40 +31,43 @@ Phase 5 cross-platform ............... PARTIAL
   Windows/WSL2 amd64 Docker ......... PASS
   Mac Intel / Apple Silicon ......... DEFERRED (no real Mac)
   Native ARM64 full Judge ........... NOT QUALIFIED
-Phase 7A standard deployment ......... PASS / MERGED
-  Compose control plane + host cell . PASS (fresh VM, 15 gates)
-  Real judge AC/WA/CE/RE/TLE ........ PASS (also after reboot)
-  Editor DOM smoke .................. PASS
-  Idempotent re-runs + reboot ....... PASS
-  OnlineCodeEditor submodule ........ PASS
-  Integration into main ............. PASS / MERGED
-Phase 7B+ ............................ NOT DEFINED
+Phase 7B one-command deployment ...... PARTIAL / FEATURE BRANCH
+  Host toolchain minimization ....... PASS (no Go/Node/pnpm needed)
+  deploy/install.sh ................. --check + contract PASS; full run PENDING
+  deploy/doctor.sh .................. PASS on the Ubuntu VM
+  Contract tests .................... 39/39 PASS
+  Fresh-host E2E, reboot, judge ..... PENDING
+  Public remote publication ......... PENDING
+  Integration into main ............. PENDING
+Phase 7C+ ............................ NOT DEFINED
 ```
 
-## Phase 7A Facts
+## Phase 7B Facts
 
-- Two-command deploy, verified on a brand-new VM:
-  `docker compose -f compose.yaml -f compose.prod.yaml --profile judge up -d --build`
-  then `sudo ./deploy/judge-host/install.sh`. No custom orchestrator.
-- OnlineCodeEditor is a pinned submodule at `plugins/OnlineCodeEditor`
-  (gitlink `09877bf30a344bfd8d61775d1ee64c8ae61c9f86`, remote
-  `https://github.com/wyl20020808/OnlineEditor.git`, no branch tracking).
-  Fresh clones use `--recurse-submodules`; existing clones use
-  `git submodule update --init --recursive`.
-- `plugins/OnlineCodeEditor` is the build default; the
-  `OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT` variable is only a developer override.
-- Compiler rootfs identity:
-  `191cb6c71d4792e4e78d70882b229eec2b3a028314ca3c15e4e3a1847850eda2`.
-- Only Web is public; API/Judge/Redis/Supervisor are loopback-only.
+- Target UX: `git clone --recurse-submodules https://github.com/wyl20020808/OJ.git`,
+  `cd OJ`, `sudo ./deploy/install.sh`.
+- `deploy/install.sh`: preflight (x86_64 only, fail closed) -> Docker from the
+  official repository when missing -> pinned submodule (aborts on drift) ->
+  `.env` 0600 with secrets generated once and never printed -> port check ->
+  standard production Compose -> bounded health gate -> `deploy/judge-host/install.sh`.
+  Never runs `git pull`; never hides Docker Compose.
+- `deploy/doctor.sh`: read-only, ends with `DEPLOY_DOCTOR=PASS/FAIL`, accurate
+  without root.
+- Host needs only Linux + git + curl + Docker. Execution-cell binaries are built
+  in `golang:1.22-bookworm`; the optional Host Agent uses npm/npx.
+- Two-command manual path still supported and documented.
+- Checkpoint report:
+  `Docs/reports/OJPLATFORM_PHASE7B_ONE_COMMAND_DEPLOYMENT_V1_REPORT.md`.
 
 ## Next Action
 
-1. Phase 7A is integrated. Next work starts only from a new approved phase.
-2. `OJPLATFORM_REMOTE_PUBLICATION = PENDING`:
-   `https://github.com/wyl20020808/OJ` is reserved for the OJPlatform main
-   repository but has not been published. The submodule URL is absolute, so
-   acquisition does not depend on it.
-3. Do not start Phase 7B, ARM64 or Mac work without an explicit decision.
+1. Operator grants one privileged run on the disposable VM, then finish Judge
+   E2E, browser E2E, reboot survival and the second installer run.
+2. Run the secret/history audit and publish `main` to
+   `https://github.com/wyl20020808/OJ.git` (no force, `main` only).
+3. Integrate Phase 7B with a `--no-ff` merge after the full gate, then repeat
+   the loop from a clean VM with no Docker/Node/pnpm/Go via the public remote.
+4. Do not start Phase 7C, ARM64 or Mac work without an explicit decision.
 
 ## Critical Boundaries
 
@@ -75,20 +79,15 @@ Phase 7B+ ............................ NOT DEFINED
 - Do not weaken AppArmor/userns, seccomp, cgroups, firewall, or Docker denial.
 - Plugin stays an independent repository: never vendor it, never squash its
   history, never auto-follow its remote `main`.
-- A host-only `pnpm build:web` needs `cd plugins/OnlineCodeEditor && npm ci`
-  once; the Docker Web build installs plugin dependencies itself.
 - Linux ARM64 remains NOT QUALIFIED. Mac Judge remains NOT TARGET. Phase 5 Mac
   remains DEFERRED.
 
 ## References
 
-- Deployment entry: `Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md`.
+- One-command deployment: `Docs/deployment/ONE_COMMAND_DEPLOYMENT.md`.
+- Manual step-by-step: `Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md`.
 - Production runbook: `Docs/deployment/JUDGE_PRODUCTION_DEPLOYMENT.md`.
 - Architecture: `Docs/deployment/JUDGE_DOCKER_ARCHITECTURE.md`.
-- Phase 7A deployment evidence:
-  `Docs/reports/OJPLATFORM_PHASE7A_STANDARD_DEPLOYMENT_V1_REPORT.md`.
-- Plugin acquisition evidence:
-  `Docs/reports/OJPLATFORM_PHASE7A_ONLINECODEEDITOR_ACQUISITION_V1_REPORT.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-19 (Phase 7A PASS / feature complete; integration pending)
+Last Updated: 2026-09-19 (Phase 7B implementation complete; E2E + publication pending)
