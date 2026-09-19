@@ -1,7 +1,7 @@
 # Judge Production Deployment
 
 ## Qualification status
-Production hardening, WSL2 prequalification, and dedicated native Linux amd64 qualification are complete. `LINUX_AMD64_FULL_JUDGE = QUALIFIED` and `PRODUCTION_JUDGE_QUALIFIED = YES` for the reviewed feature branch. Linux ARM64 remains unqualified and Mac Judge remains outside the current target.
+Production hardening, WSL2 prequalification, dedicated native Linux amd64 qualification, and controlled integration are complete. `LINUX_AMD64_FULL_JUDGE = QUALIFIED` and `PRODUCTION_JUDGE_QUALIFIED = YES`. Linux ARM64 remains unqualified and Mac Judge remains outside the current target.
 
 ## Architecture
 
