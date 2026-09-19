@@ -65,6 +65,7 @@ readonly HOST_AGENT_STATE="${OPT_ROOT}/host-agent-state.json"
 
 readonly CANONICAL_ROOTFS_IDENTITY="191cb6c71d4792e4e78d70882b229eec2b3a028314ca3c15e4e3a1847850eda2"
 readonly HOST_AGENT_ESBUILD_VERSION="0.28.2"
+readonly SUPERVISOR_READY_TIMEOUT=120
 
 ENV_FILE="${REPO_ROOT}/.env"
 SKIP_BUILD=0
@@ -358,6 +359,11 @@ build_binaries() {
   )
   chown root:root "${HOST_AGENT_DIR}/dist/server.mjs"
   chmod 0644 "${HOST_AGENT_DIR}/dist/server.mjs"
+  # The script runs under `umask 0027`, so the installed dependency tree
+  # would be unreadable by the unprivileged service identity. Make it
+  # traversable/readable for everyone while staying root-owned.
+  chmod -R a+rX "${HOST_AGENT_DIR}"
+  chown -R root:root "${HOST_AGENT_DIR}"
 
   printf 'BUILD_VERSION=%s\n' "${version}" >"${BIN_DIR}/build-version.txt"
   chown -R root:root "${BIN_DIR}" "${HOST_AGENT_DIR}"
@@ -406,14 +412,14 @@ provision_rootfs() {
 # Environment files
 # ---------------------------------------------------------------------------
 
-write_file_if_absent() {
+write_derived_file() {
+  # These files contain only values derived from the deployment env file and
+  # fixed host paths, so they are reconciled on every run. Freezing the first
+  # version would keep a stale derived value after an installer fix or an
+  # env-file change. No secret is invented or reset here.
   local path="$1" mode="$2" owner="$3"
-  if [[ -e "${path}" ]]; then
-    log "${path} exists; keeping existing values"
-    return 1
-  fi
+  [[ -e "${path}" ]] && log "refreshing derived ${path}"
   install -m "${mode}" -o "${owner%%:*}" -g "${owner##*:}" /dev/null "${path}"
-  return 0
 }
 
 provision_env_files() {
@@ -423,6 +429,11 @@ provision_env_files() {
   log "deriving host service configuration from ${ENV_FILE}"
 
   local worker_user worker_password redis_port judge_port api_port node_id max_concurrency
+  # The Worker heartbeat key must fall inside the ACL pattern
+  # `~$JUDGE_REDIS_PREFIX:workers:*`; the Worker's own default prefix
+  # (`oj:judge`) does not match the Compose-provisioned ACL.
+  local redis_prefix
+  redis_prefix="$(optional_env_value JUDGE_REDIS_PREFIX oj:judge-service)"
   worker_user="$(require_env_value REDIS_WORKER_USERNAME)"
   worker_password="$(require_env_value REDIS_WORKER_PASSWORD)"
   redis_port="$(optional_env_value OJPLATFORM_REDIS_WORKER_PORT 6379)"
@@ -441,14 +452,15 @@ provision_env_files() {
   [[ -f "${BIN_DIR}/build-version.txt" ]] &&
     build_version="$(sed -n 's/^BUILD_VERSION=//p' "${BIN_DIR}/build-version.txt")"
 
-  if write_file_if_absent "${HOST_ENV}" 0600 "root:root"; then
+  write_derived_file "${HOST_ENV}" 0600 "root:root"
+  if true; then
     cat >"${HOST_ENV}" <<EOF
 # Managed by deploy/judge-host/install.sh. Do not commit.
 # Values are derived from the deployment env file; secrets are not duplicated
 # beyond what the host-native services actually require.
 REAL_SUBMISSION_EXECUTION=true
 REDIS_URL=redis://${worker_user}:${worker_password}@127.0.0.1:${redis_port}/0
-QUEUE_PREFIX=oj:judge
+QUEUE_PREFIX=${redis_prefix}
 OJ_JUDGE_NODE_ID=${node_id}
 WORKER_ID=${node_id}
 MAX_CONCURRENCY=${max_concurrency}
@@ -470,7 +482,8 @@ EOF
 
   # The Supervisor runs as an unprivileged user unit, so it needs a separate
   # file it can read. It receives only its own artifact token and local paths.
-  if write_file_if_absent "${SUPERVISOR_ENV}" 0640 "root:${SANDBOX_USER}"; then
+  write_derived_file "${SUPERVISOR_ENV}" 0640 "root:${SANDBOX_USER}"
+  if true; then
     cat >"${SUPERVISOR_ENV}" <<EOF
 # Managed by deploy/judge-host/install.sh. Do not commit.
 OJPLATFORM_SANDBOX_ROOT=${SANDBOX_ROOT}
@@ -660,9 +673,20 @@ check_security_gates() {
     return 0
   }
 
+  # The Supervisor verifies the full compiler-rootfs manifest and runs a runc
+  # preflight before it listens, so an immediate health check races the
+  # process. Poll with a bounded deadline instead.
   gate_supervisor_identity() {
     if [[ ${NO_START} -eq 1 || ${CHECK_ONLY} -eq 1 ]]; then return 0; fi
-    curl -fsS "http://127.0.0.1:${SUPERVISOR_PORT}/v1/health" >/dev/null 2>&1
+    local deadline=$((SECONDS + SUPERVISOR_READY_TIMEOUT))
+    while (( SECONDS < deadline )); do
+      if curl -fsS --max-time 5 "http://127.0.0.1:${SUPERVISOR_PORT}/v1/health" >/dev/null 2>&1; then
+        return 0
+      fi
+      sleep 2
+    done
+    warn "Supervisor did not answer /v1/health within ${SUPERVISOR_READY_TIMEOUT}s"
+    return 1
   }
 
   # The Supervisor runs as oj-sandbox and the Worker as oj-worker, so the
@@ -673,6 +697,23 @@ check_security_gates() {
       runuser -u "${WORKER_USER}" -- test -x "${BIN_DIR}/ojplatform-worker"
   }
 
+  # The Host Agent runs unprivileged and must be able to read its own
+  # dependency tree (a 0750 root:root node_modules yields ERR_MODULE_NOT_FOUND).
+  gate_host_agent_readable() {
+    runuser -u "${HOST_AGENT_USER}" -- test -x "${HOST_AGENT_DIR}" &&
+      runuser -u "${HOST_AGENT_USER}" -- test -x "${HOST_AGENT_DIR}/node_modules" &&
+      runuser -u "${HOST_AGENT_USER}" -- test -r "${HOST_AGENT_DIR}/dist/server.mjs"
+  }
+
+  # A Worker heartbeat key outside the ACL pattern is denied (NOPERM) and
+  # leaves the Worker permanently DEGRADED.
+  gate_worker_redis_prefix_matches_acl() {
+    local expected actual
+    expected="$(optional_env_value JUDGE_REDIS_PREFIX oj:judge-service)"
+    actual="$(sed -n 's/^QUEUE_PREFIX=//p' "${HOST_ENV}")"
+    [[ -n "${actual}" && "${actual}" == "${expected}" ]]
+  }
+
   gate gate_sandbox_groups
   gate gate_docker_socket
   gate gate_worker_no_docker
@@ -680,6 +721,8 @@ check_security_gates() {
   gate gate_rootfs_immutable
   gate gate_binaries_trusted
   gate gate_sandbox_can_exec_supervisor
+  gate gate_host_agent_readable
+  gate gate_worker_redis_prefix_matches_acl
   gate gate_units_not_root
   gate gate_secret_permissions
   gate gate_sandbox_env_readable

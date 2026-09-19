@@ -115,10 +115,44 @@ describe('Phase 7A deployment contract', () => {
     expect(install).toContain('gpasswd -d');
   });
 
-  it('never overwrites existing host secrets on re-run', () => {
-    expect(install).toContain('write_file_if_absent');
-    expect(install).toContain('keeping existing values');
+  it('reconciles derived host config without inventing or resetting secrets', () => {
+    // These files hold only values derived from the deployment env file plus
+    // fixed host paths, so they are rewritten each run. Freezing the first
+    // version would keep a stale derived value after an installer fix.
+    expect(install).toContain('write_derived_file');
+    expect(install).not.toContain('write_file_if_absent');
+    expect(install).toContain('No secret is invented or reset here');
     expect(install).toMatch(/re-running|re-run|idempotent/i);
+  });
+
+  it('derives the Worker queue prefix from the Compose Redis ACL prefix', () => {
+    // The ACL grants the Worker only `~$JUDGE_REDIS_PREFIX:workers:*`. The
+    // Worker's own default (`oj:judge`) is denied with NOPERM and leaves it
+    // permanently DEGRADED.
+    expect(install).toContain(
+      'redis_prefix="$(optional_env_value JUDGE_REDIS_PREFIX oj:judge-service)"',
+    );
+    expect(install).toContain('QUEUE_PREFIX=${redis_prefix}');
+    expect(install).toContain('gate_worker_redis_prefix_matches_acl');
+  });
+
+  it('makes every runtime-owned file readable by its service identity', () => {
+    expect(install).toContain('chmod -R a+rX "${HOST_AGENT_DIR}"');
+    expect(install).toContain('gate_host_agent_readable');
+    expect(install).toContain(
+      'chmod 0755 "${BIN_DIR}/ojplatform-supervisor" "${BIN_DIR}/trusted-probe" "${BIN_DIR}/ojplatform-worker"',
+    );
+  });
+
+  it('waits for Supervisor readiness instead of racing the process', () => {
+    expect(install).toContain('readonly SUPERVISOR_READY_TIMEOUT=120');
+    expect(install).toContain('while (( SECONDS < deadline )); do');
+    // The identity gate must be a polling loop, not a single curl.
+    const identityGate = install.slice(
+      install.indexOf('gate_supervisor_identity() {'),
+      install.indexOf('gate gate_sandbox_groups'),
+    );
+    expect(identityGate).toContain('sleep 2');
   });
 
   it('makes the private config directory reachable by the unprivileged Supervisor', () => {
