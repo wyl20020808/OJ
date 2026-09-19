@@ -138,12 +138,39 @@ recovers on its own.
 | Symptom | Check |
 | --- | --- |
 | `install.sh` refuses with "must run as root" | Run it with `sudo`. |
+| "Go toolchain is required" / "Node.js is required" | Install the build prerequisites; they are the only things `install.sh` does not install itself. |
 | "cgroup v2 controller ... unavailable" | Boot the kernel with cgroup v2 and no `cgroup_no_v1=cpu` style overrides. |
+| "seccomp is unavailable in this kernel" | The kernel must be built with `CONFIG_SECCOMP`; the installer reads the `Seccomp:` field of `/proc/self/status`. |
 | AppArmor user-namespace error | Re-run the installer; it loads a narrow `userns` grant for `runc` only when the host restricts unprivileged user namespaces. |
+| Supervisor unit: "Failed to load environment files: No such file or directory" | `/etc/ojplatform` must be traversable by `oj-sandbox`; the installer sets `root:oj-sandbox 0750` and verifies readability as that identity. |
+| Supervisor unit fails with `203/EXEC` | Installed binaries must be `root:root 0755` so `oj-sandbox` can execute them; `umask 0027` would otherwise leave them `0750`. |
+| Host Agent restarts with `ERR_MODULE_NOT_FOUND: fastify` | Its dependency tree must be readable by `oj-host-agent`; the installer applies `chmod -R a+rX` under `/opt/ojplatform/host-agent`. |
+| Worker stays `DEGRADED` with `redis:false` | `QUEUE_PREFIX` must equal the Redis ACL prefix; the installer derives it from `JUDGE_REDIS_PREFIX` because the ACL only grants `~<prefix>:workers:*`. |
 | Worker never leaves `DEGRADED` | `journalctl -u ojplatform-worker.service`; verify Judge Service readiness and the Worker Redis loopback port. |
 | `EXECUTION_READY` never appears | Supervisor health, Worker registration, and the `OJ_JUDGE_NODE_ID` value in `/etc/ojplatform/judge-host.env`. |
 | Web image build fails on the plugin context | The OnlineCodeEditor checkout is missing; see above. |
 | Rootfs identity drift reported | Compare `<rootfs>.content-manifest.txt`, then re-run with `--allow-rootfs-identity-drift` after review. |
+| `up -d --build` recreate fails with "cannot stop container" | Transient Docker daemon health-check session failure under load; re-run the same command. An idle-host run converges in a single pass. |
+
+## Verified end-to-end
+
+This procedure was executed on a brand-new disposable Ubuntu 24.04.5 amd64 VM
+with no repository, no toolchain and no Docker volumes. Results:
+
+- `docker compose -f compose.yaml -f compose.prod.yaml --profile judge up -d --build`
+  completed in a single pass; all six long-lived services healthy and all five
+  one-shot bootstrap/migration jobs exited 0.
+- Only Web was publicly published; API, Judge Service, Worker Redis and the
+  Supervisor were loopback-only.
+- `sudo ./deploy/judge-host/install.sh` completed with all 15 security gates OK.
+- Worker readiness reported `control_plane/redis/supervisor = true` and Judge
+  Service reported `EXECUTION_READY` with one schedulable node and one slot.
+- Real submissions through the Product API produced `AC`, `WA`, `CE`, `RE` and
+  `TLE` verdicts from the rootless runc sandbox.
+- The OnlineCodeEditor mounted as real CodeMirror DOM in a browser.
+- A second Compose run and a second `install.sh` run were idempotent with no
+  data loss, and a guest reboot restored the whole stack and answered
+  `EXECUTION_READY` without re-running the installer.
 
 ## Related references
 
