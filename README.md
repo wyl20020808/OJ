@@ -12,18 +12,47 @@ Current project status is tracked in [Docs/PROJECT_STATUS.md](Docs/PROJECT_STATU
 
 ## Production deployment
 
-Clone with submodules so the pinned OnlineCodeEditor plugin is present:
+On a fresh Ubuntu x86_64 host, one command:
 
 ```sh
-git clone --recurse-submodules <OJPlatform remote>
+git clone --recurse-submodules https://github.com/wyl20020808/OJ.git
+cd OJ
+sudo ./deploy/install.sh
 ```
 
-See [Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md](Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md). After cloning and filling `.env` (from `.env.production.example`):
+The installer checks the host, installs Docker from the official repository when
+it is missing, initialises the pinned OnlineCodeEditor submodule, generates the
+production secrets once, starts the standard production Compose stack, waits for
+real service health, and then provisions the host-native Judge execution cell.
+
+It never needs Node, pnpm or Go on the host: the execution-cell binaries are
+compiled in a pinned Go builder container and the Web image installs the plugin
+dependencies itself.
+
+Diagnose an existing deployment (read-only):
+
+```sh
+sudo ./deploy/doctor.sh
+```
+
+Update an existing deployment:
+
+```sh
+git pull --ff-only
+git submodule update --init --recursive
+sudo ./deploy/install.sh
+```
+
+### Manual / advanced path
+
+The two documented commands remain fully supported:
 
 ```sh
 docker compose -f compose.yaml -f compose.prod.yaml --profile judge up -d --build
 sudo ./deploy/judge-host/install.sh
 ```
 
-Docker Compose owns every container. The host script provisions only the
-host-native execution cell (Supervisor, Worker, Host Agent, compiler rootfs).
+Docker Compose owns every container; the host scripts provision only the
+host-native execution cell (Supervisor, Worker, optional Host Agent, compiler
+rootfs). See [Docs/deployment/ONE_COMMAND_DEPLOYMENT.md](Docs/deployment/ONE_COMMAND_DEPLOYMENT.md)
+and [Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md](Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md).

@@ -171,7 +171,9 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
       },
     });
     expect(response.statusCode).toBe(201);
-    expect(response.headers['set-cookie']).toContain('oj_session=');
+    expect(JSON.stringify(response.headers['set-cookie'])).toContain(
+      'oj_session=',
+    );
     expect(
       (
         await server.inject({
@@ -345,6 +347,10 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
       },
     });
     expect(login.statusCode).toBe(200);
+    expect(JSON.stringify(login.headers['set-cookie'])).toContain(
+      'oj_session=',
+    );
+    expect(JSON.stringify(login.headers['set-cookie'])).toContain('oj_csrf=');
     const wrong = await server.inject({
       method: 'POST',
       url: '/api/auth/login/password',
@@ -447,7 +453,9 @@ describe('Auth V2 verification, OTP, JIT, OAuth, and linking', () => {
       },
     });
     expect(finalize.statusCode).toBe(200);
-    expect(finalize.headers['set-cookie']).toContain('oj_session=');
+    expect(JSON.stringify(finalize.headers['set-cookie'])).toContain(
+      'oj_session=',
+    );
     await server.close();
   });
 

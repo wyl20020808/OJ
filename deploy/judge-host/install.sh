@@ -30,6 +30,8 @@
 #   --allow-rootfs-identity-drift
 #                            Accept a compiler rootfs identity other than the
 #                            reviewed canonical value after manual review
+#   --with-host-agent        Require the optional Judge Host Agent (needs Node.js)
+#   --skip-host-agent        Never install the optional Judge Host Agent
 #   --no-start               Install and enable without starting services
 #   --check                  Run prerequisite and security gates only
 #   -h, --help               Show this help
@@ -65,6 +67,10 @@ readonly HOST_AGENT_STATE="${OPT_ROOT}/host-agent-state.json"
 
 readonly CANONICAL_ROOTFS_IDENTITY="191cb6c71d4792e4e78d70882b229eec2b3a028314ca3c15e4e3a1847850eda2"
 readonly HOST_AGENT_ESBUILD_VERSION="0.28.2"
+readonly HOST_AGENT_FASTIFY_VERSION="5.12.1"
+# Go builder image matching `go 1.22` in apps/*/go.mod. Worker, trusted
+# probe and Supervisor are compiled here so the host needs no Go toolchain.
+readonly GO_BUILDER_IMAGE="golang:1.22-bookworm"
 readonly SUPERVISOR_READY_TIMEOUT=120
 
 ENV_FILE="${REPO_ROOT}/.env"
@@ -74,6 +80,10 @@ REBUILD_ROOTFS=0
 ALLOW_ROOTFS_DRIFT=0
 NO_START=0
 CHECK_ONLY=0
+# The Host Agent controls optional elastic worker templates. Static/manual Worker
+# mode is sufficient for production judging, so a host Node installation must
+# never change the default deployment path or become an implicit prerequisite.
+HOST_AGENT_MODE="no"
 
 log()  { printf '%s [install] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*" >&2; }
 warn() { printf '%s [install] WARNING: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*" >&2; }
@@ -94,6 +104,8 @@ Options:
   --allow-rootfs-identity-drift
                            Accept a compiler rootfs identity other than the
                            reviewed canonical value after manual review
+  --with-host-agent        Require the optional Judge Host Agent (needs Node.js)
+  --skip-host-agent        Never install the optional Judge Host Agent
   --no-start               Install and enable without starting services
   --check                  Run prerequisite gates only; make no changes
   -h, --help               Show this help
@@ -110,6 +122,8 @@ while [[ $# -gt 0 ]]; do
     --skip-rootfs) SKIP_ROOTFS=1; shift ;;
     --rebuild-rootfs) REBUILD_ROOTFS=1; shift ;;
     --allow-rootfs-identity-drift) ALLOW_ROOTFS_DRIFT=1; shift ;;
+    --with-host-agent) HOST_AGENT_MODE="yes"; shift ;;
+    --skip-host-agent) HOST_AGENT_MODE="no"; shift ;;
     --no-start) NO_START=1; shift ;;
     --check) CHECK_ONLY=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -185,11 +199,15 @@ check_prerequisites() {
     warn "unprivileged_userns_clone is disabled; rootless runc may not work"
   fi
 
+  # Worker, trusted probe and Supervisor are compiled in a pinned Go builder
+  # container, so no Go toolchain is required on the host.
   if [[ ${SKIP_BUILD} -eq 0 ]]; then
-    have go || die "Go toolchain is required to build the Worker and Supervisor"
-    have node || die "Node.js is required to bundle the Host Agent"
-    have pnpm || die "pnpm is required to install Host Agent runtime dependencies"
-    have docker || die "Docker is required to build the compiler rootfs and to run Compose"
+    have docker || die "Docker is required to build the Worker/Supervisor binaries and the compiler rootfs"
+  fi
+  # The Host Agent is optional and is the only host-native Node process, so
+  # Node is required only when it is actually going to be installed.
+  if [[ "${HOST_AGENT_MODE}" == "yes" ]] && ! have node; then
+    die "--with-host-agent requires Node.js >= 22: the Host Agent runs as a host-native Node process"
   fi
   if [[ ${SKIP_ROOTFS} -eq 0 ]]; then
     have docker || die "Docker is required to build the compiler rootfs"
@@ -314,6 +332,12 @@ provision_apparmor() {
 # Host binaries
 # ---------------------------------------------------------------------------
 
+# The Host Agent is optional: it manages Worker templates and is not needed
+# for judging. It is installed only by explicit operator request.
+host_agent_enabled() {
+  [[ "${HOST_AGENT_MODE}" == "yes" ]]
+}
+
 build_binaries() {
   log "building host-native binaries"
   # GIT_OPTIONAL_LOCKS=0 stops git from refreshing (and therefore rewriting) the
@@ -331,15 +355,9 @@ build_binaries() {
     chown "${repo_owner}:${repo_owner}" "${REPO_ROOT}/.git/index" 2>/dev/null || true
   fi
 
-  (
-    cd "${REPO_ROOT}/apps/sandbox-supervisor"
-    go build -trimpath -ldflags "-s -w" -o "${BIN_DIR}/ojplatform-supervisor" ./cmd/supervisor
-    go build -trimpath -ldflags "-s -w" -o "${BIN_DIR}/trusted-probe" ./cmd/trusted-probe
-  )
-  (
-    cd "${REPO_ROOT}/apps/judge-worker"
-    go build -trimpath -ldflags "-s -w" -o "${BIN_DIR}/ojplatform-worker" ./cmd/judge-worker
-  )
+  log "building execution-cell binaries with ${GO_BUILDER_IMAGE}"
+  docker run --rm -e CGO_ENABLED=0 -e GOPROXY=off -v "${REPO_ROOT}:/src:ro" -v "${BIN_DIR}:/out" -w /src/apps/sandbox-supervisor "${GO_BUILDER_IMAGE}" sh -c 'go build -buildvcs=false -trimpath -ldflags "-s -w" -o /out/ojplatform-supervisor ./cmd/supervisor && go build -buildvcs=false -trimpath -ldflags "-s -w" -o /out/trusted-probe ./cmd/trusted-probe'
+  docker run --rm -e CGO_ENABLED=0 -e GOPROXY=off -v "${REPO_ROOT}:/src:ro" -v "${BIN_DIR}:/out" -w /src/apps/judge-worker "${GO_BUILDER_IMAGE}" sh -c 'go build -buildvcs=false -trimpath -ldflags "-s -w" -o /out/ojplatform-worker ./cmd/judge-worker'
 
   # Explicit modes: the script runs under `umask 0027`, so freshly built files
   # would be 0750 and the unprivileged Supervisor could not execute its own
@@ -352,27 +370,38 @@ build_binaries() {
   # runtime dependency is deployed next to the bundle instead of into the
   # repository. That keeps the operator's checkout untouched and needs no full
   # workspace install on a production host.
-  install -d -m 0755 "${HOST_AGENT_DIR}/dist"
-  printf '{"name":"ojplatform-host-agent-runtime","private":true,"version":"1.0.0","dependencies":{"fastify":"5.12.1"}}\n' \
-    >"${HOST_AGENT_DIR}/package.json"
-  chown root:root "${HOST_AGENT_DIR}/package.json" "${HOST_AGENT_DIR}/dist"
-  chmod 0644 "${HOST_AGENT_DIR}/package.json"
-  pnpm --dir "${HOST_AGENT_DIR}" install --prod --silent
-  (
-    cd "${REPO_ROOT}/apps/judge-host-agent"
-    pnpm --silent dlx esbuild@${HOST_AGENT_ESBUILD_VERSION} src/server.ts \
-      --bundle --platform=node --format=esm --target=node22 \
-      --external:fastify \
-      --banner:js='import { createRequire as __ojplatformCreateRequire } from "module"; const require = __ojplatformCreateRequire(import.meta.url);' \
-      --outfile="${HOST_AGENT_DIR}/dist/server.mjs"
-  )
-  chown root:root "${HOST_AGENT_DIR}/dist/server.mjs"
-  chmod 0644 "${HOST_AGENT_DIR}/dist/server.mjs"
-  # The script runs under `umask 0027`, so the installed dependency tree
-  # would be unreadable by the unprivileged service identity. Make it
-  # traversable/readable for everyone while staying root-owned.
-  chmod -R a+rX "${HOST_AGENT_DIR}"
-  chown -R root:root "${HOST_AGENT_DIR}"
+  if host_agent_enabled; then
+    install -d -m 0755 "${HOST_AGENT_DIR}/dist"
+    printf '{"name":"ojplatform-host-agent-runtime","private":true,"version":"1.0.0","dependencies":{"fastify":"%s"}}\n' \
+      "${HOST_AGENT_FASTIFY_VERSION}" >"${HOST_AGENT_DIR}/package.json"
+    chown root:root "${HOST_AGENT_DIR}/package.json" "${HOST_AGENT_DIR}/dist"
+    chmod 0644 "${HOST_AGENT_DIR}/package.json"
+    # npm ships with Node, so pnpm is not required on a production host.
+    npm --prefix "${HOST_AGENT_DIR}" install --omit=dev --silent
+    (
+      cd "${REPO_ROOT}/apps/judge-host-agent"
+      npx --yes "esbuild@${HOST_AGENT_ESBUILD_VERSION}" src/server.ts \
+        --bundle --platform=node --format=esm --target=node22 \
+        --external:fastify \
+        --banner:js='import { createRequire as __ojplatformCreateRequire } from "module"; const require = __ojplatformCreateRequire(import.meta.url);' \
+        --outfile="${HOST_AGENT_DIR}/dist/server.mjs"
+    )
+    chown root:root "${HOST_AGENT_DIR}/dist/server.mjs"
+    chmod 0644 "${HOST_AGENT_DIR}/dist/server.mjs"
+    # The script runs under `umask 0027`, so the installed dependency tree
+    # would be unreadable by the unprivileged service identity. Make it
+    # traversable/readable for everyone while staying root-owned.
+    chmod -R a+rX "${HOST_AGENT_DIR}"
+    chown -R root:root "${HOST_AGENT_DIR}"
+  else
+    log "Host Agent skipped: optional component and no Node.js runtime present"
+    # Drop our own unit if a previous run installed it and Node is gone.
+    if [[ -e /etc/systemd/system/ojplatform-host-agent.service ]]; then
+      systemctl disable --now ojplatform-host-agent.service >/dev/null 2>&1 || true
+      rm -f /etc/systemd/system/ojplatform-host-agent.service
+      log "removed the Host Agent unit because the Host Agent is disabled"
+    fi
+  fi
 
   printf 'BUILD_VERSION=%s\n' "${version}" >"${BIN_DIR}/build-version.txt"
   chown -R root:root "${BIN_DIR}" "${HOST_AGENT_DIR}"
@@ -518,16 +547,20 @@ EOF
 install_units() {
   log "installing systemd units"
   local node_bin
-  node_bin="$(command -v node)"
+  node_bin="$(command -v node 2>/dev/null || true)"
 
-  sed "s|@NODE_BIN@|${node_bin}|g" "${UNIT_SRC}/ojplatform-host-agent.service" \
-    >/etc/systemd/system/ojplatform-host-agent.service
+  if host_agent_enabled; then
+    sed "s|@NODE_BIN@|${node_bin}|g" "${UNIT_SRC}/ojplatform-host-agent.service" \
+      >/etc/systemd/system/ojplatform-host-agent.service
+  fi
   install -m 0644 "${UNIT_SRC}/ojplatform-worker.service" \
     /etc/systemd/system/ojplatform-worker.service
-  chown root:root /etc/systemd/system/ojplatform-host-agent.service \
-    /etc/systemd/system/ojplatform-worker.service
-  chmod 0644 /etc/systemd/system/ojplatform-host-agent.service \
-    /etc/systemd/system/ojplatform-worker.service
+  chown root:root /etc/systemd/system/ojplatform-worker.service
+  chmod 0644 /etc/systemd/system/ojplatform-worker.service
+  if host_agent_enabled; then
+    chown root:root /etc/systemd/system/ojplatform-host-agent.service
+    chmod 0644 /etc/systemd/system/ojplatform-host-agent.service
+  fi
 
   local sandbox_uid unit_dir
   sandbox_uid="$(id -u "${SANDBOX_USER}")"
@@ -548,14 +581,19 @@ start_units() {
   log "enabling execution-cell units"
 
   systemctl enable ojplatform-worker.service >/dev/null
-  systemctl enable ojplatform-host-agent.service >/dev/null
+  if host_agent_enabled; then
+    systemctl enable ojplatform-host-agent.service >/dev/null
+  fi
 
   local sandbox_uid
   sandbox_uid="$(id -u "${SANDBOX_USER}")"
 
   # Clear a previous restart-limit state so a corrected install can recover
   # without a manual `systemctl reset-failed`.
-  systemctl reset-failed ojplatform-worker.service ojplatform-host-agent.service >/dev/null 2>&1 || true
+  systemctl reset-failed ojplatform-worker.service >/dev/null 2>&1 || true
+  if host_agent_enabled; then
+    systemctl reset-failed ojplatform-host-agent.service >/dev/null 2>&1 || true
+  fi
   runuser -u "${SANDBOX_USER}" -- env \
     XDG_RUNTIME_DIR="/run/user/${sandbox_uid}" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${sandbox_uid}/bus" \
@@ -583,8 +621,10 @@ start_units() {
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${sandbox_uid}/bus" \
     systemctl --user restart ojplatform-supervisor.service ||
     warn "ojplatform-supervisor.service did not start; inspect: journalctl --user -u ojplatform-supervisor.service (as ${SANDBOX_USER})"
-  systemctl restart ojplatform-host-agent.service ||
-    warn "ojplatform-host-agent.service did not start; inspect: journalctl -u ojplatform-host-agent.service"
+  if host_agent_enabled; then
+    systemctl restart ojplatform-host-agent.service ||
+      warn "ojplatform-host-agent.service did not start; inspect: journalctl -u ojplatform-host-agent.service"
+  fi
   systemctl restart ojplatform-worker.service ||
     warn "ojplatform-worker.service did not start; inspect: journalctl -u ojplatform-worker.service"
 }
@@ -639,9 +679,13 @@ check_security_gates() {
   }
 
   gate_units_not_root() {
-    grep -q '^User=oj-worker$' /etc/systemd/system/ojplatform-worker.service &&
-      grep -q '^User=oj-host-agent$' /etc/systemd/system/ojplatform-host-agent.service &&
-      ! grep -q '^User=root$' /etc/systemd/system/ojplatform-worker.service /etc/systemd/system/ojplatform-host-agent.service
+    grep -q '^User=oj-worker$' /etc/systemd/system/ojplatform-worker.service || return 1
+    grep -q '^User=root$' /etc/systemd/system/ojplatform-worker.service && return 1
+    if host_agent_enabled; then
+      grep -q '^User=oj-host-agent$' /etc/systemd/system/ojplatform-host-agent.service || return 1
+      grep -q '^User=root$' /etc/systemd/system/ojplatform-host-agent.service && return 1
+    fi
+    return 0
   }
 
   gate_secret_permissions() {
@@ -709,6 +753,8 @@ check_security_gates() {
   # The Host Agent runs unprivileged and must be able to read its own
   # dependency tree (a 0750 root:root node_modules yields ERR_MODULE_NOT_FOUND).
   gate_host_agent_readable() {
+    # Skipped when the optional Host Agent is not installed.
+    host_agent_enabled || return 0
     runuser -u "${HOST_AGENT_USER}" -- test -x "${HOST_AGENT_DIR}" &&
       runuser -u "${HOST_AGENT_USER}" -- test -x "${HOST_AGENT_DIR}/node_modules" &&
       runuser -u "${HOST_AGENT_USER}" -- test -r "${HOST_AGENT_DIR}/dist/server.mjs"
