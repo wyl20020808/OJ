@@ -129,12 +129,25 @@ if have systemctl; then
     info "ojplatform-host-agent.service: not installed (optional component)"
   fi
   if id -u oj-sandbox >/dev/null 2>&1; then
-    uid="$(id -u oj-sandbox)"
-    supervisor_state="$(runuser -u oj-sandbox -- env XDG_RUNTIME_DIR="/run/user/${uid}" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" systemctl --user is-active ojplatform-supervisor.service 2>/dev/null || true)"
-    [[ "${supervisor_state}" == "active" ]] && ok "ojplatform-supervisor.service: ${supervisor_state}" || bad "ojplatform-supervisor.service: ${supervisor_state:-missing}"
-    groups="$(id -nG oj-sandbox)"
-    [[ " ${groups} " == *" docker "* ]] && bad "oj-sandbox is in the docker group" || ok "oj-sandbox has no privileged group"
-    runuser -u oj-sandbox -- test -r /var/run/docker.sock 2>/dev/null && bad "oj-sandbox can read the Docker socket" || ok "oj-sandbox cannot read the Docker socket"
+    if [[ ${EUID} -eq 0 ]]; then
+      uid="$(id -u oj-sandbox)"
+      supervisor_state="$(runuser -u oj-sandbox -- env XDG_RUNTIME_DIR="/run/user/${uid}" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" systemctl --user is-active ojplatform-supervisor.service 2>/dev/null || true)"
+      [[ "${supervisor_state}" == "active" ]] && ok "ojplatform-supervisor.service: ${supervisor_state}" || bad "ojplatform-supervisor.service: ${supervisor_state:-missing}"
+      groups="$(id -nG oj-sandbox)"
+      [[ " ${groups} " == *" docker "* ]] && bad "oj-sandbox is in the docker group" || ok "oj-sandbox has no privileged group"
+      runuser -u oj-sandbox -- test -r /var/run/docker.sock 2>/dev/null && bad "oj-sandbox can read the Docker socket" || ok "oj-sandbox cannot read the Docker socket"
+    else
+      # These checks need to assume the service identity, which requires root.
+      info "ojplatform-supervisor.service: re-run with sudo to inspect the user manager"
+      groups="$(id -nG oj-sandbox)"
+      [[ " ${groups} " == *" docker "* ]] && bad "oj-sandbox is in the docker group" || ok "oj-sandbox has no privileged group"
+      info "oj-sandbox Docker-socket denial: re-run with sudo to verify"
+    fi
+    if have ss && ss -lntH 2>/dev/null | grep -q '127\.0\.0\.1:19092'; then
+      ok "Supervisor is listening on 127.0.0.1:19092 (loopback only)"
+    else
+      bad "nothing is listening on 127.0.0.1:19092"
+    fi
   else
     bad "the oj-sandbox identity is missing"
   fi
