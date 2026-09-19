@@ -1,20 +1,51 @@
 # plugins/
 
-Repository-local checkout location for the separate `OnlineCodeEditor`
-repository.
+`plugins/OnlineCodeEditor` is a **pinned Git submodule**. The editor stays an
+independent repository with its own history, dependencies (`package-lock.json`)
+and build/test toolchain; OJPlatform only records which plugin commit it builds
+with.
 
-The plugin stays an independent Git repository with its own history. It is not
-committed here, not vendored, and not squashed into OJPlatform history;
-`plugins/` is Git-ignored.
+- Remote: `https://github.com/wyl20020808/OnlineEditor.git`
+- Path: `plugins/OnlineCodeEditor`
+- Pinning: a gitlink commit, **not** a branch. The build never follows the
+  plugin's `main`.
+
+## Get the plugin
 
 ```sh
-git clone <your OnlineCodeEditor remote> plugins/OnlineCodeEditor
+# fresh clone
+git clone --recurse-submodules <OJPlatform remote>
+
+# existing clone
+git submodule update --init --recursive
+```
+
+## Update the pinned version
+
+```sh
+cd plugins/OnlineCodeEditor
+git fetch origin
+git checkout <desired commit>
+cd ../..
+git add plugins/OnlineCodeEditor
+git commit -m "chore: bump OnlineCodeEditor to <desired commit>"
+```
+
+## Work on the plugin itself
+
+The plugin is a normal repository and can be cloned, built and tested on its
+own (`npm run typecheck`, `npm test`, `npm run build`). To develop it against
+OJPlatform without touching the pinned commit, point the Web build at your own
+checkout:
+
+```sh
+OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT=/path/to/your/checkout
 ```
 
 Only the `web` Docker image consumes this path, through the
-`OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT` build input. Core-only and Judge-only
-Compose operations never require it.
+`online-code-editor` named build context. Core-only and Judge-only Compose
+operations work without any plugin path.
 
-There is currently no authoritative remote for this repository inside the
-project, so it cannot be added as a pinned Git submodule yet. See
-`Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md`.
+The wildcard rule in `.gitignore` keeps an accidental stray checkout out of the
+repository; `!plugins/OnlineCodeEditor` is what allows the submodule gitlink to
+be tracked.

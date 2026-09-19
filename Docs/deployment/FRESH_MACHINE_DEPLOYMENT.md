@@ -88,25 +88,48 @@ journalctl -u ojplatform-host-agent.service -f
 
 ## OnlineCodeEditor
 
-The Web image bundles the editor, but the plugin is a separate repository that
-is **not** published to any remote this project controls, so it cannot be
-fetched by `git clone --recurse-submodules`. Provide a compatible checkout at
-the repository-local default path:
+The editor is a **pinned Git submodule**. OJPlatform records exactly which
+plugin commit it builds with; the plugin keeps its own repository, history and
+release lifecycle.
+
+A fresh clone gets it automatically:
 
 ```sh
-git clone <your OnlineCodeEditor remote> plugins/OnlineCodeEditor
-ls plugins/OnlineCodeEditor/plugin.manifest.json   # sanity check
+# as part of the initial clone
+git clone --recurse-submodules <OJPlatform remote>
+
+# or for an existing clone
+cd OJPlatform
+git submodule update --init --recursive
 ```
 
-`plugins/` is Git-ignored on purpose: the plugin keeps its own repository and
-history. Override the location if the checkout lives elsewhere:
+The submodule is checked out at `plugins/OnlineCodeEditor` and is pinned by a
+gitlink, not by a branch. Only the `web` image consumes it, through the
+`online-code-editor` Docker build context; Core-only and Judge-only Compose
+operations never need it.
+
+Developer override, for working against a custom checkout elsewhere:
 
 ```sh
 OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT=/srv/OnlineCodeEditor
 ```
 
-Only the `web` image consumes this path. Core-only and Judge-only Compose
-operations work without it.
+The default is always the repository-local submodule path, so a normal fresh
+deployment never sets this variable.
+
+### Updating the pinned plugin version
+
+```sh
+cd plugins/OnlineCodeEditor
+git fetch origin
+git checkout <desired commit>
+cd ../..
+git add plugins/OnlineCodeEditor
+git commit -m "chore: bump OnlineCodeEditor to <desired commit>"
+```
+
+The build never follows the plugin's remote `main` on its own. Changing the pin
+is an explicit reviewed commit in OJPlatform.
 
 ## Upgrade
 

@@ -12,6 +12,12 @@ Current project status is tracked in [Docs/PROJECT_STATUS.md](Docs/PROJECT_STATU
 
 ## Production deployment
 
+Clone with submodules so the pinned OnlineCodeEditor plugin is present:
+
+```sh
+git clone --recurse-submodules <OJPlatform remote>
+```
+
 See [Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md](Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md). After cloning and filling `.env` (from `.env.production.example`):
 
 ```sh
