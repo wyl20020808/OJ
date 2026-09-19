@@ -10,87 +10,85 @@
 3. Do not preload `Docs/PROJECT_STATUS.md` or historical reports.
 4. Keep this file at 60–100 lines; hard ceiling 120.
 
+## Phase 7 Definition
+
+`Phase 7 = Fresh-Machine Deployment & Bootstrap` (defined 2026-09-19).
+`Phase 7A = Standard Docker Compose Deployment + Linux Host Provisioning`.
+
 ## Completed Baseline
 
 - Docker Phase 0 readiness audit: DONE; original verdict PARTIAL.
 - Docker Phase 1–4: PASS / MERGED.
-- Docker Phase 6A: PASS / MERGED.
-- Docker Phase 6B-1: PASS / MERGED.
-- Docker Phase 6B-2: PASS / MERGED.
-- Docker Phase 6B-3: PASS / MERGED.
-- Docker Phase 6B-4: PASS / MERGED.
-- Docker Phase 6B-5: PASS / MERGED.
-- Docker Phase 6B-6: PASS / MERGED.
+- Docker Phase 6A + 6B-1 … 6B-6: PASS / MERGED.
+- Linux amd64 Judge + Production Judge: QUALIFIED / MERGED.
+- Phase 7A deployment, E2E and plugin acquisition: PASS / FEATURE BRANCH;
+  `main` merge not performed.
 
 ## Active / Deferred
 
 ```text
-Phase 5 cross-platform ................ PARTIAL
-  Windows/WSL2 amd64 Docker .......... PASS
-  Mac Intel / Apple Silicon .......... DEFERRED (no real Mac)
-  Native ARM64 full Judge ............ NOT QUALIFIED
-Linux amd64 full Judge ............... QUALIFIED
-Production Judge ..................... QUALIFIED
-Phase 7–9 ............................. NOT STARTED
+Phase 5 cross-platform ............... PARTIAL
+  Windows/WSL2 amd64 Docker ......... PASS
+  Mac Intel / Apple Silicon ......... DEFERRED (no real Mac)
+  Native ARM64 full Judge ........... NOT QUALIFIED
+Phase 7A standard deployment ......... PASS / FEATURE BRANCH
+  Compose control plane + host cell . PASS (fresh VM, 15 gates)
+  Real judge AC/WA/CE/RE/TLE ........ PASS (also after reboot)
+  Editor DOM smoke .................. PASS
+  Idempotent re-runs + reboot ....... PASS
+  OnlineCodeEditor submodule ........ PASS
+  Integration into main ............. PENDING
+Phase 7B+ ............................ NOT DEFINED
 ```
 
-## Native Linux Qualification Result
+## Phase 7A Facts
 
-- Qualification feature: `f3700efab6c4582ed6cdf9f8bc3289d0ef494fbe`.
-- Host: Ubuntu 24.04.5, kernel 6.8.0-139, native VMware x86_64,
-  cgroup v2, systemd 255, runc 1.5.1, OCI 1.3.0, libseccomp 2.5.5.
-- Fresh production Compose, migrations, MinIO provisioning, Redis ACL, Product/
-  Judge DB isolation, firewall, logging, and service-account boundaries passed.
-- Canonical rootfs identity after locale-independent manifest normalization:
+- Two-command deploy, verified on a brand-new VM:
+  `docker compose -f compose.yaml -f compose.prod.yaml --profile judge up -d --build`
+  then `sudo ./deploy/judge-host/install.sh`. No custom orchestrator.
+- OnlineCodeEditor is a pinned submodule at `plugins/OnlineCodeEditor`
+  (gitlink `09877bf30a344bfd8d61775d1ee64c8ae61c9f86`, remote
+  `https://github.com/wyl20020808/OnlineEditor.git`, no branch tracking).
+  Fresh clones use `--recurse-submodules`; existing clones use
+  `git submodule update --init --recursive`.
+- `plugins/OnlineCodeEditor` is the build default; the
+  `OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT` variable is only a developer override.
+- Compiler rootfs identity:
   `191cb6c71d4792e4e78d70882b229eec2b3a028314ca3c15e4e3a1847850eda2`.
-- Native Phase 6B-5 suite passed: 12 trusted probes and 14 bounded untrusted
-  fixtures, including isolation, resource, recovery, and cleanup gates.
-- Real artifact workflows produced AC, WA, CE, RE, and TLE.
-- Worker SIGKILL recovery, component restart recovery, and two guest reboot
-  cycles passed.
-- Worker/Judge readiness fails closed on Supervisor, Redis, or control-plane
-  loss and recovers to `EXECUTION_READY`.
-- CRITICAL/HIGH/OPEN MEDIUM findings: 0.
+- Only Web is public; API/Judge/Redis/Supervisor are loopback-only.
 
-## Accepted Residual Controls
+## Next Action
 
-- Seccomp: `ACCEPTED_WITH_DOCUMENTED_COMPENSATING_CONTROL` for the amd64
-  default-allow denylist plus rootless-runc, namespaces, capabilities, cgroups,
-  and explicit high-risk syscall controls.
-- Workspace aggregate: `ACCEPTED_WITH_DOCUMENTED_COMPENSATING_CONTROL` for the
-  bounded fail-closed monitor and free-space admission reserve.
-- `RLIMIT_NOFILE`: RESOLVED. Per-file `RLIMIT_FSIZE`: enforced.
-- Kernel/runc zero-day risk remains out of scope, not an open finding.
+1. Integration Lead reviews and integrates the Phase 7A feature history from the
+   latest live `main`. Do not merge from a worker task.
+2. `OJPLATFORM_REMOTE_PUBLICATION = PENDING`:
+   `https://github.com/wyl20020808/OJ` is reserved for the OJPlatform main
+   repository but has not been published. The submodule URL is absolute, so
+   acquisition does not depend on it.
+3. Do not start Phase 7B, ARM64 or Mac work without an explicit decision.
 
 ## Critical Boundaries
 
 - Untrusted code never runs in API/Web/Core/Judge Service/Plugin Host.
-- Worker, Supervisor, and Host Agent remain host-native and have no Product DB,
-  MinIO admin, or Docker access.
-- Supervisor remains dedicated non-root, rootless runc, cgroup v2, namespaces,
-  immutable rootfs, and loopback-only.
-- Product artifact API, Worker Redis, and Judge Service same-host bridges remain
-  loopback-only; only Web is public HTTP ingress.
+- Worker, Supervisor, Host Agent stay host-native with no Product DB, MinIO
+  admin, or Docker access.
+- Supervisor remains non-root, rootless runc, cgroup v2, namespaces, immutable
+  rootfs, loopback-only (`127.0.0.1:19092`).
 - Do not weaken AppArmor/userns, seccomp, cgroups, firewall, or Docker denial.
+- Plugin stays an independent repository: never vendor it, never squash its
+  history, never auto-follow its remote `main`.
 - Linux ARM64 remains NOT QUALIFIED. Mac Judge remains NOT TARGET. Phase 5 Mac
-  remains DEFERRED until real hardware is available.
-
-## Next Action
-
-1. Stop after Phase 6 integration.
-2. Await user selection and scope for the next roadmap phase; do not start
-   ARM64 qualification, Mac work, or Phase 7 automatically.
+  remains DEFERRED.
 
 ## References
 
-- Native evidence:
-  `Docs/reports/OJPLATFORM_NATIVE_LINUX_AMD64_PRODUCTION_JUDGE_QUALIFICATION_V1_REPORT.md`.
-- Integration evidence:
-  `Docs/reports/OJPLATFORM_NATIVE_LINUX_AMD64_JUDGE_QUALIFICATION_INTEGRATION_V1_REPORT.md`.
-- Deployment runbook: `Docs/deployment/JUDGE_PRODUCTION_DEPLOYMENT.md`.
+- Deployment entry: `Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md`.
+- Production runbook: `Docs/deployment/JUDGE_PRODUCTION_DEPLOYMENT.md`.
 - Architecture: `Docs/deployment/JUDGE_DOCKER_ARCHITECTURE.md`.
-- Repeatable native checklist:
-  `Docs/deployment/JUDGE_NATIVE_LINUX_QUALIFICATION_HANDOFF.md`.
+- Phase 7A deployment evidence:
+  `Docs/reports/OJPLATFORM_PHASE7A_STANDARD_DEPLOYMENT_V1_REPORT.md`.
+- Plugin acquisition evidence:
+  `Docs/reports/OJPLATFORM_PHASE7A_ONLINECODEEDITOR_ACQUISITION_V1_REPORT.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-19 (Phase 6B-6 PASS / MERGED; Production Judge qualified)
+Last Updated: 2026-09-19 (Phase 7A PASS / feature complete; integration pending)

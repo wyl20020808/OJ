@@ -2,6 +2,16 @@
 .env.*
 !.env.example
 !.env.compose.example
+!.env.production.example
+
+# OnlineCodeEditor checkout. Kept repository-local for reproducible builds but
+# never committed: it stays an independent repository with its own history.
+# OnlineCodeEditor is a pinned Git submodule (independent repository).
+# The wildcard keeps an accidental stray checkout out of the repository,
+# while the explicit exception lets the submodule gitlink be tracked.
+plugins/*
+!plugins/README.md
+!plugins/OnlineCodeEditor
 
 node_modules/
 dist/

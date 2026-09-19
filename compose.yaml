@@ -193,7 +193,10 @@ services:
       context: .
       dockerfile: Dockerfile.web
       additional_contexts:
-        online-code-editor: ${OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT:?OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT must point to the OnlineCodeEditor checkout}
+        # Only the Web image consumes this. It defaults to the repository-local
+        # plugin checkout so Core/Judge-only Compose operations never require a
+        # plugin path. Override it when the checkout lives elsewhere.
+        online-code-editor: ${OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT:-./plugins/OnlineCodeEditor}
     depends_on:
       api:
         condition: service_healthy

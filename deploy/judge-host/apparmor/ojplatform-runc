@@ -1,0 +1,18 @@
+# Narrow AppArmor grant required on distributions that restrict unprivileged
+# user namespaces (for example Ubuntu 24.04 with
+# kernel.apparmor_restrict_unprivileged_userns=1).
+#
+# It grants only the `userns` permission to the runc binary, instead of
+# disabling the global restriction. The sandbox Supervisor still runs as a
+# dedicated non-root identity with rootless runc, cgroup v2 delegation,
+# namespace isolation, empty capabilities, and seccomp.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile ojplatform-runc @RUNC_BIN@ flags=(unconfined) {
+  userns,
+
+  # Site policy may add narrower local rules here.
+  include if exists <local/ojplatform-runc>
+}
