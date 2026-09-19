@@ -252,9 +252,13 @@ describe('Phase 7A deployment contract', () => {
     expect(install).not.toContain(
       '--filter @ojplatform/judge-host-agent build:host',
     );
-    expect(install).toContain('dlx esbuild@${HOST_AGENT_ESBUILD_VERSION}');
+    expect(install).toContain(
+      'npx --yes "esbuild@${HOST_AGENT_ESBUILD_VERSION}"',
+    );
     expect(install).toContain('--external:fastify');
-    expect(install).toContain('pnpm --dir "${HOST_AGENT_DIR}" install --prod');
+    expect(install).toContain(
+      'npm --prefix "${HOST_AGENT_DIR}" install --omit=dev',
+    );
     expect(install).toContain('HOST_AGENT_ESBUILD_VERSION="0.28.2"');
   });
 
@@ -284,6 +288,39 @@ describe('Phase 7A deployment contract', () => {
     expect(install).toContain('-perm /222');
     expect(install).toContain('--allow-rootfs-identity-drift');
     expect(install).toContain('--rebuild-rootfs');
+  });
+
+  it('does not require Go, Node or pnpm on a production host', () => {
+    // Execution-cell binaries are compiled in a pinned Go builder container and
+    // the Host Agent bundle is produced with npm/npx, so a production host only
+    // needs Linux + Docker + git. Anything else would fail this contract.
+    expect(install).toContain(
+      'readonly GO_BUILDER_IMAGE="golang:1.22-bookworm"',
+    );
+    expect(install).toContain('docker run --rm');
+    expect(install).toContain('CGO_ENABLED=0');
+    expect(install).not.toMatch(/^\s*go build /m);
+    expect(install).not.toMatch(/^\s*have go /m);
+    expect(install).not.toMatch(/^\s*pnpm\s/m);
+    expect(install).toContain(
+      'npx --yes "esbuild@${HOST_AGENT_ESBUILD_VERSION}"',
+    );
+    expect(install).toContain(
+      'npm --prefix "${HOST_AGENT_DIR}" install --omit=dev',
+    );
+  });
+
+  it('treats the Judge Host Agent as optional', () => {
+    expect(install).toContain('host_agent_enabled() {');
+    expect(install).toContain('--with-host-agent) HOST_AGENT_MODE="yes"');
+    expect(install).toContain('--skip-host-agent) HOST_AGENT_MODE="no"');
+    // Node is only demanded when the Host Agent is actually requested.
+    expect(install).toContain(
+      'if [[ "${HOST_AGENT_MODE}" == "yes" ]] && ! have node',
+    );
+    // Every Host Agent dependent step is guarded.
+    const guarded = install.match(/if host_agent_enabled; then/g) ?? [];
+    expect(guarded.length).toBeGreaterThanOrEqual(5);
   });
 
   it('runs the execution cell as dedicated non-root identities', () => {
