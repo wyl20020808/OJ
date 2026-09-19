@@ -10,6 +10,20 @@ const execution = readFileSync(
   'apps/sandbox-supervisor/internal/supervisor/execution.go',
   'utf8',
 );
+const rootfsDockerfile = readFileSync(
+  'scripts/phase2c1-compiler-rootfs.Dockerfile',
+  'utf8',
+);
+const rootfsPrepare = readFileSync(
+  'scripts/phase2c1-prepare-compiler-rootfs.sh',
+  'utf8',
+);
+const phase2c2Qualification = readFileSync(
+  'scripts/phase2c2-qualification.mjs',
+  'utf8',
+);
+const canonicalRootfsIdentity =
+  '191cb6c71d4792e4e78d70882b229eec2b3a028314ca3c15e4e3a1847850eda2';
 
 describe('production Judge qualification gates', () => {
   it('requires all Judge production credentials without development fallback', () => {
@@ -37,6 +51,17 @@ describe('production Judge qualification gates', () => {
     expect(production).not.toMatch(
       /privileged:\s*true|network_mode:\s*host|pid:\s*host|docker\.sock/,
     );
+  });
+
+  it('pins reproducible amd64 compiler rootfs inputs and identity ordering', () => {
+    expect(rootfsDockerfile).toContain(
+      'ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517',
+    );
+    expect(rootfsDockerfile).toContain('UBUNTU_SNAPSHOT=20260820T000000Z');
+    expect(rootfsDockerfile).toContain('linux-libc-dev=6.8.0-138.138');
+    expect(rootfsPrepare).toContain('export LC_ALL=C');
+    expect(phase2c2Qualification).toContain(canonicalRootfsIdentity);
+    expect(rootfsDockerfile).not.toMatch(/--platform=.*arm64|aarch64/);
   });
 
   it('pins explicit descriptor and file-size limits in every OCI process', () => {

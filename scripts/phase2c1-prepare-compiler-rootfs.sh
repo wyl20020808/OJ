@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Manifest ordering is part of the rootfs identity. Pin collation so identical
+# content produces one identity across deployment-host locales.
+export LC_ALL=C
+
 profile=cpp20-gcc-13-v1
 image=ojplatform/compiler-rootfs:${profile}
 target=${OJPLATFORM_CPP20_ROOTFS:-/opt/ojplatform/compiler-rootfs/${profile}}

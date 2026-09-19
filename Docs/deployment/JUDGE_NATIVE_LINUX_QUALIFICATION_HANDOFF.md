@@ -79,10 +79,16 @@ sudo cat /opt/ojplatform/compiler-rootfs/cpp20-gcc-13-v1.identity
 Expected current identity:
 
 ```text
-cfb8d628eb7ef2ceb0257e27a1f82f2deb4eb312cfd3ca2498b302564a5a7e14
+191cb6c71d4792e4e78d70882b229eec2b3a028314ca3c15e4e3a1847850eda2
 ```
 
-Do not silently accept drift. Recompute/verify full content manifest, compiler version, root ownership, no writable path, and command-template hash. Preserve the prior artifact for rollback; never use an unpinned `latest` build.
+Manifest generation pins `LC_ALL=C`. The qualification feature originally
+recorded `cfb8d628...` from the same entry set under host-locale ordering;
+integration normalized serialization and reverified the canonical identity on
+the native VMware host. Do not silently accept other drift. Recompute/verify the
+full content manifest, compiler version, root ownership, no writable path, and
+command-template hash. Preserve the prior artifact for rollback; never use an
+unpinned `latest` build.
 
 ## 6. Fresh production-like start
 

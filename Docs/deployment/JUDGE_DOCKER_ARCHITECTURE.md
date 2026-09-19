@@ -455,7 +455,8 @@ Current profile:
 - GCC/G++ 13.3.0 (`13.3.0-6ubuntu2~24.04.1`);
 - host path: `/opt/ojplatform/compiler-rootfs/cpp20-gcc-13-v1`;
 - expected identity:
-  `cfb8d628eb7ef2ceb0257e27a1f82f2deb4eb312cfd3ca2498b302564a5a7e14`;
+  `191cb6c71d4792e4e78d70882b229eec2b3a028314ca3c15e4e3a1847850eda2`;
+- manifest serialization pins `LC_ALL=C`, so host locale cannot change identity;
 - root-owned and no writable non-symlink path;
 - complete file/link/type/mode/owner manifest revalidated before real execution;
 - fixed compiler argv; no user flags, shell, package download, or host compiler.
@@ -670,9 +671,11 @@ descriptor, file, multi-file, low-disk, and post-limit recovery evidence passed.
 No `CRITICAL`, `HIGH`, or OPEN `MEDIUM` finding remains.
 
 `WINDOWS_WSL_PRODUCTION_PREQUALIFICATION = PASS`. Dedicated native VMware
-Linux amd64 qualification passed on 2026-09-19. Therefore
-`LINUX_AMD64_FULL_JUDGE = QUALIFIED` and `PRODUCTION_JUDGE_QUALIFIED = YES`
-for the reviewed feature branch. Linux ARM64 remains `NOT QUALIFIED`.
+Linux amd64 qualification passed on 2026-09-19. Integration normalized rootfs
+manifest ordering to `LC_ALL=C`; two independent builds and a native VMware
+recheck produced the canonical identity above without changing manifest entries.
+Therefore `LINUX_AMD64_FULL_JUDGE = QUALIFIED` and
+`PRODUCTION_JUDGE_QUALIFIED = YES`. Linux ARM64 remains `NOT QUALIFIED`.
 
 ## macOS Boundary
 
