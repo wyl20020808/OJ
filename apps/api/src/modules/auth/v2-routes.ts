@@ -333,10 +333,11 @@ export async function registerAuthV2Routes(
           (rememberMe ? options.rememberedSessionTtlMs : options.sessionTtlMs),
       ),
     });
-    reply.header(
-      'set-cookie',
-      `oj_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${options.production ? '; Secure' : ''}${rememberMe ? `; Max-Age=${Math.floor(options.rememberedSessionTtlMs / 1000)}` : ''}`,
-    );
+    const secure = options.production ? '; Secure' : '';
+    reply.header('set-cookie', [
+      `oj_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${secure}${rememberMe ? `; Max-Age=${Math.floor(options.rememberedSessionTtlMs / 1000)}` : ''}`,
+      `oj_csrf=${encodeURIComponent(sessionToken())}; Path=/; SameSite=Lax${secure}; Max-Age=${Math.floor(options.sessionTtlMs / 1000)}`,
+    ]);
     return strength;
   };
 
