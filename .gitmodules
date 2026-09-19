@@ -1,0 +1,3 @@
+[submodule "plugins/OnlineCodeEditor"]
+	path = plugins/OnlineCodeEditor
+	url = https://github.com/wyl20020808/OnlineEditor.git

@@ -10,6 +10,8 @@ const gitMode = (path: string) => {
   return result.stdout.trim().split(/\s+/)[0];
 };
 
+const gitignore = readFileSync('.gitignore', 'utf8');
+const gitmodules = readFileSync('.gitmodules', 'utf8');
 const compose = readFileSync('compose.yaml', 'utf8');
 const production = readFileSync('compose.prod.yaml', 'utf8');
 const envTemplate = readFileSync('.env.production.example', 'utf8');
@@ -69,6 +71,35 @@ describe('Phase 7A deployment contract', () => {
     // Compose resolves the relative default against the project directory, so
     // the rendered value is absolute while still being repository-local.
     expect(guide).toContain('Core-only and Judge-only Compose');
+  });
+
+  it('pins OnlineCodeEditor as a submodule with an exact commit', () => {
+    // The plugin stays an independent repository; OJPlatform only records which
+    // plugin commit it builds with. No floating branch tracking is allowed.
+    const modules = gitmodules;
+    expect(modules).toContain('[submodule "plugins/OnlineCodeEditor"]');
+    expect(modules).toContain('path = plugins/OnlineCodeEditor');
+    expect(modules).toMatch(
+      /url = https:\/\/github\.com\/.+\/OnlineEditor(\.git)?/,
+    );
+    expect(modules).not.toMatch(/^\s*branch\s*=/m);
+    // The gitlink must be tracked, and the ignore rule must allow it.
+    const staged = spawnSync(
+      'git',
+      ['ls-files', '-s', '--', 'plugins/OnlineCodeEditor'],
+      { encoding: 'utf8' },
+    ).stdout.trim();
+    expect(staged.startsWith('160000 ')).toBe(true);
+    expect(gitignore).toContain('!plugins/OnlineCodeEditor');
+    expect(gitignore).toContain('plugins/*');
+  });
+
+  it('never requires a machine-specific plugin path', () => {
+    expect(compose).toContain(
+      'OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT:-./plugins/OnlineCodeEditor',
+    );
+    expect(compose).not.toMatch(/[A-Za-z]:\\|file:\/\/|localhost/);
+    expect(install).not.toMatch(/D:\\|C:\\/);
   });
 
   it('keeps the OnlineCodeEditor checkout out of the main build context', () => {
