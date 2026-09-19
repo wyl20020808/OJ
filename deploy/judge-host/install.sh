@@ -331,6 +331,12 @@ build_binaries() {
     go build -trimpath -ldflags "-s -w" -o "${BIN_DIR}/ojplatform-worker" ./cmd/judge-worker
   )
 
+  # Explicit modes: the script runs under `umask 0027`, so freshly built files
+  # would be 0750 and the unprivileged Supervisor could not execute its own
+  # binary (systemd reports 203/EXEC). Owned by root so nobody else can change
+  # them, executable by the service identities that must run them.
+  chmod 0755 "${BIN_DIR}/ojplatform-supervisor" "${BIN_DIR}/trusted-probe" "${BIN_DIR}/ojplatform-worker"
+
   # Host Agent: a single ESM bundle. A fresh clone has no node_modules, so the
   # bundle is produced with a pinned esbuild fetched on demand and the one
   # runtime dependency is deployed next to the bundle instead of into the
@@ -524,6 +530,15 @@ start_units() {
 
   local sandbox_uid
   sandbox_uid="$(id -u "${SANDBOX_USER}")"
+
+  # Clear a previous restart-limit state so a corrected install can recover
+  # without a manual `systemctl reset-failed`.
+  systemctl reset-failed ojplatform-worker.service ojplatform-host-agent.service >/dev/null 2>&1 || true
+  runuser -u "${SANDBOX_USER}" -- env \
+    XDG_RUNTIME_DIR="/run/user/${sandbox_uid}" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${sandbox_uid}/bus" \
+    systemctl --user reset-failed ojplatform-supervisor.service >/dev/null 2>&1 || true
+
   runuser -u "${SANDBOX_USER}" -- env \
     XDG_RUNTIME_DIR="/run/user/${sandbox_uid}" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${sandbox_uid}/bus" \
@@ -650,12 +665,21 @@ check_security_gates() {
     curl -fsS "http://127.0.0.1:${SUPERVISOR_PORT}/v1/health" >/dev/null 2>&1
   }
 
+  # The Supervisor runs as oj-sandbox and the Worker as oj-worker, so the
+  # installed binaries must be executable by those identities (not only root).
+  gate_sandbox_can_exec_supervisor() {
+    runuser -u "${SANDBOX_USER}" -- test -x "${BIN_DIR}/ojplatform-supervisor" &&
+      runuser -u "${SANDBOX_USER}" -- test -x "${BIN_DIR}/trusted-probe" &&
+      runuser -u "${WORKER_USER}" -- test -x "${BIN_DIR}/ojplatform-worker"
+  }
+
   gate gate_sandbox_groups
   gate gate_docker_socket
   gate gate_worker_no_docker
   gate gate_rootfs_owner
   gate gate_rootfs_immutable
   gate gate_binaries_trusted
+  gate gate_sandbox_can_exec_supervisor
   gate gate_units_not_root
   gate gate_secret_permissions
   gate gate_sandbox_env_readable
