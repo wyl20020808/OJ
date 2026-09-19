@@ -115,7 +115,10 @@ OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT=/srv/OnlineCodeEditor
 ```
 
 The default is always the repository-local submodule path, so a normal fresh
-deployment never sets this variable.
+deployment never sets this variable. The Web image installs the plugin's own
+dependencies inside its build stage, so a Docker deployment needs no extra
+step; only a host-only `pnpm build:web` requires `cd plugins/OnlineCodeEditor
+&& npm ci` once.
 
 ### Updating the pinned plugin version
 

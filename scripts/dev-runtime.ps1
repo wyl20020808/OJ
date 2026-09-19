@@ -64,7 +64,10 @@ function Resolve-CanonicalProductSource([string]$RepoRoot, [switch]$RequireCheck
   return [pscustomobject]@{ root = $identity.root; branch = 'main'; commit = $mainHead }
 }
 function Resolve-CanonicalPluginRepo {
-  $candidates = @($env:OJPLATFORM_CANONICAL_PLUGIN_ROOT, 'D:\OJPlatformPlugins\OnlineCodeEditor', 'D:\OJPlatformPlugins\OnlineCodeEditor-remediation') | Where-Object { $_ -and (Test-Path $_) }
+  # The canonical plugin location is the pinned repository-local submodule.
+  # The legacy absolute paths remain last so an existing host dev setup keeps working.
+  $repoPlugin = Join-Path $InvocationRoot 'plugins\OnlineCodeEditor'
+  $candidates = @($env:OJPLATFORM_CANONICAL_PLUGIN_ROOT, $repoPlugin, 'D:\OJPlatformPlugins\OnlineCodeEditor', 'D:\OJPlatformPlugins\OnlineCodeEditor-remediation') | Where-Object { $_ -and (Test-Path $_) }
   foreach ($candidate in $candidates) {
     try {
       $root = [IO.Path]::GetFullPath($candidate)

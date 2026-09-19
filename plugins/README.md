@@ -31,6 +31,17 @@ git add plugins/OnlineCodeEditor
 git commit -m "chore: bump OnlineCodeEditor to <desired commit>"
 ```
 
+## Build the plugin for a host-only Web build
+
+The Docker path installs the plugin's dependencies inside its own build stage,
+so nothing extra is needed there. A host-only Web build (`pnpm build:web`)
+resolves the plugin from the submodule and therefore needs the plugin's own
+dependencies once:
+
+```sh
+cd plugins/OnlineCodeEditor && npm ci
+```
+
 ## Work on the plugin itself
 
 The plugin is a normal repository and can be cloned, built and tested on its

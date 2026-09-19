@@ -13,7 +13,9 @@ Image uses Node `22.20.0`, pnpm `11.19.0`, frozen root lockfile, and
 unprivileged Nginx runtime. Dependencies install in Linux image layers; host
 `node_modules`, `.env`, Git metadata, reports, and build output stay excluded.
 
-Set `OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT` to a local OnlineCodeEditor checkout:
+The plugin is a pinned submodule at `plugins/OnlineCodeEditor`, which is the
+default build input, so a normal build needs nothing set. To build against a
+different checkout, set `OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT`:
 
 ```text
 docker compose -f compose.yaml -f compose.dev.yaml build web
@@ -29,7 +31,8 @@ OnlineCodeEditor remains a separate repository. Compose receives its path from
 stage and Vite bundles source. Final Nginx image contains generated static
 output only, not plugin source or its `node_modules`.
 
-Plugin acquisition remains external: developers need a compatible checkout.
+Plugin acquisition is handled by the submodule (`git clone --recurse-submodules`
+or `git submodule update --init --recursive`); see `plugins/README.md`.
 Package distribution, submodules, and release automation are deferred.
 
 ## Nginx
