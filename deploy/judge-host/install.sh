@@ -62,6 +62,7 @@ readonly HOST_AGENT_PORT="13180"
 readonly HOST_AGENT_STATE="${OPT_ROOT}/host-agent-state.json"
 
 readonly CANONICAL_ROOTFS_IDENTITY="191cb6c71d4792e4e78d70882b229eec2b3a028314ca3c15e4e3a1847850eda2"
+readonly HOST_AGENT_ESBUILD_VERSION="0.28.2"
 
 ENV_FILE="${REPO_ROOT}/.env"
 SKIP_BUILD=0
@@ -172,12 +173,14 @@ check_prerequisites() {
   have curl || die "curl is required"
 
   # Namespaces and seccomp are kernel capabilities; report them explicitly so a
-  # hardened kernel fails here instead of during a real submission.
+  # hardened kernel fails here instead of during a real submission. The status
+  # field is `Seccomp:` (capital S), so the match must be case-insensitive.
   [[ -e /proc/self/ns/user ]] || die "user namespaces are unavailable in this kernel"
-  grep -qw seccomp /proc/self/status || die "seccomp is unavailable in this kernel"
-  [[ -e /proc/sys/kernel/unprivileged_userns_clone ]] &&
-    [[ "$(cat /proc/sys/kernel/unprivileged_userns_clone)" == "1" ]] ||
-    log "unprivileged_userns_clone sysctl absent (restriction handled by AppArmor if present)"
+  grep -qi '^Seccomp:' /proc/self/status || die "seccomp is unavailable in this kernel"
+  if [[ -r /proc/sys/kernel/unprivileged_userns_clone ]] &&
+    [[ "$(cat /proc/sys/kernel/unprivileged_userns_clone)" != "1" ]]; then
+    warn "unprivileged_userns_clone is disabled; rootless runc may not work"
+  fi
 
   if [[ ${SKIP_BUILD} -eq 0 ]]; then
     have go || die "Go toolchain is required to build the Worker and Supervisor"
@@ -322,13 +325,27 @@ build_binaries() {
     go build -trimpath -ldflags "-s -w" -o "${BIN_DIR}/ojplatform-worker" ./cmd/judge-worker
   )
 
-  # Host Agent: a single self-contained ESM bundle. Bundling the runtime
-  # dependency closure keeps the operator's pnpm workspace untouched (a
-  # `pnpm deploy --prod` would leave it in a production-only state) and needs no
-  # node_modules on the host.
-  pnpm --dir "${REPO_ROOT}" --filter @ojplatform/judge-host-agent build:host
+  # Host Agent: a single ESM bundle. A fresh clone has no node_modules, so the
+  # bundle is produced with a pinned esbuild fetched on demand and the one
+  # runtime dependency is deployed next to the bundle instead of into the
+  # repository. That keeps the operator's checkout untouched and needs no full
+  # workspace install on a production host.
   install -d -m 0755 "${HOST_AGENT_DIR}/dist"
-  install -m 0644 "${REPO_ROOT}/dist/host-agent/server.mjs" "${HOST_AGENT_DIR}/dist/server.mjs"
+  printf '{"name":"ojplatform-host-agent-runtime","private":true,"version":"1.0.0","dependencies":{"fastify":"5.12.1"}}\n' \
+    >"${HOST_AGENT_DIR}/package.json"
+  chown root:root "${HOST_AGENT_DIR}/package.json" "${HOST_AGENT_DIR}/dist"
+  chmod 0644 "${HOST_AGENT_DIR}/package.json"
+  pnpm --dir "${HOST_AGENT_DIR}" install --prod --silent
+  (
+    cd "${REPO_ROOT}/apps/judge-host-agent"
+    pnpm --silent dlx esbuild@${HOST_AGENT_ESBUILD_VERSION} src/server.ts \
+      --bundle --platform=node --format=esm --target=node22 \
+      --external:fastify \
+      --banner:js='import { createRequire as __ojplatformCreateRequire } from "module"; const require = __ojplatformCreateRequire(import.meta.url);' \
+      --outfile="${HOST_AGENT_DIR}/dist/server.mjs"
+  )
+  chown root:root "${HOST_AGENT_DIR}/dist/server.mjs"
+  chmod 0644 "${HOST_AGENT_DIR}/dist/server.mjs"
 
   printf 'BUILD_VERSION=%s\n' "${version}" >"${BIN_DIR}/build-version.txt"
   chown -R root:root "${BIN_DIR}" "${HOST_AGENT_DIR}"

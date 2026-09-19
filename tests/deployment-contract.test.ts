@@ -121,6 +121,27 @@ describe('Phase 7A deployment contract', () => {
     expect(install).toMatch(/re-running|re-run|idempotent/i);
   });
 
+  it('works on a fresh clone that has no node_modules or toolchain state', () => {
+    // A fresh production checkout has no node_modules, so any build step that
+    // relies on the pnpm workspace would fail. The Host Agent must be bundled
+    // with an on-demand pinned esbuild and its single runtime dependency
+    // deployed next to the bundle.
+    expect(install).not.toContain(
+      '--filter @ojplatform/judge-host-agent build:host',
+    );
+    expect(install).toContain('dlx esbuild@${HOST_AGENT_ESBUILD_VERSION}');
+    expect(install).toContain('--external:fastify');
+    expect(install).toContain('pnpm --dir "${HOST_AGENT_DIR}" install --prod');
+    expect(install).toContain('HOST_AGENT_ESBUILD_VERSION="0.28.2"');
+  });
+
+  it('checks kernel capabilities with the real /proc field spelling', () => {
+    // /proc/self/status uses `Seccomp:`; a case-sensitive lowercase match
+    // reports a false negative on every normal kernel.
+    expect(install).toContain("grep -qi '^Seccomp:' /proc/self/status");
+    expect(install).not.toMatch(/grep\s+-qw\s+seccomp/);
+  });
+
   it('fails closed on missing prerequisites and security gates', () => {
     expect(install).toContain('must run as root');
     expect(install).toContain('cgroup v2 (unified hierarchy) is required');
