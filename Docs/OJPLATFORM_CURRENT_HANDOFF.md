@@ -21,8 +21,7 @@
 - Docker Phase 1–4: PASS / MERGED.
 - Docker Phase 6A + 6B-1 … 6B-6: PASS / MERGED.
 - Linux amd64 Judge + Production Judge: QUALIFIED / MERGED.
-- Phase 7A deployment, E2E and plugin acquisition: PASS / FEATURE BRANCH;
-  `main` merge not performed.
+- Phase 7A deployment, E2E and plugin acquisition: PASS / MERGED into `main`.
 
 ## Active / Deferred
 
@@ -31,13 +30,13 @@ Phase 5 cross-platform ............... PARTIAL
   Windows/WSL2 amd64 Docker ......... PASS
   Mac Intel / Apple Silicon ......... DEFERRED (no real Mac)
   Native ARM64 full Judge ........... NOT QUALIFIED
-Phase 7A standard deployment ......... PASS / FEATURE BRANCH
+Phase 7A standard deployment ......... PASS / MERGED
   Compose control plane + host cell . PASS (fresh VM, 15 gates)
   Real judge AC/WA/CE/RE/TLE ........ PASS (also after reboot)
   Editor DOM smoke .................. PASS
   Idempotent re-runs + reboot ....... PASS
   OnlineCodeEditor submodule ........ PASS
-  Integration into main ............. PENDING
+  Integration into main ............. PASS / MERGED
 Phase 7B+ ............................ NOT DEFINED
 ```
 
@@ -59,8 +58,7 @@ Phase 7B+ ............................ NOT DEFINED
 
 ## Next Action
 
-1. Integration Lead reviews and integrates the Phase 7A feature history from the
-   latest live `main`. Do not merge from a worker task.
+1. Phase 7A is integrated. Next work starts only from a new approved phase.
 2. `OJPLATFORM_REMOTE_PUBLICATION = PENDING`:
    `https://github.com/wyl20020808/OJ` is reserved for the OJPlatform main
    repository but has not been published. The submodule URL is absolute, so
@@ -77,6 +75,8 @@ Phase 7B+ ............................ NOT DEFINED
 - Do not weaken AppArmor/userns, seccomp, cgroups, firewall, or Docker denial.
 - Plugin stays an independent repository: never vendor it, never squash its
   history, never auto-follow its remote `main`.
+- A host-only `pnpm build:web` needs `cd plugins/OnlineCodeEditor && npm ci`
+  once; the Docker Web build installs plugin dependencies itself.
 - Linux ARM64 remains NOT QUALIFIED. Mac Judge remains NOT TARGET. Phase 5 Mac
   remains DEFERRED.
 
