@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
-const gitMode = (path) => {
+const gitMode = (path: string) => {
   const result = spawnSync('git', ['ls-files', '-s', '--', path], {
     encoding: 'utf8',
   });
@@ -186,7 +186,7 @@ describe('Phase 7A deployment contract', () => {
     // Windows checkouts default to CRLF, which makes `#!/usr/bin/env bash\r`
     // fail on Linux, and `gate "$gate_x"` expands an unset variable under
     // `set -u`. Both are silent until the script actually runs on the host.
-    const raw = (path) => readFileSync(path);
+    const raw = (path: string) => readFileSync(path);
     for (const path of [
       'deploy/judge-host/install.sh',
       'deploy/judge-host/systemd/ojplatform-worker.service',
