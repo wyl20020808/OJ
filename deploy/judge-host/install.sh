@@ -315,8 +315,11 @@ provision_apparmor() {
 
 build_binaries() {
   log "building host-native binaries"
+  # GIT_OPTIONAL_LOCKS=0 stops git from refreshing (and therefore rewriting) the
+  # repository index. Without it a root install would leave a root-owned
+  # .git/index in an operator-owned checkout.
   local version
-  version="$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  version="$(GIT_OPTIONAL_LOCKS=0 git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
   (
     cd "${REPO_ROOT}/apps/sandbox-supervisor"
