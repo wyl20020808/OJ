@@ -182,6 +182,14 @@ describe('Phase 7A deployment contract', () => {
     expect(invoked.sort()).toEqual(defined.sort());
   });
 
+  it('never leaves root-owned git metadata in an operator checkout', () => {
+    expect(install).toContain('GIT_OPTIONAL_LOCKS=0 git -C "${REPO_ROOT}"');
+    expect(install).toContain('local repo_owner');
+    expect(install).toContain(
+      'chown "${repo_owner}:${repo_owner}" "${REPO_ROOT}/.git/index"',
+    );
+  });
+
   it('keeps every host artifact LF-only and free of unbound-name references', () => {
     // Windows checkouts default to CRLF, which makes `#!/usr/bin/env bash\r`
     // fail on Linux, and `gate "$gate_x"` expands an unset variable under

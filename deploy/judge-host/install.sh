@@ -321,6 +321,15 @@ build_binaries() {
   # .git/index in an operator-owned checkout.
   local version
   version="$(GIT_OPTIONAL_LOCKS=0 git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  # Some git versions still touch the index while resolving HEAD as root.
+  # Restore the repository owner so a sudo install never leaves root-owned
+  # metadata in an operator-owned checkout.
+  local repo_owner
+  repo_owner="$(stat -c '%U' "${REPO_ROOT}")"
+  if [[ "${repo_owner}" != "root" && -e "${REPO_ROOT}/.git/index" &&
+    "$(stat -c '%U' "${REPO_ROOT}/.git/index")" == "root" ]]; then
+    chown "${repo_owner}:${repo_owner}" "${REPO_ROOT}/.git/index" 2>/dev/null || true
+  fi
 
   (
     cd "${REPO_ROOT}/apps/sandbox-supervisor"
