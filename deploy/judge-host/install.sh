@@ -348,7 +348,9 @@ provision_rootfs() {
     die "--skip-rootfs was given but ${identity_file} is missing"
   else
     log "building compiler rootfs (digest-pinned, snapshot-pinned)"
-    "${REPO_ROOT}/scripts/phase2c1-prepare-compiler-rootfs.sh" >&2
+    # Invoked through bash so a checkout that lost the executable bit (for
+    # example a filemode-less copy) still works.
+    bash "${REPO_ROOT}/scripts/phase2c1-prepare-compiler-rootfs.sh" >&2
   fi
 
   [[ -f "${identity_file}" ]] || die "compiler rootfs identity sidecar is missing"

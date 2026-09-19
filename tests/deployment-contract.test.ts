@@ -1,5 +1,14 @@
 import { readFileSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
+
+const gitMode = (path) => {
+  const result = spawnSync('git', ['ls-files', '-s', '--', path], {
+    encoding: 'utf8',
+  });
+  expect(result.status, `git ls-files failed for ${path}`).toBe(0);
+  return result.stdout.trim().split(/\s+/)[0];
+};
 
 const compose = readFileSync('compose.yaml', 'utf8');
 const production = readFileSync('compose.prod.yaml', 'utf8');
@@ -164,6 +173,20 @@ describe('Phase 7A deployment contract', () => {
     expect(apparmor).toContain('userns,');
     expect(apparmor).not.toMatch(/kernel\.unprivileged_userns_clone\s*=\s*1/);
     expect(apparmor).not.toContain('flags=(complain)');
+  });
+
+  it('records the executable bit for scripts the deployment guide runs directly', () => {
+    // A fresh Linux clone only gets the executable bit from the Git index.
+    // Without 100755 the documented `sudo ./deploy/judge-host/install.sh`
+    // fails with "Permission denied".
+    expect(gitMode('deploy/judge-host/install.sh')).toBe('100755');
+    expect(gitMode('scripts/phase2c1-prepare-compiler-rootfs.sh')).toBe(
+      '100755',
+    );
+    // install.sh must not depend on that bit for the rootfs helper it calls.
+    expect(install).toContain(
+      'bash "${REPO_ROOT}/scripts/phase2c1-prepare-compiler-rootfs.sh"',
+    );
   });
 
   it('documents every production-required variable in the env template', () => {
