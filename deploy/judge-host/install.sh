@@ -357,8 +357,8 @@ build_binaries() {
   fi
 
   log "building execution-cell binaries with ${GO_BUILDER_IMAGE}"
-  docker run --rm -e CGO_ENABLED=0 -e GOPROXY=off -v "${REPO_ROOT}:/src:ro" -v "${BIN_DIR}:/out" -w /src/apps/sandbox-supervisor "${GO_BUILDER_IMAGE}" sh -c 'go build -trimpath -ldflags "-s -w" -o /out/ojplatform-supervisor ./cmd/supervisor && go build -trimpath -ldflags "-s -w" -o /out/trusted-probe ./cmd/trusted-probe'
-  docker run --rm -e CGO_ENABLED=0 -e GOPROXY=off -v "${REPO_ROOT}:/src:ro" -v "${BIN_DIR}:/out" -w /src/apps/judge-worker "${GO_BUILDER_IMAGE}" sh -c 'go build -trimpath -ldflags "-s -w" -o /out/ojplatform-worker ./cmd/judge-worker'
+  docker run --rm -e CGO_ENABLED=0 -e GOPROXY=off -v "${REPO_ROOT}:/src:ro" -v "${BIN_DIR}:/out" -w /src/apps/sandbox-supervisor "${GO_BUILDER_IMAGE}" sh -c 'go build -buildvcs=false -trimpath -ldflags "-s -w" -o /out/ojplatform-supervisor ./cmd/supervisor && go build -buildvcs=false -trimpath -ldflags "-s -w" -o /out/trusted-probe ./cmd/trusted-probe'
+  docker run --rm -e CGO_ENABLED=0 -e GOPROXY=off -v "${REPO_ROOT}:/src:ro" -v "${BIN_DIR}:/out" -w /src/apps/judge-worker "${GO_BUILDER_IMAGE}" sh -c 'go build -buildvcs=false -trimpath -ldflags "-s -w" -o /out/ojplatform-worker ./cmd/judge-worker'
 
   # Explicit modes: the script runs under `umask 0027`, so freshly built files
   # would be 0750 and the unprivileged Supervisor could not execute its own

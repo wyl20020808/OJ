@@ -148,6 +148,10 @@ describe('Phase 7B one-command production deployment contract', () => {
     expect(judgeHost).toContain('docker run --rm');
     expect(judgeHost).not.toMatch(/^\s*go build /m);
     expect(judgeHost).not.toMatch(/^\s*pnpm\s/m);
+    // VCS stamping fails inside the builder container because the read-only
+    // bind mount is owned by the operator, not root ('dubious ownership').
+    const buildvcs = judgeHost.match(/-buildvcs=false/g) ?? [];
+    expect(buildvcs.length).toBeGreaterThanOrEqual(2);
   });
 
   it('keeps the documented manual two-command path working', () => {
