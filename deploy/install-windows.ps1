@@ -199,6 +199,8 @@ function Ensure-WslAndDistro {
   if (-not $wslCommand) { throw 'wsl.exe is unavailable on this Windows build.' }
 
   if (-not (Test-DistroInstalled)) {
+    Invoke-Native 'wsl.exe' @('--update') -AllowFailure | Out-Null
+    Invoke-Native 'wsl.exe' @('--set-default-version', '2') | Out-Null
     $online = (((& wsl.exe --list --online 2>$null) -join "`n") -replace "`0", '')
     if ($online -notmatch ('(?m)^\s*' + [regex]::Escape($DistroName) + '\s')) {
       throw "Microsoft WSL does not currently advertise '$DistroName'. Run 'wsl --list --online' and use a supported Ubuntu 24.04 distro name."
@@ -208,6 +210,8 @@ function Ensure-WslAndDistro {
     Write-Host "  Installing $DistroName from Microsoft's supported WSL source..."
     Invoke-Native 'wsl.exe' @('--install', $DistroName, '--version', '2', '--no-launch') -AllowFailure | Out-Null
     if (-not (Test-DistroInstalled)) { Request-RebootResume }
+    $launchProbe = Invoke-Wsl 'root' 'true' -AllowFailure
+    if ($launchProbe -ne 0) { Request-RebootResume }
   }
 
   if ((Get-DistroVersion) -ne 2) {
