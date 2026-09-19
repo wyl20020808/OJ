@@ -1,58 +1,54 @@
 # OJPlatform
 
-Status: **Pre-development / Architecture Foundation**.
+**语言 / Language:** [简体中文](./README.zh-CN.md) | [English](./README.en.md)
 
-OJPlatform aims to become a modern Online Judge that can evolve safely over the long term, execute untrusted code securely, scale horizontally, and support a plugin ecosystem.
+OJPlatform 是面向长期演进的现代在线判题平台。它提供完整 Web 产品、独立
+OnlineCodeEditor，以及隔离的 Linux Judge 执行边界。
 
-The current architecture source of truth is [Docs/OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md](Docs/OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md). Formal business development has not started. Future work is driven by phased goals.
+OJPlatform is a modern Online Judge built for long-term evolution, a complete
+Web experience, an independent OnlineCodeEditor, and isolated Linux judging.
 
-Developers and coding agents must read `AGENTS.md` before making changes. Current phase state, deferred work, and the next action are summarized in [Docs/OJPLATFORM_CURRENT_HANDOFF.md](Docs/OJPLATFORM_CURRENT_HANDOFF.md).
+## Quick Start / 快速开始
 
-Current project status is tracked in [Docs/PROJECT_STATUS.md](Docs/PROJECT_STATUS.md). Goal reports live under [Docs/reports](Docs/reports), and architecture decisions under [Docs/adr](Docs/adr).
+### Windows 11 x86_64
 
-## Production deployment
+```powershell
+git clone --recurse-submodules https://github.com/wyl20020808/OJ.git
+cd OJ
+powershell -ExecutionPolicy Bypass -File .\deploy\install-windows.ps1
+```
 
-On a fresh Ubuntu x86_64 host, one command:
+Windows is the bootstrap host. Production runs in Ubuntu 24.04 under WSL2 and
+uses the same authoritative Linux installer. Docker Desktop, Node, pnpm, and Go
+are not required.
 
-```sh
+Windows 仅作为引导主机；生产运行时仍是 WSL2 内的 Ubuntu 24.04，并复用权威
+Linux 安装器。无需 Docker Desktop、Node、pnpm 或 Go。
+
+### Ubuntu 24.04 x86_64
+
+```bash
 git clone --recurse-submodules https://github.com/wyl20020808/OJ.git
 cd OJ
 sudo ./deploy/install.sh
 ```
 
-The installer checks the host, installs Docker from the official repository when
-it is missing, initialises the pinned OnlineCodeEditor submodule, generates the
-production secrets once, starts the standard production Compose stack, waits for
-real service health, and then provisions the host-native Judge execution cell.
+## Highlights / 核心能力
 
-It never needs Node, pnpm or Go on the host: the execution-cell binaries are
-compiled in a pinned Go builder container and the Web image installs the plugin
-dependencies itself.
+- Production Auth, Session, CSRF, problems, submissions, and evaluation flows
+- Real AC/WA judging through a separate Worker/Supervisor/rootless-runc boundary
+- Pinned independent OnlineCodeEditor submodule with CodeMirror
+- Idempotent deployment, read-only doctors, reboot recovery, persistent data
+- PostgreSQL, Redis ACL, MinIO, Docker Compose control plane
 
-Diagnose an existing deployment (read-only):
+## Documentation / 文档
 
-```sh
-sudo ./deploy/doctor.sh
-```
-
-Update an existing deployment:
-
-```sh
-git pull --ff-only
-git submodule update --init --recursive
-sudo ./deploy/install.sh
-```
-
-### Manual / advanced path
-
-The two documented commands remain fully supported:
-
-```sh
-docker compose -f compose.yaml -f compose.prod.yaml --profile judge up -d --build
-sudo ./deploy/judge-host/install.sh
-```
-
-Docker Compose owns every container; the host scripts provision only the
-host-native execution cell (Supervisor, Worker, optional Host Agent, compiler
-rootfs). See [Docs/deployment/ONE_COMMAND_DEPLOYMENT.md](Docs/deployment/ONE_COMMAND_DEPLOYMENT.md)
-and [Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md](Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md).
+- [完整中文说明](./README.zh-CN.md)
+- [Complete English guide](./README.en.md)
+- [Windows one-command deployment](./Docs/deployment/WINDOWS_ONE_COMMAND_DEPLOYMENT.md)
+- [Linux one-command deployment](./Docs/deployment/ONE_COMMAND_DEPLOYMENT.md)
+- [Fresh-machine manual path](./Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md):
+  `docker compose -f compose.yaml -f compose.prod.yaml --profile judge up -d --build`
+  then `sudo ./deploy/judge-host/install.sh`
+- [Architecture baseline](./Docs/OJ_PROJECT_ARCHITECTURE_BASELINE_V1.md)
+- [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
