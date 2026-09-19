@@ -100,10 +100,6 @@ const normalizePhone = (value: string) => {
       : `+${normalized}`;
   return /^\+[1-9]\d{7,14}$/.test(normalized) ? normalized : null;
 };
-const normalizeMainlandChinaPhone = (value: string) =>
-  /^1[3-9]\d{9}$/.test(value.normalize('NFKC').trim())
-    ? `+86${value.normalize('NFKC').trim()}`
-    : null;
 const validEmail = (value: string) =>
   value.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const validUsername = (value: string) =>
@@ -963,7 +959,7 @@ export async function registerAuthV2Routes(
     const identifier =
       type === 'EMAIL'
         ? normalizeEmail(rawIdentifier)
-        : normalizeMainlandChinaPhone(rawIdentifier);
+        : normalizePhone(rawIdentifier);
     if (!identifier || (type === 'EMAIL' && !validEmail(identifier)))
       return sendError(reply, 400, 'VALIDATION_ERROR', 'Invalid credentials');
     if (
