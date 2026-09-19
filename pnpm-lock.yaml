@@ -162,7 +162,11 @@ importers:
         specifier: 3.4.0
         version: 3.4.0
 
-  apps/judge-host-agent: {}
+  apps/judge-host-agent:
+    dependencies:
+      fastify:
+        specifier: 5.12.1
+        version: 5.12.1
 
   apps/judge-service:
     dependencies:

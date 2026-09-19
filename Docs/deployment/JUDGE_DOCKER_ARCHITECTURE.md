@@ -13,6 +13,11 @@ database or Docker volume.
 
 Risk terms are `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, and `INFO`.
 
+Native Linux amd64 final qualification passed on 2026-09-19. The Worker,
+Supervisor, and Host Agent remain host-native; same-host Product artifact API,
+Worker Redis, and Judge Service bridges are loopback-only. See the native
+qualification report for runtime evidence and accepted controls.
+
 ## Phase 6B-1 Implementation Status
 
 Phase 6B-1 implements and validates the Dockerized Judge control plane on the
@@ -259,9 +264,9 @@ revocation also requires `ACL SETUSER <user> off` and administrative
 
 Development publishes Redis on host loopback for the native Worker. Its
 `judge-host` attachment remains required because Docker does not realize the host
-publication from an internal-only network. Production publishes no Redis port;
-a production execution host needs a separately approved private/loopback Redis
-endpoint using the Worker URL and credential, never public ingress. Redis ACLs
+publication from an internal-only network. Production publishes a dedicated Worker ACL endpoint on host loopback only.
+The native Worker uses that stable loopback URL rather than a reboot-unstable
+container bridge IP. It is never public ingress. Redis ACLs
 are the enforcement boundary; application prefixes alone are not.
 
 ## Product/Judge Isolation
@@ -450,7 +455,7 @@ Current profile:
 - GCC/G++ 13.3.0 (`13.3.0-6ubuntu2~24.04.1`);
 - host path: `/opt/ojplatform/compiler-rootfs/cpp20-gcc-13-v1`;
 - expected identity:
-  `ffb494c1c8ddf5cbf9357e887abb12adc37c3308016bbfeada9998c3e732c9c5`;
+  `cfb8d628eb7ef2ceb0257e27a1f82f2deb4eb312cfd3ca2498b302564a5a7e14`;
 - root-owned and no writable non-symlink path;
 - complete file/link/type/mode/owner manifest revalidated before real execution;
 - fixed compiler argv; no user flags, shell, package download, or host compiler.
@@ -664,9 +669,10 @@ seccomp policy are formally accepted with documented controls. Safe syscall,
 descriptor, file, multi-file, low-disk, and post-limit recovery evidence passed.
 No `CRITICAL`, `HIGH`, or OPEN `MEDIUM` finding remains.
 
-`WINDOWS_WSL_PRODUCTION_PREQUALIFICATION = PASS`. Full Linux amd64 Judge remains
-`PARTIAL` because no native Linux host was available. Linux ARM64 remains
-`NOT QUALIFIED`; Production Judge remains `NO`.
+`WINDOWS_WSL_PRODUCTION_PREQUALIFICATION = PASS`. Dedicated native VMware
+Linux amd64 qualification passed on 2026-09-19. Therefore
+`LINUX_AMD64_FULL_JUDGE = QUALIFIED` and `PRODUCTION_JUDGE_QUALIFIED = YES`
+for the reviewed feature branch. Linux ARM64 remains `NOT QUALIFIED`.
 
 ## macOS Boundary
 

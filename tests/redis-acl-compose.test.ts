@@ -64,14 +64,16 @@ describe('Redis ACL Compose contract', () => {
     }
   });
 
-  it('keeps development Redis loopback-only and production Redis unpublished', () => {
+  it('keeps development and production Worker Redis endpoints loopback-only', () => {
     const devRedis = serviceBlock(development, 'redis');
     const prodRedis = serviceBlock(production, 'redis');
     expect(devRedis).toContain(
       "'127.0.0.1:${OJPLATFORM_REDIS_PORT:-56379}:6379'",
     );
     expect(devRedis).toContain('networks: [infrastructure, judge-host]');
-    expect(prodRedis).not.toContain('ports:');
+    expect(prodRedis).toContain(
+      "'127.0.0.1:${OJPLATFORM_REDIS_WORKER_PORT:-6379}:6379'",
+    );
     expect(serviceBlock(production, 'web')).toContain('ports:');
   });
 

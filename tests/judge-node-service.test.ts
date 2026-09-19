@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildJudgeService } from '../apps/judge-service/src/app.js';
 import { InMemoryJudgeServiceStateRepository } from '../apps/judge-service/src/repository.js';
 import {
@@ -114,6 +114,59 @@ describe('Phase 2C.7B Judge node service contract', () => {
     expect(staleCompletion.statusCode).toBe(409);
     expect(staleCompletion.json()).toMatchObject({
       code: 'STALE_NODE_INCARNATION',
+    });
+    await app.close();
+  });
+
+  it('recovers an expired job lease after a Worker incarnation crash', async () => {
+    const queue = new InMemoryJudgeJobRepository();
+    const recover = queue.recoverStale.bind(queue);
+    vi.spyOn(queue, 'recoverStale').mockImplementation(() =>
+      recover(new Date(Date.now() + 30_001)),
+    );
+    const app = await buildJudgeService({
+      queue,
+      state: new InMemoryJudgeServiceStateRepository(),
+      nodes: new InMemoryJudgeNodeRepository(),
+      serviceToken,
+      nodeToken,
+      logger: false,
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/register',
+      headers: nodeHeaders,
+      payload: registration('node-a', 'a1'),
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/v1/jobs',
+      headers: serviceHeaders,
+      payload: { ...request, clientRequestId: 'node-service-crash-recovery' },
+    });
+    const first = await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/node-a/assignments/claim',
+      headers: nodeHeaders,
+      payload: { incarnation: 'a1' },
+    });
+    expect(first.json().job.attempt).toBe(1);
+    await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/register',
+      headers: nodeHeaders,
+      payload: registration('node-a', 'a2'),
+    });
+    const recovered = await app.inject({
+      method: 'POST',
+      url: '/v1/nodes/node-a/assignments/claim',
+      headers: nodeHeaders,
+      payload: { incarnation: 'a2' },
+    });
+    expect(queue.recoverStale).toHaveBeenCalled();
+    expect(recovered.json()).toMatchObject({
+      assignment: { incarnation: 'a2', attemptGeneration: 2 },
+      job: { attempt: 2 },
     });
     await app.close();
   });

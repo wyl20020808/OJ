@@ -32,6 +32,7 @@ const required = {
     'postgres://ojplatform_judge_runtime:qualification-judge-runtime-password@postgres:5432/ojplatform_judge',
   JUDGE_SERVICE_TOKEN: 'qualification-service-token-1234',
   JUDGE_NODE_TOKEN: 'qualification-node-token-567890',
+  JUDGE_ARTIFACT_READ_TOKEN: 'qualification-artifact-token-901234',
   OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT: '.',
 };
 
@@ -102,13 +103,25 @@ fail(
     ports('judge-service')[0].host_ip === '127.0.0.1',
   'Judge Service must publish loopback only',
 );
-for (const name of ['api', 'postgres', 'redis', 'minio'])
+fail(
+  ports('api').length === 1 && ports('api')[0].host_ip === '127.0.0.1',
+  'Product artifact API must publish loopback only',
+);
+fail(
+  ports('redis').length === 1 && ports('redis')[0].host_ip === '127.0.0.1',
+  'Worker Redis endpoint must publish loopback only',
+);
+for (const name of ['postgres', 'minio'])
   fail(ports(name).length === 0, `${name} must remain private`);
 fail(
   config.networks?.infrastructure?.internal === true,
   'infrastructure network must be internal',
 );
 
+fail(
+  env('api').REAL_SUBMISSION_EXECUTION === 'true',
+  'Product API must enable real submission execution',
+);
 const judge = services['judge-service'];
 fail(judge?.read_only === true, 'Judge Service rootfs must be read-only');
 fail(judge?.privileged !== true, 'Judge Service must not be privileged');

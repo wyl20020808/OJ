@@ -175,6 +175,17 @@ export class InMemoryJudgeNodeRepository implements JudgeNodeRepository {
       this.nodes.set(value.nodeId, current);
       return structuredClone(current);
     }
+    for (const [assignmentId, assignment] of this.assignments) {
+      if (
+        assignment.nodeId === value.nodeId &&
+        assignment.incarnation !== value.incarnation &&
+        assignment.status === 'LEASED'
+      )
+        this.assignments.set(assignmentId, {
+          ...assignment,
+          status: 'EXPIRED',
+        });
+    }
     this.nodes.set(value.nodeId, next);
     return structuredClone(next);
   }
@@ -401,6 +412,10 @@ export class PostgresJudgeNodeRepository implements JudgeNodeRepository {
         stamp(now),
         JSON.stringify(value.metadata ?? {}),
       ],
+    );
+    await this.pool.query(
+      `UPDATE judge_node_assignments SET status='EXPIRED' WHERE node_id=$1 AND incarnation<>$2 AND status='LEASED'`,
+      [value.nodeId, value.incarnation],
     );
     return node(result.rows[0]!);
   }

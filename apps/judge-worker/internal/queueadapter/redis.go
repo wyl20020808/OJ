@@ -531,6 +531,17 @@ func New(redisURL string) (*Client, error) {
 	}
 	return client, nil
 }
+
+const redisIOTimeout = 2 * time.Second
+
+func redisDeadline(ctx context.Context) time.Time {
+	deadline := time.Now().Add(redisIOTimeout)
+	if contextDeadline, ok := ctx.Deadline(); ok && contextDeadline.Before(deadline) {
+		return contextDeadline
+	}
+	return deadline
+}
+
 func (c *Client) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -538,12 +549,19 @@ func (c *Client) Connect(ctx context.Context) error {
 		return nil
 	}
 	d := net.Dialer{}
-	conn, err := d.DialContext(ctx, "tcp", c.addr)
+	dialCtx, cancel := context.WithDeadline(ctx, redisDeadline(ctx))
+	defer cancel()
+	conn, err := d.DialContext(dialCtx, "tcp", c.addr)
 	if err != nil {
 		return err
 	}
 	c.conn = conn
 	c.reader = bufio.NewReader(conn)
+	if err = conn.SetDeadline(redisDeadline(ctx)); err != nil {
+		_ = conn.Close()
+		c.conn = nil
+		return err
+	}
 	if c.password != "" {
 		if c.username != "" {
 			_, err = c.command("AUTH", c.username, c.password)
@@ -557,6 +575,11 @@ func (c *Client) Connect(ctx context.Context) error {
 		}
 	}
 	if _, err = c.command("PING"); err != nil {
+		_ = conn.Close()
+		c.conn = nil
+		return err
+	}
+	if err = conn.SetDeadline(time.Time{}); err != nil {
 		_ = conn.Close()
 		c.conn = nil
 		return err
@@ -641,7 +664,15 @@ func (c *Client) do(ctx context.Context, args ...string) (any, error) {
 			continue
 		}
 		c.mu.Lock()
+		if c.conn != nil {
+			_ = c.conn.SetDeadline(redisDeadline(ctx))
+		}
 		value, err := c.command(args...)
+		if err == nil && c.conn != nil {
+			if deadlineErr := c.conn.SetDeadline(time.Time{}); deadlineErr != nil {
+				err = deadlineErr
+			}
+		}
 		c.mu.Unlock()
 		if err == nil {
 			return value, nil

@@ -283,7 +283,7 @@ export async function buildJudgeService(
       const healthy = executionNodes.filter(
         (node) =>
           (node.desiredState ?? 'ONLINE') === 'ONLINE' &&
-          ['ONLINE', 'BUSY'].includes(node.observedState ?? node.state),
+          ['ONLINE', 'BUSY'].includes(node.state),
       );
       const availableSlots = healthy.reduce(
         (total, node) =>
@@ -1125,6 +1125,9 @@ export async function buildJudgeService(
     const current = await nodes.get(nodeId);
     if (!current || current.incarnation !== body.incarnation)
       return reply.code(409).send({ code: 'STALE_NODE_INCARNATION' });
+    // Node claims are job-id directed, so recover expired queue leases before
+    // filtering candidates; otherwise a crashed Worker can strand a LEASED job.
+    await options.queue.recoverStale();
     for (const stored of await options.state.listAll()) {
       const job = await options.queue.getById(stored.result.judgeJobId);
       if (!job || !['QUEUED', 'FAILED_RETRYABLE'].includes(job.status))
