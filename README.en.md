@@ -33,10 +33,9 @@ same Linux Judge inside WSL2 Ubuntu.
 
 ## 5. One-command deployment
 
-Qualified production baselines:
-
-- Ubuntu 24.04 LTS x86_64
-- Windows 11 x86_64 with WSL2 Ubuntu 24.04
+The qualified production baseline is Ubuntu 24.04 LTS x86_64. Phase 7C targets
+Windows 11 x86_64 with WSL2 Ubuntu 24.04, but Windows deployment is not claimed
+as qualified until an independent clean Windows host completes the final gate.
 
 Linux ARM64, Windows ARM64, Windows Server, and a native Windows Judge are not
 qualified. Windows 10 is best effort only and is not claimed as supported.

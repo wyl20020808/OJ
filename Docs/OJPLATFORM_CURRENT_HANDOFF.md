@@ -14,7 +14,8 @@
 
 `Phase 7 = Fresh-Machine Deployment & Bootstrap`.  
 `Phase 7A = Standard Docker Compose Deployment + Linux Host Provisioning`.  
-`Phase 7B = Production Publication + One-Command Fresh Host Deployment`.
+`Phase 7B = Production Publication + One-Command Fresh Host Deployment`.  
+`Phase 7C = Windows Foolproof One-Command Deployment + Bilingual README`.
 
 ## Completed Baseline
 
@@ -32,54 +33,65 @@ Phase 5 cross-platform ............... PARTIAL
   Windows/WSL2 amd64 Docker ......... PASS
   Mac Intel / Apple Silicon ......... DEFERRED (no real Mac)
   Native ARM64 full Judge ........... NOT QUALIFIED
-Phase 7A standard deployment ........ PASS / MERGED
-Phase 7B one-command deployment ..... PASS / MERGED / PUBLISHED
-Phase 7C+ ............................ NOT DEFINED
+Phase 7C Windows deployment ......... PARTIAL / FEATURE BRANCH
+  PowerShell bootstrap/doctor ........ IMPLEMENTED / STATIC TESTED
+  Bilingual README ................... IMPLEMENTED
+  Clean Windows runtime .............. BLOCKED (no nested Windows host)
+  Integration/publication ............ PENDING runtime qualification
 ```
 
-## Phase 7B Final Facts
+## Phase 7C Facts
 
-- Public remote: `https://github.com/wyl20020808/OJ.git`.
-- Qualified code tip: `ff8f030cb4592038cdcefc014cb97f5fc2944d52`.
-- Pinned OnlineCodeEditor: `09877bf30a344bfd8d61775d1ee64c8ae61c9f86`.
-- Anonymous recursive clone reproduced both commits.
-- Target UX passed on a clean independent Ubuntu 24.04.5 guest:
-  `git clone --recurse-submodules ...`, then `sudo ./deploy/install.sh`.
-- Real production verification/register/login, browser session + CSRF,
-  same-origin Submission API, Judge AC/WA and CodeMirror typing passed.
-- Reboot recovery, `deploy/doctor.sh`, persistence, second installer run,
-  unchanged secrets/data, no duplicate containers and post-install AC passed.
-- Secret/history audit passed; only `main` was pushed and no force push used.
-- Qualification-only mail sinks, overrides and passwordless sudo were removed.
-- Formal report:
-  `Docs/reports/OJPLATFORM_PHASE7B_ONE_COMMAND_DEPLOYMENT_V1_REPORT.md`.
+- Feature branch: `codex/phase7c-windows-one-command-deployment-v1`.
+- Base: public `main` `d785b36aab5306c31f774344394e87899a74c981`.
+- Implementation commits: `8a0ee5a`, `6546ddd`.
+- Windows is bootstrap only. Production remains Ubuntu 24.04 under WSL2 and
+  delegates to authoritative `deploy/install.sh`; no second orchestrator or
+  Windows-native Judge/DB/systemd architecture exists.
+- Implemented `deploy/install-windows.ps1`, `bootstrap-windows.ps1`,
+  `doctor-windows.ps1`, secret-free bounded reboot resume, systemd setup, WSL
+  ext4 public clone, localhost checks, and credential-free WSL startup task.
+- `README.md` routes prominently to full `README.zh-CN.md` and `README.en.md`.
+- PowerShell parser, 50 deployment contracts, typecheck, build, architecture,
+  changed lint/format and diff gates pass.
+- Full Vitest still has unrelated pre-existing Web contract failures; Phase 7C
+  tests pass.
+
+## Hard Blocker
+
+- No clean Windows VM/snapshot exists in available inventory.
+- Official Windows 11 Enterprise Evaluation VM creation was attempted. VMware
+  rejected nested virtualization: `This platform does not support virtualized
+  Intel VT-x/EPT`; WSL2 cannot be qualified without it.
+- Host is Windows Home with no Hyper-V VM management; no external/cloud nested
+  Windows host is available.
+- Disabling host Hyper-V may unblock VMware but needs two host reboots and would
+  interrupt the user's WSL environment. Explicit approval is required.
+- Do not merge/publish or claim Windows PASS before clean-host runtime evidence.
 
 ## Next Action
 
-1. Phase 7B needs no follow-up action.
-2. Do not start Phase 7C, native ARM64 or Mac work without an explicit goal.
-3. Preserve the existing untracked browser evidence file unless explicitly
-   asked to archive or remove it.
+1. Obtain a clean Windows 11 x86_64 host with nested virtualization, or explicit
+   approval for the host-hypervisor disable/restore reboot cycle.
+2. Run fresh no-Git bootstrap, auth/CSRF, AC/WA/TLE/MLE/cancel/CE/RE, Windows
+   browser editor, second install, real Windows reboot and doctor gates.
+3. After PASS, integrate from fresh live `main` with `--no-ff`, run regression,
+   push only `main`, and repeat from the public clone.
 
 ## Critical Boundaries
 
-- Untrusted code never runs in API/Web/Core/Judge Service/Plugin Host.
-- Worker, Supervisor and optional Host Agent stay host-native with no Product
-  DB, MinIO admin or Docker access.
-- Supervisor remains non-root, rootless runc, cgroup v2, namespaces, immutable
-  rootfs and loopback-only (`127.0.0.1:19092`).
-- Do not weaken AppArmor/userns, seccomp, cgroups, firewall or Docker denial.
-- Plugin remains an independently versioned pinned submodule; never vendor it,
-  squash its history or automatically follow its remote `main`.
+- Untrusted code never runs in Windows, API/Web/Core/Judge Service/Plugin Host.
+- `deploy/install.sh` remains the single production installer.
+- Do not disable Windows Firewall, require Docker Desktop, persist credentials,
+  leave `NOPASSWD:ALL`, deploy from `/mnt/c`, or expose internal service ports.
 - Linux ARM64 remains NOT QUALIFIED. Mac Judge remains NOT TARGET. Phase 5 Mac
   remains DEFERRED.
 
 ## References
 
-- One-command deployment: `Docs/deployment/ONE_COMMAND_DEPLOYMENT.md`.
-- Manual deployment: `Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md`.
-- Production runbook: `Docs/deployment/JUDGE_PRODUCTION_DEPLOYMENT.md`.
-- Architecture: `Docs/deployment/JUDGE_DOCKER_ARCHITECTURE.md`.
-- Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
+- Phase 7C report:
+  `Docs/reports/OJPLATFORM_PHASE7C_WINDOWS_ONE_COMMAND_DEPLOYMENT_V1_REPORT.md`.
+- Windows deployment: `Docs/deployment/WINDOWS_ONE_COMMAND_DEPLOYMENT.md`.
+- Linux deployment: `Docs/deployment/ONE_COMMAND_DEPLOYMENT.md`.
 
-Last Updated: 2026-09-19 (Phase 7B PASS / merged / published / publicly qualified)
+Last Updated: 2026-09-20 (Phase 7C implemented; clean Windows qualification blocked)

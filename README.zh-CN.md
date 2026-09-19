@@ -30,10 +30,9 @@ OnlineCodeEditor 是固定到父仓库 gitlink 的独立公开子模块，基于
 
 ## 5. 一键部署
 
-正式支持的生产基线：
-
-- Ubuntu 24.04 LTS x86_64
-- Windows 11 x86_64 + WSL2 Ubuntu 24.04
+正式支持的生产基线是 Ubuntu 24.04 LTS x86_64。Phase 7C 的 Windows 目标是
+Windows 11 x86_64 + WSL2 Ubuntu 24.04；在独立全新 Windows 主机完成最终资格
+验证前，不宣称 Windows 部署已经正式通过。
 
 Linux ARM64、Windows ARM64、Windows Server 和原生 Windows Judge 尚未正式
 验证。Windows 10 仅属尽力兼容，不宣称正式支持。
