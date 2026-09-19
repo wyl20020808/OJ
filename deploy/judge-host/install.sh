@@ -80,7 +80,10 @@ REBUILD_ROOTFS=0
 ALLOW_ROOTFS_DRIFT=0
 NO_START=0
 CHECK_ONLY=0
-HOST_AGENT_MODE="auto"
+# The Host Agent controls optional elastic worker templates. Static/manual Worker
+# mode is sufficient for production judging, so a host Node installation must
+# never change the default deployment path or become an implicit prerequisite.
+HOST_AGENT_MODE="no"
 
 log()  { printf '%s [install] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*" >&2; }
 warn() { printf '%s [install] WARNING: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*" >&2; }
@@ -330,13 +333,9 @@ provision_apparmor() {
 # ---------------------------------------------------------------------------
 
 # The Host Agent is optional: it manages Worker templates and is not needed
-# for judging. "auto" installs it only when a Node runtime is already present.
+# for judging. It is installed only by explicit operator request.
 host_agent_enabled() {
-  case "${HOST_AGENT_MODE}" in
-    yes) return 0 ;;
-    no) return 1 ;;
-  esac
-  have node
+  [[ "${HOST_AGENT_MODE}" == "yes" ]]
 }
 
 build_binaries() {

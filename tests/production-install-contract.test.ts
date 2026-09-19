@@ -152,6 +152,10 @@ describe('Phase 7B one-command production deployment contract', () => {
     // bind mount is owned by the operator, not root ('dubious ownership').
     const buildvcs = judgeHost.match(/-buildvcs=false/g) ?? [];
     expect(buildvcs.length).toBeGreaterThanOrEqual(2);
+    // The optional Host Agent must be explicit: a preinstalled/broken host
+    // Node/npm must not turn into an implicit deployment prerequisite.
+    expect(judgeHost).toContain('HOST_AGENT_MODE="no"');
+    expect(judgeHost).toContain('--with-host-agent) HOST_AGENT_MODE="yes"');
   });
 
   it('keeps the documented manual two-command path working', () => {
