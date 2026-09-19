@@ -278,7 +278,7 @@ provision_directories() {
   ensure_dir "${BIN_DIR}" "root:root" 0755
   ensure_dir "${ROOTFS_DIR}" "root:root" 0755
   ensure_dir "${HOST_AGENT_DIR}" "root:root" 0755
-  ensure_dir "${CONF_DIR}" "root:root" 0750
+  ensure_dir "${CONF_DIR}" "root:${SANDBOX_USER}" 0750
 
   # Sandbox parent. The Supervisor (as oj-sandbox) creates the sandbox root,
   # the artifact staging directory and the execution-record directory inside it,
@@ -538,13 +538,18 @@ start_units() {
     return 0
   fi
 
-  # Supervisor first: the Worker preflight fails closed until it answers.
+  # Supervisor first: the Worker preflight fails closed until it answers. A
+  # failed start is reported by the security gates below instead of aborting
+  # here, so the operator sees every gate result in one run.
   runuser -u "${SANDBOX_USER}" -- env \
     XDG_RUNTIME_DIR="/run/user/${sandbox_uid}" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${sandbox_uid}/bus" \
-    systemctl --user restart ojplatform-supervisor.service
-  systemctl restart ojplatform-host-agent.service
-  systemctl restart ojplatform-worker.service
+    systemctl --user restart ojplatform-supervisor.service ||
+    warn "ojplatform-supervisor.service did not start; inspect: journalctl --user -u ojplatform-supervisor.service (as ${SANDBOX_USER})"
+  systemctl restart ojplatform-host-agent.service ||
+    warn "ojplatform-host-agent.service did not start; inspect: journalctl -u ojplatform-host-agent.service"
+  systemctl restart ojplatform-worker.service ||
+    warn "ojplatform-worker.service did not start; inspect: journalctl -u ojplatform-worker.service"
 }
 
 # ---------------------------------------------------------------------------
@@ -607,6 +612,27 @@ check_security_gates() {
       [[ "$(stat -c '%a' "${SUPERVISOR_ENV}")" == "640" ]]
   }
 
+  # The Supervisor runs under an unprivileged user manager, so it must be able
+  # to reach its own environment file. A non-traversable parent directory shows
+  # up as "Failed to load environment files: No such file or directory".
+  gate_sandbox_env_readable() {
+    runuser -u "${SANDBOX_USER}" -- test -r "${SUPERVISOR_ENV}" &&
+      runuser -u "${SANDBOX_USER}" -- test -x "${CONF_DIR}"
+  }
+
+  # Rootless runc needs the user manager's delegated controllers.
+  gate_sandbox_cgroup_delegation() {
+    local uid controllers
+    uid="$(id -u "${SANDBOX_USER}")"
+    controllers="$(cat "/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service/cgroup.controllers" 2>/dev/null || true)"
+    [[ -n "${controllers}" ]] || return 0
+    local controller
+    for controller in cpu memory pids; do
+      [[ " ${controllers} " == *" ${controller} "* ]] || return 1
+    done
+    return 0
+  }
+
   gate_loopback_supervisor() {
     if [[ ${NO_START} -eq 1 || ${CHECK_ONLY} -eq 1 ]]; then return 0; fi
     local listeners
@@ -632,6 +658,8 @@ check_security_gates() {
   gate gate_binaries_trusted
   gate gate_units_not_root
   gate gate_secret_permissions
+  gate gate_sandbox_env_readable
+  gate gate_sandbox_cgroup_delegation
   gate gate_loopback_supervisor
   gate gate_supervisor_identity
 

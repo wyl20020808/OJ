@@ -121,6 +121,33 @@ describe('Phase 7A deployment contract', () => {
     expect(install).toMatch(/re-running|re-run|idempotent/i);
   });
 
+  it('makes the private config directory reachable by the unprivileged Supervisor', () => {
+    // /etc/ojplatform must be traversable by oj-sandbox or the user manager
+    // reports "Failed to load environment files: No such file or directory"
+    // even though the file exists.
+    expect(install).toContain(
+      'ensure_dir "${CONF_DIR}" "root:${SANDBOX_USER}" 0750',
+    );
+    expect(install).toContain('gate_sandbox_env_readable');
+    expect(install).toContain('gate_sandbox_cgroup_delegation');
+    expect(install).toContain(
+      'runuser -u "${SANDBOX_USER}" -- test -r "${SUPERVISOR_ENV}"',
+    );
+    // A failed unit start must not abort before the gates report it.
+    expect(install).toContain('did not start; inspect:');
+  });
+
+  it('covers every security gate in the gate runner', () => {
+    const defined = [...install.matchAll(/^\s*gate_(\w+)\(\) \{/gm)].map(
+      (match) => match[1],
+    );
+    const invoked = [...install.matchAll(/^\s*gate gate_(\w+)$/gm)].map(
+      (match) => match[1],
+    );
+    expect(defined.length).toBeGreaterThanOrEqual(10);
+    expect(invoked.sort()).toEqual(defined.sort());
+  });
+
   it('keeps every host artifact LF-only and free of unbound-name references', () => {
     // Windows checkouts default to CRLF, which makes `#!/usr/bin/env bash\r`
     // fail on Linux, and `gate "$gate_x"` expands an unset variable under
