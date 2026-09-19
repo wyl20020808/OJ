@@ -311,7 +311,7 @@ async function main() {
   assert(
     capabilities.status === 200 &&
       capabilities.body.compiler_rootfs_identity ===
-        'ffb494c1c8ddf5cbf9357e887abb12adc37c3308016bbfeada9998c3e732c9c5',
+        'cfb8d628eb7ef2ceb0257e27a1f82f2deb4eb312cfd3ca2498b302564a5a7e14',
     'compiler rootfs identity invalid',
   );
 

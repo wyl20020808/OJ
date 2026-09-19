@@ -45,7 +45,7 @@ docker compose --env-file "$ENV_FILE" \
   -f compose.yaml -f compose.prod.yaml --profile judge config >/tmp/judge-render.yaml
 ```
 
-Verify rendered output: Web only public; Judge Service loopback; API/PostgreSQL/Redis/MinIO private; required secrets have no development fallback; Judge Service non-root/read-only/cap-drop/no-new-privileges/no Docker socket/host namespaces.
+Verify rendered output: Web only public; Product artifact API, Worker Redis, and Judge Service loopback; PostgreSQL/MinIO private; required secrets have no development fallback; Judge Service non-root/read-only/cap-drop/no-new-privileges/no Docker socket/host namespaces.
 
 ## 4. Execution-cell provisioning
 
@@ -64,7 +64,7 @@ sudo -u oj-sandbox sh -c 'test ! -r /var/run/docker.sock'
 sudo -u oj-sandbox docker version >/dev/null 2>&1 && exit 1 || true
 ```
 
-Install trusted root-owned Supervisor/Worker binaries and units. Supervisor must bind exactly `127.0.0.1:19092`.
+Install trusted root-owned Supervisor/Worker binaries and units. Supervisor must bind exactly `127.0.0.1:19092`. Worker Redis must use the stable loopback publication, not a Docker bridge container IP. Worker incarnation must be generated per process start.
 
 ## 5. Compiler rootfs
 
@@ -79,7 +79,7 @@ sudo cat /opt/ojplatform/compiler-rootfs/cpp20-gcc-13-v1.identity
 Expected current identity:
 
 ```text
-ffb494c1c8ddf5cbf9357e887abb12adc37c3308016bbfeada9998c3e732c9c5
+cfb8d628eb7ef2ceb0257e27a1f82f2deb4eb312cfd3ca2498b302564a5a7e14
 ```
 
 Do not silently accept drift. Recompute/verify full content manifest, compiler version, root ownership, no writable path, and command-template hash. Preserve the prior artifact for rollback; never use an unpinned `latest` build.
@@ -103,7 +103,7 @@ Verify:
 
 ## 7. Native services and readiness
 
-Start isolated Supervisor, then Worker (Host Agent optional). Check:
+Start isolated Supervisor, then Worker (Host Agent optional). If Ubuntu AppArmor restricts unprivileged user namespaces, provision only the reviewed `/usr/bin/runc` `userns` profile; never disable the global restriction. Check:
 
 - Supervisor health/preflight passes as `oj-sandbox`.
 - `ss` shows only `127.0.0.1:19092`; `0.0.0.0`/`::` is immediate FAIL.
@@ -188,3 +188,7 @@ LINUX_ARM64_FULL_JUDGE = NOT QUALIFIED
 MAC_JUDGE = NOT TARGET
 PHASE_5_MAC = DEFERRED
 ```
+
+## Qualification record
+
+This checklist passed on 2026-09-19 on the dedicated Ubuntu 24.04 VMware amd64 clone. Evidence: `Docs/reports/OJPLATFORM_NATIVE_LINUX_AMD64_PRODUCTION_JUDGE_QUALIFICATION_V1_REPORT.md`. Re-run after any kernel, runc, rootfs, seccomp, AppArmor, cgroup, or execution-boundary change.

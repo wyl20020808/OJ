@@ -29,6 +29,8 @@ services:
     environment:
       REDIS_HEALTH_USERNAME: ${REDIS_HEALTH_USERNAME:?REDIS_HEALTH_USERNAME must be set for production}
       REDIS_HEALTH_PASSWORD: ${REDIS_HEALTH_PASSWORD:?REDIS_HEALTH_PASSWORD must be set for production}
+    ports:
+      - '127.0.0.1:${OJPLATFORM_REDIS_WORKER_PORT:-6379}:6379'
     logging: *production-logging
     restart: unless-stopped
 
@@ -38,6 +40,14 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set for production}
     logging: *production-logging
     restart: unless-stopped
+
+  minio-bootstrap:
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set for production}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set for production}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY must be set for production}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY must be set for production}
+      S3_BUCKET: ${S3_BUCKET:?S3_BUCKET must be set for production}
 
   migrate-product:
     environment:
@@ -51,6 +61,10 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY must be set for production}
       S3_BUCKET: ${S3_BUCKET:?S3_BUCKET must be set for production}
       JUDGE_SERVICE_TOKEN: ${JUDGE_SERVICE_TOKEN:?JUDGE_SERVICE_TOKEN must be set for production}
+      JUDGE_ARTIFACT_READ_TOKEN: ${JUDGE_ARTIFACT_READ_TOKEN:?JUDGE_ARTIFACT_READ_TOKEN must be set for production}
+      REAL_SUBMISSION_EXECUTION: 'true'
+    ports:
+      - '127.0.0.1:${OJPLATFORM_API_INTERNAL_PORT:-3010}:3010'
     logging: *production-logging
     restart: unless-stopped
 

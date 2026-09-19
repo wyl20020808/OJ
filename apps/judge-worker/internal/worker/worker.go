@@ -199,14 +199,6 @@ func (w *Worker) heartbeat(ctx context.Context) {
 	}
 }
 func (w *Worker) emitHeartbeat() {
-	if w.NodeClient != nil {
-		if err := w.NodeClient.Heartbeat(context.Background(), w.WorkerID, w.InstanceID, int(w.active.Load())); err != nil {
-			w.controlPlaneReady.Store(false)
-			w.logger.Printf(`{"event":"node_heartbeat_error","worker_id":%q}`, w.WorkerID)
-		} else {
-			w.controlPlaneReady.Store(true)
-		}
-	}
 	if w.Config.RealSubmissionExecution && w.Supervisor != nil {
 		preflightCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		err := w.Supervisor.Preflight(preflightCtx)
@@ -230,6 +222,18 @@ func (w *Worker) emitHeartbeat() {
 			w.logger.Printf(`{"event":"worker_heartbeat_error","worker_id":%q,"worker_instance_id":%q}`, w.WorkerID, w.InstanceID)
 		} else {
 			w.redisReady.Store(true)
+		}
+	}
+	if w.NodeClient != nil {
+		if !w.redisReady.Load() || !w.supervisorReady.Load() {
+			// Do not advertise schedulable capacity while a local execution
+			// dependency is unavailable. Judge Service will age this node out.
+			w.controlPlaneReady.Store(false)
+		} else if err := w.NodeClient.Heartbeat(context.Background(), w.WorkerID, w.InstanceID, int(w.active.Load())); err != nil {
+			w.controlPlaneReady.Store(false)
+			w.logger.Printf(`{"event":"node_heartbeat_error","worker_id":%q}`, w.WorkerID)
+		} else {
+			w.controlPlaneReady.Store(true)
 		}
 	}
 	w.refreshDependencyState()

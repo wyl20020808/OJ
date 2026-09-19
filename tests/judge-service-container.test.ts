@@ -158,6 +158,18 @@ describe('Judge Service container contract', () => {
       schedulableNodes: 1,
       availableSlots: 2,
     });
+    await nodes.list(new Date(Date.now() + 16_000));
+    const stale = await app.inject({
+      url: '/v1/execution-readiness',
+      headers,
+    });
+    expect(stale.statusCode).toBe(503);
+    expect(stale.json()).toMatchObject({
+      state: 'DEGRADED',
+      reason: 'NO_SCHEDULABLE_CAPACITY',
+      schedulableNodes: 0,
+      availableSlots: 0,
+    });
     await app.close();
   });
 

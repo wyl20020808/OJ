@@ -1,8 +1,7 @@
 # Judge Production Deployment
 
 ## Qualification status
-
-Production hardening and WSL2 production-like prequalification are complete. Native Linux amd64 qualification is pending; therefore Production Judge is **not qualified**. Linux ARM64 is not qualified. macOS Judge is not a target.
+Production hardening, WSL2 prequalification, and dedicated native Linux amd64 qualification are complete. `LINUX_AMD64_FULL_JUDGE = QUALIFIED` and `PRODUCTION_JUDGE_QUALIFIED = YES` for the reviewed feature branch. Linux ARM64 remains unqualified and Mac Judge remains outside the current target.
 
 ## Architecture
 
@@ -11,7 +10,7 @@ Docker: Web -> API -> Judge Service -> Judge PostgreSQL + Redis ACL
 Host:   optional Host Agent -> Worker -> 127.0.0.1:19092 Supervisor -> rootless runc
 ```
 
-Only Web has public ingress. Judge Service may publish only on host loopback for a same-host Worker. API, PostgreSQL, Redis, and MinIO remain private. Worker and Supervisor are native Linux services; never mount Docker socket or use host PID/network to containerize them.
+Only Web has public ingress. The Product artifact API, Worker Redis endpoint, and Judge Service publish on host loopback only for same-host native services. PostgreSQL and MinIO remain unexposed. Worker and Supervisor are native Linux services; never mount Docker socket or use host PID/network to containerize them.
 
 ## Host requirements
 
@@ -56,17 +55,20 @@ Values come from a secret manager, protected environment file, or Compose secret
 | `JUDGE_SERVICE_TOKEN` | API/Judge Service | yes | yes | service protocol |
 | `JUDGE_NODE_TOKEN` | Judge Service/Workers | yes | yes | node protocol; distinct from service token |
 | `REDIS_URL` | Worker | yes | yes today | Worker ACL URL only; no queue/admin access |
-| artifact/Supervisor tokens | Worker/API/Supervisor | yes | when enabled | distinct scoped identities |
+| `JUDGE_ARTIFACT_READ_TOKEN` | API/Worker | yes | yes | read-only artifact transport |
+| `OJPLATFORM_SUPERVISOR_ARTIFACT_TOKEN` | Worker/Supervisor | yes | yes | local artifact staging |
 | `OJPLATFORM_*_IMAGE` | Compose | no | recommended | immutable release tag/digest |
 | `OJPLATFORM_WEB_PORT` | Web | no | no | public ingress selection |
 | `OJPLATFORM_JUDGE_SERVICE_PORT` | Judge Service | no | no | loopback only |
+| `OJPLATFORM_API_INTERNAL_PORT` | Product artifact API | no | no | loopback only |
+| `OJPLATFORM_REDIS_WORKER_PORT` | Worker Redis ACL endpoint | no | no | loopback only |
 
 Production overlay uses `${VAR:?message}` gates for required values. Judge Service also supports exclusive `_FILE` providers and rejects missing, short, equal, or ambiguous tokens. Development defaults in base Compose are overridden; production must never run base Compose alone.
 
 ## Provisioning
 
 1. Install patched host prerequisites and create trusted Docker operator.
-2. Create `oj-sandbox` without supplementary privileged groups. Enable linger/user bus and delegated cgroup controllers.
+2. Create `oj-sandbox` without supplementary privileged groups. Enable linger/user bus and delegated cgroup controllers. On Ubuntu 24.04 with restricted unprivileged user namespaces, install a narrow AppArmor profile granting `userns` to `/usr/bin/runc`; do not disable the global restriction.
 3. Create root-owned Supervisor/Worker binary and config locations; do not make trusted binaries world-writable.
 4. Build compiler rootfs from `scripts/phase2c1-compiler-rootfs.Dockerfile`, whose Ubuntu base is digest-pinned and compiler packages are version-pinned.
 5. Run `scripts/phase2c1-prepare-compiler-rootfs.sh` as trusted root. Record image metadata, package list, compiler version, content manifest, and identity. Deploy by immutable release artifact where possible; do not rebuild from `latest` on production hosts.
@@ -102,10 +104,10 @@ Only `EXECUTION_READY` plus successful Worker/Supervisor preflight authorizes sc
 
 ## Security checks
 
-- `docker compose config`: only Web public; Judge Service `127.0.0.1`; no private service publication.
+- `docker compose config`: only Web public; Product artifact API, Worker Redis, and Judge Service are `127.0.0.1` only; PostgreSQL/MinIO are unpublished.
 - `docker inspect`: Judge Service non-root, read-only rootfs, cap-drop ALL, no-new-privileges, no host PID/network, no devices/socket.
 - `id -nG oj-sandbox`: primary group only. Fresh process Docker socket/API denial mandatory.
-- Redis: default user disabled; role ACLs distinct; no production host port.
+- Redis: default user disabled; role ACLs distinct; Worker endpoint is loopback-only and never public.
 - DB: Product/Judge credentials separated; runtime roles have no role/database creation and no schema DDL.
 - Sandbox: dual-opt-in bounded qualification; no real Submission or public exploit.
 - Logs: no URL userinfo, authorization headers, tokens, source/testcase secrets, or environment dumps.
@@ -138,7 +140,7 @@ Production Compose uses `json-file` rotation: 10 MiB x 5 files per long-lived se
 - **Second startup:** bootstrap/migrations are idempotent and must complete again without ACL reset or identity drift.
 - **Judge Service restart:** Worker reconnects; durable jobs/leases remain authoritative.
 - **Redis restart:** ACL file remains active from process start; no unauthenticated window. Clients reconnect.
-- **Worker restart:** use a new host-owned incarnation; stale incarnation/lease completion is rejected.
+- **Worker restart:** generate a new incarnation for every process start; expired queue leases are recovered and old-incarnation assignments become `EXPIRED`. Never pin one incarnation across restarts.
 - **Supervisor restart:** in-flight records recover as infrastructure failure; owned residue cleanup must verify exact ownership; ambiguity fails closed.
 - **Low disk/memory:** refuse new execution through preflight/admission; do not rely on host OOM or disk-full behavior.
 
@@ -161,5 +163,4 @@ Production Compose uses `json-file` rotation: 10 MiB x 5 files per long-lived se
 Full disaster-recovery rehearsal is outside Phase 6B-6, but ownership above is mandatory.
 
 ## Qualification
-
-Run `Docs/deployment/JUDGE_NATIVE_LINUX_QUALIFICATION_HANDOFF.md` on a disposable native Linux amd64 host. WSL2 evidence is prequalification only and cannot set `PRODUCTION_JUDGE_QUALIFIED=YES`.
+The checklist in `Docs/deployment/JUDGE_NATIVE_LINUX_QUALIFICATION_HANDOFF.md` passed on the dedicated native VMware Linux amd64 host on 2026-09-19. See `Docs/reports/OJPLATFORM_NATIVE_LINUX_AMD64_PRODUCTION_JUDGE_QUALIFICATION_V1_REPORT.md`. Re-run it for a new kernel/runc/rootfs/security profile; WSL2 evidence alone remains prequalification only.

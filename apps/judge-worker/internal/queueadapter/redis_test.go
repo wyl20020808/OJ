@@ -1,8 +1,10 @@
 package queueadapter
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"strings"
 	"testing"
@@ -28,6 +30,50 @@ func TestRedisURLSupportsACLUsernameAndPassword(t *testing.T) {
 		if _, err := New(raw); err == nil {
 			t.Fatalf("invalid Redis URL accepted: %s", raw)
 		}
+	}
+}
+
+func TestRedisCommandHonorsContextDeadlineOnStalledConnection(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	release := make(chan struct{})
+	defer close(release)
+	go func() {
+		conn, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer conn.Close()
+		reader := bufio.NewReader(conn)
+		for range 3 {
+			if _, readErr := reader.ReadString('\n'); readErr != nil {
+				return
+			}
+		}
+		_, _ = conn.Write([]byte("+PONG\r\n"))
+		<-release
+	}()
+	client, err := New("redis://" + listener.Addr().String() + "/0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	connectCtx, connectCancel := context.WithTimeout(context.Background(), time.Second)
+	defer connectCancel()
+	if err = client.Connect(connectCtx); err != nil {
+		t.Fatal(err)
+	}
+	commandCtx, commandCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer commandCancel()
+	started := time.Now()
+	if _, err = client.Get(commandCtx, "stalled"); err == nil {
+		t.Fatal("stalled Redis command unexpectedly succeeded")
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("stalled Redis command ignored context deadline: %s", elapsed)
 	}
 }
 
