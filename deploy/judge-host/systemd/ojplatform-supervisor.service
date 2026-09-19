@@ -1,0 +1,22 @@
+[Unit]
+Description=OJPlatform sandbox Supervisor (rootless runc execution boundary)
+Documentation=file:/opt/ojplatform/README.judge-host
+# Installed as a systemd *user* unit for the dedicated non-root oj-sandbox
+# identity. It relies on linger plus the user manager's delegated cpu/memory/pids
+# controllers, which is why it must not run as a system service.
+After=default.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/ojplatform/supervisor.env
+ExecStart=/opt/ojplatform/bin/ojplatform-supervisor -listen 127.0.0.1:19092
+Restart=always
+RestartSec=2
+TimeoutStopSec=45
+# The Supervisor drops nothing: it already runs as an unprivileged non-root
+# identity with rootless runc, empty capabilities inside the bundle, and no
+# Docker/database/object-storage credential.
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,32 @@
+[Unit]
+Description=OJPlatform Judge Worker (host-native execution cell)
+Documentation=file:/opt/ojplatform/README.judge-host
+After=network-online.target
+Wants=network-online.target
+# The control plane is a separate Docker Compose stack. The Worker must start
+# without it and recover on its own, so no ordering dependency is declared.
+
+[Service]
+Type=simple
+User=oj-worker
+Group=oj-worker
+# Root-owned, 0600. Carries the Worker Redis ACL URL, Judge Service/node tokens
+# and the artifact read token. Never world-readable.
+EnvironmentFile=/etc/ojplatform/judge-host.env
+ExecStart=/opt/ojplatform/bin/ojplatform-worker
+Restart=always
+RestartSec=5
+TimeoutStopSec=60
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectControlGroups=no
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+# The Worker has no Docker, database, or MinIO credential by design.
+# Do not add SupplementaryGroups here.
+
+[Install]
+WantedBy=multi-user.target

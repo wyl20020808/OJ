@@ -33,8 +33,11 @@ const required = {
   JUDGE_SERVICE_TOKEN: 'qualification-service-token-1234',
   JUDGE_NODE_TOKEN: 'qualification-node-token-567890',
   JUDGE_ARTIFACT_READ_TOKEN: 'qualification-artifact-token-901234',
-  OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT: '.',
 };
+
+// Deliberately absent: OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT. The Web image is
+// the only consumer of the plugin checkout, and production Core/Judge-only
+// operations must render without any plugin path being configured.
 
 const composeArguments = [
   'compose',
@@ -122,6 +125,20 @@ fail(
   env('api').REAL_SUBMISSION_EXECUTION === 'true',
   'Product API must enable real submission execution',
 );
+
+// Judge-only and Core-only deployments must never depend on the plugin checkout.
+const webContexts = services.web?.build?.additional_contexts ?? {};
+fail(
+  (webContexts['online-code-editor'] ?? '').endsWith(
+    '/plugins/OnlineCodeEditor',
+  ),
+  'Web must default to the repository-local OnlineCodeEditor context',
+);
+for (const name of ['api', 'judge-service'])
+  fail(
+    !Object.keys(services[name]?.build?.additional_contexts ?? {}).length,
+    `${name} must not require the OnlineCodeEditor build context`,
+  );
 const judge = services['judge-service'];
 fail(judge?.read_only === true, 'Judge Service rootfs must be read-only');
 fail(judge?.privileged !== true, 'Judge Service must not be privileged');

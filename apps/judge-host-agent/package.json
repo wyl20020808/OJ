@@ -6,7 +6,8 @@
   "types": "src/index.ts",
   "scripts": {
     "test": "vitest run",
-    "dev": "tsx src/server.ts"
+    "dev": "tsx src/server.ts",
+    "build:host": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node22 --banner:js=\"import { createRequire as __ojplatformCreateRequire } from 'module'; const require = __ojplatformCreateRequire(import.meta.url);\" --outfile=../../dist/host-agent/server.mjs"
   },
   "dependencies": {
     "fastify": "5.12.1"

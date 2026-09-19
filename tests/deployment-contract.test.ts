@@ -1,0 +1,182 @@
+import { readFileSync, existsSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+const compose = readFileSync('compose.yaml', 'utf8');
+const production = readFileSync('compose.prod.yaml', 'utf8');
+const envTemplate = readFileSync('.env.production.example', 'utf8');
+const install = readFileSync('deploy/judge-host/install.sh', 'utf8');
+const supervisorUnit = readFileSync(
+  'deploy/judge-host/systemd/ojplatform-supervisor.service',
+  'utf8',
+);
+const workerUnit = readFileSync(
+  'deploy/judge-host/systemd/ojplatform-worker.service',
+  'utf8',
+);
+const hostAgentUnit = readFileSync(
+  'deploy/judge-host/systemd/ojplatform-host-agent.service',
+  'utf8',
+);
+const apparmor = readFileSync(
+  'deploy/judge-host/apparmor/ojplatform-runc',
+  'utf8',
+);
+const guide = readFileSync(
+  'Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md',
+  'utf8',
+);
+
+const requiredFromOverlay = [
+  ...new Set(
+    [...production.matchAll(/\$\{([A-Z0-9_]+):\?/g)].map((match) => match[1]),
+  ),
+].sort();
+const templateKeys = new Set(
+  [...envTemplate.matchAll(/^([A-Z0-9_]+)=/gm)].map((match) => match[1]),
+);
+
+describe('Phase 7A deployment contract', () => {
+  it('keeps Docker Compose as the only container orchestrator', () => {
+    expect(compose).toContain('name: ${OJPLATFORM_COMPOSE_PROJECT_NAME');
+    expect(production).toContain('x-production-logging: &production-logging');
+    // No custom launcher, wrapper CLI, or vendored compose replacement.
+    expect(existsSync('deploy/ojplatform')).toBe(false);
+    expect(existsSync('ojplatform')).toBe(false);
+    for (const file of [
+      'compose.yaml',
+      'compose.dev.yaml',
+      'compose.prod.yaml',
+    ])
+      expect(existsSync(file), file).toBe(true);
+  });
+
+  it('decouples Core/Judge operations from the OnlineCodeEditor build input', () => {
+    // A required-variable gate here would make every Judge-only render depend on
+    // a plugin checkout even though only the Web image consumes it.
+    expect(compose).not.toMatch(/OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT:\?/);
+    expect(compose).toContain(
+      'online-code-editor: ${OJPLATFORM_ONLINE_CODE_EDITOR_CONTEXT:-./plugins/OnlineCodeEditor}',
+    );
+    // Compose resolves the relative default against the project directory, so
+    // the rendered value is absolute while still being repository-local.
+    expect(guide).toContain('Core-only and Judge-only Compose');
+  });
+
+  it('exposes exactly one host provisioning script for non-Compose resources', () => {
+    expect(install.startsWith('#!/usr/bin/env bash')).toBe(true);
+    expect(install).toContain('set -euo pipefail');
+    expect(install).toContain('umask 0027');
+    for (const step of [
+      'check_prerequisites',
+      'provision_users',
+      'provision_directories',
+      'provision_apparmor',
+      'build_binaries',
+      'provision_rootfs',
+      'provision_env_files',
+      'install_units',
+      'start_units',
+      'check_security_gates',
+    ])
+      expect(install, step).toContain(`${step}`);
+  });
+
+  it('never grants privileged group membership or performs destructive cleanup', () => {
+    expect(install).not.toMatch(/usermod\s+-aG\s+docker/);
+    expect(install).not.toMatch(/gpasswd\s+-a\s+\S+\s+docker/);
+    expect(install).not.toMatch(
+      /docker\s+(system|volume|network|image)\s+prune/,
+    );
+    expect(install).not.toMatch(/docker\s+rm\s+-f\s+\$\(docker/);
+    expect(install).not.toMatch(/rm\s+-rf\s+\/(?:\s|$)/);
+    expect(install).not.toMatch(/git\s+clean|git\s+reset\s+--hard/);
+    // Privileged group membership is actively removed when found.
+    expect(install).toContain('enforce_no_privileged_groups');
+    expect(install).toContain('gpasswd -d');
+  });
+
+  it('never overwrites existing host secrets on re-run', () => {
+    expect(install).toContain('write_file_if_absent');
+    expect(install).toContain('keeping existing values');
+    expect(install).toMatch(/re-running|re-run|idempotent/i);
+  });
+
+  it('fails closed on missing prerequisites and security gates', () => {
+    expect(install).toContain('must run as root');
+    expect(install).toContain('cgroup v2 (unified hierarchy) is required');
+    expect(install).toContain('seccomp is unavailable in this kernel');
+    expect(install).toContain('user namespaces are unavailable in this kernel');
+    expect(install).toContain('refusing to report success');
+    // Non-secret output only.
+    expect(install).not.toMatch(/echo\s+.*\$\{?.*PASSWORD/);
+    expect(install).not.toMatch(/echo\s+.*\$\{?.*TOKEN/);
+  });
+
+  it('preserves compiler rootfs integrity and identity contract', () => {
+    expect(install).toContain(
+      '191cb6c71d4792e4e78d70882b229eec2b3a028314ca3c15e4e3a1847850eda2',
+    );
+    expect(install).toContain('phase2c1-prepare-compiler-rootfs.sh');
+    expect(install).toContain('-perm /222');
+    expect(install).toContain('--allow-rootfs-identity-drift');
+    expect(install).toContain('--rebuild-rootfs');
+  });
+
+  it('runs the execution cell as dedicated non-root identities', () => {
+    expect(install).toContain('oj-sandbox');
+    expect(install).toContain('oj-worker');
+    expect(install).toContain('oj-host-agent');
+    expect(workerUnit).toContain('User=oj-worker');
+    expect(workerUnit).toContain(
+      'EnvironmentFile=/etc/ojplatform/judge-host.env',
+    );
+    expect(hostAgentUnit).toContain('User=oj-host-agent');
+    expect(hostAgentUnit).toContain(
+      '@NODE_BIN@ /opt/ojplatform/host-agent/dist/server.mjs',
+    );
+    expect(supervisorUnit).toContain(
+      'ExecStart=/opt/ojplatform/bin/ojplatform-supervisor -listen 127.0.0.1:19092',
+    );
+    for (const unit of [workerUnit, hostAgentUnit]) {
+      expect(unit).toContain('Restart=always');
+      expect(unit).toContain('NoNewPrivileges=yes');
+      expect(unit).not.toContain('User=root');
+      expect(unit).not.toContain('docker.sock');
+    }
+    // Supervisor is a user unit so it keeps delegated cgroup controllers.
+    expect(supervisorUnit).toContain('WantedBy=default.target');
+    expect(supervisorUnit).toContain('NoNewPrivileges=yes');
+  });
+
+  it('grants only the user-namespace permission through AppArmor', () => {
+    expect(apparmor).toContain('profile ojplatform-runc @RUNC_BIN@');
+    expect(apparmor).toContain('userns,');
+    expect(apparmor).not.toMatch(/kernel\.unprivileged_userns_clone\s*=\s*1/);
+    expect(apparmor).not.toContain('flags=(complain)');
+  });
+
+  it('documents every production-required variable in the env template', () => {
+    expect(requiredFromOverlay.length).toBeGreaterThan(20);
+    const missing = requiredFromOverlay.filter(
+      (name) => !templateKeys.has(name),
+    );
+    expect(missing).toEqual([]);
+    // No real or demo production secret, and no machine-specific absolute path.
+    expect(envTemplate).not.toMatch(/D:\\\\|C:\\\\|\/home\/[a-z]+\/OJPlatform/);
+    expect(envTemplate).toMatch(/<set-strong-random-value>/);
+    expect(envTemplate).toContain('REQUIRED');
+  });
+
+  it('keeps the two-command deployment story visible and standard', () => {
+    expect(guide).toContain(
+      'docker compose -f compose.yaml -f compose.prod.yaml --profile judge up -d --build',
+    );
+    expect(guide).toContain('sudo ./deploy/judge-host/install.sh');
+    expect(guide).toContain('There is no project-specific status CLI');
+    const readme = readFileSync('README.md', 'utf8');
+    expect(readme).toContain('Docs/deployment/FRESH_MACHINE_DEPLOYMENT.md');
+    expect(readme).toContain(
+      'docker compose -f compose.yaml -f compose.prod.yaml',
+    );
+  });
+});

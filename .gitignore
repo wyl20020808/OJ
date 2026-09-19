@@ -2,6 +2,12 @@
 .env.*
 !.env.example
 !.env.compose.example
+!.env.production.example
+
+# OnlineCodeEditor checkout. Kept repository-local for reproducible builds but
+# never committed: it stays an independent repository with its own history.
+plugins/*
+!plugins/README.md
 
 node_modules/
 dist/

@@ -1,0 +1,29 @@
+[Unit]
+Description=OJPlatform Judge Host Agent (host-native execution cell)
+Documentation=file:/opt/ojplatform/README.judge-host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oj-host-agent
+Group=oj-host-agent
+WorkingDirectory=/opt/ojplatform/host-agent
+EnvironmentFile=/etc/ojplatform/judge-host.env
+ExecStart=@NODE_BIN@ /opt/ojplatform/host-agent/dist/server.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectControlGroups=no
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+# The Host Agent owns only its own state file and any Worker it is asked to
+# manage through deployment-owned templates.
+
+[Install]
+WantedBy=multi-user.target
