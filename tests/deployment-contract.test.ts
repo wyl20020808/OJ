@@ -121,6 +121,29 @@ describe('Phase 7A deployment contract', () => {
     expect(install).toMatch(/re-running|re-run|idempotent/i);
   });
 
+  it('keeps every host artifact LF-only and free of unbound-name references', () => {
+    // Windows checkouts default to CRLF, which makes `#!/usr/bin/env bash\r`
+    // fail on Linux, and `gate "$gate_x"` expands an unset variable under
+    // `set -u`. Both are silent until the script actually runs on the host.
+    const raw = (path) => readFileSync(path);
+    for (const path of [
+      'deploy/judge-host/install.sh',
+      'deploy/judge-host/systemd/ojplatform-worker.service',
+      'deploy/judge-host/systemd/ojplatform-host-agent.service',
+      'deploy/judge-host/systemd/ojplatform-supervisor.service',
+      'deploy/judge-host/apparmor/ojplatform-runc',
+    ]) {
+      const bytes = raw(path);
+      expect(bytes.includes(Buffer.from('\r\n')), `${path} has CRLF`).toBe(
+        false,
+      );
+    }
+    expect(install.startsWith('#!/usr/bin/env bash\n')).toBe(true);
+    // Function names are passed as words, never as variable expansions.
+    expect(install).not.toMatch(/^\s*gate\s+"\$gate_/m);
+    expect(install).toContain('  gate gate_sandbox_groups');
+  });
+
   it('works on a fresh clone that has no node_modules or toolchain state', () => {
     // A fresh production checkout has no node_modules, so any build step that
     // relies on the pnpm workspace would fail. The Host Agent must be bundled

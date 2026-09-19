@@ -37,8 +37,10 @@
 set -euo pipefail
 umask 0027
 
-readonly SCRIPT_PATH="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-readonly REPO_ROOT="$(cd -- "${SCRIPT_PATH}/../.." && pwd)"
+SCRIPT_PATH="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_PATH
+REPO_ROOT="$(cd -- "${SCRIPT_PATH}/../.." && pwd)"
+readonly REPO_ROOT
 readonly UNIT_SRC="${SCRIPT_PATH}/systemd"
 readonly APPARMOR_SRC="${SCRIPT_PATH}/apparmor/ojplatform-runc"
 
@@ -193,11 +195,12 @@ check_prerequisites() {
   fi
 
   # Filesystem semantics: the rootfs install and atomic rename contract need a
-  # local Unix filesystem, not a network or Windows-mounted path.
+  # local Unix filesystem, not a network or Windows-mounted path. `statfs`
+  # reports the classic `ext2/ext3` magic for ext2, ext3 and ext4 alike.
   local fstype
   fstype="$(stat -fc %T /opt 2>/dev/null || echo unknown)"
   case "${fstype}" in
-    ext4|xfs|btrfs|overlayfs) : ;;
+    ext2/ext3|ext4|ext3|ext2|xfs|btrfs|overlayfs) : ;;
     *) warn "unexpected filesystem type '${fstype}' for /opt; ext4/xfs is the qualified choice" ;;
   esac
 
@@ -497,7 +500,8 @@ install_units() {
 
   local sandbox_uid unit_dir
   sandbox_uid="$(id -u "${SANDBOX_USER}")"
-  unit_dir="/home/${SANDBOX_USER}/.config/systemd/user"  install -d -o "${SANDBOX_USER}" -g "${SANDBOX_USER}" -m 0700 "${unit_dir}"
+  unit_dir="/home/${SANDBOX_USER}/.config/systemd/user"
+  install -d -o "${SANDBOX_USER}" -g "${SANDBOX_USER}" -m 0700 "${unit_dir}"
   install -o "${SANDBOX_USER}" -g "${SANDBOX_USER}" -m 0644 \
     "${UNIT_SRC}/ojplatform-supervisor.service" \
     "${unit_dir}/ojplatform-supervisor.service"
@@ -617,16 +621,16 @@ check_security_gates() {
     curl -fsS "http://127.0.0.1:${SUPERVISOR_PORT}/v1/health" >/dev/null 2>&1
   }
 
-  gate "$gate_sandbox_groups"
-  gate "$gate_docker_socket"
-  gate "$gate_worker_no_docker"
-  gate "$gate_rootfs_owner"
-  gate "$gate_rootfs_immutable"
-  gate "$gate_binaries_trusted"
-  gate "$gate_units_not_root"
-  gate "$gate_secret_permissions"
-  gate "$gate_loopback_supervisor"
-  gate "$gate_supervisor_identity"
+  gate gate_sandbox_groups
+  gate gate_docker_socket
+  gate gate_worker_no_docker
+  gate gate_rootfs_owner
+  gate gate_rootfs_immutable
+  gate gate_binaries_trusted
+  gate gate_units_not_root
+  gate gate_secret_permissions
+  gate gate_loopback_supervisor
+  gate gate_supervisor_identity
 
   [[ ${failures} -eq 0 ]] || die "${failures} security gate(s) failed; refusing to report success"
   log "all security gates passed"
