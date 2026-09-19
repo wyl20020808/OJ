@@ -38,10 +38,9 @@ included.
 ## Secret / Machine Path Audit
 
 Added-line and tree scans found no private key, SSH material, VM credential,
-qualification password, `192.168.44.*`, `127.0.0.1:2224`, or
-`D:\VirtualMachines` dependency. Synthetic `qualification-*` values remain only
-inside the production render test. Production secrets remain required external
-environment values.
+qualification password, qualification-host IP/SSH endpoint, or Windows VM path
+dependency. Synthetic `qualification-*` values remain only inside the production
+render test. Production secrets remain required external environment values.
 
 ## Integrated Commits
 
