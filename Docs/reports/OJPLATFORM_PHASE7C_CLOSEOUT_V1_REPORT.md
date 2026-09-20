@@ -153,3 +153,21 @@ LINUX_UBUNTU_DEPLOYMENT = Production Qualified (unchanged)
 JUDGE_TAIL_REJUDGE = PASS
 JUDGE_TAIL_CANCEL = PASS
 ```
+
+## Environmental events observed during closeout validation
+
+- At 17:50:53 local (UTC+8) the WSL2 distribution hosting the production stack
+  performed a WSL-level shutdown (`systemd-logind`: "The system will power off
+  now!") while a `deploy/doctor-windows.ps1` run was in flight. The next WSL
+  command started the distribution again, and Docker, the six long-lived
+  services, the Worker and the Supervisor recovered on their own without
+  re-running any installer.
+- During that restart window the Windows doctor reported one transient `FAIL`
+  (API `http://localhost:8080/ready` unavailable) and `curl` from Windows
+  reproduced `503` on `/ready` while `/` stayed `200`. Both doctors returned
+  `PASS` again on the next run with no repair action.
+- `deploy/doctor.sh` is read-only and the audit log shows only
+  `./deploy/doctor.sh` was invoked, so the distribution shutdown was a WSL-level
+  event and not an effect of a repository script.
+- This is automatic recovery after a WSL-level distribution restart, **not**
+  after a Windows host reboot. `WINDOWS_REBOOT_SURVIVAL` remains NOT VERIFIED.
