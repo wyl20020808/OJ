@@ -2,15 +2,19 @@
 # migration files; this avoids copying unrelated local plugin worktrees.
 FROM node:22.20.0-alpine AS build
 
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ENV NPM_CONFIG_REGISTRY=$NPM_REGISTRY
+ENV npm_config_registry=$NPM_REGISTRY
+ENV COREPACK_NPM_REGISTRY=$NPM_REGISTRY
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 WORKDIR /workspace
 
-RUN corepack enable && corepack install -g pnpm@11.19.0
+RUN corepack enable && COREPACK_NPM_REGISTRY=$NPM_REGISTRY corepack install -g pnpm@11.19.0
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --registry=$NPM_REGISTRY
 RUN pnpm build && pnpm build:api:container
-RUN pnpm deploy --legacy --filter @ojplatform/api --prod /runtime
+RUN pnpm deploy --config.registry=$NPM_REGISTRY --legacy --filter @ojplatform/api --prod /runtime
 
 FROM node:22.20.0-alpine AS runtime
 

@@ -69,8 +69,17 @@ function Invoke-SelfElevation {
 
 function Invoke-Native([string]$FilePath, [string[]]$Arguments, [switch]$AllowFailure) {
   Write-Log "$FilePath $($Arguments -join ' ')"
-  & $FilePath @Arguments 2>&1 | ForEach-Object { Write-Log ([string]$_) }
-  $exitCode = $LASTEXITCODE
+  $previousErrorPreference = $ErrorActionPreference
+  try {
+    # PowerShell 5 wraps native stderr as ErrorRecord. With the script-wide Stop
+    # preference, normal progress written to stderr (Git/Docker) would abort the
+    # pipeline before the native exit code can be read.
+    $ErrorActionPreference = 'Continue'
+    & $FilePath @Arguments 2>&1 | ForEach-Object { Write-Log ([string]$_) }
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorPreference
+  }
   if ($exitCode -ne 0 -and -not $AllowFailure) {
     throw "Command failed with exit code ${exitCode}: $FilePath $($Arguments -join ' ')"
   }
@@ -78,16 +87,44 @@ function Invoke-Native([string]$FilePath, [string[]]$Arguments, [switch]$AllowFa
 }
 
 function Invoke-Wsl([string]$User, [string]$Command, [switch]$Capture, [switch]$AllowFailure) {
-  $arguments = @('-d', $DistroName, '-u', $User, '--exec', '/bin/bash', '-lc', $Command)
-  Write-Log "wsl.exe -d $DistroName -u $User --exec /bin/bash -lc <command>"
-  $output = & wsl.exe @arguments 2>&1
-  $exitCode = $LASTEXITCODE
-  if ($exitCode -ne 0 -and -not $AllowFailure) {
-    $safeOutput = (($output | Select-Object -Last 8) -join [Environment]::NewLine)
-    throw "WSL command failed with exit code ${exitCode}. See $script:LogFile`n$safeOutput"
+  # Passing a multiline shell program directly through wsl.exe lets the Windows
+  # native argument parser reinterpret quotes and command substitutions. Encode
+  # the program so only a fixed, non-secret wrapper crosses that boundary.
+  $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Command))
+  $wrapper = "printf '%s' '$encodedCommand' | base64 -d | /bin/bash"
+  $arguments = @('-d', $DistroName, '-u', $User, '--exec', '/bin/bash', '-lc', $wrapper)
+  Write-Log "wsl.exe -d $DistroName -u $User --exec /bin/bash -lc <base64-encoded-command>"
+  if ($Capture) {
+    $previousErrorPreference = $ErrorActionPreference
+    try {
+      $ErrorActionPreference = 'Continue'
+      $output = & wsl.exe @arguments 2>&1
+      $exitCode = $LASTEXITCODE
+    } finally {
+      $ErrorActionPreference = $previousErrorPreference
+    }
+    if ($exitCode -ne 0 -and -not $AllowFailure) {
+      $safeOutput = (($output | Select-Object -Last 8) -join [Environment]::NewLine)
+      throw "WSL command failed with exit code ${exitCode}. See $script:LogFile`n$safeOutput"
+    }
+    return (((($output -join "`n") -replace "`0", '')).Trim())
   }
-  if ($Capture) { return (((($output -join "`n") -replace "`0", '')).Trim()) }
-  $output | ForEach-Object { Write-Log ([string]$_) }
+
+  $previousErrorPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = 'Continue'
+    & wsl.exe @arguments 2>&1 | ForEach-Object {
+      $line = ([string]$_) -replace "`0", ''
+      Write-Host $line
+      Write-Log $line
+    }
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorPreference
+  }
+  if ($exitCode -ne 0 -and -not $AllowFailure) {
+    throw "WSL command failed with exit code ${exitCode}. See $script:LogFile"
+  }
   return $exitCode
 }
 
@@ -179,16 +216,24 @@ function Assert-WindowsPreflight {
   $computer = Get-CimInstance Win32_ComputerSystem
   $processor = Get-CimInstance Win32_Processor | Select-Object -First 1
   $architecture = $env:PROCESSOR_ARCHITECTURE
-  $systemDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'"
+  if (Test-DistroInstalled) {
+    $storageLabel = "$DistroName root filesystem"
+    $availableBytes = [double](Invoke-Wsl 'root' "df -B1 --output=avail / | tail -n 1 | tr -d ' '" -Capture)
+  } else {
+    $storageLabel = $env:SystemDrive
+    $storageDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'"
+    if (-not $storageDrive) { throw "Cannot inspect the default WSL storage drive: $($env:SystemDrive)" }
+    $availableBytes = [double]$storageDrive.FreeSpace
+  }
   $memoryGiB = [math]::Floor([double]$computer.TotalPhysicalMemory / 1GB)
-  $diskGiB = [math]::Floor([double]$systemDrive.FreeSpace / 1GB)
+  $diskGiB = [math]::Floor($availableBytes / 1GB)
 
   Write-Host "  Windows: $($os.Caption), build $($os.BuildNumber)"
-  Write-Host "  Architecture: $architecture; memory: ${memoryGiB} GiB; free disk: ${diskGiB} GiB"
+  Write-Host "  Architecture: $architecture; memory: ${memoryGiB} GiB; $storageLabel free: ${diskGiB} GiB"
   if ($architecture -ne 'AMD64') { throw 'Unsupported architecture. Phase 7C supports Windows 11 x86_64 only; Windows ARM64 is NOT QUALIFIED.' }
   if ([int]$os.BuildNumber -lt 22000) { throw 'Unsupported Windows build. Phase 7C supports Windows 11 x86_64 (build 22000 or newer).' }
   if ($memoryGiB -lt 4) { throw "At least 4 GiB RAM is required; found ${memoryGiB} GiB." }
-  if ($diskGiB -lt 25) { throw "At least 25 GiB free on $($env:SystemDrive) is required; found ${diskGiB} GiB." }
+  if ($diskGiB -lt 25) { throw "At least 25 GiB free on $storageLabel is required; found ${diskGiB} GiB." }
   $virtualizationReady = [bool]$computer.HypervisorPresent -or [bool]$processor.VirtualizationFirmwareEnabled -or (Test-DistroInstalled)
   if (-not $virtualizationReady) { throw 'Hardware virtualization is unavailable. Enable virtualization in firmware before installing WSL2.' }
   Write-Host "  Pending reboot: $(Test-PendingReboot)"
@@ -221,7 +266,15 @@ function Ensure-WslAndDistro {
 }
 
 function Ensure-LinuxInitialization {
-  Invoke-Wsl 'root' "export DEBIAN_FRONTEND=noninteractive; apt-get update -qq; apt-get install -y -qq git ca-certificates curl" | Out-Null
+  $prerequisitesReady = Invoke-Wsl 'root' "command -v git >/dev/null && command -v curl >/dev/null && test -s /etc/ssl/certs/ca-certificates.crt && echo ready || echo missing" -Capture
+  if ($prerequisitesReady -match '(?m)^ready$') {
+    Write-Host '  Git, curl, and CA certificates are already installed; skipping package download.'
+  } else {
+    Write-Host '  Updating Ubuntu package metadata (network progress follows; timeout: 10 minutes)...'
+    Invoke-Wsl 'root' "export DEBIAN_FRONTEND=noninteractive; timeout --foreground 600 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update" | Out-Null
+    Write-Host '  Installing Git and TLS prerequisites (timeout: 10 minutes)...'
+    Invoke-Wsl 'root' "export DEBIAN_FRONTEND=noninteractive; timeout --foreground 600 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y git ca-certificates curl" | Out-Null
+  }
   $linuxParent = $LinuxRepoPath.Substring(0, $LinuxRepoPath.LastIndexOf('/'))
   Invoke-Wsl 'root' "id -u '$LinuxUser' >/dev/null 2>&1 || useradd --create-home --shell /bin/bash '$LinuxUser'; install -d -o '$LinuxUser' -g '$LinuxUser' '$linuxParent'" | Out-Null
 
@@ -243,7 +296,14 @@ function Ensure-LinuxCheckout {
 set -e
 install -d -o '__USER__' -g '__USER__' '__PARENT__'
 if [ ! -d '__REPO__/.git' ]; then
-  runuser -u '__USER__' -- git clone --recurse-submodules '__URL__' '__REPO__'
+  test ! -e '__REPO__' || { echo 'Checkout path exists but is not a Git repository; refusing to overwrite it.' >&2; exit 1; }
+  for attempt in 1 2 3; do
+    echo "Git clone attempt $attempt/3..."
+    if runuser -u '__USER__' -- env GIT_TERMINAL_PROMPT=0 git clone --progress --recurse-submodules '__URL__' '__REPO__'; then break; fi
+    test ! -e '__REPO__' || { echo 'A failed clone left an unexpected checkout path; refusing to remove it.' >&2; exit 1; }
+    [ "$attempt" -lt 3 ] || exit 1
+    sleep $((attempt * 3))
+  done
 else
   test "$(runuser -u '__USER__' -- git -C '__REPO__' remote get-url origin)" = '__URL__'
   runuser -u '__USER__' -- git -C '__REPO__' submodule update --init --recursive
@@ -328,7 +388,8 @@ try {
   Invoke-Wsl 'root' "cd '$LinuxRepoPath' && ./deploy/install.sh --non-interactive" | Out-Null
 
   Write-Step 7 'Verifying Judge and services'
-  $doctor = Invoke-Wsl 'root' "cd '$LinuxRepoPath' && ./deploy/doctor.sh" -Capture
+  $doctorCommand = "cd '$LinuxRepoPath'; for attempt in 1 2 3; do ./deploy/doctor.sh && exit 0; [ `"`$attempt`" -eq 3 ] && exit 1; echo 'Linux doctor is not ready yet; retrying in 5 seconds...'; sleep 5; done"
+  $doctor = Invoke-Wsl 'root' $doctorCommand -Capture
   if ($doctor -notmatch 'DEPLOY_DOCTOR=PASS') { throw 'Linux deployment doctor did not pass.' }
   Wait-WindowsEndpoint $script:WebUrl
   Wait-WindowsEndpoint $script:ApiUrl

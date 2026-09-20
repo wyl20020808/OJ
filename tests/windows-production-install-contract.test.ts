@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 const install = readFileSync('deploy/install-windows.ps1', 'utf8');
 const bootstrap = readFileSync('deploy/bootstrap-windows.ps1', 'utf8');
 const doctor = readFileSync('deploy/doctor-windows.ps1', 'utf8');
+const webProxy = readFileSync('deploy/nginx/web.conf', 'utf8');
 const landing = readFileSync('README.md', 'utf8');
 const chinese = readFileSync('README.zh-CN.md', 'utf8');
 const english = readFileSync('README.en.md', 'utf8');
@@ -47,7 +48,7 @@ describe('Phase 7C Windows production bootstrap contract', () => {
     expect(install).toContain('./deploy/install.sh --non-interactive');
     expect(install).toContain('./deploy/doctor.sh');
     expect(install).toContain("'/home/ojplatform/OJ'");
-    expect(install).toContain('git clone --recurse-submodules');
+    expect(install).toContain('git clone --progress --recurse-submodules');
     expect(install).toContain('plugins/OnlineCodeEditor');
     for (const forbidden of [
       'docker compose up',
@@ -65,6 +66,8 @@ describe('Phase 7C Windows production bootstrap contract', () => {
     expect(install).toContain('[int]$os.BuildNumber -lt 22000');
     expect(install).toContain('$memoryGiB -lt 4');
     expect(install).toContain('$diskGiB -lt 25');
+    expect(install).toContain('$DistroName root filesystem');
+    expect(install).toContain('df -B1 --output=avail /');
     expect(install).toContain('Hardware virtualization is unavailable');
     expect(install).toContain('Windows ARM64 is NOT QUALIFIED');
   });
@@ -106,6 +109,20 @@ describe('Phase 7C Windows production bootstrap contract', () => {
     expect(install).not.toContain('New-NetFirewallRule');
     expect(install).not.toContain('Set-NetFirewallProfile');
     expect(install).not.toContain('netsh');
+  });
+
+  it('streams bounded Linux setup progress without native quoting corruption', () => {
+    expect(install).toContain('[Convert]::ToBase64String');
+    expect(install).toContain('| base64 -d | /bin/bash');
+    expect(install).toContain('Write-Host $line');
+    expect(install).toContain('timeout --foreground 600 apt-get');
+    expect(install).toContain('already installed; skipping package download');
+  });
+
+  it('re-resolves the API after an idempotent container recreate', () => {
+    expect(webProxy).toContain('resolver 127.0.0.11');
+    expect(webProxy).toContain('set $api_upstream http://api:3010');
+    expect(webProxy).toContain('proxy_pass $api_upstream');
   });
 
   it('initializes Ubuntu without an interactive password or UNIX-user prompt', () => {
