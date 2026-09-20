@@ -1,6 +1,9 @@
 # OJPlatform
 
-**语言 / Language:** [简体中文](./README.zh-CN.md) | [English](./README.en.md)
+**语言 / Language:** [简体中文](./README.md) | [English](./README.en.md) | [完整中文文档](./README.zh-CN.md)
+
+> This file is the complete English guide. The repository landing page is
+> [README.md](./README.md) in Chinese.
 
 ## 1. Overview
 
@@ -33,14 +36,29 @@ same Linux Judge inside WSL2 Ubuntu.
 
 ## 5. One-command deployment
 
-The qualified production baseline is Ubuntu 24.04 LTS x86_64. Phase 7C targets
-Windows 11 x86_64 with WSL2 Ubuntu 24.04, but Windows deployment is not claimed
-as qualified until an independent clean Windows host completes the final gate.
+The production-qualified baseline is Ubuntu 24.04 LTS x86_64. Windows 11 x86_64
+with WSL2 is **Preview / functionally qualified**: the functional path passed
+end-to-end on a physical Windows 11 host with an existing WSL2 installation,
+while the fresh-host (no WSL2) bootstrap and reboot-resume qualification is
+still pending, so Windows deployment is not claimed as production ready.
+
+| Platform                 | Status                         |
+| ------------------------ | ------------------------------ |
+| Ubuntu 24.04 x86_64      | Production Qualified           |
+| Windows 11 x86_64 + WSL2 | Preview / Functional Qualified |
+| Windows ARM64            | Not Qualified                  |
+| macOS                    | Not Target                     |
 
 Linux ARM64, Windows ARM64, Windows Server, and a native Windows Judge are not
 qualified. Windows 10 is best effort only and is not claimed as supported.
 
 ## 6. Windows deployment
+
+Status: Preview / functionally qualified. Installation, Web, API, database,
+Judge (AC/WA/TLE/MLE/CE/RE), OnlineCodeEditor, second-install idempotency,
+diagnostics, and persistence passed on a physical Windows 11 host with an
+existing WSL2 distribution; the fresh Windows host bootstrap qualification is
+still pending.
 
 With Git and a checkout:
 
@@ -70,6 +88,10 @@ untrusted binary. Docker Desktop, Node, pnpm, and Go are not prerequisites.
 See the [Windows deployment guide](./Docs/deployment/WINDOWS_ONE_COMMAND_DEPLOYMENT.md).
 
 ## 7. Linux deployment
+
+Status: Production Qualified. A clean Ubuntu 24.04.5 guest repeatedly completed
+clone, installation, real registration and login, submitted judging, and reboot
+recovery.
 
 ```bash
 git clone --recurse-submodules https://github.com/wyl20020808/OJ.git

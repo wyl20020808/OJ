@@ -15,11 +15,28 @@ provisioning. Docker Desktop is not required.
 
 | Platform | Status |
 | --- | --- |
-| Windows 11 x86_64 + WSL2 Ubuntu 24.04 | Supported target; requires Phase 7C clean-host qualification evidence before PASS is claimed |
+| Windows 11 x86_64 + WSL2 Ubuntu 24.04 | Preview / functional qualification PASS on a physical Windows 11 host with an existing WSL2 distribution; fresh-host bootstrap and reboot-resume qualification pending |
 | Windows 10 x86_64 | Best effort only; not formally qualified |
 | Windows ARM64 | Not supported |
 | Windows Server | Not qualified |
 | Native Windows Judge | Not a target |
+
+### Qualification state
+
+```text
+WINDOWS_FUNCTIONAL_QUALIFICATION = PASS
+  existing WSL2 reuse, install, Web, API, DB, Judge AC/WA/TLE/MLE/CE/RE,
+  OnlineCodeEditor, second-install idempotency, persistence, DEPLOY_DOCTOR,
+  WINDOWS_DEPLOY_DOCTOR, rejudge, cancel
+WINDOWS_FRESH_HOST_QUALIFICATION = DEFERRED
+  no clean Windows host without WSL2 was available for an independent run
+WINDOWS_REBOOT_SURVIVAL = NOT VERIFIED
+```
+
+Windows is usable today on a host that already has WSL2 and virtualization;
+it is not yet a production promise. Do not read this page as a claim that a
+fresh Windows installation, its automatic WSL2 bootstrap, or its reboot-resume
+path has been independently qualified.
 
 ## Entry points
 

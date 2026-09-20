@@ -1,6 +1,8 @@
 # OJPlatform
 
-**语言 / Language:** [简体中文](./README.zh-CN.md) | [English](./README.en.md)
+**语言 / Language：** [简体中文首页](./README.md) | [English](./README.en.md)
+
+> 本文件是完整中文文档；仓库首页 [README.md](./README.md) 是中文默认落地页。
 
 ## 1. 项目简介
 
@@ -30,14 +32,26 @@ OnlineCodeEditor 是固定到父仓库 gitlink 的独立公开子模块，基于
 
 ## 5. 一键部署
 
-正式支持的生产基线是 Ubuntu 24.04 LTS x86_64。Phase 7C 的 Windows 目标是
-Windows 11 x86_64 + WSL2 Ubuntu 24.04；在独立全新 Windows 主机完成最终资格
-验证前，不宣称 Windows 部署已经正式通过。
+正式支持的生产基线是 Ubuntu 24.04 LTS x86_64（Production Qualified）。Windows
+部署目前是 **Preview / 功能资格验证通过**：功能路径已在具备现有 WSL2 的 Windows
+11 x86_64 物理主机上完成端到端验证；全新 Windows 主机（无 WSL2）的自动引导与
+重启续跑仍待最终独立资格验证，因此不宣称 Windows 部署已经正式通过。
 
-Linux ARM64、Windows ARM64、Windows Server 和原生 Windows Judge 尚未正式
-验证。Windows 10 仅属尽力兼容，不宣称正式支持。
+| 平台                        | 状态                           |
+| --------------------------- | ------------------------------ |
+| Ubuntu 24.04 x86_64 / Linux | Production Qualified           |
+| Windows 11 x86_64 + WSL2    | Preview / Functional Qualified |
+| Windows ARM64               | Not Qualified                  |
+| macOS                       | Not Target                     |
+
+Linux ARM64、Windows ARM64、Windows Server 和原生 Windows Judge 尚未正式验证。
+Windows 10 仅属尽力兼容，不宣称正式支持。
 
 ## 6. Windows 一键部署
+
+状态：Preview / 功能资格验证通过。已在现有 WSL2 的 Windows 11 物理主机验证
+安装、Web、API、数据库、Judge（AC/WA/TLE/MLE/CE/RE）、OnlineCodeEditor、双次
+安装幂等、诊断与持久化；全新 Windows 主机引导尚待最终独立资格验证。
 
 已有 Git 和仓库：
 
@@ -65,6 +79,9 @@ Git 官方站点安装，不会下载未知二进制。Docker Desktop、Node、p
 [Windows 一键部署](./Docs/deployment/WINDOWS_ONE_COMMAND_DEPLOYMENT.md)。
 
 ## 7. Linux 一键部署
+
+状态：Production Qualified。已在全新 Ubuntu 24.04.5 客户机上重复完成克隆、
+安装、真实注册登录、提交判题与重启恢复验证。
 
 ```bash
 git clone --recurse-submodules https://github.com/wyl20020808/OJ.git

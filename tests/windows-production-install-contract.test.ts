@@ -171,10 +171,13 @@ describe('Phase 7C Windows production bootstrap contract', () => {
   });
 
   it('provides visible bilingual navigation without losing deployment guidance', () => {
-    for (const readme of [landing, chinese, english]) {
-      expect(readme).toContain('[简体中文](./README.zh-CN.md)');
-      expect(readme).toContain('[English](./README.en.md)');
-    }
+    expect(landing).toContain('[简体中文](./README.md)');
+    expect(landing).toContain('[English](./README.en.md)');
+    expect(landing).toContain('[完整中文文档](./README.zh-CN.md)');
+    expect(english).toContain('[简体中文](./README.md)');
+    expect(english).toContain('[English](./README.en.md)');
+    expect(chinese).toContain('[简体中文首页](./README.md)');
+    expect(chinese).toContain('[English](./README.en.md)');
     expect(landing).toContain('.\\deploy\\install-windows.ps1');
     expect(landing).toContain('sudo ./deploy/install.sh');
     expect(chinese).toContain('## 6. Windows 一键部署');
@@ -182,5 +185,57 @@ describe('Phase 7C Windows production bootstrap contract', () => {
     expect(guide).toContain('Windows 11 x86_64');
     expect(guide).toContain('Docker Desktop is not required');
     expect(guide).toContain('deploy/install.sh` remains authoritative');
+  });
+
+  it('makes Chinese the default GitHub landing language', () => {
+    // GitHub renders README.md first: it must be readable Chinese, not an
+    // English page with one hidden Chinese link.
+    expect(landing).toMatch(/[\u4e00-\u9fff]/);
+    const chineseLines = landing
+      .split('\n')
+      .filter((line) => /[\u4e00-\u9fff]/.test(line)).length;
+    expect(chineseLines).toBeGreaterThan(20);
+    expect(landing).toContain('# OJPlatform');
+    for (const heading of [
+      '## 功能特性',
+      '## 快速开始',
+      '### Ubuntu 24.04 x86_64 / Linux',
+      '### Windows 11 x86_64',
+      '## 部署状态',
+    ])
+      expect(landing).toContain(heading);
+    expect(landing).not.toContain('\uFFFD');
+  });
+
+  it('keeps the English and full Chinese documents complete and linked', () => {
+    expect(english).toMatch(/## 1\. Overview/);
+    expect(english).toContain('git clone --recurse-submodules');
+    expect(chinese).toMatch(/## 1\. 项目简介/);
+    expect(chinese).toMatch(/[\u4e00-\u9fff]/);
+    for (const readme of [landing, chinese, english])
+      expect(readme).not.toMatch(/[A-Za-z]:\\\\/);
+  });
+
+  it('never claims Windows is production qualified', () => {
+    for (const readme of [landing, chinese, english]) {
+      expect(readme).toContain('Preview');
+      for (const paragraph of readme.split(/\n{2,}/)) {
+        if (!paragraph.includes('Windows')) continue;
+        if (
+          !paragraph.includes('Production Qualified') &&
+          !paragraph.includes('production qualified')
+        )
+          continue;
+        // A paragraph may contrast Linux and Windows, but any Windows status
+        // claim must keep the Preview qualifier.
+        expect(paragraph).toContain('Preview');
+      }
+    }
+    expect(landing).toContain(
+      '| Ubuntu 24.04 x86_64 / Linux | Production Qualified',
+    );
+    expect(landing).toContain('| Windows 11 x86_64 + WSL2    | Preview');
+    expect(guide).toContain('WINDOWS_FRESH_HOST_QUALIFICATION = DEFERRED');
+    expect(guide).not.toMatch(/WINDOWS_FRESH_HOST_QUALIFICATION = PASS/);
   });
 });
