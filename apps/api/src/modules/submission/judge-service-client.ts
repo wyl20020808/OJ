@@ -168,6 +168,12 @@ export class JudgeServiceClient {
     });
   }
 
+  async cancel(jobId: string): Promise<JudgeServiceJob> {
+    return this.request(`/v1/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: 'POST',
+    });
+  }
+
   private async request(
     path: string,
     init: { method?: string; body?: unknown } = {},
@@ -194,6 +200,16 @@ export class JudgeServiceClient {
       );
     }
     if (!response.ok) {
+      // Judge Service domain outcomes (conflict, unknown job, unsupported
+      // operation) are not control-plane outages. Collapsing them into 503
+      // `JUDGE_DISPATCH_UNAVAILABLE` hid the real contract failure, so each
+      // one now keeps its own status and never becomes silently retryable.
+      if (response.status === 409)
+        throw new JudgeDispatchError('JUDGE_CONFLICT', 409, false);
+      if (response.status === 404)
+        throw new JudgeDispatchError('JUDGE_JOB_NOT_FOUND', 404, false);
+      if (response.status === 501)
+        throw new JudgeDispatchError('JUDGE_OPERATION_UNAVAILABLE', 501, false);
       const code =
         response.status === 400 || response.status === 413
           ? 'INVALID_ARTIFACT_CONTRACT'
@@ -258,11 +274,16 @@ export function artifactJudgeServiceInput(
   submission: Submission,
   artifact: JudgeArtifactReference,
   requestId: string,
+  evaluationGeneration = 1,
 ) {
   return {
     ...judgeServiceInput(
       submission,
-      `submission:${submission.id}:evaluation:1`,
+      // Judge Service idempotency is keyed by clientRequestId. A later
+      // evaluation generation must therefore never reuse generation 1's
+      // identity, otherwise the service answers 409 Conflicting
+      // clientRequestId for a legitimate rejudge.
+      `submission:${submission.id}:evaluation:${evaluationGeneration}`,
       true,
     ),
     jobContract: JUDGE_ARTIFACT_JOB_CONTRACT,

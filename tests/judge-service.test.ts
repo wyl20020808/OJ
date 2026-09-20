@@ -4,6 +4,7 @@ import { buildJudgeService } from '../apps/judge-service/src/app.js';
 import { InMemoryJudgeServiceStateRepository } from '../apps/judge-service/src/repository.js';
 import { InMemoryJudgeJobRepository } from '@ojplatform/judge-runtime';
 import {
+  JudgeDispatchError,
   JudgeServiceClient,
   productPublication,
 } from '../apps/api/src/modules/submission/judge-service-client.js';
@@ -427,6 +428,38 @@ describe('standalone Judge Service V1', () => {
       submissionId: 'submission-1',
       verdict: 'AC',
       status: 'COMPLETED_WITH_VERDICT',
+    });
+  });
+
+  it('keeps Judge Service conflicts out of the retryable outage path', async () => {
+    const rejection = (status: number) =>
+      new JudgeServiceClient(
+        'http://judge.local',
+        token,
+        async () => new Response('{}', { status }),
+      );
+    await expect(rejection(409).submit({})).rejects.toMatchObject({
+      code: 'JUDGE_CONFLICT',
+      status: 409,
+      retryable: false,
+    });
+    await expect(rejection(404).get('missing')).rejects.toMatchObject({
+      code: 'JUDGE_JOB_NOT_FOUND',
+      status: 404,
+      retryable: false,
+    });
+    await expect(rejection(501).cancel('job-1')).rejects.toMatchObject({
+      code: 'JUDGE_OPERATION_UNAVAILABLE',
+      status: 501,
+      retryable: false,
+    });
+    await expect(rejection(503).submit({})).rejects.toBeInstanceOf(
+      JudgeDispatchError,
+    );
+    await expect(rejection(503).submit({})).rejects.toMatchObject({
+      code: 'JUDGE_DISPATCH_UNAVAILABLE',
+      status: 503,
+      retryable: true,
     });
   });
 });
