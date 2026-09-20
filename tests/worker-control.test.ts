@@ -102,4 +102,169 @@ describe('Lead Worker control API', () => {
     );
     await app.close();
   });
+
+  it('cancels production submissions through the authoritative control plane', async () => {
+    const app = Fastify();
+    const repository = new InMemoryJudgeJobRepository();
+    const published: Array<{ submissionId: string; judgeJobId?: string }> = [];
+    let job: {
+      judgeJobId: string;
+      status: string;
+      attempt: number;
+      maxAttempts: number;
+      terminal: boolean;
+      publication?: {
+        submissionId: string;
+        judgeJobId: string;
+        evaluationGeneration: number;
+        attemptGeneration: number;
+        status: 'CANCELLED';
+        evaluationRecordDigest: string;
+      };
+    } = {
+      judgeJobId: 'judge-service-job-1',
+      status: 'RUNNING',
+      attempt: 1,
+      maxAttempts: 0,
+      terminal: false,
+      publication: {
+        submissionId: 'submission-1',
+        judgeJobId: 'judge-service-job-1',
+        evaluationGeneration: 1,
+        attemptGeneration: 1,
+        status: 'CANCELLED',
+        evaluationRecordDigest: 'judge-service-digest',
+      },
+    };
+    await registerWorkerControlRoutes(app, {
+      getAuthContext: async (request) => {
+        const userId = request.headers['x-user-id'];
+        return typeof userId === 'string'
+          ? { userId, sessionId: 'session', strength: 'password' }
+          : undefined;
+      },
+      judgeRepository: repository,
+      judgeJobCancellation: {
+        getBySubmissionId: async () => job,
+        cancel: async () => {
+          job = { ...job, status: 'CANCELLED' };
+          return job;
+        },
+      },
+      resolveSubmission: async (id) =>
+        id === 'submission-1' ? { ownerUserId: 'owner' } : undefined,
+      submissionRepository: {
+        publishEvaluation: async (input: { submissionId: string }) => {
+          published.push({ submissionId: input.submissionId });
+          return undefined;
+        },
+        cancelEvaluation: async (submissionId: string, judgeJobId: string) => {
+          published.push({ submissionId, judgeJobId });
+          return undefined;
+        },
+      } as never,
+      operatorUserIds: new Set<string>(),
+    });
+    const cancelled = await app.inject({
+      method: 'POST',
+      url: '/api/submissions/submission-1/judge/cancel',
+      headers: { 'x-user-id': 'owner' },
+    });
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.json()).toMatchObject({
+      judgeJobId: 'judge-service-job-1',
+      status: 'CANCELLED',
+      synthetic: false,
+    });
+    // The Judge Service publication owns the persisted digest, so the product
+    // must publish it instead of a second synthetic cancellation digest.
+    expect(published).toEqual([{ submissionId: 'submission-1' }]);
+    job = { ...job, status: 'COMPLETED_WITH_VERDICT', terminal: true };
+    const terminal = await app.inject({
+      method: 'POST',
+      url: '/api/submissions/submission-1/judge/cancel',
+      headers: { 'x-user-id': 'owner' },
+    });
+    expect(terminal.statusCode).toBe(409);
+    expect(terminal.json()).toMatchObject({ code: 'TERMINAL' });
+    expect(published).toHaveLength(1);
+    await app.close();
+  });
+
+  it('falls back to the persisted cancellation without a control-plane publication', async () => {
+    const app = Fastify();
+    const published: Array<{ submissionId: string; judgeJobId: string }> = [];
+    await registerWorkerControlRoutes(app, {
+      getAuthContext: async (request) => {
+        const userId = request.headers['x-user-id'];
+        return typeof userId === 'string'
+          ? { userId, sessionId: 'session', strength: 'password' }
+          : undefined;
+      },
+      judgeRepository: new InMemoryJudgeJobRepository(),
+      judgeJobCancellation: {
+        getBySubmissionId: async () => ({
+          judgeJobId: 'judge-service-job-2',
+          status: 'QUEUED',
+          attempt: 0,
+          maxAttempts: 0,
+          terminal: false,
+        }),
+        cancel: async () => ({
+          judgeJobId: 'judge-service-job-2',
+          status: 'CANCELLED',
+          attempt: 0,
+          maxAttempts: 0,
+          terminal: false,
+        }),
+      },
+      resolveSubmission: async () => ({ ownerUserId: 'owner' }),
+      submissionRepository: {
+        cancelEvaluation: async (submissionId: string, judgeJobId: string) => {
+          published.push({ submissionId, judgeJobId });
+          return undefined;
+        },
+      } as never,
+      operatorUserIds: new Set<string>(),
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/submissions/submission-1/judge/cancel',
+      headers: { 'x-user-id': 'owner' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(published).toEqual([
+      { submissionId: 'submission-1', judgeJobId: 'judge-service-job-2' },
+    ]);
+    await app.close();
+  });
+
+  it('reports a missing control-plane judge job instead of a fake outage', async () => {
+    const app = Fastify();
+    await registerWorkerControlRoutes(app, {
+      getAuthContext: async (request) => {
+        const userId = request.headers['x-user-id'];
+        return typeof userId === 'string'
+          ? { userId, sessionId: 'session', strength: 'password' }
+          : undefined;
+      },
+      judgeRepository: new InMemoryJudgeJobRepository(),
+      judgeJobCancellation: {
+        getBySubmissionId: async () => undefined,
+        cancel: async () => {
+          throw new Error('cancel must not be reached');
+        },
+      },
+      resolveSubmission: async () => ({ ownerUserId: 'owner' }),
+      operatorUserIds: new Set<string>(),
+    });
+    const missing = await app.inject({
+      method: 'POST',
+      url: '/api/submissions/submission-1/judge/cancel',
+      headers: { 'x-user-id': 'owner' },
+    });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toMatchObject({ code: 'NOT_FOUND' });
+    await app.close();
+  });
 });

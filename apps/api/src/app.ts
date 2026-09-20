@@ -39,6 +39,7 @@ import {
   registerJudgeModule,
 } from './modules/judge/index.js';
 import { registerWorkerControlRoutes } from './modules/judge/worker-control.js';
+import { createJudgeServiceCancellationPlane } from './modules/judge/judge-service-cancellation.js';
 import {
   JudgeAdminAdapterClient,
   MemoryJudgeAdminAuditRepository,
@@ -726,6 +727,7 @@ export async function buildApp(options: AppOptions = {}) {
                   submission,
                   artifact,
                   `rejudge:${submission.id}`,
+                  generation,
                 )
               : judgeInputForSubmission(submission, false)),
             evaluationGeneration: generation,
@@ -1073,6 +1075,14 @@ export async function buildApp(options: AppOptions = {}) {
       getAuthContext: async (request) =>
         (await auth.getAuthContext(request)) ?? undefined,
       judgeRepository,
+      ...(judgeService
+        ? {
+            judgeJobCancellation: createJudgeServiceCancellationPlane(
+              judgeService,
+              submissionRepository,
+            ),
+          }
+        : {}),
       resolveSubmission: async (submissionId) =>
         (await submissionRepository.get(submissionId)) ?? undefined,
       submissionRepository,

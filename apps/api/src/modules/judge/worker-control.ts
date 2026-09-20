@@ -9,7 +9,10 @@ import {
   type WorkerStatusReference,
 } from '../authz/worker.js';
 import type { AuthContext } from '../submission/model.js';
-import type { SubmissionRepository } from '../submission/repository.js';
+import type {
+  PublishEvaluationInput,
+  SubmissionRepository,
+} from '../submission/repository.js';
 import type { JudgeJob, JudgeJobRepository } from './model.js';
 
 type WorkerControlOptions = {
@@ -17,11 +20,39 @@ type WorkerControlOptions = {
   heartbeatPrefix?: string;
   getAuthContext: (request: FastifyRequest) => Promise<AuthContext | undefined>;
   judgeRepository: JudgeJobRepository;
+  /** Authoritative cancellation plane (Judge Service) when it is configured. */
+  judgeJobCancellation?: JudgeJobCancellationPlane;
   resolveSubmission: (
     submissionId: string,
   ) => Promise<{ ownerUserId: string } | undefined>;
   submissionRepository?: SubmissionRepository;
   operatorUserIds?: ReadonlySet<string>;
+};
+
+/**
+ * Product-facing view of one cancellable judge job. The Judge Service keeps its
+ * own status vocabulary and generation counters, so the control plane maps them
+ * here instead of leaking queue internals into the route.
+ */
+export type CancellableJudgeJob = {
+  judgeJobId: string;
+  status: string;
+  attempt: number;
+  maxAttempts: number;
+  terminal: boolean;
+  /**
+   * Judge Service publication for this job when the control plane produced one.
+   * Publishing it keeps a single authoritative digest, so the progress bridge
+   * and the read-side projection stay idempotent instead of conflicting.
+   */
+  publication?: PublishEvaluationInput;
+};
+
+export type JudgeJobCancellationPlane = {
+  getBySubmissionId(
+    submissionId: string,
+  ): Promise<CancellableJudgeJob | undefined>;
+  cancel(judgeJobId: string): Promise<CancellableJudgeJob>;
 };
 
 type HeartbeatRecord = {
@@ -238,8 +269,11 @@ export async function registerWorkerControlRoutes(
       });
     const id = (request.params as { id: string }).id;
     const submission = await options.resolveSubmission(id);
-    const job = await options.judgeRepository.getBySubmissionId(id);
-    if (!submission || !job)
+    const plane = options.judgeJobCancellation;
+    const target = plane
+      ? await plane.getBySubmissionId(id)
+      : await legacyCancellationTarget(options.judgeRepository, id);
+    if (!submission || !target)
       return reply.status(404).send({
         code: 'NOT_FOUND',
         message: 'Submission not found',
@@ -253,26 +287,68 @@ export async function registerWorkerControlRoutes(
         message: 'Cancellation forbidden',
         requestId: request.id,
       });
-    if (['SUCCEEDED_FAKE', 'COMPLETED', 'FAILED_TERMINAL'].includes(job.status))
+    if (target.terminal)
       return reply.status(409).send({
         code: 'TERMINAL',
         message: 'Judge job is already terminal',
         requestId: request.id,
       });
-    if (!options.judgeRepository.cancel)
+    if (!plane && !options.judgeRepository.cancel)
       return reply.status(501).send({
         code: 'NOT_IMPLEMENTED',
         message: 'Cancellation is not available',
         requestId: request.id,
       });
-    const cancelled = await options.judgeRepository.cancel(job.id);
-    await options.submissionRepository?.cancelEvaluation?.(id, cancelled.id);
+    const cancelled = plane
+      ? await plane.cancel(target.judgeJobId)
+      : await legacyCancel(options.judgeRepository, target.judgeJobId);
+    if (cancelled.publication)
+      await options.submissionRepository?.publishEvaluation?.(
+        cancelled.publication,
+      );
+    else
+      await options.submissionRepository?.cancelEvaluation?.(
+        id,
+        cancelled.judgeJobId,
+      );
     return reply.send({
-      judgeJobId: cancelled.id,
+      judgeJobId: cancelled.judgeJobId,
       status: cancelled.status,
       attempt: cancelled.attempt,
       maxAttempts: cancelled.maxAttempts,
       synthetic: false,
     });
   });
+}
+
+/** Legacy API-local queue statuses that reject cancellation as already final. */
+const legacyTerminalStatuses = [
+  'SUCCEEDED_FAKE',
+  'COMPLETED',
+  'FAILED_TERMINAL',
+];
+
+function legacyView(job: JudgeJob): CancellableJudgeJob {
+  return {
+    judgeJobId: job.id,
+    status: job.status,
+    attempt: job.attempt,
+    maxAttempts: job.maxAttempts,
+    terminal: legacyTerminalStatuses.includes(job.status),
+  };
+}
+
+async function legacyCancellationTarget(
+  repository: JudgeJobRepository,
+  submissionId: string,
+): Promise<CancellableJudgeJob | undefined> {
+  const job = await repository.getBySubmissionId(submissionId);
+  return job ? legacyView(job) : undefined;
+}
+
+async function legacyCancel(
+  repository: JudgeJobRepository,
+  judgeJobId: string,
+): Promise<CancellableJudgeJob> {
+  return legacyView(await repository.cancel!(judgeJobId));
 }

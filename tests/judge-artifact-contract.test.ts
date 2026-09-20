@@ -232,6 +232,84 @@ describe('immutable artifact contract', () => {
       await app.close();
     }
   });
+
+  it('dispatches a later evaluation generation without reusing generation 1 identity', async () => {
+    const artifact = createJudgeArtifact(fixture());
+    const submission = {
+      id: 'submission-rejudge',
+      ownerUserId: 'author-1',
+      problemId: 'problem-1',
+      problemRevisionId: 'revision-1',
+      testdataVersionRef: 'data-1',
+      languageId: 'cpp20',
+      source: 'int main(){}',
+      status: 'PENDING' as const,
+      createdAt: artifact.createdAt,
+      updatedAt: artifact.createdAt,
+    };
+    const first = artifactJudgeServiceInput(
+      submission,
+      artifact,
+      'submission:submission-rejudge',
+      1,
+    );
+    const rejudge = {
+      ...artifactJudgeServiceInput(
+        submission,
+        artifact,
+        'rejudge:submission-rejudge',
+        2,
+      ),
+      evaluationGeneration: 2,
+    };
+    expect(first.clientRequestId).toBe(
+      'submission:submission-rejudge:evaluation:1',
+    );
+    expect(rejudge.clientRequestId).toBe(
+      'submission:submission-rejudge:evaluation:2',
+    );
+    const queue = new InMemoryJudgeJobRepository();
+    const app = await buildJudgeService({
+      queue,
+      state: new InMemoryJudgeServiceStateRepository(),
+      serviceToken: 'service-test-token',
+      nodeToken: 'node-test-token',
+      logger: false,
+    });
+    try {
+      const send = (payload: Record<string, unknown>) =>
+        app.inject({
+          method: 'POST',
+          url: '/v1/jobs',
+          headers: { 'x-judge-service-token': 'service-test-token' },
+          payload,
+        });
+      const created = await send(first);
+      expect(created.statusCode).toBe(201);
+      const second = await send(rejudge);
+      expect(second.statusCode).toBe(201);
+      expect(second.json()).toMatchObject({
+        externalSubmissionId: submission.id,
+        evaluationGeneration: 2,
+      });
+      expect(second.json().judgeJobId).not.toBe(
+        created.json().judgeJobId as string,
+      );
+      const history = await app.inject({
+        method: 'GET',
+        url: `/v1/jobs/${created.json().judgeJobId as string}/history`,
+        headers: { 'x-judge-service-token': 'service-test-token' },
+      });
+      expect(history.json().items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ evaluationGeneration: 1 }),
+          expect.objectContaining({ evaluationGeneration: 2 }),
+        ]),
+      );
+    } finally {
+      await app.close();
+    }
+  });
   it('preserves digest when database reorders JSON keys', () => {
     const manifest = fixture();
     const reordered = Object.fromEntries(
