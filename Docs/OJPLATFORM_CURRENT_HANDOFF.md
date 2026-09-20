@@ -59,24 +59,27 @@ Phase 7C Windows deployment ......... PARTIAL / FEATURE BRANCH
 
 ## Hard Blocker
 
-- No clean Windows VM/snapshot exists in available inventory.
-- Official Windows 11 Enterprise Evaluation VM creation was attempted. VMware
-  rejected nested virtualization: `This platform does not support virtualized
-  Intel VT-x/EPT`; WSL2 cannot be qualified without it.
-- Host is Windows Home with no Hyper-V VM management; no external/cloud nested
-  Windows host is available.
-- Disabling host Hyper-V may unblock VMware but needs two host reboots and would
-  interrupt the user's WSL environment. Explicit approval is required.
-- Do not merge/publish or claim Windows PASS before clean-host runtime evidence.
+- Local hypervisor inventory was re-audited: VMware Workstation 17.6.4 exists;
+  VirtualBox/QEMU do not; full Hyper-V management/module is absent on Windows
+  Home. The active Microsoft hypervisor supports WSL utility VMs only.
+- Four local VMware VMs exist; all are stopped Ubuntu x86_64 guests with
+  `vhv.enable=FALSE`. No Windows VM or Windows snapshot exists to clone.
+- Host VBS and Microsoft hypervisor are active. VMware rejects nested VT-x/EPT
+  in this mode, so a new Windows guest cannot run WSL2.
+- Only remaining local route is a reversible host-hypervisor switch requiring
+  two host reboots and temporary WSL/Docker interruption. Explicit approval is
+  required; no host setting was changed.
+- Do not merge/publish or claim Windows PASS before runtime evidence.
 
 ## Next Action
 
-1. Obtain a clean Windows 11 x86_64 host with nested virtualization, or explicit
-   approval for the host-hypervisor disable/restore reboot cycle.
-2. Run fresh no-Git bootstrap, auth/CSRF, AC/WA/TLE/MLE/cancel/CE/RE, Windows
-   browser editor, second install, real Windows reboot and doctor gates.
-3. After PASS, integrate from fresh live `main` with `--no-ff`, run regression,
-   push only `main`, and repeat from the public clone.
+1. If approved, record host boot state, disable Microsoft hypervisor boot,
+   reboot, qualify a disposable nested VMware Windows 11 guest, restore the
+   exact host setting, reboot, and revalidate host WSL.
+2. Run fresh bootstrap, auth/CSRF, AC/WA/TLE/MLE/cancel/CE/RE, Windows browser,
+   second install, guest reboot and doctor gates.
+3. After feature PASS, integrate from fresh live `main` with `--no-ff`, run
+   regression, push only `main`, and repeat from the public clone.
 
 ## Critical Boundaries
 

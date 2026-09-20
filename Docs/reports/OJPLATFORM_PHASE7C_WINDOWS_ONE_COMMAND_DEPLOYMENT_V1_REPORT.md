@@ -77,31 +77,63 @@ The Linux installer and Compose architecture are untouched.
 No secret, password, token, VM image, ISO, generated qualification state, or
 machine-specific qualification artifact is tracked.
 
-## Clean Windows qualification blocker
+## Local VM discovery and qualification blocker
 
-Final PASS requires a disposable clean Windows 11 x86_64 host with nested
-virtualization, no repository, no WSL distro, no Node/pnpm/Go, no Docker
-Desktop requirement, and preferably no Git.
+The requested `DISCOVER_AND_QUALIFY_EXISTING_WINDOWS_VM` audit was rerun without
+assuming the earlier VMware result applied to every local VM.
 
-Three reasonable acquisition paths were exhausted:
+### Host
 
-1. **Existing disposable inventory:** all available project VMs are Ubuntu;
-   there is no Windows base image or clean Windows snapshot to clone.
-2. **New official Windows VM:** the current official Windows 11 Enterprise
-   Evaluation x64 ISO was acquired and a new disposable VMware VM definition
-   was created. VMware starts the VM only after rejecting nested virtualization
-   with `This platform does not support virtualized Intel VT-x/EPT`. Without
-   nested virtualization the guest cannot run WSL2, so continuing would produce
-   false evidence.
-3. **Alternative local/cloud hypervisor:** the host is Windows Home and has no
-   Hyper-V VM management capability; no external nested-virtualization Windows
-   host or cloud credential is available. Windows Sandbox also cannot survive
-   the required reboot/idempotency loop and is not valid qualification.
+- Physical host: MSI Z790 x86_64, Windows 11 Home China build 26200.
+- Microsoft hypervisor: active (`HypervisorPresent=true`, `vmcompute`, `HvHost`,
+  HNS and WSL services present). WSL 2.7.12 with kernel 6.18.33.2 runs existing
+  `docker-desktop` and `Ubuntu-24.04` distributions as WSL2.
+- VBS: enabled and running (`VirtualizationBasedSecurityStatus=2`, hypervisor
+  enforced code integrity service running).
+- Full Hyper-V management: not installed/supported by this Home edition. The
+  Hyper-V PowerShell module and `Get-VM` command are both absent; this is not
+  merely a non-admin `Get-VM` failure. Read-only optional-feature and boot-store
+  queries require an elevated shell and were not used to change the host.
+- VMware Workstation: 17.6.4, authorization/NAT/DHCP/USB services running,
+  `vmrun` available. VMware is operating through the active Microsoft
+  hypervisor compatibility path.
+- VirtualBox/QEMU/Multipass/Parallels: no installed runtime or inventory found.
 
-The host currently runs Hyper-V/WSL, which prevents VMware from exposing nested
-VT-x. Disabling the host hypervisor may allow the VMware path but requires two
-real host reboots, temporarily disables the user's WSL environment, and is not
-safe to perform without explicit operator approval.
+### Local VM inventory
+
+VMware's registered inventory, `vmrun list`, VMware recent configuration, and
+only the normal local VM directories were checked. No full-disk scan was used.
+
+| VM | Hypervisor | Guest | State | Snapshot | Nested candidate |
+| --- | --- | --- | --- | --- | --- |
+| OJPlatform-NativeLinux-AMD64 | VMware 17.6.4 | Ubuntu x86_64 | stopped | `clean-base` | no (`vhv.enable=FALSE`) |
+| OJPlatform-NativeLinux-AMD64-Qualification-V1 | VMware 17.6.4 | Ubuntu x86_64 | stopped | none | no (`vhv.enable=FALSE`) |
+| OJPlatform-Phase7A-FreshDeploy-V1 | VMware 17.6.4 | Ubuntu x86_64 | stopped | none | no (`vhv.enable=FALSE`) |
+| OJPlatform-Phase7B-Public-Final-V1 | VMware 17.6.4 | Ubuntu x86_64 | stopped | none | no (`vhv.enable=FALSE`) |
+
+No Windows 11 or Windows 10 VM exists in VMware inventory or the normal local VM
+directories. Therefore there is no Windows base VM to inspect for existing WSL2
+and no safe Windows VM to clone. Existing Linux base VMs were not modified.
+
+### Local paths evaluated
+
+1. **Existing Windows VM with working WSL2:** unavailable; every discovered VM
+   is Ubuntu.
+2. **Hyper-V disposable Windows clone with nested extensions:** unavailable;
+   this Windows Home host lacks the full Hyper-V role/module and has no general
+   Hyper-V VM inventory to clone or configure with `Set-VMProcessor`.
+3. **Existing VMware Windows VM already exposing nested VT-x:** unavailable; no
+   Windows VMware VM exists.
+4. **New disposable VMware Windows VM:** the official Windows 11 Enterprise
+   Evaluation x64 path was attempted previously. VMware rejected
+   `vhv.enable=TRUE` with `This platform does not support virtualized Intel
+   VT-x/EPT` while the Microsoft hypervisor/VBS stack is active. A guest without
+   nested VT-x cannot run WSL2 and cannot qualify Phase 7C.
+
+The only remaining local path is temporarily disabling the host Microsoft
+hypervisor/VBS boot path, rebooting, qualifying a disposable VMware Windows VM,
+then restoring the host setting and rebooting again. This affects the user's
+working WSL/Docker environment and remains prohibited without explicit approval.
 
 ## Not verified
 
@@ -116,16 +148,17 @@ safe to perform without explicit operator approval.
 
 ## Required next action
 
-Provide one of:
+If local qualification must continue on this host, explicit approval is needed
+to perform the reversible host-hypervisor switch and two host reboots:
 
-1. a disposable clean Windows 11 x86_64 machine/VM with nested virtualization
-   and remote access; or
-2. explicit approval to disable the current host hypervisor, reboot, run the
-   nested VMware qualification, restore the hypervisor, and reboot again.
+1. record the current boot/hypervisor/VBS configuration;
+2. disable only the Microsoft hypervisor boot launch, then reboot;
+3. create and qualify a disposable VMware Windows 11 clone with nested VT-x;
+4. restore the exact original boot configuration and reboot;
+5. revalidate host WSL and the existing development environment.
 
-Then execute first install, real Auth/Judge/browser gates, second install,
-Windows reboot survival, security audit, fresh no-ff integration, regression,
-main-only publication, and a final public-clone clean-host repeat.
+No host boot, Hyper-V, WSL, VBS, Memory Integrity, firewall or reboot change was
+made during discovery.
 
 `PHASE_7C = PARTIAL`  
 `WINDOWS_IMPLEMENTATION = PASS`  
