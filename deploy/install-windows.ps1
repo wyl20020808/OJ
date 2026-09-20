@@ -218,7 +218,10 @@ function Assert-WindowsPreflight {
   $architecture = $env:PROCESSOR_ARCHITECTURE
   if (Test-DistroInstalled) {
     $storageLabel = "$DistroName root filesystem"
-    $availableBytes = [double](Invoke-Wsl 'root' "df -B1 --output=avail / | tail -n 1 | tr -d ' '" -Capture)
+    $storageOutput = Invoke-Wsl 'root' "df -B1 --output=avail / | tail -n 1 | tr -d ' '" -Capture
+    $availableText = @($storageOutput -split "`r?`n" | Where-Object { $_ -match '^\s*\d+\s*$' } | Select-Object -Last 1)
+    if ($availableText.Count -ne 1) { throw "Cannot inspect free space in the $DistroName root filesystem." }
+    $availableBytes = [double]$availableText[0].Trim()
   } else {
     $storageLabel = $env:SystemDrive
     $storageDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'"
