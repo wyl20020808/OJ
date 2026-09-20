@@ -219,3 +219,26 @@ made during discovery.
 - `WINDOWS_CLEAN_HOST_QUALIFICATION = BLOCKED`
 - `WINDOWS_PUBLIC_QUALIFICATION = NOT VERIFIED`
 - `WINDOWS_REBOOT_SURVIVAL = NOT VERIFIED`
+
+## Closeout update (2026-09-20)
+
+The user decided to close Phase 7C as a Windows **preview** and to stop looking
+for a clean Windows host. Nothing above is rewritten; this append records the
+final state.
+
+- `WINDOWS_FUNCTIONAL_QUALIFICATION = PASS` — the physical-host evidence in
+  "Current physical-host functional qualification" stands, including the
+  second-install idempotency, both doctors, persistence and browser checks.
+- `WINDOWS_FRESH_HOST_QUALIFICATION = DEFERRED` — no clean Windows host without
+  an existing WSL2 installation was available and no local VM can nest WSL2, so
+  the fresh no-WSL2 bootstrap, its reboot resume and the real host-reboot
+  recovery stay NOT VERIFIED. The host boot configuration, VBS, HVCI, firewall
+  and reboot state were not modified.
+- Rejudge is no longer NOT VERIFIED. The `409` was a reused Judge Service
+  idempotency identity collapsed into a retryable `503`; after generation-scoped
+  request identity, precise Judge Service status mapping and a
+  control-plane-routed cancel path, a live product-path run produced
+  AC → rejudge → generation 2 AC and an in-flight cancel → `CANCELLED` with no
+  verdict. See `Docs/reports/OJPLATFORM_PHASE7C_CLOSEOUT_V1_REPORT.md`.
+- `PHASE_7C = PREVIEW_COMPLETE`, `WINDOWS_ONE_COMMAND_DEPLOYMENT = PREVIEW`.
+  Windows is never documented as fully qualified or as a supported fresh host.
