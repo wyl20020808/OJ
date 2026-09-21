@@ -81,9 +81,12 @@ After readiness passes, `scripts/judge-service-bootstrap.mjs` prepares the Judge
 role and database. It is idempotent and retries only explicit transient
 connection failures with bounded exponential backoff (1s, 2s, 4s, 8s; five
 attempts). Authentication, credential, missing database/role, permission and
-SQL/schema failures fail immediately and are never retried. The Runtime Manager
-reports such a failure as `JUDGE_DATABASE_BOOTSTRAP_FAILED` and no longer uses a
-30s process budget for this step.
+SQL/schema failures fail immediately and are never retried. Before reporting
+success it connects to the Judge database as the Judge role with the configured
+password (`SELECT 1`), so a credential the Judge runtime cannot use is a loud
+failure instead of a silent state change. The Runtime Manager reports a failure
+as `JUDGE_DATABASE_BOOTSTRAP_FAILED` and no longer uses a 30s process budget for
+this step.
 
 Normal `stop` stops application services and preserves infrastructure.
 `stop -All` additionally stops PostgreSQL, Redis, and MinIO without removing

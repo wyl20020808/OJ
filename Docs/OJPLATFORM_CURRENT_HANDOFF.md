@@ -55,7 +55,9 @@ Phase 8+ ............................. NOT DEFINED
   bootstrap PASS, second start PASS (10.6s, all REUSE), dev data and volumes
   unchanged. `Deployment impact = No` (`deploy/` untouched).
 - `Dev-only` = one legacy `0000_platform_metadata.down` product ledger row was
-  removed from the local dev DB (dumped first) so migrations could pass.
+  removed from the local dev DB (dumped first) so migrations could pass; a bad
+  dev test case also changed the local judge role password and was repaired
+  (bootstrap now verifies the Judge role credential).
 - Report: `Docs/reports/OJPLATFORM_DEV_RUNTIME_INFRASTRUCTURE_READINESS_V1_REPORT.md`.
 
 ## Phase 7C Final Facts

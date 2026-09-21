@@ -111,7 +111,11 @@ published paths.
   missing database or role, permission denied, SQL/schema/migration errors (including
   `28P01`, `28000`, `3D000`, `42501`, `42P01`, `42P06`, `42P07`, `42601`, `42703`, `42710`);
 - unknown failures are not retried; failures emit a compact JSON record with
-  `status/attempt/failureClass/error` and never print the connection URL.
+  `status/attempt/failureClass/error` and never print the connection URL;
+- a postcondition now verifies the exact credential the Judge runtime will use (connect to the
+  Judge database as the Judge role with the configured password and run `SELECT 1`) before the
+  bootstrap reports success, so a credential that cannot connect is a loud failure instead of a
+  silent state change.
 
 ## Data safety
 
@@ -124,6 +128,23 @@ published paths.
   normal product use.
 - The Compose network recreation asserted the presence of `ojplatform-postgres-data` before and
   after (`INFRASTRUCTURE_REPAIR_REFUSED` / `INFRASTRUCTURE_DATA_LOSS_DETECTED` otherwise).
+
+### Incident during validation: Judge role password changed by a bad test case (repaired)
+
+One dev-only retry-test scenario passed a deliberately wrong `JUDGE_DATABASE_PASSWORD` together
+with correct admin credentials. Because the bootstrap is idempotent and applies
+`ALTER ROLE ... PASSWORD`, that scenario silently changed the live `oj_judge_service` password.
+The running Judge Service then answered `GET /v1/admin/nodes` with HTTP 500
+`DatabaseError: password authentication failed for user "oj_judge_service"` (its pg pool mixed
+connections created before and after the change, so the failure looked intermittent).
+
+The runtime manager surfaced it as `RUNNING_VERSION_MISMATCH_ACTIVE_JOBS_UNKNOWN` during the
+version-mismatch reconcile instead of guessing. It was repaired by re-running the bootstrap with
+the Runtime Manager secret, and verified afterwards: connecting to `ojplatform_judge` as
+`oj_judge_service` with the runtime secret succeeds and `GET /v1/admin/nodes` returns 200.
+No table or row was affected. The test helper was corrected to use a wrong **admin URL**
+password instead (which fails before any role change) and now carries an explicit warning, and
+the bootstrap gained the role-credential postcondition described above.
 
 ### Pre-existing blocker found and repaired (dev DB only, with authorization)
 
@@ -161,15 +182,16 @@ Runtime evidence on the physical Windows 11 host (WSL2 `Ubuntu-24.04`, WSL-nativ
 | Slow Postgres only (redis/minio already up) | PASS; redis/minio `READY (6.1s)`, postgres `READY (11.4s)`, bootstrap started only after — no premature bootstrap |
 | Second start while running | PASS; 10.6s total, all `REUSE`, no duplicates, no DB errors |
 | Repair code path (`Repair-InfrastructurePublishedPath`) | executed on the live runtime; network recreated without volume removal, subnet `172.19.0.0/16`, assets preserved, subsequent full start PASS (43.8s incl. supervisor rebuild) |
+| Version-mismatch reconcile after committing the fix | PASS; `RUNNING_VERSION_MISMATCH` detected per service, old owned processes stopped, services restarted from the committed HEAD, `status` reports `MIXED SOURCE = False` with all services `RUNNING` and `worker RUNNING_OWNED` |
 | Failure diagnostics format | rendered container state/health/`RestartCount`/exit code/image/ports/host TCP/probe/container IP/WSL route/subnet/log tail/reproduce commands |
 
 `scripts/judge-service-bootstrap.mjs` behaviour:
 
 | Scenario | Result |
 | --- | --- |
-| normal/idempotent | `BOOTSTRAPPED` attempt 1 (0.2s) |
+| normal/idempotent | `BOOTSTRAPPED` attempt 1 (0.2s), Judge role credential verified |
 | server not listening | 5 attempts, backoff 1s/2s/4s/8s, then `FAILED … failureClass=TRANSIENT` (15.2s) |
-| admin authentication failure | `FAILED … failureClass=FATAL` attempt 1 (0.1s) — not retried |
+| wrong admin credentials | `FAILED … failureClass=FATAL` attempt 1 (0.2s) — not retried |
 | missing admin database | `FAILED … failureClass=FATAL` attempt 1 (0.2s) — not retried |
 
 Regression:
@@ -204,6 +226,11 @@ depend on Windows/WSL2 port forwarding, so the affected fault class does not exi
 - `FOLLOW-UP (other dev machines)` — a dev database carrying the legacy
   `0000_platform_metadata.down` ledger row needs the same documented one-row repair before
   `dev-runtime start` can pass migrations.
+- `FOLLOW-UP (dev tooling)` — `judge-service-bootstrap.mjs` is idempotent and applies
+  `ALTER ROLE ... PASSWORD`, so calling it with a wrong Judge password silently changes the
+  live role password and breaks the running Judge Service. Dev tooling must always pass the
+  Runtime Manager secret; the script now verifies the resulting credential but cannot know the
+  intended one.
 
 ## Unverified / not claimed
 
