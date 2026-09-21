@@ -12,8 +12,10 @@ identity, and port. It is written through a temporary file replacement.
 Host Agent also require their live HTTP health and listener identity;
 Supervisor requires its live health and WSL user systemd unit; Worker requires
 Judge Service registry/heartbeat; infrastructure requires canonical Docker
-Compose container, health, published port, network, and host reachability.
-Healthy resources owned by another checkout are shown as
+Compose container, health, published port, network, and a live
+published-path readiness probe (PostgreSQL `connect + SELECT 1` on `55432`,
+Redis `PING -> +PONG` on `56379`, MinIO `/minio/health/ready` HTTP 200 on
+`59000`). Healthy resources owned by another checkout are shown as
 `RUNNING_OJPLATFORM_OTHER_CHECKOUT`. An unproven listener is
 `BLOCKED_BY_EXTERNAL_OWNER` and is never stopped.
 
@@ -24,16 +26,43 @@ single runtime. `stop -All` stops named containers only and preserves volumes.
 
 `scripts/dev-runtime.ps1 start` uses WSL-native Docker in `Ubuntu-24.04`.
 The Compose project is always `ojplatform-local`, independent of checkout path.
-Infrastructure services are reconciled individually: existing healthy containers
-with expected health, `ojplatform-local` network, published ports `55432`,
-`56379`, `59000`, and Windows host reachability are reused. Missing, stopped,
-unhealthy, or stale services are started; stale port/network/Compose metadata is
-recreated only for that service with `--force-recreate`.
+Infrastructure services are reconciled individually: existing containers whose
+container-level evidence **and** published-path protocol probe are both valid
+are reused. Missing, stopped, unhealthy, or stale services are started; stale
+port/network/Compose metadata is recreated only for that service with
+`--force-recreate`.
+
+A running container, a container-level healthcheck, and an accepted TCP
+connection are never readiness on their own. The container healthcheck runs
+inside the container and cannot see the Windows -> WSL -> port forwarder ->
+container path that application processes use, and the port forwarder accepts a
+connection before it can reach the container. Startup therefore waits for the
+real PostgreSQL/Redis/MinIO protocol answer on the published host port and
+prints `STARTING`, per-service `READY (<n>s)`, or `FAILED`, bounded by
+`InfraReadyTimeoutSec` (default 120s) with `InfraReadyPollSec` polling (default
+2s). Both are configurable from `config/dev-runtime.local.ps1`. Failures emit
+the service, container state, health, restart count, publish mapping, host TCP
+reachability, probe result, container IP, WSL host-namespace route, Compose
+network subnet, recent container log, and the commands to reproduce.
+
+A healthy container whose published path stays dead for `InfraPathStallSec`
+(default 20s) is repaired at network level at most once per start: the Compose
+network is recreated with `down --remove-orphans` and `up -d` **without `-v`**,
+and the presence of `ojplatform-postgres-data` is asserted before and after.
+This re-registers the bridge, the port forwarders and the routes, which repairs
+the proven fault class where the Compose bridge subnet overlaps the WSL2 host
+NAT subnet and the container IP is therefore routed out of `eth0` instead of the
+bridge. Connection, transport and PostgreSQL startup failures are transient and
+keep waiting or trigger that repair; credential, authentication, missing
+database/role, permission and SQL/schema failures fail immediately as
+`INFRASTRUCTURE_READINESS_BLOCKED` and are never retried or hidden.
 
 Start performs WSL, Docker daemon, and Compose preflight before waiting for
 ports. Failures retain container state and emit a specific code such as
 `DOCKER_DAEMON_UNAVAILABLE`, `PORT_MAPPING_MISSING`, `CONTAINER_UNHEALTHY`,
-`HOST_PORT_UNREACHABLE`, `NETWORK_CONFIGURATION_STALE`, or `COMPOSE_FAILURE`.
+`HOST_PORT_UNREACHABLE`, `PUBLISHED_PATH_UNREACHABLE`,
+`INFRASTRUCTURE_READINESS_TIMEOUT`, `INFRASTRUCTURE_READINESS_BLOCKED`,
+`NETWORK_CONFIGURATION_STALE`, or `COMPOSE_FAILURE`.
 No infrastructure cleanup runs when an application service later fails. Named
 PostgreSQL, Redis, and MinIO volumes are never removed by the Runtime Manager.
 
@@ -47,6 +76,14 @@ before Compose retry. Other Docker resources fail with
 `PORT_OWNER_UNKNOWN`. Bind retries are limited and report
 `PORT_BIND_FAILED` with service and port. Docker proxy cleanup is targeted to
 the identified listener only.
+
+After readiness passes, `scripts/judge-service-bootstrap.mjs` prepares the Judge
+role and database. It is idempotent and retries only explicit transient
+connection failures with bounded exponential backoff (1s, 2s, 4s, 8s; five
+attempts). Authentication, credential, missing database/role, permission and
+SQL/schema failures fail immediately and are never retried. The Runtime Manager
+reports such a failure as `JUDGE_DATABASE_BOOTSTRAP_FAILED` and no longer uses a
+30s process budget for this step.
 
 Normal `stop` stops application services and preserves infrastructure.
 `stop -All` additionally stops PostgreSQL, Redis, and MinIO without removing
