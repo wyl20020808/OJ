@@ -93,6 +93,18 @@ const targetUrl = (() => {
   return url.toString();
 })();
 
+// The Judge connection the runtime will actually use. It is verified at the end
+// of every successful bootstrap so a credential that cannot connect is reported
+// as a failure instead of silently leaving the Judge runtime unable to reach its
+// database.
+const judgeRoleUrl = (() => {
+  const url = new URL(adminUrl);
+  url.username = roleName;
+  url.password = rolePassword;
+  url.pathname = `/${databaseName}`;
+  return url.toString();
+})();
+
 // Idempotent: creating only what is missing and re-applying the same grants is
 // safe to repeat after a mid-way transient failure.
 const bootstrap = async () => {
@@ -156,6 +168,17 @@ const bootstrap = async () => {
     );
   } finally {
     await target.end();
+  }
+
+  const verifier = new pg.Client({
+    connectionString: judgeRoleUrl,
+    connectionTimeoutMillis: 5000,
+  });
+  await verifier.connect();
+  try {
+    await verifier.query('select 1');
+  } finally {
+    await verifier.end();
   }
 };
 
