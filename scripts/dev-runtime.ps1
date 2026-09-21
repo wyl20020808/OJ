@@ -123,7 +123,14 @@ $Config = @{
   JudgeDatabaseName = 'ojplatform_judge'; JudgeDatabaseRole = 'oj_judge_service'; JudgeDatabasePassword = ''
   JudgeDatabaseUrl = 'postgres://oj_judge_service:CHANGE_ME@127.0.0.1:55432/ojplatform_judge'
   RedisUrl = 'redis://127.0.0.1:56379'; JudgeRedisPrefix = 'oj:judge-service'; MinioEndpoint = 'http://127.0.0.1:59000'; AutoOpenBrowser = $false
+  # Infrastructure readiness contract: a running container, a container-level
+  # healthcheck and an accepted TCP connection are never readiness. Startup waits
+  # for the real PostgreSQL/Redis/MinIO answer on the published host port that
+  # application processes use, and repairs a provably dead published path once.
+  InfraReadyTimeoutSec = 120; InfraReadyPollSec = 2; InfraPathStallSec = 20; InfrastructurePathRepair = $true
+  InfrastructureDataVolume = 'ojplatform-postgres-data'
 }
+
 $LocalConfig = Join-Path $ProjectRoot 'config/dev-runtime.local.ps1'
 if (Test-Path $LocalConfig) { . $LocalConfig; if ($OJPlatformRuntimeConfig) { foreach ($key in $OJPlatformRuntimeConfig.Keys) { $Config[$key] = $OJPlatformRuntimeConfig[$key] } } }
 $Config.WebOrigin = "http://127.0.0.1:$($Config.WebPort)"; $Config.ApiOrigin = "http://127.0.0.1:$($Config.ApiPort)"; $Config.JudgeOrigin = "http://127.0.0.1:$($Config.JudgeServicePort)"; $Config.HostOrigin = "http://127.0.0.1:$($Config.HostAgentPort)"; $Config.SupervisorOrigin = "http://127.0.0.1:$($Config.SupervisorPort)"
@@ -617,9 +624,87 @@ function Test-ContainerNetwork($Inspection, [string]$NetworkName) {
   if (-not $Inspection -or -not $Inspection.NetworkSettings -or -not $Inspection.NetworkSettings.Networks) { return $false }
   return @($Inspection.NetworkSettings.Networks.PSObject.Properties | Where-Object { $_.Name -eq $NetworkName }).Count -gt 0
 }
+# Accepted-connection and container-level health evidence cannot distinguish a
+# reachable service from a dead published path. The WSL/Docker port forwarder
+# accepts the client connection and then closes it when it cannot reach the
+# container, which PostgreSQL reports as "Connection terminated unexpectedly".
+# Only a real protocol answer on the published host port counts as readiness.
+$TransientConnectionFailurePatterns = @('ECONNREFUSED','ECONNRESET','ETIMEDOUT','EPIPE','EHOSTUNREACH','ENETUNREACH','ENETDOWN','Connection terminated','server closed the connection unexpectedly','no response','timeout expired','the database system is starting up','the database system is in recovery mode','terminating connection due to administrator command','08000','08001','08003','08004','08006','53300','57P01','57P02','57P03')
+# Configuration, credential and schema failures are never transient. They must fail
+# the start immediately instead of being hidden behind a retry or a repair.
+$ConfigurationFailurePatterns = @('password authentication failed','no pg_hba.conf entry','authentication failed','permission denied','must be owner of','does not exist','syntax error','already exists','NOAUTH','invalid password','WRONGPASS','NOPERM','28P01','28000','3D000','42P01','42601','42703','42501','42P06','42P07','42710','22023')
+function Get-InfrastructureProbeFailureClass([string]$Detail) {
+  foreach ($pattern in $ConfigurationFailurePatterns) { if ($Detail -match [regex]::Escape($pattern)) { return 'CONFIGURATION' } }
+  foreach ($pattern in $TransientConnectionFailurePatterns) { if ($Detail -match [regex]::Escape($pattern)) { return 'TRANSIENT' } }
+  return 'UNKNOWN'
+}
+function New-InfrastructureProbeResult([bool]$Ok, [string]$Detail, [string]$FailureClass = 'TRANSIENT') {
+  return [pscustomobject]@{ ok=$Ok; detail=$Detail; failureClass=if($Ok){'NONE'}else{$FailureClass}; repairable=((-not $Ok) -and $FailureClass -eq 'TRANSIENT') }
+}
+function Get-RedactedConnectionTarget([string]$Url) {
+  try { $uri = [Uri]$Url; return "$($uri.Host):$($uri.Port)$($uri.AbsolutePath)" } catch { return '<unparseable connection target>' }
+}
+function Test-PostgresPublishedReadiness([string]$Url) {
+  # PostgreSQL protocol probe over the published host port with the real
+  # development credentials: connect + SELECT 1 (pg_isready semantics plus a
+  # query). The connection target is reported without the password.
+  if (-not $Url) { return (New-InfrastructureProbeResult $false 'PostgreSQL probe URL is not configured' 'CONFIGURATION') }
+  $probe = 'import pg from "pg"; const c=new pg.Client({connectionString:process.env.OJPLATFORM_INFRA_PROBE_URL,connectionTimeoutMillis:3000}); let o; try { await c.connect(); await c.query("select 1"); o={ok:true,detail:"connection + SELECT 1"}; } catch (e) { o={ok:false,detail:String(e.message).split("\n")[0]}; } finally { try { await c.end(); } catch {} } console.log(JSON.stringify(o));'
+  try {
+    $raw = Invoke-ProcessCommand 'node' @('--input-type=module','-e',$probe) @{ OJPLATFORM_INFRA_PROBE_URL = $Url } 20000
+    $outcome = ConvertFrom-Json -InputObject (($raw -split "`r?`n" | Where-Object { $_ } | Select-Object -Last 1))
+    if ($outcome.ok) { return (New-InfrastructureProbeResult $true "PostgreSQL $(Get-RedactedConnectionTarget $Url): $($outcome.detail)") }
+    return (New-InfrastructureProbeResult $false "PostgreSQL $(Get-RedactedConnectionTarget $Url) did not answer the protocol: $($outcome.detail)" (Get-InfrastructureProbeFailureClass ([string]$outcome.detail)))
+  } catch { return (New-InfrastructureProbeResult $false "PostgreSQL readiness probe could not run: $($_.Exception.Message)" 'UNKNOWN') }
+}
+function Test-RedisPublishedReadiness([string]$Url) {
+  # redis-cli PING equivalent over the published host port; +PONG is required.
+  if (-not $Url) { return (New-InfrastructureProbeResult $false 'Redis URL is not configured' 'CONFIGURATION') }
+  $client = $null
+  try {
+    $uri = [Uri]$Url
+    $port = if ($uri.Port -gt 0) { $uri.Port } else { 6379 }
+    $client = [Net.Sockets.TcpClient]::new()
+    $connect = $client.ConnectAsync($uri.Host, $port)
+    $connected = $false
+    try { $connected = $connect.Wait(3000) -and -not $connect.IsFaulted } catch { $connected = $false }
+    if (-not $connected) { return (New-InfrastructureProbeResult $false "Redis $($uri.Host):$port accepted no connection" 'TRANSIENT') }
+    $stream = $client.GetStream(); $stream.ReadTimeout = 3000; $stream.WriteTimeout = 3000
+    $payload = [Text.Encoding]::ASCII.GetBytes("PING`r`n"); $stream.Write($payload, 0, $payload.Length); $stream.Flush()
+    $buffer = [byte[]]::new(64); $read = $stream.Read($buffer, 0, $buffer.Length)
+    $reply = if ($read -gt 0) { [Text.Encoding]::ASCII.GetString($buffer, 0, $read).Trim() } else { '' }
+    if ($reply -eq '+PONG') { return (New-InfrastructureProbeResult $true "Redis $($uri.Host):$port PING -> +PONG") }
+    if (-not $reply) { return (New-InfrastructureProbeResult $false "Redis $($uri.Host):$port accepted the connection and closed it without a PING reply (published path unreachable)" 'TRANSIENT') }
+    return (New-InfrastructureProbeResult $false "Redis $($uri.Host):$port accepted the connection but PING returned '$reply'" (Get-InfrastructureProbeFailureClass $reply))
+  } catch { return (New-InfrastructureProbeResult $false "Redis PING probe failed: $($_.Exception.Message)" 'TRANSIENT') }
+  finally { if ($client) { $client.Dispose() } }
+}
+function Test-MinioPublishedReadiness([string]$Endpoint) {
+  if (-not $Endpoint) { return (New-InfrastructureProbeResult $false 'MinIO endpoint is not configured' 'CONFIGURATION') }
+  $url = "$($Endpoint.TrimEnd('/'))/minio/health/ready"
+  try {
+    $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+    if ([int]$response.StatusCode -eq 200) { return (New-InfrastructureProbeResult $true "MinIO $url -> HTTP 200") }
+    $detail = "MinIO $url -> HTTP $([int]$response.StatusCode)"
+    $failureClass = if ([int]$response.StatusCode -in @(401,403)) { 'CONFIGURATION' } else { 'TRANSIENT' }
+    return (New-InfrastructureProbeResult $false $detail $failureClass)
+  } catch {
+    # A transport-level failure (connection refused, reset, closed before the
+    # HTTP reply) is always published-path class, regardless of message locale.
+    return (New-InfrastructureProbeResult $false "MinIO $url -> $($_.Exception.Message)" 'TRANSIENT')
+  }
+}
+function Get-InfrastructurePublishedProbe([string]$Service) {
+  switch ($Service) {
+    'postgres' { return (Test-PostgresPublishedReadiness ([string]$Config.JudgeDatabaseAdminUrl)) }
+    'redis' { return (Test-RedisPublishedReadiness ([string]$Config.RedisUrl)) }
+    'minio' { return (Test-MinioPublishedReadiness ([string]$Config.MinioEndpoint)) }
+    default { return (New-InfrastructureProbeResult $false "no published-path readiness probe is defined for $Service" 'UNKNOWN') }
+  }
+}
 function Get-InfrastructureStatus([string]$Service, [string]$ContainerPort, [int]$HostPort) {
   $inspection = Get-ComposeInspection $Service
-  $result = [ordered]@{ service=$Service; hostPort=$HostPort; container="$($Config.ComposeProjectName)-$Service-1"; exists=[bool]$inspection; running=$false; healthy=$false; mapping=$false; network=$false; hostReachable=$false; code='CONTAINER_DOWN'; detail='' ; inspection=$inspection }
+  $result = [ordered]@{ service=$Service; hostPort=$HostPort; container="$($Config.ComposeProjectName)-$Service-1"; exists=[bool]$inspection; running=$false; healthy=$false; mapping=$false; network=$false; hostReachable=$false; publishedPath=$null; code='CONTAINER_DOWN'; detail='' ; inspection=$inspection }
   if (-not $inspection) { $result.detail = 'expected container is missing'; return [pscustomobject]$result }
   $result.running = [string]$inspection.State.Status -eq 'running'
   $result.healthy = $result.running -and $inspection.State.Health -and ([string]$inspection.State.Health.Status -eq 'healthy')
@@ -634,11 +719,117 @@ function Get-InfrastructureStatus([string]$Service, [string]$ContainerPort, [int
   if (-not $result.network) { $result.code='NETWORK_CONFIGURATION_STALE'; $result.detail="expected network $($Config.ComposeProjectName)"; return [pscustomobject]$result }
   $result.hostReachable = Test-TcpPort $HostPort
   if (-not $result.hostReachable) { $result.code='HOST_PORT_UNREACHABLE'; $result.detail="127.0.0.1:$HostPort is not reachable"; return [pscustomobject]$result }
-  $result.code='READY'; $result.detail='container, health, mapping, network, and host reachability valid'; return [pscustomobject]$result
+  # Container level evidence is satisfied; only a real protocol answer on the
+  # published host port proves the service is usable by application processes.
+  $result.publishedPath = Get-InfrastructurePublishedProbe $Service
+  if (-not $result.publishedPath.ok) { $result.code='PUBLISHED_PATH_UNREACHABLE'; $result.detail="container is healthy and 127.0.0.1:$HostPort accepts TCP, but the published path does not serve ${Service}: $($result.publishedPath.detail)"; return [pscustomobject]$result }
+  $result.code='READY'; $result.detail="container healthy, mapping/network valid, published path serving: $($result.publishedPath.detail)"; return [pscustomobject]$result
 }
-function Write-InfrastructureDiagnostics($Statuses) {
+function Get-ContainerPublishedPathEvidence([string]$Service) {
+  $container = "$($Config.ComposeProjectName)-$Service-1"
+  try {
+    $ip = (Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','inspect','--format','{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}',$container) 15000).Trim()
+    if (-not $ip) { return [pscustomobject]@{ containerIp='unknown'; route='unknown'; subnet='unknown' } }
+    $route = (Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','bash','-lc',"ip route get $ip 2>&1 | head -1") 15000).Trim()
+    $subnet = (Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','network','inspect',$Config.ComposeProjectName,'--format','{{json .IPAM.Config}}') 15000).Trim()
+    return [pscustomobject]@{ containerIp=$ip; route=$route; subnet=$subnet }
+  } catch { return [pscustomobject]@{ containerIp='unknown'; route="unavailable: $($_.Exception.Message)"; subnet='unknown' } }
+}
+function Get-ContainerDiagnostics([string]$Service) {
+  $container = "$($Config.ComposeProjectName)-$Service-1"
+  $lines = @(); $log = @()
+  try {
+    $raw = Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','inspect','--format','State={{.State.Status}} Health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} RestartCount={{.RestartCount}} ExitCode={{.State.ExitCode}} StartedAt={{.State.StartedAt}} FinishedAt={{.State.FinishedAt}} Image={{.Config.Image}}',$container) 15000
+    $lines += @(($raw.Trim() -split "`r?`n") | Where-Object { $_ })
+    $ports = Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','port',$container) 15000
+    $lines += "PublishedPorts: " + (@(($ports.Trim() -split "`r?`n") | Where-Object { $_ }) -join ', ')
+  } catch { $lines += "container inspection failed: $($_.Exception.Message)" }
+  try { $log = @(((Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','bash','-lc',"docker logs --tail 40 --timestamps $container 2>&1") 60000)) -split "`r?`n" | Where-Object { $_ }) } catch { $log = @("container log unavailable: $($_.Exception.Message)") }
+  return [pscustomobject]@{ container=$container; lines=$lines; log=$log }
+}
+function Write-InfrastructureFailureDiagnostics([string]$Service, [int]$HostPort, $Status) {
+  Write-Host "Infrastructure $Service FAILED"
+  Write-Host "ReadinessCode: $($Status.code)"
+  Write-Host "Detail: $($Status.detail)"
+  $facts = Get-ContainerDiagnostics $Service
+  foreach ($line in $facts.lines) { Write-Host $line }
+  Write-Host "PublishedHostPort: 127.0.0.1:$HostPort (host TCP reachable: $(Test-TcpPort $HostPort))"
+  if ($Status.publishedPath) { Write-Host "PublishedPathProbe: $($Status.publishedPath.detail)" }
+  $path = Get-ContainerPublishedPathEvidence $Service
+  Write-Host "ContainerIp: $($path.containerIp)"
+  Write-Host "WslHostNamespaceRoute: $($path.route)"
+  Write-Host "ComposeNetworkSubnet: $($path.subnet)"
+  Write-Host 'RecentContainerLog:'
+  foreach ($line in $facts.log) { Write-Host "  $line" }
+  Write-Host 'Diagnose:'
+  Write-Host "  wsl.exe -d $($Config.WslDistro) --user root -- docker logs --tail 200 $($facts.container)"
+  Write-Host "  wsl.exe -d $($Config.WslDistro) --user root -- docker inspect $($facts.container)"
+  Write-Host "  wsl.exe -d $($Config.WslDistro) --user root -- bash -lc 'ip route get <container ip>'"
+}
+function Test-ComposeVolumePresence([string]$Volume) {
+  try { return [bool]((Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','volume','inspect','--format','{{.Name}}',$Volume) 15000).Trim()) } catch { return $false }
+}
+function Repair-InfrastructurePublishedPath($state, [string]$Compose) {
+  # A healthy container can still be unreachable on its published port: the WSL
+  # host namespace then cannot reach the container IP and the port forwarder
+  # accepts and immediately closes client connections. Recreating the compose
+  # network re-registers the bridge, the forwarders and the routes. `down` is
+  # used WITHOUT -v, so named data volumes and the development database survive.
+  $volume = [string]$Config.InfrastructureDataVolume
+  if (-not (Test-ComposeVolumePresence $volume)) { throw "INFRASTRUCTURE_REPAIR_REFUSED: the development data volume $volume is missing; refusing to recreate the compose project." }
+  Write-Host 'Infrastructure RECONCILE: containers are healthy but the published path is unreachable; recreating the compose network without removing volumes'
+  Invoke-Compose @('down','--remove-orphans') 180000 | Out-Null
+  Invoke-Compose @('up','-d') 300000 | Out-Null
+  if (-not (Test-ComposeVolumePresence $volume)) { throw "INFRASTRUCTURE_DATA_LOSS_DETECTED: $volume is gone after compose network recreation." }
+  $subnet = (Invoke-Wsl @('-d',$Config.WslDistro,'--user','root','--','docker','network','inspect',$Config.ComposeProjectName,'--format','{{json .IPAM.Config}}') 15000).Trim()
+  $state.infrastructure = @{ managed=$true; project=$Config.ComposeProjectName; compose=$Compose; startedAt=(Get-Date).ToUniversalTime().ToString('o') }
+  Save-State $state
+  Write-Host "Infrastructure RECONCILE complete (network $($Config.ComposeProjectName) subnet $subnet, named volumes preserved)"
+}
+function Wait-InfrastructureReady($state, [string]$Compose, $Services, [datetime]$Started) {
+  $timeoutSec = [int]$Config.InfraReadyTimeoutSec
+  $pollMs = [int]([double]$Config.InfraReadyPollSec * 1000)
+  $deadline = (Get-Date).AddSeconds($timeoutSec)
+  $readyAt = @{}
+  $pathFailureSince = $null
+  $repairAttempted = $false
+  Write-Host "Infrastructure STARTING (published-path readiness probes, timeout ${timeoutSec}s, poll $([double]$Config.InfraReadyPollSec)s)"
+  while ($true) {
+    $statuses = @($Services | ForEach-Object { Get-InfrastructureStatus $_.name $_.containerPort $_.hostPort })
+    $now = Get-Date
+    foreach ($status in @($statuses | Where-Object { $_.code -eq 'READY' })) {
+      if (-not $readyAt.ContainsKey($status.service)) { $readyAt[$status.service] = [Math]::Round(($now - $Started).TotalSeconds, 1); Write-Host "Infrastructure $($status.service) READY ($($readyAt[$status.service])s)" }
+    }
+    $pending = @($statuses | Where-Object { $_.code -ne 'READY' })
+    if ($pending.Count -eq 0) { Write-InfrastructureDiagnostics $statuses -Quiet; return [pscustomobject]@{ statuses=$statuses; readyAt=$readyAt } }
+    foreach ($status in $pending) {
+      if ($status.publishedPath -and -not $status.publishedPath.ok -and -not $status.publishedPath.repairable) {
+        Write-InfrastructureDiagnostics $statuses
+        Write-InfrastructureFailureDiagnostics $status.service $status.hostPort $status
+        throw "INFRASTRUCTURE_READINESS_BLOCKED: $($status.service) $($status.code) - $($status.detail)"
+      }
+    }
+    if ($now -ge $deadline) {
+      Write-InfrastructureDiagnostics $statuses
+      foreach ($status in $pending) { Write-InfrastructureFailureDiagnostics $status.service $status.hostPort $status }
+      $first = $pending | Select-Object -First 1
+      throw "INFRASTRUCTURE_READINESS_TIMEOUT: $($first.service) $($first.code) after ${timeoutSec}s - $($first.detail)"
+    }
+    $pathStalled = @($pending | Where-Object { $_.code -eq 'PUBLISHED_PATH_UNREACHABLE' })
+    if ($pathStalled.Count -eq 0) { $pathFailureSince = $null } elseif (-not $pathFailureSince) { $pathFailureSince = $now }
+    if (-not $repairAttempted -and [bool]$Config.InfrastructurePathRepair -and $pathStalled.Count -gt 0 -and (($now - $pathFailureSince).TotalSeconds -ge [double]$Config.InfraPathStallSec)) {
+      $repairAttempted = $true
+      Repair-InfrastructurePublishedPath $state $Compose
+      $deadline = (Get-Date).AddSeconds($timeoutSec)
+      $pathFailureSince = $null
+      continue
+    }
+    Start-Sleep -Milliseconds $pollMs
+  }
+}
+function Write-InfrastructureDiagnostics($Statuses, [switch]$Quiet) {
   $lines = @("$(Get-Date -Format o) infrastructure reconciliation")
-  foreach ($status in $Statuses) { $lines += "$($status.service): $($status.code) - $($status.detail)"; Write-Host "Infrastructure $($status.service): $($status.code) ($($status.detail))" }
+  foreach ($status in $Statuses) { $lines += "$($status.service): $($status.code) - $($status.detail)"; if (-not $Quiet) { Write-Host "Infrastructure $($status.service): $($status.code) ($($status.detail))" } }
   Ensure-RuntimeFolders; Add-Content -LiteralPath (Join-Path $LogRoot 'infrastructure.log') -Value $lines
 }
 function Convert-WindowsPathToWsl([string]$Path) { if ($Path -match '^([A-Za-z]):\\(.*)$') { return "/mnt/$($Matches[1].ToLower())/$($Matches[2].Replace('\','/'))" }; return $Path.Replace('\','/') }
@@ -815,10 +1006,15 @@ function Ensure-Infrastructure($state) {
   $statuses = @($services | ForEach-Object { Get-InfrastructureStatus $_.name $_.containerPort $_.hostPort })
   Write-InfrastructureDiagnostics $statuses
   if (@($statuses | Where-Object { $_.code -eq 'READY' }).Count -eq $services.Count) {
+    $elapsed = [Math]::Round(((Get-Date)-$started).TotalSeconds, 1)
+    foreach ($status in $statuses) { Write-Host "Infrastructure $($status.service) READY (reuse, ${elapsed}s)" }
     $state.infrastructure = @{ managed=$true; project=$Config.ComposeProjectName; compose=$compose; startedAt=(Get-Date).ToUniversalTime().ToString('o') }
-    $state.timings.infra = 0; Save-State $state; Write-Host 'Infrastructure REUSE (healthy, canonical project/mapping/network)'; return
+    $state.timings.infra = 0; Save-State $state; Write-Host 'Infrastructure REUSE (healthy containers, canonical project/mapping/network, published path serving)'; return
   }
-  foreach ($status in $statuses | Where-Object { $_.code -ne 'READY' }) {
+  # Only services whose container level state is wrong are started or recreated.
+  # A healthy container whose published path is dead is never recreated blindly;
+  # Wait-InfrastructureReady probes it and repairs the path at network level.
+  foreach ($status in $statuses | Where-Object { $_.code -ne 'READY' -and $_.code -ne 'PUBLISHED_PATH_UNREACHABLE' }) {
     $recreate = $status.exists -and ((-not $status.mapping) -or (-not $status.network) -or ((Get-ContainerLabel $status.inspection 'com.docker.compose.project') -ne [string]$Config.ComposeProjectName) -or ((Get-ContainerLabel $status.inspection 'com.docker.compose.service') -ne $status.service))
     try {
       Invoke-ProcessCommand 'powershell.exe' @('-NoProfile','-ExecutionPolicy','Bypass','-File',$PortReconcileScript,'-Distro',$Config.WslDistro,'-Project',$Config.ComposeProjectName,'-Service',$status.service,'-Port',[string]$status.hostPort) @{} 30000 | ForEach-Object { if ($_){ Write-Host $_ } }
@@ -848,25 +1044,20 @@ function Ensure-Infrastructure($state) {
       } else { throw "COMPOSE_FAILURE: $($status.service): $message" }
     }
   }
-  $deadline = (Get-Date).AddSeconds(90)
-  do {
-    $statuses = @($services | ForEach-Object { Get-InfrastructureStatus $_.name $_.containerPort $_.hostPort })
-    if (@($statuses | Where-Object { $_.code -eq 'READY' }).Count -eq $services.Count) {
-      $state.infrastructure = @{ managed=$true; project=$Config.ComposeProjectName; compose=$compose; startedAt=(Get-Date).ToUniversalTime().ToString('o') }
-      $state.timings.infra = [int]((Get-Date)-$started).TotalMilliseconds; Save-State $state; Write-Host "Infrastructure START ($($state.timings.infra) ms)"; return
-    }
-    Start-Sleep -Milliseconds 750
-  } while ((Get-Date) -lt $deadline)
-  Write-InfrastructureDiagnostics $statuses
-  $first = $statuses | Where-Object { $_.code -ne 'READY' } | Select-Object -First 1
-  throw "Infrastructure readiness failed: $($first.code) [$($first.service)] $($first.detail)"
+  $waited = Wait-InfrastructureReady $state $compose $services $started
+  $state.infrastructure = @{ managed=$true; project=$Config.ComposeProjectName; compose=$compose; startedAt=(Get-Date).ToUniversalTime().ToString('o') }
+  $state.timings.infra = [int]((Get-Date)-$started).TotalMilliseconds; Save-State $state
+  Write-Host "Infrastructure START READY ($([Math]::Round($state.timings.infra/1000,1))s)"
 }
 function Ensure-JudgeDatabase {
   Write-Host 'Judge DB bootstrap: checking'
   $password = if ($Config.JudgeDatabasePassword) { [string]$Config.JudgeDatabasePassword } else { [string]$script:Secrets.judgeDatabasePassword }
   if (-not $Config.JudgeDatabaseAdminUrl -or -not $Config.JudgeDatabaseName -or -not $Config.JudgeDatabaseRole) { throw 'Judge database bootstrap configuration is incomplete.' }
   $env = @{ JUDGE_DATABASE_ADMIN_URL = [string]$Config.JudgeDatabaseAdminUrl; JUDGE_DATABASE_NAME = [string]$Config.JudgeDatabaseName; JUDGE_DATABASE_ROLE = [string]$Config.JudgeDatabaseRole; JUDGE_DATABASE_PASSWORD = $password }
-  Invoke-ProcessCommand 'node' @('scripts/judge-service-bootstrap.mjs') $env 30000 | Out-Null
+  # The bootstrap performs its own bounded retry for transient connection
+  # failures, so the process budget must cover backoff plus the attempts.
+  try { Invoke-ProcessCommand 'node' @('scripts/judge-service-bootstrap.mjs') $env 90000 | Out-Null }
+  catch { throw "JUDGE_DATABASE_BOOTSTRAP_FAILED: $($_.Exception.Message)" }
   $Config.JudgeDatabaseUrl = "postgres://$($Config.JudgeDatabaseRole):$([uri]::EscapeDataString($password))@127.0.0.1:55432/$($Config.JudgeDatabaseName)"
   Write-Host "Judge DB bootstrap REUSE/READY ($($Config.JudgeDatabaseName))"
 }
@@ -1004,6 +1195,12 @@ function Get-WorkerStatus {
   $online = $node.desiredState -eq 'ONLINE' -and @('ONLINE','BUSY') -contains $node.observedState -and $node.heartbeatAgeMs -lt 15000 -and $node.capabilities.executionModes -contains 'REAL_SANDBOXED_EXECUTION'
   return [pscustomobject]@{ service='worker'; status=if($online){'RUNNING_OWNED'}else{'STALE'}; ownerCheckout='Judge Service -> Host Agent'; pid=$node.nodeId; port='-'; source='Judge Service node registry + heartbeat'; binaryPath=$Config.WorkerBinary; binaryHash=(Get-FileSha256 $Config.WorkerBinary); commit=$ProductIdentity.commit; canonical=([bool]($online -and (Get-FileSha256 $Config.WorkerBinary))) }
 }
+function Get-InfrastructurePublishedStatus([string]$Service, [int]$HostPort) {
+  if (-not (Test-TcpPort $HostPort)) { return 'DOWN' }
+  $probe = Get-InfrastructurePublishedProbe $Service
+  if ($probe.ok) { return 'READY' }
+  return 'PUBLISHED_PATH_UNREACHABLE'
+}
 function Show-Status($state) {
   $displayProduct = if ($state.requestedSource) { [pscustomobject]$state.requestedSource } else { $ProductIdentity }
   $displayPlugin = if ($state.requestedPlugin) { [pscustomobject]$state.requestedPlugin } else { $PluginIdentity }
@@ -1025,9 +1222,9 @@ function Show-Status($state) {
   Write-Host "PLUGIN CANONICAL = $pluginCanonical"
   Write-Host "EXPLICIT DEVELOPMENT SOURCE = $([bool]($SourceRoot -or $UseCurrentCheckout -or $PluginSourceRoot))"
   $infra = @(
-    [pscustomobject]@{ service='postgres'; status=if(Test-TcpPort 55432){'REACHABLE'}else{'DOWN'}; port=55432; source='authoritative localhost TCP probe' }
-    [pscustomobject]@{ service='redis'; status=if(Test-TcpPort 56379){'REACHABLE'}else{'DOWN'}; port=56379; source='authoritative localhost TCP probe' }
-    [pscustomobject]@{ service='minio'; status=if(Test-TcpPort 59000){if(Test-HttpOk "$($Config.MinioEndpoint)/minio/health/ready"){'RUNNING_OWNED'}else{'REACHABLE'}}else{'DOWN'}; port=59000; source='authoritative HTTP/TCP probe' }
+    [pscustomobject]@{ service='postgres'; status=(Get-InfrastructurePublishedStatus 'postgres' 55432); port=55432; source='published-path PostgreSQL protocol probe (connect + SELECT 1)' }
+    [pscustomobject]@{ service='redis'; status=(Get-InfrastructurePublishedStatus 'redis' 56379); port=56379; source='published-path Redis PING probe (+PONG required)' }
+    [pscustomobject]@{ service='minio'; status=(Get-InfrastructurePublishedStatus 'minio' 59000); port=59000; source='published-path MinIO /minio/health/ready probe' }
   )
   Write-Host "Shared runtime: $RuntimeRoot  instance=$($state.runtimeInstanceId) owner=$($state.ownerCheckout)"; $infra | Format-Table -AutoSize
   $items = @(); foreach ($name in @('api','web','judge-service','host-agent','supervisor')) { $record=$state.processes[$name]; $port=Get-ServicePort $name; $url=if($name -eq 'web'){$Config.WebOrigin}elseif($name -eq 'supervisor'){$Config.SupervisorOrigin+'/v1/health'}else{"http://127.0.0.1:$port/health"}; $headers=if($name -eq 'host-agent'){@{'x-judge-host-agent-token'=$script:Secrets.hostAgentToken}}else{@{}}; $healthy=$false; if (Test-TcpPort $port) { $healthy=if($name -eq 'web'){Test-HttpOk $url}else{[bool](Get-HttpJson $url $headers 1)} }; $item=[pscustomobject]@{service=$name;status=if($healthy){'RUNNING'}else{'DOWN'};pid=if($record){$record.pid}else{'-'};port=$port;source='authoritative HTTP health probe';sourceRoot=if($record){$record.sourceRoot}else{'-'};commit=if($record){$record.gitCommit}else{'-'};canonical=if($record){Test-VersionCompatible $record}else{$false}}; $items += $item }; $items += Get-WorkerStatus; $items | Format-Table -AutoSize
