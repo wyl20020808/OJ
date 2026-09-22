@@ -21,7 +21,17 @@
 - Docker Phase 0–4: DONE; Docker Phase 6A + 6B-1 … 6B-6: PASS / MERGED.
 - Linux amd64 native Judge + Production Judge: QUALIFIED / MERGED.
 - Phase 7A: PASS / MERGED; Phase 7B: PASS / MERGED / PUBLISHED / PUBLICLY QUALIFIED; Typography V1: PASS / MERGED.
-- Full-Stack Synchronization V1: PASS / MERGED.
+- Full-Stack Synchronization V1: PASS / MERGED / CI GREEN (`a6b5732`, run `35726474650`).
+
+## GitHub CI (2026-09-22)
+
+- `OJPlatform CI = GREEN` at `a6b5732`: `ci:check` 1082/1030 passed/47 known/
+  1 resolved, `integration` 20/20, `test:e2e:baseline` 31 identities (1 pass /
+  17 known legacy failures / 13 gated skips). Exact identity+signature gates;
+  no test deleted or newly skipped.
+- `TECH DEBT` = 17 legacy E2E failures (stale selectors, legacy English UI
+  expectations, test cleanup FK collision); pinned in
+  `Docs/reports/artifacts/fullstack-sync-v1/e2e-baseline.json`.
 
 ## Active / Deferred
 
@@ -34,31 +44,20 @@ Phase 7C Windows preview ............. PREVIEW_COMPLETE / INTEGRATED
 Phase 8+ ............................. NOT DEFINED
 ```
 
-## Windows Dev Runtime Infra Readiness (2026-09-21)
+## Windows Dev Runtime Infra Readiness (2026-09-21) — PASS
 
-- `Issue` = cold Docker/WSL infrastructure readiness race: `dev-runtime start`
-  printed READY and then the Judge DB bootstrap died with
-  `Connection terminated unexpectedly` (`pg/lib/client.js`).
-- `Root cause` = **false READY** (container health + accepted TCP was treated as
-  readiness). The Compose bridge (`172.18.0.0/16`) overlapped the WSL2 host-NAT
-  subnet (`172.18.0.0/30`), so postgres `172.18.0.2` / redis `172.18.0.3` were
-  routed via `eth0` instead of the bridge: the port forwarder accepted and closed
-  connections while the in-container healthcheck stayed `healthy` (MinIO
-  `172.18.0.4` was fine). Container-only `--force-recreate` cannot recover it;
-  recreating the network can.
+- `Issue` = cold Docker/WSL readiness race: false READY (container health +
+  accepted TCP) while a Compose bridge/WSL2 NAT subnet collision broke the
+  published postgres/redis paths; container-only recreate could not recover.
 - `Fix` = published-path protocol probes (pg `connect + SELECT 1`, redis
-  `PING -> +PONG`, MinIO `/minio/health/ready`), bounded 120s/2s wait with
-  `STARTING` / `READY (n s)` / `FAILED`, one bounded network-level reconcile
-  (`down --remove-orphans` + `up -d`, never `-v`, volume asserted), full failure
-  diagnostics, and bounded transient-only retry in `judge-service-bootstrap.mjs`.
-- `Verified` = cold start with containers `exited` PASS (infra 12.2–17.7s,
-  bootstrap READY, migrations PASS, worker ONLINE), slow-Postgres no-premature-
-  bootstrap PASS, second start PASS (10.6s, all REUSE), dev data and volumes
-  unchanged. `Deployment impact = No` (`deploy/` untouched).
-- `Dev-only` = one legacy `0000_platform_metadata.down` product ledger row was
-  removed from the local dev DB (dumped first) so migrations could pass; a bad
-  dev test case also changed the local judge role password and was repaired
-  (bootstrap now verifies the Judge role credential).
+  `PING -> +PONG`, MinIO `/minio/health/ready`), bounded 120s/2s wait, one
+  bounded network-level reconcile (never `-v`, volume asserted), full failure
+  diagnostics, transient-only retry + Judge credential verification in
+  `judge-service-bootstrap.mjs`.
+- `Verified` = cold start (exited containers), slow-Postgres no-premature-
+  bootstrap, second start; dev data/volumes unchanged. Deployment impact = No.
+- `Dev-only` = one legacy `0000_platform_metadata.down` ledger row removed from
+  the local dev DB (dumped first) so migrations could pass.
 - Report: `Docs/reports/OJPLATFORM_DEV_RUNTIME_INFRASTRUCTURE_READINESS_V1_REPORT.md`.
 
 ## Phase 7C Final Facts
@@ -117,4 +116,4 @@ pursue it by changing host boot configuration, VBS, HVCI or rebooting the host.
 - Local dev runtime: `Docs/LOCAL_RUNTIME.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-22 (Full-Stack Synchronization V1 PASS / MERGED)
+Last Updated: 2026-09-22 (Full-Stack Synchronization V1 PASS / MERGED / CI GREEN)

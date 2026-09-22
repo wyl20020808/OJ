@@ -19,6 +19,8 @@ AUTOMATED_BROWSER_RUNTIME = PASS
 BASELINE_FAILURE_COMPARISON = PASS (exact identities/signatures unchanged)
 MERGED_TO_INTEGRATION_CANDIDATE = YES
 READY_FOR_MAIN_FAST_FORWARD = YES
+MERGED_TO_MAIN = YES (main == origin/main == a6b5732)
+GITHUB_ACTIONS_CI = PASS (run 35726474650 at a6b5732)
 MANUAL UI ACCEPTANCE = PENDING USER
 ```
 
@@ -229,3 +231,55 @@ The managed runtime was stopped through `scripts/dev-runtime.ps1`, restarted
 with the integration checkout as the explicit source, and verified by Doctor.
 The final browser journey again covered the persisted and explicitly unavailable
 flows listed above, with no page error or unexpected HTTP failure accepted.
+
+## GitHub CI qualification and repair
+
+The inherited GitHub Actions workflow was red before this goal and stayed red
+after the first pushes. Every failure was diagnosed from the authenticated job
+log before any change; each repair is one scoped commit pushed normally.
+
+| Run | Commit | Failure exposed | Repair |
+| --- | --- | --- | --- |
+| 35715174850 | `98059f1` | inherited raw `pnpm ci:check` (parallel test interference) | exact serialized known-failure gate (`55d2220`) |
+| 35716304142 | `55d2220` | MinIO image denied by Docker Hub | canonical `quay.io/minio/minio` (`96e7c92`) |
+| 35716874483 | `96e7c92` | product migration missing `DATABASE_URL` | migration environment (`65aa9c8`) |
+| 35717212315 | `65aa9c8` | only 654/1082 tests collected on Linux + parallel interference | serialized qualification (`aabfd65`) |
+| 35718015799 | `aabfd65` | Windows-only Vitest plugin alias hid 428 tests on Linux | portable pinned-submodule alias + real editor assertion (`769f587`) |
+| 35719732880 | `769f587` | stale integration contract (heatmap became available in `6238522`) | assert current capabilities incl. wrong-book (`fa088f2`) |
+| 35720905108 | `fa088f2` | Playwright hardcoded Windows Chrome path on Linux | portable browser selection (`2897c9b`) |
+| 35721926556 | `2897c9b` | two nondeterministic unit identities (child-expiry race, same-ms ordering race) | deterministic test fixtures (`d973869`, 20/20 focused repetitions) |
+| 35722963052 | `d973869` | legacy E2E suite: 17 known failures / 1 pass / 13 gated skips | exact Playwright known-failure gate (`c3b0b19`) |
+| 35725451532 | `c3b0b19` | gate identity mismatch (JSON reporter paths are testDir-relative) | identity normalization (`a6b5732`) |
+| 35726474650 | `a6b5732` | — | **SUCCESS, 18/18 steps green** |
+
+Final CI state at `a6b57323906213d5b760cab006146f2da12dbf8e` (run
+`35726474650`):
+
+```text
+ci:check          = PASS (1082 collected; 1030 passed; 47 known failures;
+                      1 resolved; new=0; signature changes=0; new pending=0)
+integration       = PASS (10 files / 20 tests)
+test:e2e:baseline = PASS (31 identities; 1 passed; 17 known failures;
+                      13 known gated skips; new=0; signature changes=0)
+```
+
+Qualification notes:
+
+- No test was deleted or newly skipped to obtain green. Both gates run their
+  complete suites (`test:baseline` executes all 1082 Vitest tests;
+  `test:e2e:baseline` executes all 31 Playwright tests) and fail on missing
+  identities, new failures, new skips, changed failure signatures, Playwright
+  report errors, or reduced collection. Resolved failures are reported but
+  never required.
+- `test:e2e:baseline` reference
+  `Docs/reports/artifacts/fullstack-sync-v1/e2e-baseline.json` records the exact
+  17 legacy failure identities/signatures and the 13 environment-gated skips
+  (Lead-composed real runtimes). The composed Full-Stack Synchronization
+  journey passes and must keep passing.
+- The 17 legacy E2E failures predate this goal (stale selectors/DOM contracts,
+  legacy English UI expectations after Chinese productization, and test-owned
+  `DELETE FROM problems` cleanup colliding with contest foreign keys). They are
+  tracked as `TECH DEBT` in `Docs/PROJECT_STATUS.md`, not hidden or rewritten.
+- Browser portability keeps the host override: `PLAYWRIGHT_EXECUTABLE_PATH`
+  opts into an installed browser (used for the local Chrome evidence); without
+  it Playwright-managed Chromium is used (CI).
