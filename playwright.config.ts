@@ -3,16 +3,14 @@ import { defineConfig } from '@playwright/test';
 const phase1eRuntime = process.env.OJPLATFORM_PHASE1E_REAL_RUNTIME === 'true';
 const apiPort = process.env.PHASE1E_API_PORT ?? '3021';
 const webPort = phase1eRuntime ? 4174 : 4173;
+const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH;
 
 export default defineConfig({
   testDir: './tests/e2e',
   workers: 1,
   use: {
     baseURL: `http://127.0.0.1:${webPort}`,
-    launchOptions: {
-      executablePath:
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    },
+    launchOptions: executablePath ? { executablePath } : {},
   },
   webServer: phase1eRuntime
     ? [
