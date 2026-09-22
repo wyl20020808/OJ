@@ -8,7 +8,9 @@ if (!root) throw new Error('Missing application root');
 createRoot(root).render(
   <StrictMode>
     <ErrorBoundary>
-      <ToastProvider><App /></ToastProvider>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
     </ErrorBoundary>
   </StrictMode>,
 );

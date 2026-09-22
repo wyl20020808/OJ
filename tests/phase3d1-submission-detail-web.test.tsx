@@ -423,19 +423,39 @@ describe('Phase 3D.1 submission detail Web projection', () => {
       status: 'RUNNING',
       current: true,
       createdAt: submission.createdAt,
-      detail: { testcaseCount: 1, completedTestcaseCount: 0, testcases: [{ ordinal: 1, status: 'RUNNING' }] },
+      detail: {
+        testcaseCount: 1,
+        completedTestcaseCount: 0,
+        testcases: [{ ordinal: 1, status: 'RUNNING' }],
+      },
     };
     const { api, submissionEvaluation } = apiFor({ 2: snapshot, 1: snapshot });
     submissionEvaluation
       .mockResolvedValueOnce({ evaluation: snapshot })
-      .mockResolvedValueOnce({ evaluation: { ...snapshot, status: 'COMPLETED_WITH_VERDICT', verdict: 'AC' } })
+      .mockResolvedValueOnce({
+        evaluation: {
+          ...snapshot,
+          status: 'COMPLETED_WITH_VERDICT',
+          verdict: 'AC',
+        },
+      })
       .mockResolvedValue({ evaluation: { ...snapshot, status: 'RUNNING' } });
     const clearSpy = vi.spyOn(window, 'clearInterval');
     render(<SubmissionDetail api={api} id={submission.id} user={user} />);
-    await vi.waitFor(() => expect(submissionEvaluation).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(submissionEvaluation).toHaveBeenCalledTimes(1),
+    );
     await vi.advanceTimersByTimeAsync(3000);
-    await vi.waitFor(() => expect(submissionEvaluation).toHaveBeenCalledTimes(2));
-    await vi.waitFor(() => expect(within(screen.getByRole('complementary', { name: '评测信息' })).getByText('COMPLETED_WITH_VERDICT')).toBeInTheDocument());
+    await vi.waitFor(() =>
+      expect(submissionEvaluation).toHaveBeenCalledTimes(2),
+    );
+    await vi.waitFor(() =>
+      expect(
+        within(
+          screen.getByRole('complementary', { name: '评测信息' }),
+        ).getByText('COMPLETED_WITH_VERDICT'),
+      ).toBeInTheDocument(),
+    );
     await vi.advanceTimersByTimeAsync(6000);
     expect(submissionEvaluation).toHaveBeenCalledTimes(2);
     cleanup();

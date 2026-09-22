@@ -2,7 +2,11 @@ import type { EditorCodeDraft, SaveEditorCodeDraftInput } from './model.js';
 import { EditorDraftConflictError, validateDraftInput } from './model.js';
 
 export interface EditorDraftRepository {
-  get(userId: string, problemId: string, language: string): Promise<EditorCodeDraft | undefined>;
+  get(
+    userId: string,
+    problemId: string,
+    language: string,
+  ): Promise<EditorCodeDraft | undefined>;
   save(input: SaveEditorCodeDraftInput): Promise<EditorCodeDraft>;
 }
 
@@ -25,16 +29,33 @@ export class InMemoryEditorDraftRepository implements EditorDraftRepository {
     if (current && current.source === input.source) return { ...current };
     const now = timestamp();
     const row: EditorCodeDraft = current
-      ? { ...current, source: input.source, version: current.version + 1, updatedAt: now }
-      : { userId: input.userId, problemId: input.problemId, language: input.language, source: input.source, version: 1, createdAt: now, updatedAt: now };
+      ? {
+          ...current,
+          source: input.source,
+          version: current.version + 1,
+          updatedAt: now,
+        }
+      : {
+          userId: input.userId,
+          problemId: input.problemId,
+          language: input.language,
+          source: input.source,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        };
     this.rows.set(key, row);
     return { ...row };
   }
 }
 
 type QueryResult = { rows: Record<string, unknown>[] };
-type QueryExecutor = { query(text: string, values?: unknown[]): Promise<QueryResult> };
-type PoolLike = QueryExecutor & { connect?: () => Promise<QueryExecutor & { release(): void }> };
+type QueryExecutor = {
+  query(text: string, values?: unknown[]): Promise<QueryResult>;
+};
+type PoolLike = QueryExecutor & {
+  connect?: () => Promise<QueryExecutor & { release(): void }>;
+};
 
 const mapRow = (row: Record<string, unknown>): EditorCodeDraft => ({
   userId: String(row.user_id),
@@ -57,7 +78,9 @@ export class PostgresEditorDraftRepository implements EditorDraftRepository {
   }
   async save(input: SaveEditorCodeDraftInput) {
     validateDraftInput(input);
-    const executor: QueryExecutor & { release?: () => void } = this.pool.connect ? await this.pool.connect() : this.pool;
+    const executor: QueryExecutor & { release?: () => void } = this.pool.connect
+      ? await this.pool.connect()
+      : this.pool;
     const transactional = Boolean(this.pool.connect);
     if (transactional) await executor.query('BEGIN');
     try {
@@ -76,7 +99,9 @@ export class PostgresEditorDraftRepository implements EditorDraftRepository {
         current
           ? 'UPDATE editor_code_drafts SET source=$4,version=version+1,updated_at=now() WHERE user_id=$1 AND problem_id=$2 AND language=$3 RETURNING user_id,problem_id,language,source,version,created_at,updated_at'
           : 'INSERT INTO editor_code_drafts(user_id,problem_id,language,source,version) VALUES($1,$2,$3,$4,1) RETURNING user_id,problem_id,language,source,version,created_at,updated_at',
-        current ? [input.userId, input.problemId, input.language, input.source] : [input.userId, input.problemId, input.language, input.source],
+        current
+          ? [input.userId, input.problemId, input.language, input.source]
+          : [input.userId, input.problemId, input.language, input.source],
       );
       if (transactional) await executor.query('COMMIT');
       return mapRow(result.rows[0]!);

@@ -17,8 +17,14 @@ describe('Profile feature extraction', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       capabilities: {
         contractVersion: '1',
-        activity: { available: false, reason: 'PRODUCT_DOMAIN_NOT_IMPLEMENTED' },
-        favorites: { available: false, reason: 'PRODUCT_DOMAIN_NOT_IMPLEMENTED' },
+        activity: {
+          available: false,
+          reason: 'PRODUCT_DOMAIN_NOT_IMPLEMENTED',
+        },
+        favorites: {
+          available: false,
+          reason: 'PRODUCT_DOMAIN_NOT_IMPLEMENTED',
+        },
       },
     } as unknown as PublicProfile;
     const api = {
@@ -32,7 +38,14 @@ describe('Profile feature extraction', () => {
     } as unknown as ApiClient;
     const navigate = vi.fn();
 
-    render(<ProfilePage user={null} username="alice" api={api} navigate={navigate} />);
+    render(
+      <ProfilePage
+        user={null}
+        username="alice"
+        api={api}
+        navigate={navigate}
+      />,
+    );
 
     expect(await screen.findByRole('heading', { name: 'Alice' })).toBeTruthy();
     expect(api.publicProfile).toHaveBeenCalledWith('alice');

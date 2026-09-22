@@ -108,18 +108,16 @@ describe('Profile UI completeness', () => {
 
   it('shows retryable API error and development fixture data', async () => {
     const api = profileApi({
-      profileSubmissions: vi
-        .fn()
-        .mockRejectedValue(
-          new ApiError(
-            {
-              code: 'SERVICE_UNAVAILABLE',
-              message: 'offline',
-              requestId: 'test',
-            },
-            503,
-          ),
+      profileSubmissions: vi.fn().mockRejectedValue(
+        new ApiError(
+          {
+            code: 'SERVICE_UNAVAILABLE',
+            message: 'offline',
+            requestId: 'test',
+          },
+          503,
         ),
+      ),
     });
     render(<ProfilePage user={user} api={api} navigate={vi.fn()} />);
 

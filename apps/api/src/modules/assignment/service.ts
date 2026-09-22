@@ -238,18 +238,22 @@ export class AssignmentService {
       (relations.length
         ? await this.acceptedProblems(userId)
         : new Set<string>());
-    const loaded = await this.loadProblems(relations.map((item) => item.problemId));
+    const loaded = await this.loadProblems(
+      relations.map((item) => item.problemId),
+    );
     const byId = new Map(loaded.map((problem) => [problem.id, problem]));
     const problemItems = relations.flatMap((relation) => {
       const problem = byId.get(relation.problemId);
       return problem
-        ? [{
-            publicId: problem.publicId,
-            title: problem.title,
-            problemId: problem.id,
-            displayOrder: relation.displayOrder,
-            completed: accepted.has(problem.id),
-          }]
+        ? [
+            {
+              publicId: problem.publicId,
+              title: problem.title,
+              problemId: problem.id,
+              displayOrder: relation.displayOrder,
+              completed: accepted.has(problem.id),
+            },
+          ]
         : [];
     });
     const completedCount = problemItems.filter((item) => item.completed).length;

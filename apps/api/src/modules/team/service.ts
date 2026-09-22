@@ -112,7 +112,8 @@ export class TeamService {
       ...team,
       membershipState: member?.role ?? 'NOT_MEMBER',
       joinRequestStatus: userId
-        ? (await this.repository.pendingJoinRequest(team.id, userId))?.status ?? null
+        ? ((await this.repository.pendingJoinRequest(team.id, userId))
+            ?.status ?? null)
         : null,
       memberCount: await this.repository.countMembers(team.id),
     };

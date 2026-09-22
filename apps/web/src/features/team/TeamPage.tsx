@@ -6,7 +6,12 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { ApiClient, TeamJoinRequest, TeamMember, TeamSummary } from '../../services/api.js';
+import type {
+  ApiClient,
+  TeamJoinRequest,
+  TeamMember,
+  TeamSummary,
+} from '../../services/api.js';
 
 type TeamView = 'mine' | 'joined' | 'discoverable';
 type TeamPolicy = TeamSummary['joinPolicy'];
@@ -45,18 +50,14 @@ const policyLabel = (value: TeamPolicy) =>
   ({ OPEN: '自由加入', REQUEST: '申请加入', INVITE_ONLY: '仅邀请' })[value];
 
 type TeamPortalIconName =
-  | 'arrow'
-  | 'calendar'
-  | 'group'
-  | 'search'
-  | 'tag'
-  | 'trophy'
-  | 'users';
+  'arrow' | 'calendar' | 'group' | 'search' | 'tag' | 'trophy' | 'users';
 
 function TeamPortalIcon({ name }: { name: TeamPortalIconName }) {
   const paths: Record<TeamPortalIconName, ReactNode> = {
     arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
-    calendar: <path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2zm2-2v4m10-4v4M3 9h18M7 13h2m3 0h2m3 0h1M7 17h2m3 0h2" />,
+    calendar: (
+      <path d="M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2zm2-2v4m10-4v4M3 9h18M7 13h2m3 0h2m3 0h1M7 17h2m3 0h2" />
+    ),
     group: (
       <>
         <circle cx="9" cy="8" r="3" />
@@ -71,7 +72,9 @@ function TeamPortalIcon({ name }: { name: TeamPortalIconName }) {
       </>
     ),
     tag: <path d="M20 13 13 20 4 11V4h7zM8.5 8.5h.01" />,
-    trophy: <path d="M8 4h8v4a4 4 0 0 1-8 0zm0 2H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4m-4 0v5m-4 3h8" />,
+    trophy: (
+      <path d="M8 4h8v4a4 4 0 0 1-8 0zm0 2H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4m-4 0v5m-4 3h8" />
+    ),
     users: (
       <>
         <path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -125,7 +128,11 @@ function TeamCard({
       </header>
       <div className="team-portal-card-title">
         <span className="team-avatar" aria-hidden="true">
-          {team.avatarUrl ? <img src={team.avatarUrl} alt="" /> : initial(team.name)}
+          {team.avatarUrl ? (
+            <img src={team.avatarUrl} alt="" />
+          ) : (
+            initial(team.name)
+          )}
         </span>
         <div>
           <h2>
@@ -192,7 +199,9 @@ export function TeamPage({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [joinRequestStatus, setJoinRequestStatus] = useState<TeamJoinRequest['status'] | null>(null);
+  const [joinRequestStatus, setJoinRequestStatus] = useState<
+    TeamJoinRequest['status'] | null
+  >(null);
   const [requests, setRequests] = useState<TeamJoinRequest[]>([]);
   const [requestError, setRequestError] = useState('');
 
@@ -643,8 +652,11 @@ export function TeamPage({
       </section>
     );
   const isMember = team.membershipState !== 'NOT_MEMBER';
-  const canJoin = Boolean(user && !isMember && team.joinPolicy !== 'INVITE_ONLY');
-  const canReview = team.membershipState === 'OWNER' || team.membershipState === 'MANAGER';
+  const canJoin = Boolean(
+    user && !isMember && team.joinPolicy !== 'INVITE_ONLY',
+  );
+  const canReview =
+    team.membershipState === 'OWNER' || team.membershipState === 'MANAGER';
   const pending = joinRequestStatus === 'PENDING';
   return (
     <section className="team-page">
@@ -673,14 +685,21 @@ export function TeamPage({
                 void api
                   .joinTeam(team.slug)
                   .then((result) => {
-                    if ((result as { status?: string }).status === 'REQUESTED') setJoinRequestStatus('PENDING');
+                    if ((result as { status?: string }).status === 'REQUESTED')
+                      setJoinRequestStatus('PENDING');
                     else window.location.reload();
                   })
                   .catch(() => setError('申请失败，请稍后重试'))
                   .finally(() => setBusy(false));
               }}
             >
-              {pending ? '申请中' : busy ? '提交中...' : team.joinPolicy === 'REQUEST' ? '申请加入' : '加入团队'}
+              {pending
+                ? '申请中'
+                : busy
+                  ? '提交中...'
+                  : team.joinPolicy === 'REQUEST'
+                    ? '申请加入'
+                    : '加入团队'}
             </button>
           )}
           {isMember && team.membershipState !== 'OWNER' && (
@@ -703,7 +722,9 @@ export function TeamPage({
         </div>
       </header>
       <nav className="team-section-nav" aria-label="团队内容">
-        <a href="#overview" aria-current="page">概览</a>
+        <a href="#overview" aria-current="page">
+          概览
+        </a>
         <a href="#members">成员</a>
         <a
           href={`/teams/${encodeURIComponent(team.slug)}/assignments`}
@@ -714,7 +735,8 @@ export function TeamPage({
         >
           作业
         </a>
-        {(team.membershipState === 'OWNER' || team.membershipState === 'MANAGER') && <a href="#requests">申请</a>}
+        {(team.membershipState === 'OWNER' ||
+          team.membershipState === 'MANAGER') && <a href="#requests">申请</a>}
       </nav>
       <div className="team-detail-grid">
         <section id="overview" className="team-panel">
@@ -766,23 +788,64 @@ export function TeamPage({
         </section>
         {canReview && (
           <section id="requests" className="team-panel team-requests-panel">
-            <header><h2>加入申请</h2><span>{requests.length} 条待处理</span></header>
-            {requestError ? <p className="team-error" role="alert">{requestError}</p> : requests.length ? (
+            <header>
+              <h2>加入申请</h2>
+              <span>{requests.length} 条待处理</span>
+            </header>
+            {requestError ? (
+              <p className="team-error" role="alert">
+                {requestError}
+              </p>
+            ) : requests.length ? (
               <ul className="team-member-list">
                 {requests.map((request) => (
                   <li key={request.id}>
-                    <span className="member-avatar" aria-hidden="true">申</span>
-                    <span><strong>用户 {request.userId}</strong><small>{new Date(request.createdAt).toLocaleString()}</small></span>
-                    <button type="button" onClick={() => {
-                      void api.approveJoinRequest(team.slug, request.id).then(() => setRequests((items) => items.filter((item) => item.id !== request.id))).catch(() => setRequestError('同意申请失败，请重试'));
-                    }}>同意</button>
-                    <button type="button" className="secondary" onClick={() => {
-                      void api.rejectJoinRequest(team.slug, request.id).then(() => setRequests((items) => items.filter((item) => item.id !== request.id))).catch(() => setRequestError('拒绝申请失败，请重试'));
-                    }}>拒绝</button>
+                    <span className="member-avatar" aria-hidden="true">
+                      申
+                    </span>
+                    <span>
+                      <strong>用户 {request.userId}</strong>
+                      <small>
+                        {new Date(request.createdAt).toLocaleString()}
+                      </small>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void api
+                          .approveJoinRequest(team.slug, request.id)
+                          .then(() =>
+                            setRequests((items) =>
+                              items.filter((item) => item.id !== request.id),
+                            ),
+                          )
+                          .catch(() => setRequestError('同意申请失败，请重试'));
+                      }}
+                    >
+                      同意
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        void api
+                          .rejectJoinRequest(team.slug, request.id)
+                          .then(() =>
+                            setRequests((items) =>
+                              items.filter((item) => item.id !== request.id),
+                            ),
+                          )
+                          .catch(() => setRequestError('拒绝申请失败，请重试'));
+                      }}
+                    >
+                      拒绝
+                    </button>
                   </li>
                 ))}
               </ul>
-            ) : <p className="team-list-status">暂无待处理申请</p>}
+            ) : (
+              <p className="team-list-status">暂无待处理申请</p>
+            )}
           </section>
         )}
       </div>

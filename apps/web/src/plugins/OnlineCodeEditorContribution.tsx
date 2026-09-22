@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
-import editorPlugin, { type EditorSlotContext } from '@ojplatform/online-code-editor';
+import editorPlugin, {
+  type EditorSlotContext,
+} from '@ojplatform/online-code-editor';
 import type { EditorHostContext } from '@ojplatform/online-code-editor/host/EditorHostContext';
 import type { ProblemSolveEditorContext } from '@ojplatform/plugin-sdk';
 import '@ojplatform/online-code-editor/app.css';
@@ -15,9 +17,15 @@ type HostedProblemContext = ProblemSolveEditorContext & {
   onViewSubmission?: (submissionId: string) => void;
 };
 
-export function OnlineCodeEditorContribution({ context }: { context: HostedProblemContext }) {
+export function OnlineCodeEditorContribution({
+  context,
+}: {
+  context: HostedProblemContext;
+}) {
   const elementRef = useRef<HTMLDivElement>(null);
-  const draftAdapterRef = useRef(new HttpDraftAdapter(import.meta.env.VITE_API_URL ?? ''));
+  const draftAdapterRef = useRef(
+    new HttpDraftAdapter(import.meta.env.VITE_API_URL ?? ''),
+  );
   useEffect(() => {
     const element = elementRef.current;
     if (!element) return;
@@ -28,9 +36,13 @@ export function OnlineCodeEditorContribution({ context }: { context: HostedProbl
       draftAdapter: draftAdapterRef.current,
       codeRunAdapter: context.codeRunAdapter,
       sampleProvider: { getSamples: () => context.samples },
-      ...(context.submissionAdapter ? { submissionAdapter: context.submissionAdapter } : {}),
+      ...(context.submissionAdapter
+        ? { submissionAdapter: context.submissionAdapter }
+        : {}),
       ...(context.checker ? { checker: context.checker } : {}),
-      ...(context.onViewSubmission ? { onViewSubmission: context.onViewSubmission } : {}),
+      ...(context.onViewSubmission
+        ? { onViewSubmission: context.onViewSubmission }
+        : {}),
     };
     const mountContext: EditorSlotContext = { element, hostContext };
     return editorPlugin.mount(mountContext);

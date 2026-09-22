@@ -97,7 +97,10 @@ export class ProblemJudgeDataService {
       }
     if (!(await this.problemExists(p)))
       throw new JudgeDataError('NOT_FOUND', 'Problem not found', 404);
-    if ((action === 'manage' || action === 'publish') && (await this.problemIsDeleted?.(p)))
+    if (
+      (action === 'manage' || action === 'publish') &&
+      (await this.problemIsDeleted?.(p))
+    )
       throw new JudgeDataError('PROBLEM_DELETED', 'Problem is deleted', 409);
   }
   async draft(problemId: string, user: unknown) {

@@ -277,7 +277,9 @@ describe('Product Web Chinese Rich Experience V3', () => {
       await screen.findByRole('heading', { name: '公告' }),
     ).toBeInTheDocument();
     expect(screen.getByText('暂无公告')).toBeInTheDocument();
-    expect(screen.queryByText(/版本控制的真实静态公告/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/版本控制的真实静态公告/),
+    ).not.toBeInTheDocument();
   });
   it.each(['WEB-V3-22', 'WEB-V3-23'])(
     '%s personal activity does not invent stats',

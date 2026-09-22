@@ -58,10 +58,9 @@ describe('problem edit save V1', () => {
 
   it('returns 4xx for invalid payload and unauthorized edit', async () => {
     const repository = new InMemoryProblemRepository();
-    const created = await new ProblemService(repository, allow).create(
-      input,
-      { userId: 'owner' },
-    );
+    const created = await new ProblemService(repository, allow).create(input, {
+      userId: 'owner',
+    });
     const app = Fastify();
     await registerProblemModule(app, {
       repository,
@@ -130,7 +129,11 @@ describe('problem edit save V1', () => {
         if (text.startsWith('SELECT p.*')) return { rows: [row] };
         if (text.startsWith('UPDATE problems')) {
           const examples = JSON.parse(String(values?.[0]));
-          return { rows: [{ ...row, examples, updated_at: '2026-01-02T00:00:00.000Z' }] };
+          return {
+            rows: [
+              { ...row, examples, updated_at: '2026-01-02T00:00:00.000Z' },
+            ],
+          };
         }
         return { rows: [] };
       },
@@ -142,10 +145,13 @@ describe('problem edit save V1', () => {
     });
     expect(updated.samples).toEqual([{ ordinal: 9, input: '3', output: '4' }]);
     expect(calls.some((call) => call.text.startsWith('BEGIN'))).toBe(false);
-    expect(calls.find((call) => call.text.startsWith('UPDATE problems'))?.values?.[0]).toBe(
-      JSON.stringify([{ ordinal: 9, input: '3', output: '4' }]),
-    );
-    expect(calls.some((call) => call.text.startsWith('DELETE FROM problem_tags'))).toBe(true);
+    expect(
+      calls.find((call) => call.text.startsWith('UPDATE problems'))
+        ?.values?.[0],
+    ).toBe(JSON.stringify([{ ordinal: 9, input: '3', output: '4' }]));
+    expect(
+      calls.some((call) => call.text.startsWith('DELETE FROM problem_tags')),
+    ).toBe(true);
   });
 
   it('binds published revision INSERT with matching parameter count', async () => {
@@ -178,13 +184,20 @@ describe('problem edit save V1', () => {
       async query(text: string, values?: unknown[]) {
         calls.push(values === undefined ? { text } : { text, values });
         if (text.startsWith('SELECT p.*')) return { rows: [row] };
-        if (text.startsWith('SELECT * FROM problem_revisions')) return { rows: [] };
+        if (text.startsWith('SELECT * FROM problem_revisions'))
+          return { rows: [] };
         return { rows: [] };
       },
     };
     const repository = new PostgresProblemRepository(pool);
-    await repository.createRevision('published-1', { title: 'Draft title' }, 'editor');
-    const insert = calls.find((call) => call.text.startsWith('INSERT INTO problem_revisions'))!;
+    await repository.createRevision(
+      'published-1',
+      { title: 'Draft title' },
+      'editor',
+    );
+    const insert = calls.find((call) =>
+      call.text.startsWith('INSERT INTO problem_revisions'),
+    )!;
     expect(insert.text).not.toContain('$22');
     expect(insert.values).toHaveLength(21);
   });

@@ -146,7 +146,13 @@ export function AssignmentPage({
         </div>
       ) : (
         <div className="assignment-empty">
-          <h2>{teamSlug ? (teamRole === 'OWNER' || teamRole === 'MANAGER' ? '还没有作业' : '团队暂未发布作业') : '暂无作业'}</h2>
+          <h2>
+            {teamSlug
+              ? teamRole === 'OWNER' || teamRole === 'MANAGER'
+                ? '还没有作业'
+                : '团队暂未发布作业'
+              : '暂无作业'}
+          </h2>
           <p>加入团队后，团队发布的作业会显示在这里。</p>
           {teamSlug && (teamRole === 'OWNER' || teamRole === 'MANAGER') && (
             <button
