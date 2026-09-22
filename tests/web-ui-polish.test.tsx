@@ -129,9 +129,11 @@ describe('Web UI polish', () => {
       'href',
       expect.stringContaining('#solve'),
     );
-    expect(
-      await screen.findByRole('heading', { name: 'Online Code Editor' }),
-    ).toBeInTheDocument();
+    const editorMarker = await screen.findByText('Online Code Editor', {
+      selector: '.oj-editor-sr-only',
+    });
+    expect(editorMarker).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'p1' })).toBeInTheDocument();
     expect(screen.getByText(/样例运行按 EXACT_BYTES/)).toBeInTheDocument();
     expect(
       vi

@@ -22,16 +22,11 @@ export default defineConfig({
       },
       {
         find: /^@ojplatform\/online-code-editor\/(.+)$/,
-        replacement:
-          resolve(
-            'D:/OJPlatform-worktrees/submission-live-eval-plugin-v2/src',
-          ) + '/$1',
+        replacement: resolve('plugins/OnlineCodeEditor/src') + '/$1',
       },
       {
         find: '@ojplatform/online-code-editor',
-        replacement: resolve(
-          'D:/OJPlatform-worktrees/submission-live-eval-plugin-v2/src/plugin.ts',
-        ),
+        replacement: resolve('plugins/OnlineCodeEditor/src/plugin.ts'),
       },
     ],
   },
