@@ -50,6 +50,7 @@ import type {
   ContestDetail,
   ContestListItem,
   ContestProblem,
+  ContestSubmission,
   ContestSummary,
   FriendRequest,
   FriendSummary,
@@ -67,7 +68,6 @@ import {
 import { ProductSubmissionAdapter } from '../services/submission-adapter.js';
 import { TeamPage } from '../features/team/TeamPage.js';
 import { AssignmentPage } from '../features/assignment/AssignmentPage.js';
-import { HomeworkDashboardPage } from '../features/homework-dashboard/HomeworkDashboardPage.js';
 import { SubmissionHistoryPage } from '../features/submissions/SubmissionHistoryPage.js';
 import { SubmissionDetailPage } from '../features/submissions/SubmissionDetailPage.js';
 export { SubmissionDetailPage as SubmissionDetail } from '../features/submissions/SubmissionDetailPage.js';
@@ -130,6 +130,8 @@ type Route = {
     | 'team-assignment-new';
   id?: string;
 };
+type AuthState =
+  'loading' | 'authenticated' | 'unauthenticated' | 'unavailable';
 function route(path = window.location.pathname): Route {
   if (path === '/') return { name: 'home' };
   if (path === '/discussion' || path === '/discussion/')
@@ -595,8 +597,9 @@ function Home({
   }>();
   const [contestError, setContestError] = useState(false);
   const [discussionAnnouncements, setDiscussionAnnouncements] = useState<
-    DiscussionPost[]
-  >([]);
+    DiscussionPost[] | null
+  >(null);
+  const [discussionError, setDiscussionError] = useState(false);
   const [fortuneVisible, setFortuneVisible] = useState(false);
   const fortune = useMemo(() => {
     const seed =
@@ -642,203 +645,29 @@ function Home({
           Array.isArray(result?.items) ? result.items : [],
         ),
       )
-      .catch(() => setDiscussionAnnouncements([]));
+      .catch(() => {
+        setDiscussionError(true);
+        setDiscussionAnnouncements([]);
+      });
   }, [api]);
-  const dailyProblem = chooseDailyProblem(recentProblems ?? []) as Problem;
+  const dailyProblem = chooseDailyProblem(recentProblems ?? []) ?? null;
   const recommendedProblems = (recentProblems ?? []).slice(0, 4);
-  const contestGroups: Array<[string, BackendContest[]]> = contestSummary
-    ? [
-        ['进行中', contestSummary.running],
-        ['即将开始', contestSummary.upcoming],
-        ['最近结束', contestSummary.recentEnded],
-      ]
-    : [];
   return (
     <HomeReference
       announcements={discussionAnnouncements}
       contests={contestSummary}
       dailyProblem={dailyProblem}
       recommendedProblems={recommendedProblems}
-      unavailable={error || contestError}
+      problemLoading={recentProblems === null}
+      problemUnavailable={error}
+      contestLoading={contestSummary === undefined && !contestError}
+      contestUnavailable={contestError}
+      announcementsUnavailable={discussionError}
       signedIn={Boolean(user)}
       fortune={fortune}
       fortuneVisible={fortuneVisible}
       onRevealFortune={() => setFortuneVisible(true)}
     />
-  );
-  return (
-    <section className="home-page home-v4">
-      <section className="home-columns home-v4-columns">
-        <div className="home-column-main">
-          <section className="announcement-panel home-section">
-            <div className="section-heading-inline">
-              <div>
-                <p className="eyebrow">站点信息</p>
-                <h1>公告</h1>
-              </div>
-            </div>
-            <ul className="announcement-list">
-              {discussionAnnouncements.map((item) => (
-                <li key={item.id}>
-                  <span className="announcement-meta">
-                    公告 · {formatDate(item.publishedAt ?? item.createdAt)}
-                  </span>
-                  <strong>
-                    <Link to={`/discussion/${item.publicId}`}>
-                      {item.title}
-                    </Link>
-                  </strong>
-                  {item.summary && <p>{item.summary}</p>}
-                </li>
-              ))}
-              {!discussionAnnouncements.length && (
-                <li className="announcement-empty">暂无公告</li>
-              )}
-            </ul>
-          </section>
-          <section className="home-section homework-panel">
-            <div className="section-heading-inline">
-              <div>
-                <p className="eyebrow">学习任务</p>
-                <h2>我的作业</h2>
-              </div>
-              <Link to="/homework">查看作业</Link>
-            </div>
-            <p className="unavailable-note" role="note">
-              作业功能正在接入。当前不会显示虚构的作业、截止时间或完成进度。
-            </p>
-          </section>
-          <section className="home-section wrong-book-panel">
-            <div className="section-heading-inline">
-              <div>
-                <p className="eyebrow">复盘</p>
-                <h2>错题集</h2>
-              </div>
-              <Link to="/wrong-book">打开错题集</Link>
-            </div>
-            <p className="unavailable-note" role="note">
-              错题集数据暂不可用。Verdict Engine
-              接入前不会把原始执行状态解释为错题。
-            </p>
-          </section>
-        </div>
-        <aside className="home-column-side">
-          <section className="daily-problem-panel home-section">
-            <div className="section-heading-inline">
-              <div>
-                <p className="eyebrow">按日期稳定选取</p>
-                <h2>每日一题</h2>
-              </div>
-            </div>
-            {dailyProblem ? (
-              <div className="daily-problem">
-                <span className="problem-id">
-                  {dailyProblem.slug || dailyProblem.id}
-                </span>
-                <strong>{dailyProblem.title}</strong>
-                <div className="tag-row">
-                  {dailyProblem.difficulty && (
-                    <span>{dailyProblem.difficulty}</span>
-                  )}
-                  {dailyProblem.tags?.map((tag) => (
-                    <span key={tag}>{tag}</span>
-                  ))}
-                </div>
-                <Link to={`/problems/${dailyProblem.slug || dailyProblem.id}`}>
-                  开始练习 →
-                </Link>
-              </div>
-            ) : (
-              <p className="unavailable-note" role="note">
-                {error
-                  ? '题库数据暂不可用。'
-                  : '暂无可用于每日一题的真实题目。'}
-              </p>
-            )}
-          </section>
-          <section className="fortune-panel home-section">
-            <div className="section-heading-inline">
-              <div>
-                <p className="eyebrow">刷题手气</p>
-                <h2>今日运势</h2>
-              </div>
-            </div>
-            {!fortuneVisible ? (
-              <div className="fortune-entry">
-                <p>看看今天适合怎样开始练习。</p>
-                <button type="button" onClick={() => setFortuneVisible(true)}>
-                  获取今日运势
-                </button>
-              </div>
-            ) : (
-              <div aria-live="polite">
-                <p className="fortune-state">{fortune.state}</p>
-                <dl>
-                  <div>
-                    <dt>宜</dt>
-                    <dd>{fortune.should}</dd>
-                  </div>
-                  <div>
-                    <dt>忌</dt>
-                    <dd>{fortune.avoid}</dd>
-                  </div>
-                  <div>
-                    <dt>幸运算法</dt>
-                    <dd>
-                      {fortune.algorithm} · {fortune.complexity}
-                    </dd>
-                  </div>
-                </dl>
-                <p className="field-help">
-                  同一浏览器同一天结果一致，种子不使用邮箱、手机号、令牌、密码或
-                  IP。
-                </p>
-              </div>
-            )}
-          </section>
-          <section className="home-section contest-home-panel">
-            <div className="section-heading-inline">
-              <div>
-                <p className="eyebrow">竞赛中心</p>
-                <h2>比赛与排名</h2>
-              </div>
-              <Link to="/contests">全部比赛</Link>
-            </div>
-            {contestSummary ? (
-              <div className="home-contest-summary" aria-label="比赛摘要">
-                {contestGroups.map(([label, items]) => (
-                  <div key={label}>
-                    <span className="eyebrow">{label}</span>
-                    {items.length ? (
-                      <ul>
-                        {items.slice(0, 3).map((contest) => (
-                          <li key={contest.id}>
-                            <Link to={`/contests/${contest.id}`}>
-                              {contest.title}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="muted">暂无比赛</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p
-                className="unavailable-note"
-                role={contestError ? 'alert' : 'note'}
-              >
-                {contestError
-                  ? '比赛摘要暂时不可用，请稍后重试。当前不展示虚构赛程或名次。'
-                  : '正在加载真实比赛摘要…'}
-              </p>
-            )}
-          </section>
-        </aside>
-      </section>
-    </section>
   );
 }
 function HomeReference({
@@ -846,13 +675,17 @@ function HomeReference({
   contests,
   dailyProblem,
   recommendedProblems,
-  unavailable,
+  problemLoading,
+  problemUnavailable,
+  contestLoading,
+  contestUnavailable,
+  announcementsUnavailable,
   signedIn,
   fortune,
   fortuneVisible,
   onRevealFortune,
 }: {
-  announcements: DiscussionPost[];
+  announcements: DiscussionPost[] | null;
   contests:
     | {
         running: BackendContest[];
@@ -862,7 +695,11 @@ function HomeReference({
     | undefined;
   dailyProblem: Problem | null;
   recommendedProblems: Problem[];
-  unavailable: boolean;
+  problemLoading: boolean;
+  problemUnavailable: boolean;
+  contestLoading: boolean;
+  contestUnavailable: boolean;
+  announcementsUnavailable: boolean;
   signedIn: boolean;
   fortune: ReturnType<typeof getDailyFortune>;
   fortuneVisible: boolean;
@@ -919,7 +756,7 @@ function HomeReference({
               <Link to="/discussion">更多 →</Link>
             </div>
             <ul>
-              {announcements.slice(0, 5).map((item) => (
+              {(announcements ?? []).slice(0, 5).map((item) => (
                 <li key={item.id}>
                   <span>公告</span>
                   <Link to={`/discussion/${item.publicId}`}>{item.title}</Link>
@@ -928,8 +765,13 @@ function HomeReference({
                   </time>
                 </li>
               ))}
-              {!announcements.length && (
-                <li className="reference-empty">暂无公告</li>
+              {announcements?.length === 0 && (
+                <li className="reference-empty">
+                  {announcementsUnavailable ? '公告暂时不可用。' : '暂无公告'}
+                </li>
+              )}
+              {announcements === null && (
+                <li className="reference-empty">正在加载公告…</li>
               )}
             </ul>
           </section>
@@ -952,9 +794,11 @@ function HomeReference({
               ))}
               {!nearbyContests.length && (
                 <p>
-                  {unavailable
+                  {contestUnavailable
                     ? '比赛摘要暂时不可用，请稍后重试。当前不展示虚构赛程或名次。'
-                    : '正在加载真实比赛摘要…'}
+                    : contestLoading
+                      ? '正在加载真实比赛摘要…'
+                      : '暂无近期比赛。'}
                 </p>
               )}
             </div>
@@ -999,14 +843,18 @@ function HomeReference({
               </div>
             ) : (
               <p className="reference-empty">
-                {unavailable ? '题库数据暂不可用。' : '正在加载每日练习题目…'}
+                {problemUnavailable
+                  ? '题库数据暂不可用。'
+                  : problemLoading
+                    ? '正在加载每日练习题目…'
+                    : '暂无可用于每日一题的真实题目。'}
               </p>
             )}
           </section>
           <section className="reference-card reference-recommendations">
             <div className="reference-card-title">
               <h2>
-                <HomeIcon name="recommendations" /> 推荐题单
+                <HomeIcon name="recommendations" /> 近期题目
               </h2>
               <Link to="/problems">更多 →</Link>
             </div>
@@ -1022,11 +870,17 @@ function HomeReference({
                     {problem.difficulty ?? '练习题'}
                     {problem.tags?.[0] ? ` · ${problem.tags[0]}` : ''}
                   </small>
-                  <span>推荐练习 {['▮▮', '◆', '♧', '▣'][index]}</span>
+                  <span>近期收录 {['▮▮', '◆', '♧', '▣'][index]}</span>
                 </Link>
               ))}
               {!recommendedProblems.length && (
-                <p className="reference-empty">暂无可推荐练习题目。</p>
+                <p className="reference-empty">
+                  {problemUnavailable
+                    ? '近期题目暂时不可用。'
+                    : problemLoading
+                      ? '正在加载近期题目…'
+                      : '暂无近期题目。'}
+                </p>
               )}
             </div>
           </section>
@@ -1036,15 +890,9 @@ function HomeReference({
                 <HomeIcon name="calendar" /> 学习日历
               </h2>
               <div>
-                <button type="button" aria-label="上个月">
-                  ‹
-                </button>
                 <b>
                   {now.getFullYear()} 年 {now.getMonth() + 1} 月
                 </b>
-                <button type="button" aria-label="下个月">
-                  ›
-                </button>
                 <Link to="/profile">更多 →</Link>
               </div>
             </div>
@@ -1114,7 +962,9 @@ function HomeReference({
               <Link to="/homework">全部 →</Link>
             </div>
             <p>
-              作业功能正在接入。当前不会显示虚构的作业、截止时间或完成进度。
+              {signedIn
+                ? '查看团队发布的真实作业、题目与完成进度。'
+                : '登录后查看团队发布的真实作业与完成进度。'}
             </p>
           </section>
           <section className="reference-card reference-wrong">
@@ -1127,13 +977,7 @@ function HomeReference({
             <div>
               <strong>—</strong>
               <span>道错题</span>
-              <div className="reference-bars">
-                <i />
-                <i />
-                <i />
-                <i />
-                <i />
-              </div>
+              <p>权威错题聚合尚未接入，不展示推测统计。</p>
             </div>
           </section>
           <section className="reference-fortune">
@@ -1194,6 +1038,42 @@ function State({
       {action}
     </div>
   );
+}
+
+function AuthenticatedRoute({
+  authState,
+  user,
+  children,
+  actionText,
+}: {
+  authState: AuthState;
+  user: AuthenticatedUser | null;
+  children: ReactNode;
+  actionText: string;
+}) {
+  if (authState === 'loading')
+    return <State title="正在验证登录状态…" text="正在读取当前会话。" />;
+  if (authState === 'unavailable')
+    return (
+      <State
+        title="账户服务暂不可用"
+        text="暂时无法验证当前会话，登录状态未发生变化。"
+        action={
+          <button type="button" onClick={() => window.location.reload()}>
+            {zhCN.common.retry}
+          </button>
+        }
+      />
+    );
+  if (!user)
+    return (
+      <State
+        title="请先登录"
+        text={`登录后才能${actionText}。`}
+        action={<Link to="/login">登录</Link>}
+      />
+    );
+  return children;
 }
 
 function formatMemoryLimit(bytes: number) {
@@ -1719,9 +1599,10 @@ function ProblemDetail({
   const [discussionReload, setDiscussionReload] = useState(0);
   const [relatedProblems, setRelatedProblems] = useState<Problem[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(true);
-  const [checker, setChecker] = useState<'EXACT_BYTES' | 'TOKEN_WHITESPACE'>(
-    'EXACT_BYTES',
-  );
+  const [relatedError, setRelatedError] = useState(false);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [favoriteSaved, setFavoriteSaved] = useState(false);
+  const [favoriteMessage, setFavoriteMessage] = useState('');
   const codeRunAdapter = useMemo(() => new HttpCodeRunAdapter(), []);
   const submissionAdapter = useMemo(
     () => new ProductSubmissionAdapter(api),
@@ -1734,6 +1615,12 @@ function ProblemDetail({
     setActiveTab('statement');
     setDiscussionPosts([]);
     setDiscussionState('idle');
+    setRelatedProblems([]);
+    setRelatedLoading(true);
+    setRelatedError(false);
+    setFavoriteBusy(false);
+    setFavoriteSaved(false);
+    setFavoriteMessage('');
     discussionRequestKey.current = '';
     void api
       .problem(id)
@@ -1760,16 +1647,6 @@ function ProblemDetail({
     };
   }, [api, id]);
   useEffect(() => {
-    void api
-      .judgeData(id)
-      .then((data) => {
-        if (data) setChecker(data.defaults.checker);
-      })
-      .catch((e) =>
-        console.error('[ProblemDetail] judge checker unavailable', e),
-      );
-  }, [api, id]);
-  useEffect(() => {
     if (!problem) return;
     let active = true;
     const firstTagId = problem.tagDetails?.[0]?.id;
@@ -1780,10 +1657,12 @@ function ProblemDetail({
         : undefined;
     if (!options) {
       setRelatedProblems([]);
+      setRelatedError(false);
       setRelatedLoading(false);
       return;
     }
     setRelatedLoading(true);
+    setRelatedError(false);
     void api
       .problems(0, 6, options)
       .then((result) => {
@@ -1793,7 +1672,10 @@ function ProblemDetail({
           );
       })
       .catch(() => {
-        if (active) setRelatedProblems([]);
+        if (active) {
+          setRelatedProblems([]);
+          setRelatedError(true);
+        }
       })
       .finally(() => {
         if (active) setRelatedLoading(false);
@@ -2049,11 +1931,45 @@ function ProblemDetail({
                   </button>
                 </Link>
               )}
-              <button type="button" className="secondary" disabled>
+              <button
+                type="button"
+                className="secondary"
+                disabled={!user || user.guest || favoriteBusy || favoriteSaved}
+                title={
+                  !user
+                    ? '登录后可收藏题目'
+                    : user.guest
+                      ? '游客账号升级后可收藏题目'
+                      : undefined
+                }
+                onClick={() => {
+                  setFavoriteBusy(true);
+                  setFavoriteMessage('');
+                  void api
+                    .addFavorite(problem.id)
+                    .then(() => {
+                      setFavoriteSaved(true);
+                      setFavoriteMessage('已加入收藏。');
+                    })
+                    .catch((reason: unknown) =>
+                      setFavoriteMessage(
+                        reason instanceof ApiError && reason.status === 403
+                          ? '当前账号无法收藏这道题。'
+                          : '收藏失败，请稍后重试。',
+                      ),
+                    )
+                    .finally(() => setFavoriteBusy(false));
+                }}
+              >
                 <ProblemDetailIcon name="star" />
-                收藏
+                {favoriteSaved ? '已收藏' : favoriteBusy ? '收藏中…' : '收藏'}
               </button>
             </div>
+            {favoriteMessage && (
+              <small role={favoriteSaved ? 'status' : 'alert'}>
+                {favoriteMessage}
+              </small>
+            )}
           </section>
           <section className="problem-aside-card">
             <h2>
@@ -2115,6 +2031,10 @@ function ProblemDetail({
             </h2>
             {relatedLoading ? (
               <p className="muted">正在获取相关题目…</p>
+            ) : relatedError ? (
+              <p className="muted" role="alert">
+                相关题目暂时不可用。
+              </p>
             ) : relatedProblems.length ? (
               <ul>
                 {relatedProblems.map((item) => (
@@ -2141,6 +2061,10 @@ function ProblemDetail({
           className="problem-editor-slot"
           aria-label="OnlineCodeEditor"
         >
+          <p className="field-help">
+            样例运行按 EXACT_BYTES 比较输出；正式提交由服务端绑定的 Judge
+            配置评测。
+          </p>
           <ProblemSolveEditorSlot
             context={
               {
@@ -2152,7 +2076,7 @@ function ProblemDetail({
                   label: `样例 ${index + 1}`,
                 })),
                 problemRevisionId: problem.currentRevisionId ?? problem.id,
-                checker,
+                checker: 'EXACT_BYTES',
                 codeRunAdapter,
                 ...(user ? { submissionAdapter } : {}),
                 onViewSubmission: (submissionId: string) =>
@@ -2387,6 +2311,9 @@ function ContestRoute({
   const [contests, setContests] = useState<ContestListItem[]>([]);
   const [detail, setDetail] = useState<ContestDetail>();
   const [problems, setProblems] = useState<ContestProblem[]>([]);
+  const [contestSubmissions, setContestSubmissions] = useState<
+    ContestSubmission[]
+  >([]);
   const [standings, setStandings] = useState<never[]>([]);
   const [standingsUnavailableReason, setStandingsUnavailableReason] =
     useState<string>();
@@ -2397,6 +2324,10 @@ function ContestRoute({
     let active = true;
     setLoading(true);
     setError('');
+    setDetail(undefined);
+    setProblems([]);
+    setContestSubmissions([]);
+    setStandings([]);
     setStandingsUnavailableReason(undefined);
     if (view === 'list' || view === 'mine') {
       const request =
@@ -2440,12 +2371,17 @@ function ContestRoute({
       view === 'standings'
         ? api.contestStandings(contestId)
         : Promise.resolve(undefined);
+    const submissionsRequest =
+      view === 'submissions'
+        ? api.contestSubmissions(contestId)
+        : Promise.resolve(undefined);
     void Promise.all([
       api.contest(contestId),
       api.contestProblems(contestId),
       standingsRequest,
+      submissionsRequest,
     ])
-      .then(([value, problemResult, standingResult]) => {
+      .then(([value, problemResult, standingResult, submissionResult]) => {
         if (!active) return;
         setDetail({
           ...contestSummary(value),
@@ -2458,6 +2394,7 @@ function ContestRoute({
           if (standingResult.available) setStandings([]);
           else setStandingsUnavailableReason(standingResult.reason);
         }
+        if (submissionResult) setContestSubmissions(submissionResult.items);
       })
       .catch((reason: unknown) => {
         if (active) setError(routeErrorText(reason, '比赛数据'));
@@ -2481,6 +2418,7 @@ function ContestRoute({
       {...(view === 'list' || view === 'mine' ? { contests } : {})}
       {...(detail ? { detail } : {})}
       {...(view === 'problems' ? { problems } : {})}
+      {...(view === 'submissions' ? { contestSubmissions } : {})}
       {...(view === 'standings' ? { standings } : {})}
       {...(view === 'standings' && standingsUnavailableReason
         ? { standingsUnavailableReason }
@@ -2583,10 +2521,13 @@ export function App() {
   );
   const [current, setCurrent] = useState<Route>(route());
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
-  const [authState, setAuthState] = useState<
-    'loading' | 'authenticated' | 'unauthenticated' | 'unavailable'
-  >('loading');
+  const [authState, setAuthState] = useState<AuthState>('loading');
   const [canViewJudgeAdmin, setCanViewJudgeAdmin] = useState(false);
+  const [canManageJudgeAdmin, setCanManageJudgeAdmin] = useState(false);
+  const [judgeAdminCapabilityLoading, setJudgeAdminCapabilityLoading] =
+    useState(false);
+  const [judgeAdminCapabilityError, setJudgeAdminCapabilityError] =
+    useState(false);
   useEffect(() => {
     const h = () => setCurrent(route());
     window.addEventListener('popstate', h);
@@ -2595,14 +2536,27 @@ export function App() {
       .then((value) => {
         setUser(value);
         setAuthState('authenticated');
+        setJudgeAdminCapabilityLoading(true);
+        setJudgeAdminCapabilityError(false);
         void api
           .judgeAdminCapabilities()
-          .then((capability) => setCanViewJudgeAdmin(capability.canView))
-          .catch(() => setCanViewJudgeAdmin(false));
+          .then((capability) => {
+            setCanViewJudgeAdmin(capability.canView);
+            setCanManageJudgeAdmin(capability.canManage);
+          })
+          .catch(() => {
+            setCanViewJudgeAdmin(false);
+            setCanManageJudgeAdmin(false);
+            setJudgeAdminCapabilityError(true);
+          })
+          .finally(() => setJudgeAdminCapabilityLoading(false));
       })
       .catch((error) => {
         setUser(null);
         setCanViewJudgeAdmin(false);
+        setCanManageJudgeAdmin(false);
+        setJudgeAdminCapabilityLoading(false);
+        setJudgeAdminCapabilityError(false);
         setAuthState(
           error instanceof ApiError && error.status === 401
             ? 'unauthenticated'
@@ -2626,14 +2580,26 @@ export function App() {
         user={user}
       />
     ) : current.name === 'discussion-new' ? (
-      <DiscussionEditor api={api} navigate={navigate} user={user} />
-    ) : current.name === 'discussion-edit' ? (
-      <DiscussionEditor
-        api={api}
-        navigate={navigate}
-        {...(current.id ? { id: current.id } : {})}
+      <AuthenticatedRoute
+        authState={authState}
         user={user}
-      />
+        actionText="发布讨论"
+      >
+        <DiscussionEditor api={api} navigate={navigate} user={user} />
+      </AuthenticatedRoute>
+    ) : current.name === 'discussion-edit' ? (
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="编辑讨论"
+      >
+        <DiscussionEditor
+          api={api}
+          navigate={navigate}
+          {...(current.id ? { id: current.id } : {})}
+          user={user}
+        />
+      </AuthenticatedRoute>
     ) : current.name === 'login' || current.name === 'register' ? (
       <AuthExperience
         mode={current.name}
@@ -2641,10 +2607,20 @@ export function App() {
         onUser={(value) => {
           setUser(value);
           setAuthState('authenticated');
+          setJudgeAdminCapabilityLoading(true);
+          setJudgeAdminCapabilityError(false);
           void api
             .judgeAdminCapabilities()
-            .then((capability) => setCanViewJudgeAdmin(capability.canView))
-            .catch(() => setCanViewJudgeAdmin(false));
+            .then((capability) => {
+              setCanViewJudgeAdmin(capability.canView);
+              setCanManageJudgeAdmin(capability.canManage);
+            })
+            .catch(() => {
+              setCanViewJudgeAdmin(false);
+              setCanManageJudgeAdmin(false);
+              setJudgeAdminCapabilityError(true);
+            })
+            .finally(() => setJudgeAdminCapabilityLoading(false));
         }}
         onNavigate={navigate}
       />
@@ -2657,9 +2633,21 @@ export function App() {
     ) : current.name === 'contests' ? (
       <ContestRoute api={api} view="list" navigate={navigate} />
     ) : current.name === 'my-contests' ? (
-      <ContestRoute api={api} view="mine" navigate={navigate} />
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="查看我的比赛"
+      >
+        <ContestRoute api={api} view="mine" navigate={navigate} />
+      </AuthenticatedRoute>
     ) : current.name === 'contest-new' ? (
-      <ContestExperience view="create" navigate={navigate} api={api} />
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="创建比赛"
+      >
+        <ContestExperience view="create" navigate={navigate} api={api} />
+      </AuthenticatedRoute>
     ) : current.name === 'contest-detail' ? (
       <ContestRoute
         api={api}
@@ -2675,12 +2663,18 @@ export function App() {
         navigate={navigate}
       />
     ) : current.name === 'contest-submissions' ? (
-      <ContestRoute
-        api={api}
-        view="submissions"
-        contestId={current.id ?? ''}
-        navigate={navigate}
-      />
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="查看比赛提交"
+      >
+        <ContestRoute
+          api={api}
+          view="submissions"
+          contestId={current.id ?? ''}
+          navigate={navigate}
+        />
+      </AuthenticatedRoute>
     ) : current.name === 'contest-standings' ? (
       <ContestRoute
         view="standings"
@@ -2689,31 +2683,61 @@ export function App() {
         api={api}
       />
     ) : current.name === 'contest-settings' ? (
-      <ContestRoute
-        view="settings"
-        contestId={current.id ?? ''}
-        navigate={navigate}
-        api={api}
-      />
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="管理比赛"
+      >
+        <ContestRoute
+          view="settings"
+          contestId={current.id ?? ''}
+          navigate={navigate}
+          api={api}
+        />
+      </AuthenticatedRoute>
     ) : current.name === 'homework' ? (
-      <HomeworkDashboardPage navigate={navigate} />
+      <AssignmentPage
+        api={api}
+        navigate={navigate}
+        user={user}
+        authState={authState}
+      />
     ) : current.name === 'homework-detail' ? (
       <AssignmentPage
         api={api}
         navigate={navigate}
         user={user}
+        authState={authState}
         {...(current.id ? { detailId: current.id } : {})}
       />
     ) : current.name === 'wrong-book' ? (
       <WrongBookPage navigate={navigate} />
     ) : current.name === 'notifications' ? (
-      <NotificationsRoute api={api} />
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="查看通知"
+      >
+        <NotificationsRoute api={api} />
+      </AuthenticatedRoute>
     ) : current.name === 'messages' ? (
-      <MessagesRoute api={api} />
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="查看通讯消息"
+      >
+        <MessagesRoute api={api} />
+      </AuthenticatedRoute>
     ) : current.name === 'teams' ? (
       <TeamPage api={api} user={user} navigate={navigate} />
     ) : current.name === 'team-new' ? (
-      <TeamPage api={api} user={user} navigate={navigate} create />
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="创建团队"
+      >
+        <TeamPage api={api} user={user} navigate={navigate} create />
+      </AuthenticatedRoute>
     ) : current.name === 'team-detail' ? (
       <TeamPage
         api={api}
@@ -2727,46 +2751,83 @@ export function App() {
         api={api}
         navigate={navigate}
         user={user}
+        authState={authState}
         {...(current.id ? { teamSlug: current.id } : {})}
         create={current.name === 'team-assignment-new'}
       />
     ) : current.name === 'submit' ? (
-      <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="提交代码"
+      >
+        <SubmissionForm api={api} problemId={current.id ?? ''} user={user} />
+      </AuthenticatedRoute>
     ) : current.name === 'submissions' ? (
       <SubmissionHistoryPage api={api} user={user} navigate={navigate} />
     ) : current.name === 'submission' ? (
-      user && current.id ? (
-        <SubmissionDetailPage
-          api={api}
-          id={current.id}
-          user={user}
-          navigate={navigate}
-        />
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="查看这条评测记录"
+      >
+        {user && current.id ? (
+          <SubmissionDetailPage
+            api={api}
+            id={current.id}
+            user={user}
+            navigate={navigate}
+          />
+        ) : (
+          <NotFound />
+        )}
+      </AuthenticatedRoute>
+    ) : current.name === 'sandbox' ? (
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="验证沙箱操作权限"
+      >
+        <SandboxOperationsPage api={api} authorized />
+      </AuthenticatedRoute>
+    ) : current.name === 'judge-nodes' ||
+      current.name === 'judge-node-detail' ? (
+      authState === 'loading' || judgeAdminCapabilityLoading ? (
+        <State title="正在验证权限…" text="正在读取 Judge 管理能力。" />
       ) : authState === 'unavailable' ? (
         <State
-          title="提交服务暂不可用"
-          text="暂时无法连接服务，登录状态未发生变化。"
+          title="账户服务暂不可用"
+          text="暂时无法验证当前会话，登录状态未发生变化。"
           action={
-            <button onClick={() => window.location.reload()}>
+            <button type="button" onClick={() => window.location.reload()}>
               {zhCN.common.retry}
             </button>
           }
         />
+      ) : judgeAdminCapabilityError ? (
+        <State
+          title="权限服务暂不可用"
+          text="暂时无法读取 Judge 管理权限，请稍后重试。"
+          action={
+            <button type="button" onClick={() => window.location.reload()}>
+              {zhCN.common.retry}
+            </button>
+          }
+        />
+      ) : canViewJudgeAdmin ? (
+        <JudgeMachinesPage
+          {...(current.id ? { nodeId: current.id } : {})}
+          canManage={canManageJudgeAdmin}
+        />
+      ) : user ? (
+        <Forbidden />
       ) : (
         <State
           title="请先登录"
-          text="登录后才能查看这条评测记录。"
+          text="登录后才能验证 Judge 管理权限。"
           action={<Link to="/login">登录</Link>}
         />
       )
-    ) : current.name === 'sandbox' ? (
-      <SandboxOperationsPage api={api} authorized={Boolean(user)} />
-    ) : current.name === 'judge-nodes' ||
-      current.name === 'judge-node-detail' ? (
-      <JudgeMachinesPage
-        {...(current.id ? { nodeId: current.id } : {})}
-        canManage={Boolean(user && !user.guest)}
-      />
     ) : current.name === 'public-profile' ? (
       <Profile
         api={api}
@@ -2774,37 +2835,41 @@ export function App() {
         {...(current.id === undefined ? {} : { username: current.id })}
       />
     ) : current.name === 'profile' ? (
-      <Profile api={api} user={user} />
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="查看个人资料"
+      >
+        <Profile api={api} user={user} />
+      </AuthenticatedRoute>
     ) : current.name === 'settings' ? (
-      user ? (
-        <AccountSettings api={api} user={user} />
-      ) : (
-        <State
-          title="请先登录"
-          text="登录后才能管理账户安全。"
-          action={<Link to="/login">登录</Link>}
-        />
-      )
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="管理账户安全"
+      >
+        <AccountSettings api={api} user={user!} />
+      </AuthenticatedRoute>
     ) : current.name === 'author-new' ? (
-      user ? (
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="创建题目草稿"
+      >
         <AuthorForm api={api} />
-      ) : (
-        <State
-          title="请先登录"
-          text="登录后才能创建题目草稿。"
-          action={<Link to="/login">登录</Link>}
-        />
-      )
+      </AuthenticatedRoute>
     ) : current.name === 'author-edit' ? (
-      user && current.id ? (
-        <ProblemEditor api={api} problemId={current.id} />
-      ) : (
-        <State
-          title="请先登录"
-          text="登录后才能编辑题目草稿。"
-          action={<Link to="/login">登录</Link>}
-        />
-      )
+      <AuthenticatedRoute
+        authState={authState}
+        user={user}
+        actionText="编辑题目草稿"
+      >
+        {current.id ? (
+          <ProblemEditor api={api} problemId={current.id} />
+        ) : (
+          <NotFound />
+        )}
+      </AuthenticatedRoute>
     ) : current.name === 'problem' ? (
       <ProblemDetail api={api} id={current.id ?? ''} user={user} />
     ) : (
@@ -2812,7 +2877,7 @@ export function App() {
     );
   return (
     <AppLayout
-      className={`${current.name === 'submissions' ? 'submissions-view' : ''}${current.name === 'submission' ? ' submission-detail-view' : ''}${current.name === 'homework' ? ' homework-dashboard-view' : ''}`.trim()}
+      className={`${current.name === 'submissions' ? 'submissions-view' : ''}${current.name === 'submission' ? ' submission-detail-view' : ''}`.trim()}
       navbar={
         <AppNavbar
           Link={Link}
@@ -2824,6 +2889,9 @@ export function App() {
           onLogoutComplete={() => {
             setUser(null);
             setAuthState('unauthenticated');
+            setCanViewJudgeAdmin(false);
+            setCanManageJudgeAdmin(false);
+            setJudgeAdminCapabilityError(false);
             navigate('/');
           }}
         />
@@ -2858,9 +2926,7 @@ export function App() {
                       ? 'shell shell-submissions'
                       : current.name === 'submission'
                         ? 'shell shell-submission-detail'
-                        : current.name === 'homework'
-                          ? 'shell shell-homework-dashboard'
-                          : 'shell'
+                        : 'shell'
       }
     >
       {page}

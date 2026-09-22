@@ -30,6 +30,8 @@ export function AppNavbar({
   onLogoutComplete,
 }: AppNavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const [logoutError, setLogoutError] = useState(false);
   const isDiscussion = current.name.startsWith('discussion');
 
   return (
@@ -162,12 +164,24 @@ export function AppNavbar({
             </Link>
             <button
               className="app-navbar__link-button"
+              disabled={logoutBusy}
               onClick={() => {
-                void api.logout().finally(onLogoutComplete);
+                setLogoutBusy(true);
+                setLogoutError(false);
+                void api
+                  .logout()
+                  .then(onLogoutComplete)
+                  .catch(() => setLogoutError(true))
+                  .finally(() => setLogoutBusy(false));
               }}
             >
-              退出登录
+              {logoutBusy ? '正在退出…' : '退出登录'}
             </button>
+            {logoutError && (
+              <span className="app-navbar__logout-error" role="alert">
+                退出失败，请重试
+              </span>
+            )}
           </>
         ) : (
           <>

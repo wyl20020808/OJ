@@ -20,7 +20,7 @@
 
 - Docker Phase 0–4: DONE; Docker Phase 6A + 6B-1 … 6B-6: PASS / MERGED.
 - Linux amd64 native Judge + Production Judge: QUALIFIED / MERGED.
-- Phase 7A: PASS / MERGED; Phase 7B: PASS / MERGED / PUBLISHED / PUBLICLY QUALIFIED.
+- Phase 7A: PASS / MERGED; Phase 7B: PASS / MERGED / PUBLISHED / PUBLICLY QUALIFIED; Typography V1: PASS / MERGED.
 
 ## Active / Deferred
 
@@ -31,6 +31,7 @@ Phase 5 cross-platform ............... PARTIAL
   Native ARM64 full Judge ........... NOT QUALIFIED
 Phase 7C Windows preview ............. PREVIEW_COMPLETE / INTEGRATED
 Phase 8+ ............................. NOT DEFINED
+Full-Stack Synchronization V1 ....... PASS / READY FOR INTEGRATION
 ```
 
 ## Windows Dev Runtime Infra Readiness (2026-09-21)
@@ -102,10 +103,9 @@ pursue it by changing host boot configuration, VBS, HVCI or rebooting the host.
 
 ## Next Action
 
-1. Typography V1 = PASS / READY FOR INTEGRATION on `codex/frontend-typography-unification-v1`; main is not merged.
-2. Next: review the before/after evidence, then use the integration workflow.
-3. Preserve the existing untracked browser evidence file unless explicitly asked
-   to archive or remove it.
+1. Integrate `codex/fullstack-sync-v1` from fresh latest main with `--no-ff`, then
+   run exact baseline, static/build, plugin, and runtime regression gates.
+2. Fast-forward canonical main, push normally, and require green GitHub CI.
 
 ## References
 
@@ -117,4 +117,4 @@ pursue it by changing host boot configuration, VBS, HVCI or rebooting the host.
 - Local dev runtime: `Docs/LOCAL_RUNTIME.md`.
 - Historical details: search `Docs/PROJECT_STATUS.md`, then open one report.
 
-Last Updated: 2026-09-22 (Frontend Typography Unification V1 ready for integration)
+Last Updated: 2026-09-22 (Full-Stack Synchronization V1 ready for integration)

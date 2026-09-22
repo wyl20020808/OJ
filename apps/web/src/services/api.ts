@@ -720,7 +720,6 @@ export type TeamJoinRequest = {
 export type AssignmentProblem = {
   publicId: string;
   title: string;
-  problemId: string;
   displayOrder: number;
   completed: boolean;
 };
@@ -977,7 +976,7 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
     me: () =>
       request<AuthenticatedUser>(baseUrl, '/api/auth/me', undefined, fetcher),
     judgeAdminCapabilities: () =>
-      request<{ canView: boolean }>(
+      request<{ canView: boolean; canManage: boolean }>(
         baseUrl,
         '/api/admin/judge/capabilities',
         undefined,
@@ -1593,6 +1592,20 @@ export function createApiClient(baseUrl = '', fetcher: typeof fetch = fetch) {
       }>(
         baseUrl,
         `/api/contests/${encodeURIComponent(id)}/participants`,
+        undefined,
+        fetcher,
+      ),
+    contestSubmissions: (id: string, limit = 100) =>
+      request<{
+        items: Array<{
+          id: string;
+          problemId: string;
+          status: string;
+          createdAt: string;
+        }>;
+      }>(
+        baseUrl,
+        `/api/contests/${encodeURIComponent(id)}/submissions?limit=${encodeURIComponent(String(limit))}`,
         undefined,
         fetcher,
       ),

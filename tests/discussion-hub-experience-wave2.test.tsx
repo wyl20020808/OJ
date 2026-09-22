@@ -124,6 +124,8 @@ describe('Blog Hub Reference Experience', () => {
         name: '区间 DP 中最容易写错的三个地方',
       }),
     ).toBeInTheDocument();
+    expect(screen.getByText('最新讨论')).toBeInTheDocument();
+    expect(screen.queryByText('精选讨论')).not.toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: '秋季训练安排调整' }),
     ).toBeInTheDocument();
@@ -416,7 +418,10 @@ describe('Blog Hub Reference Experience', () => {
     expect(
       screen.getByRole('heading', { name: /代码实现/ }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'AI总结' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: '文章摘要' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/AI 自动总结暂不可用/)).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: '题目链接' }),
     ).toBeInTheDocument();

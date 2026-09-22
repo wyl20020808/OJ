@@ -92,6 +92,12 @@ describe('judge admin adapter and product boundary', () => {
         request.headers['x-csrf-token'] === 'csrf' &&
         request.headers.cookie === 'oj_csrf=csrf',
     });
+    const capabilities = await app.inject({
+      method: 'GET',
+      url: '/api/admin/judge/capabilities',
+    });
+    expect(capabilities.statusCode).toBe(200);
+    expect(capabilities.json()).toEqual({ canView: true, canManage: true });
     const denied = await app.inject({
       method: 'POST',
       url: '/api/admin/judge/nodes/judge-a/drain',
@@ -128,6 +134,69 @@ describe('judge admin adapter and product boundary', () => {
     expect(
       audit.events.filter((event) => event.outcome === 'success'),
     ).toHaveLength(2);
+    await app.close();
+  });
+
+  it('keeps view-only Judge access distinct from mutation permission', async () => {
+    const app = Fastify();
+    let authenticated = true;
+    await registerJudgeAdminRoutes(app, {
+      adapter: {
+        summary: async () => ({ totalNodes: 0 }),
+        nodes: async () => ({ items: [] }),
+        node: async () => node,
+        assignments: async () => ({ items: [] }),
+        jobs: async () => ({ items: [] }),
+        failures: async () => ({ items: [] }),
+        assignment: async () => ({}),
+        metrics: async () => ({}),
+        mutate: async () => ({ operationId: 'unexpected', node }),
+      },
+      audit: new MemoryJudgeAdminAuditRepository(),
+      getAuthContext: async () => (authenticated ? ctx : undefined),
+      can: async (context, permission) =>
+        Boolean(context) && permission === 'judge.view',
+    });
+
+    const capabilities = await app.inject({
+      method: 'GET',
+      url: '/api/admin/judge/capabilities',
+    });
+    expect(capabilities.statusCode).toBe(200);
+    expect(capabilities.json()).toEqual({ canView: true, canManage: false });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/admin/judge/summary',
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/admin/judge/nodes/judge-a/drain',
+          payload: {
+            reason: 'maintenance',
+            expectedIncarnation: 'inc-1',
+            expectedControlVersion: 2,
+            idempotencyKey: 'read-only-user',
+          },
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    authenticated = false;
+    const unauthenticatedCapabilities = await app.inject({
+      method: 'GET',
+      url: '/api/admin/judge/capabilities',
+    });
+    expect(unauthenticatedCapabilities.statusCode).toBe(200);
+    expect(unauthenticatedCapabilities.json()).toEqual({
+      canView: false,
+      canManage: false,
+    });
     await app.close();
   });
 

@@ -337,6 +337,7 @@ export function DiscussionHome({
 
   useEffect(() => {
     let active = true;
+    setOverview(null);
     setOverviewError(false);
     void api
       .discussionBlogOverview()
@@ -413,14 +414,10 @@ export function DiscussionHome({
           new Date(a.publishedAt ?? a.createdAt).getTime(),
   );
   const featured = overview?.featured ?? visiblePosts[0];
+  const hasAuthoritativeFeatured = Boolean(overview?.featured);
   const feed = visiblePosts.filter((post) => post.id !== featured?.id);
   const authors = overview?.authors ?? [];
-  const stats = overview?.stats ?? {
-    todayPosts: 0,
-    weekPosts: 0,
-    totalAuthors: 0,
-    totalPosts: 0,
-  };
+  const stats = overview?.stats;
   const categories = overview?.categories ?? [];
   const hotTags = overview?.tags ?? [];
 
@@ -470,26 +467,29 @@ export function DiscussionHome({
             <button
               type="button"
               data-ui-only="true"
+              disabled
               title="关注文章功能将在后续接入"
             >
               <BlogIcon name="comment" />
-              我的关注
+              我的关注（暂不可用）
             </button>
             <button
               type="button"
               data-ui-only="true"
+              disabled
               title="收藏文章功能将在后续接入"
             >
               <BlogIcon name="star" />
-              我的收藏
+              我的收藏（暂不可用）
             </button>
             <button
               type="button"
               data-ui-only="true"
+              disabled
               title="浏览历史功能将在后续接入"
             >
               <BlogIcon name="history" />
-              浏览历史
+              浏览历史（暂不可用）
             </button>
           </nav>
           <section>
@@ -505,7 +505,7 @@ export function DiscussionHome({
               >
                 <BlogIcon name="archive" />
                 全部分类
-                <small>{stats.totalPosts}</small>
+                <small>{stats?.totalPosts ?? '—'}</small>
               </a>
               {categories.map((item, index) => (
                 <a
@@ -561,29 +561,17 @@ export function DiscussionHome({
           <section>
             <h2>快速导航</h2>
             <div className="blog-quick-links">
-              <button type="button" data-ui-only="true">
-                发布公告
-              </button>
-              <button type="button" data-ui-only="true">
-                优秀作者
-              </button>
-              <button type="button" data-ui-only="true">
-                创作指南
-              </button>
-              <button type="button" data-ui-only="true">
-                加入我们
-              </button>
+              <span aria-disabled="true">发布公告（暂不可用）</span>
+              <span aria-disabled="true">创作指南（暂不可用）</span>
             </div>
           </section>
         </aside>
 
         <main className="blog-main">
           <section className="blog-featured">
-            <span>精选讨论</span>
-            <h2>{featured?.title ?? '为什么热爱算法？'}</h2>
-            <p>
-              {featured?.summary ?? '是挑战，是成长，还是遇见了更好的自己？'}
-            </p>
+            <span>{hasAuthoritativeFeatured ? '精选讨论' : '最新讨论'}</span>
+            <h2>{featured?.title ?? '暂无讨论'}</h2>
+            <p>{featured?.summary ?? '当前没有可展示的真实讨论。'}</p>
             <div>
               <span>
                 <BlogIcon name="comment" />
@@ -719,9 +707,6 @@ export function DiscussionHome({
                 <BlogIcon name="archive" />
                 优秀作者榜
               </h2>
-              <button type="button" data-ui-only="true">
-                查看全部 <BlogIcon name="arrow" />
-              </button>
             </div>
             {authors.length ? (
               <ol>
@@ -737,7 +722,13 @@ export function DiscussionHome({
                 ))}
               </ol>
             ) : (
-              <p className="blog-panel-empty">暂无作者数据</p>
+              <p className="blog-panel-empty">
+                {overviewError
+                  ? '作者数据暂时不可用'
+                  : overview
+                    ? '暂无作者数据'
+                    : '正在加载作者数据…'}
+              </p>
             )}
           </section>
           <section className="blog-panel blog-community-stats">
@@ -752,8 +743,8 @@ export function DiscussionHome({
                   今日新增
                 </dt>
                 <dd>
-                  {stats.todayPosts}
-                  <small> 篇</small>
+                  {stats ? stats.todayPosts : '—'}
+                  {stats && <small> 篇</small>}
                 </dd>
               </div>
               <div>
@@ -762,8 +753,8 @@ export function DiscussionHome({
                   近七日新增
                 </dt>
                 <dd>
-                  {stats.weekPosts}
-                  <small> 篇</small>
+                  {stats ? stats.weekPosts : '—'}
+                  {stats && <small> 篇</small>}
                 </dd>
               </div>
               <div>
@@ -771,14 +762,14 @@ export function DiscussionHome({
                   <BlogIcon name="users" />
                   注册作者
                 </dt>
-                <dd>{stats.totalAuthors}</dd>
+                <dd>{stats?.totalAuthors ?? '—'}</dd>
               </div>
               <div>
                 <dt>
                   <BlogIcon name="archive" />
                   文章总数
                 </dt>
-                <dd>{stats.totalPosts}</dd>
+                <dd>{stats?.totalPosts ?? '—'}</dd>
               </div>
             </dl>
             <blockquote>“每一个认真分享的人，都在点亮别人的路。”</blockquote>
@@ -809,7 +800,13 @@ export function DiscussionHome({
                 ))}
               </ol>
             ) : (
-              <p className="blog-panel-empty">暂无热门文章</p>
+              <p className="blog-panel-empty">
+                {overviewError
+                  ? '热门文章暂时不可用'
+                  : overview
+                    ? '暂无热门文章'
+                    : '正在加载热门文章…'}
+              </p>
             )}
           </section>
           <section className="blog-panel blog-recent-comments">
@@ -818,9 +815,6 @@ export function DiscussionHome({
                 <BlogIcon name="comment" />
                 最新评论
               </h2>
-              <button type="button" data-ui-only="true">
-                查看更多 <BlogIcon name="arrow" />
-              </button>
             </div>
             {overview?.recentComments.length ? (
               <ul>
@@ -854,7 +848,13 @@ export function DiscussionHome({
                 ))}
               </ul>
             ) : (
-              <p className="blog-panel-empty">暂无最新评论</p>
+              <p className="blog-panel-empty">
+                {overviewError
+                  ? '最新评论暂时不可用'
+                  : overview
+                    ? '暂无最新评论'
+                    : '正在加载最新评论…'}
+              </p>
             )}
           </section>
         </aside>
@@ -1064,10 +1064,11 @@ export function DiscussionPostPage({
           <button
             type="button"
             data-ui-only="true"
+            disabled
             title="收藏功能将在后续接入"
           >
             <BlogIcon name="star" />
-            <strong>收藏</strong>
+            <strong>收藏（暂不可用）</strong>
           </button>
           <button
             type="button"
@@ -1113,34 +1114,12 @@ export function DiscussionPostPage({
             <header>
               <h2>
                 <BlogIcon name="sparkles" />
-                AI总结
+                文章摘要
               </h2>
-              <small>界面预览</small>
+              <small>来自作者内容</small>
             </header>
-            <ol>
-              <li>
-                <b>1</b>
-                <p>
-                  <strong>内容概要：</strong>
-                  {post.summary ?? '作者暂未填写文章摘要。'}
-                </p>
-              </li>
-              <li>
-                <b>2</b>
-                <p>
-                  <strong>阅读结构：</strong>
-                  全文按 {sections.length} 个章节整理，可从正文顺序阅读。
-                </p>
-              </li>
-              <li>
-                <b>3</b>
-                <p>
-                  <strong>互动建议：</strong>
-                  可在评论区补充思路、提问或交流不同解法。
-                </p>
-              </li>
-            </ol>
-            <p>AI 自动总结待后端接入，当前仅展示可用的文章摘要。</p>
+            <p>{post.summary ?? '作者暂未填写文章摘要。'}</p>
+            <p>AI 自动总结暂不可用，当前不会生成或伪造总结。</p>
           </section>
 
           {isSolution && (
@@ -1160,9 +1139,10 @@ export function DiscussionPostPage({
                 <button
                   type="button"
                   data-ui-only="true"
+                  disabled
                   title="题目关联功能将在后续接入"
                 >
-                  打开链接 <BlogIcon name="share" />
+                  暂不可用 <BlogIcon name="share" />
                 </button>
               </div>
             </section>

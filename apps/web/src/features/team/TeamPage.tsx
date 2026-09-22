@@ -196,6 +196,8 @@ export function TeamPage({
     (TeamSummary & { membershipState: string }) | null
   >(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [membersLoaded, setMembersLoaded] = useState(false);
+  const [memberError, setMemberError] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -203,11 +205,18 @@ export function TeamPage({
     TeamJoinRequest['status'] | null
   >(null);
   const [requests, setRequests] = useState<TeamJoinRequest[]>([]);
+  const [requestsLoaded, setRequestsLoaded] = useState(false);
   const [requestError, setRequestError] = useState('');
 
   useEffect(() => {
     let live = true;
     setError('');
+    setMemberError('');
+    setMembersLoaded(false);
+    setMembers([]);
+    setRequestError('');
+    setRequestsLoaded(false);
+    setRequests([]);
     setLoading(true);
     if (!slug) {
       void Promise.all([
@@ -245,8 +254,14 @@ export function TeamPage({
         if (!user) return;
         void api
           .teamMembers(slug)
-          .then((memberPage) => live && setMembers(memberPage.items))
-          .catch(() => live && setMembers([]));
+          .then((memberPage) => {
+            if (!live) return;
+            setMembers(memberPage.items);
+            setMembersLoaded(true);
+          })
+          .catch(() => {
+            if (live) setMemberError('成员列表暂时不可用');
+          });
         if (
           (detail.membershipState === 'OWNER' ||
             detail.membershipState === 'MANAGER') &&
@@ -254,8 +269,14 @@ export function TeamPage({
         ) {
           void api
             .teamJoinRequests(slug)
-            .then((page) => live && setRequests(page.items))
+            .then((page) => {
+              if (!live) return;
+              setRequests(page.items);
+              setRequestsLoaded(true);
+            })
             .catch(() => live && setRequestError('暂时无法加载待处理申请'));
+        } else {
+          setRequestsLoaded(true);
         }
       })
       .catch(() => live && setError('团队不存在或当前不可见'))
@@ -279,16 +300,6 @@ export function TeamPage({
   }, [query, source]);
   const calendarNow = new Date();
   const calendarDays = teamCalendarDays(calendarNow);
-  const activityDays = new Set(
-    discoverable
-      .map((item) => new Date(item.createdAt))
-      .filter(
-        (date) =>
-          date.getFullYear() === calendarNow.getFullYear() &&
-          date.getMonth() === calendarNow.getMonth(),
-      )
-      .map((date) => date.getDate()),
-  );
 
   if (create) return <CreateTeam api={api} navigate={navigate} />;
   if (error)
@@ -374,6 +385,7 @@ export function TeamPage({
           <button
             type="button"
             data-ui-only="true"
+            disabled
             title="训练小组分类将在后续接入"
           >
             <i>
@@ -381,7 +393,7 @@ export function TeamPage({
             </i>
             <span>
               <strong>训练小组</strong>
-              <small>专注算法能力成长</small>
+              <small>暂不可用</small>
             </span>
             <b>
               <TeamPortalIcon name="arrow" />
@@ -390,6 +402,7 @@ export function TeamPage({
           <button
             type="button"
             data-ui-only="true"
+            disabled
             title="课程班级分类将在后续接入"
           >
             <i>
@@ -397,7 +410,7 @@ export function TeamPage({
             </i>
             <span>
               <strong>课程班级</strong>
-              <small>和同学一起进步</small>
+              <small>暂不可用</small>
             </span>
             <b>
               <TeamPortalIcon name="arrow" />
@@ -410,9 +423,9 @@ export function TeamPage({
               <header>
                 <div>
                   <h2>
-                    <TeamPortalIcon name="trophy" /> 热门团队
+                    <TeamPortalIcon name="trophy" /> 团队列表
                   </h2>
-                  <p>发现活跃的训练社区，和伙伴一起进步。</p>
+                  <p>浏览后端提供的真实团队，和伙伴一起进步。</p>
                 </div>
                 <button
                   type="button"
@@ -544,24 +557,7 @@ export function TeamPage({
                 <h3>
                   <TeamPortalIcon name="tag" /> 团队标签
                 </h3>
-                <div>
-                  {[
-                    '入门友好',
-                    '高强度训练',
-                    '算法竞赛',
-                    '数据结构',
-                    '动态规划',
-                    '图论',
-                    '数学',
-                    '模拟',
-                    '团队合作',
-                    '高校赛事',
-                  ].map((tag) => (
-                    <button key={tag} type="button" data-ui-only="true">
-                      # {tag}
-                    </button>
-                  ))}
-                </div>
+                <p>团队标签尚未接入，不展示推测分类。</p>
               </footer>
             </section>
           </main>
@@ -572,22 +568,14 @@ export function TeamPage({
                 <h2>
                   <TeamPortalIcon name="calendar" /> 团队日历
                 </h2>
-                <button type="button" data-ui-only="true">
-                  查看更多 →
-                </button>
+                <small>团队活动数据尚未接入</small>
               </header>
               <div className="team-calendar-month">
-                <button type="button" data-ui-only="true" aria-label="上一个月">
-                  ‹
-                </button>
                 <strong>
                   {calendarNow.getFullYear()} 年 {calendarNow.getMonth() + 1} 月
                 </strong>
-                <button type="button" data-ui-only="true" aria-label="下一个月">
-                  ›
-                </button>
               </div>
-              <div className="team-calendar-grid" data-ui-only="true">
+              <div className="team-calendar-grid">
                 {['日', '一', '二', '三', '四', '五', '六'].map((day) => (
                   <strong key={day}>{day}</strong>
                 ))}
@@ -599,19 +587,15 @@ export function TeamPage({
                     }
                   >
                     {day}
-                    {day && activityDays.has(day) && <i aria-hidden="true" />}
                   </span>
                 ))}
               </div>
-              <p>
-                <i /> 小点表示本月有新的公开团队
-              </p>
             </section>
 
             <section className="team-recommendations-card">
               <header>
                 <h2>
-                  <TeamPortalIcon name="group" /> 推荐团队
+                  <TeamPortalIcon name="group" /> 可发现团队
                 </h2>
                 <button type="button" onClick={() => setView('discoverable')}>
                   查看更多 →
@@ -637,7 +621,7 @@ export function TeamPage({
                   ))}
                 </ul>
               ) : (
-                <p className="team-recommendations-empty">暂无可推荐团队</p>
+                <p className="team-recommendations-empty">暂无可发现团队</p>
               )}
             </section>
           </aside>
@@ -750,7 +734,9 @@ export function TeamPage({
             <div>
               <dt>管理员</dt>
               <dd>
-                {members.filter((member) => member.role !== 'MEMBER').length}
+                {membersLoaded
+                  ? members.filter((member) => member.role !== 'MEMBER').length
+                  : '—'}
               </dd>
             </div>
             <div>
@@ -768,33 +754,51 @@ export function TeamPage({
             <h2>成员</h2>
             <span>{team.memberCount ?? members.length} 人</span>
           </header>
-          <ul className="team-member-list">
-            {members.map((member) => (
-              <li key={member.userId}>
-                <span className="member-avatar" aria-hidden="true">
-                  {initial(member.displayName)}
-                </span>
-                <span>
-                  <strong>{member.displayName}</strong>
-                  <small>@{member.username}</small>
-                </span>
-                <time dateTime={member.joinedAt}>
-                  {new Date(member.joinedAt).toLocaleDateString()}
-                </time>
-                <strong className="team-role">{member.role}</strong>
-              </li>
-            ))}
-          </ul>
+          {memberError ? (
+            <p className="team-error" role="alert">
+              {memberError}
+            </p>
+          ) : !user ? (
+            <p className="muted">登录后查看成员列表。</p>
+          ) : !membersLoaded ? (
+            <p className="muted" role="status">
+              正在加载成员列表…
+            </p>
+          ) : membersLoaded && !members.length ? (
+            <p className="muted">暂无成员。</p>
+          ) : (
+            <ul className="team-member-list">
+              {members.map((member) => (
+                <li key={member.userId}>
+                  <span className="member-avatar" aria-hidden="true">
+                    {initial(member.displayName)}
+                  </span>
+                  <span>
+                    <strong>{member.displayName}</strong>
+                    <small>@{member.username}</small>
+                  </span>
+                  <time dateTime={member.joinedAt}>
+                    {new Date(member.joinedAt).toLocaleDateString()}
+                  </time>
+                  <strong className="team-role">{member.role}</strong>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
         {canReview && (
           <section id="requests" className="team-panel team-requests-panel">
             <header>
               <h2>加入申请</h2>
-              <span>{requests.length} 条待处理</span>
+              <span>{requestsLoaded ? requests.length : '—'} 条待处理</span>
             </header>
             {requestError ? (
               <p className="team-error" role="alert">
                 {requestError}
+              </p>
+            ) : !requestsLoaded ? (
+              <p className="team-list-status" role="status">
+                正在加载待处理申请…
               </p>
             ) : requests.length ? (
               <ul className="team-member-list">

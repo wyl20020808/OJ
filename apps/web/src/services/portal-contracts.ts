@@ -65,6 +65,13 @@ export type ContestProblem = {
   score?: number;
 };
 
+export type ContestSubmission = {
+  id: string;
+  problemId: string;
+  status: string;
+  createdAt: string;
+};
+
 export type ContestStanding = {
   rank: number;
   userId: string;

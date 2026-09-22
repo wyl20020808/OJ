@@ -182,7 +182,7 @@ describe('Product Access & Evaluation V1', () => {
         url: '/api/admin/judge/capabilities',
         headers: root.headers,
       });
-      expect(capability.json()).toEqual({ canView: true });
+      expect(capability.json()).toEqual({ canView: true, canManage: true });
       const update = await app.inject({
         method: 'PATCH',
         url: `/api/problems/${problemId}`,

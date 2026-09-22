@@ -10,6 +10,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../apps/web/src/app/App.js';
 import {
+  ContestExperience,
   MessagesExperience,
   NotificationBell,
   NotificationsPage,
@@ -128,15 +129,176 @@ afterEach(() => {
 });
 
 describe('Product Web Backend runtime regressions', () => {
-  it('uses the password-only My Contests projection and exposes Guest denial with retry', async () => {
-    let projectionCalls = 0;
-    const fetcher = installAppFetch((url) => {
+  it('separates contest loading, failure, and successful empty states', () => {
+    const view = render(
+      <ContestExperience
+        view="submissions"
+        contestId="contest-1"
+        navigate={vi.fn()}
+        loading
+      />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('正在加载比赛数据');
+    expect(screen.queryByText('暂无比赛提交。')).not.toBeInTheDocument();
+
+    view.rerender(
+      <ContestExperience
+        view="submissions"
+        contestId="contest-1"
+        navigate={vi.fn()}
+        error="比赛数据暂时不可用，请稍后重试。"
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('比赛数据暂时不可用');
+    expect(screen.queryByText('暂无比赛提交。')).not.toBeInTheDocument();
+
+    view.rerender(
+      <ContestExperience
+        view="submissions"
+        contestId="contest-1"
+        navigate={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('暂无比赛提交。')).toBeInTheDocument();
+  });
+
+  it('keeps draft and cancelled contests visible in My Contests', () => {
+    render(
+      <ContestExperience
+        view="mine"
+        navigate={vi.fn()}
+        contests={[
+          { ...contest, id: 'draft-contest', lifecycle: 'DRAFT' },
+          { ...contest, id: 'cancelled-contest', lifecycle: 'CANCELLED' },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByRole('heading', { name: '草稿比赛' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '已取消' })).toBeInTheDocument();
+    expect(screen.getByText('尚未发布')).toBeInTheDocument();
+    expect(screen.getByText('比赛已取消')).toBeInTheDocument();
+  });
+
+  it('reports partial contest creation without allowing a duplicate create', async () => {
+    const navigate = vi.fn();
+    const api = {
+      createContest: vi.fn().mockResolvedValue(contest),
+      setContestProblems: vi
+        .fn()
+        .mockRejectedValue(userError('NOT_FOUND', 404)),
+    } as unknown as ApiClient;
+    render(<ContestExperience view="create" navigate={navigate} api={api} />);
+
+    fireEvent.change(screen.getByLabelText('比赛名称'), {
+      target: { value: '已持久化比赛' },
+    });
+    fireEvent.change(screen.getByLabelText('开始时间'), {
+      target: { value: '2026-09-23T10:00' },
+    });
+    fireEvent.change(screen.getByLabelText('结束时间'), {
+      target: { value: '2026-09-23T12:00' },
+    });
+    fireEvent.change(screen.getByLabelText('题目选择与排序'), {
+      target: { value: 'problem-1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '创建比赛' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '比赛已创建，但比赛或相关资源不存在',
+    );
+    expect(screen.getByRole('button', { name: '比赛已创建' })).toBeDisabled();
+    expect(api.createContest).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: '前往比赛管理' }));
+    expect(navigate).toHaveBeenCalledWith('/contests/contest-1/settings');
+  });
+
+  it('renders successful empty Home projections as empty rather than loading', async () => {
+    installAppFetch((url) => {
       if (url.endsWith('/api/auth/me'))
         return response(401, {
           code: 'UNAUTHENTICATED',
           message: 'unauthenticated',
           requestId: 'auth',
         });
+      if (url.endsWith('/ready'))
+        return response(200, { status: 'ok', dependencies: {} });
+      if (url.endsWith('/api/home'))
+        return response(200, { recentProblems: [] });
+      if (url.endsWith('/api/contests/home-summary'))
+        return response(200, {
+          running: [],
+          upcoming: [],
+          recentEnded: [],
+          counts: { running: 0, upcoming: 0, ended: 0 },
+        });
+      if (url.includes('/api/discussion/posts?'))
+        return response(200, { items: [] });
+      return response(404, {
+        code: 'NOT_FOUND',
+        message: 'not found',
+        requestId: 'fallback',
+      });
+    });
+
+    routeSetup('/');
+    render(<App />);
+
+    expect(await screen.findByText('暂无近期比赛。')).toBeInTheDocument();
+    expect(
+      screen.getByText('暂无可用于每日一题的真实题目。'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('暂无近期题目。')).toBeInTheDocument();
+    expect(screen.queryByText(/正在加载真实比赛摘要/)).not.toBeInTheDocument();
+  });
+
+  it('keeps failed Home problem projections distinct from successful emptiness', async () => {
+    installAppFetch((url) => {
+      if (url.endsWith('/api/auth/me'))
+        return response(401, {
+          code: 'UNAUTHENTICATED',
+          message: 'unauthenticated',
+          requestId: 'auth',
+        });
+      if (url.endsWith('/ready'))
+        return response(200, { status: 'ok', dependencies: {} });
+      if (url.endsWith('/api/home'))
+        return response(503, {
+          code: 'HOME_UNAVAILABLE',
+          message: 'unavailable',
+          requestId: 'home',
+        });
+      if (url.endsWith('/api/contests/home-summary'))
+        return response(200, {
+          running: [],
+          upcoming: [],
+          recentEnded: [],
+          counts: { running: 0, upcoming: 0, ended: 0 },
+        });
+      if (url.includes('/api/discussion/posts?'))
+        return response(200, { items: [] });
+      return response(404, {
+        code: 'NOT_FOUND',
+        message: 'not found',
+        requestId: 'fallback',
+      });
+    });
+
+    routeSetup('/');
+    render(<App />);
+
+    expect(await screen.findByText('题库数据暂不可用。')).toBeInTheDocument();
+    expect(screen.getByText('近期题目暂时不可用。')).toBeInTheDocument();
+    expect(screen.queryByText('暂无近期题目。')).not.toBeInTheDocument();
+  });
+
+  it('uses the password-only My Contests projection and exposes Guest denial with retry', async () => {
+    let projectionCalls = 0;
+    const fetcher = installAppFetch((url) => {
+      if (url.endsWith('/api/auth/me')) return response(200, passwordUser);
       if (url.endsWith('/ready'))
         return response(200, { status: 'ok', dependencies: {} });
       if (url.includes('/api/profile/contests?')) {
@@ -320,12 +482,7 @@ describe('Product Web Backend runtime regressions', () => {
   it('retries a failed notification list request instead of presenting no notifications', async () => {
     let notificationCalls = 0;
     installAppFetch((url) => {
-      if (url.endsWith('/api/auth/me'))
-        return response(401, {
-          code: 'UNAUTHENTICATED',
-          message: 'unauthenticated',
-          requestId: 'auth',
-        });
+      if (url.endsWith('/api/auth/me')) return response(200, passwordUser);
       if (url.endsWith('/ready'))
         return response(200, { status: 'ok', dependencies: {} });
       if (url.endsWith('/api/notifications/unread-count'))
@@ -371,12 +528,7 @@ describe('Product Web Backend runtime regressions', () => {
   it('retries a failed messaging bootstrap instead of presenting empty conversations', async () => {
     let conversationCalls = 0;
     installAppFetch((url) => {
-      if (url.endsWith('/api/auth/me'))
-        return response(401, {
-          code: 'UNAUTHENTICATED',
-          message: 'unauthenticated',
-          requestId: 'auth',
-        });
+      if (url.endsWith('/api/auth/me')) return response(200, passwordUser);
       if (url.endsWith('/ready'))
         return response(200, { status: 'ok', dependencies: {} });
       if (url.endsWith('/api/notifications/unread-count'))

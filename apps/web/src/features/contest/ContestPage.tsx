@@ -124,6 +124,8 @@ function dateRange(contest: ContestListItem) {
 }
 
 function remaining(contest: ContestListItem) {
+  if (contest.lifecycle === 'CANCELLED') return '比赛已取消';
+  if (contest.lifecycle === 'DRAFT') return '尚未发布';
   const target = new Date(
     contest.lifecycle === 'RUNNING' ? contest.endsAt : contest.startsAt,
   ).getTime();
@@ -206,6 +208,8 @@ const sections = [
   ['RUNNING', '正在进行', '正在开放的比赛', 'trophy'],
   ['UPCOMING', '即将开始', '报名与赛前准备', 'clock'],
   ['ENDED', '历史比赛', '最近结束的比赛', 'medal'],
+  ['DRAFT', '草稿比赛', '尚未发布的比赛', 'code'],
+  ['CANCELLED', '已取消', '已取消的比赛', 'calendar'],
 ] as const;
 
 export function ContestPage({
@@ -249,6 +253,7 @@ export function ContestPage({
   const upcoming = contests
     .filter(({ lifecycle }) => lifecycle === 'UPCOMING')
     .slice(0, 6);
+  const overviewUnavailable = loading || Boolean(error);
 
   return (
     <section className="contest-landing">
@@ -279,25 +284,31 @@ export function ContestPage({
         <article>
           <ContestLandingIcon name="trophy" />
           <span>
-            <strong>{counts.running}</strong>正在进行
+            <strong>{overviewUnavailable ? '—' : counts.running}</strong>
+            正在进行
           </span>
         </article>
         <article>
           <ContestLandingIcon name="clock" />
           <span>
-            <strong>{counts.upcoming}</strong>即将开始
+            <strong>{overviewUnavailable ? '—' : counts.upcoming}</strong>
+            即将开始
           </span>
         </article>
         <article>
           <ContestLandingIcon name="medal" />
           <span>
-            <strong>{counts.ended}</strong>历史比赛
+            <strong>{overviewUnavailable ? '—' : counts.ended}</strong>历史比赛
           </span>
         </article>
         <article>
           <ContestLandingIcon name="people" />
           <span>
-            <strong>{totalParticipants.toLocaleString('zh-CN')}</strong>
+            <strong>
+              {overviewUnavailable
+                ? '—'
+                : totalParticipants.toLocaleString('zh-CN')}
+            </strong>
             累计报名记录
           </span>
         </article>
@@ -447,7 +458,13 @@ export function ContestPage({
                 近期赛程
               </h2>
             </header>
-            {upcoming.length ? (
+            {loading ? (
+              <p className="contest-aside-empty" role="status">
+                正在加载近期赛程…
+              </p>
+            ) : error ? (
+              <p className="contest-aside-empty">近期赛程暂不可用</p>
+            ) : upcoming.length ? (
               <ul>
                 {upcoming.map((contest) => (
                   <li key={contest.id}>

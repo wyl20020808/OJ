@@ -11,6 +11,7 @@ import {
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../apps/web/src/app/App.js';
+import { JudgeMachinesPage } from '../apps/web/src/components/JudgeMachinesPage.js';
 import { ProblemEditor } from '../apps/web/src/components/ProblemEditor.js';
 import type { ApiClient, Problem } from '../apps/web/src/services/api.js';
 
@@ -131,6 +132,12 @@ describe('Web UI polish', () => {
     expect(
       await screen.findByRole('heading', { name: 'Online Code Editor' }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/样例运行按 EXACT_BYTES/)).toBeInTheDocument();
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(([input]) => String(input).includes('/judge-data')),
+    ).toBe(false);
   });
 
   it('opens the traditional submission surface from the problem action', async () => {
@@ -151,6 +158,29 @@ describe('Web UI polish', () => {
     expect(
       screen.getByRole('button', { name: '提交源代码' }),
     ).toBeInTheDocument();
+  });
+
+  it('persists the problem favorite action through the real profile API', async () => {
+    renderApp('/problems/sum', {
+      id: 'u2',
+      username: 'reader',
+      email: 'reader@example.test',
+      displayName: 'Reader',
+      status: 'active',
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: '收藏' }));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/profile/favorites/p1',
+        expect.objectContaining({ method: 'POST', credentials: 'include' }),
+      ),
+    );
+    expect(
+      await screen.findByRole('button', { name: '已收藏' }),
+    ).toBeDisabled();
+    expect(screen.getByText('已加入收藏。')).toHaveAttribute('role', 'status');
   });
 
   it('hides internal metadata and copies only whitespace-preserved sample input', async () => {
@@ -305,7 +335,7 @@ describe('Web UI polish', () => {
             status: 'active',
           });
         if (url.endsWith('/api/admin/judge/capabilities'))
-          return response({ canView: true });
+          return response({ canView: true, canManage: false });
         if (url.endsWith('/ready')) return response({ status: 'ok' });
         return response({ items: [], nextCursor: null });
       }),
@@ -316,6 +346,15 @@ describe('Web UI polish', () => {
       'href',
       '/admin/judge/nodes',
     );
+  });
+
+  it('does not grant Judge mutation controls from login state alone', async () => {
+    render(<JudgeMachinesPage fixture canManage={false} />);
+
+    expect(await screen.findAllByText('需要 judge.manage')).toHaveLength(3);
+    expect(
+      screen.queryByRole('button', { name: '排空任务' }),
+    ).not.toBeInTheDocument();
   });
 
   it('saves the statement without editor refresh or problem publication controls', async () => {
