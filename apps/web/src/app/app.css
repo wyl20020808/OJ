@@ -128,10 +128,8 @@ table,
   font-family: var(--font-ui);
 }
 .online-code-editor-host
+  .online-code-editor.oj-editor-page
   :is(.cm-content, .cm-gutters, textarea, pre, code) {
-  font-family: var(--font-code);
-}
-.online-code-editor-host .online-code-editor.oj-editor-page textarea {
   font-family: var(--font-code);
 }
 button {
