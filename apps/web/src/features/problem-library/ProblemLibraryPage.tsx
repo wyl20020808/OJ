@@ -213,8 +213,9 @@ export function ProblemLibraryPage({
     [category, tagCatalog],
   );
   const categoryTagKey = categoryTagIds.join(',');
+  const categoryCatalogReady = !category || tagCatalogReady;
   const load = () => {
-    if (category && !tagCatalogReady) return;
+    if (!categoryCatalogReady) return;
     const activeRequest = ++requestId.current;
     setError(false);
     setLoading(true);
@@ -255,7 +256,7 @@ export function ProblemLibraryPage({
     category,
     provider,
     categoryTagKey,
-    tagCatalogReady,
+    categoryCatalogReady,
     sort,
     order,
   ]);

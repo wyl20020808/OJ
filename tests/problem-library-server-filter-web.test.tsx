@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -100,6 +101,10 @@ describe('problem library server filter integration', () => {
 
   it('uses the sort selection and labels unsupported filters unavailable', async () => {
     const requests: string[] = [];
+    let resolveTags!: (value: ReturnType<typeof response>) => void;
+    const tagsRequest = new Promise<ReturnType<typeof response>>((resolve) => {
+      resolveTags = resolve;
+    });
     vi.stubGlobal(
       'fetch',
       vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
@@ -107,7 +112,7 @@ describe('problem library server filter integration', () => {
         requests.push(url);
         if (url.endsWith('/api/auth/me')) return response({}, 401);
         if (url.endsWith('/ready')) return response({ status: 'ok' });
-        if (url.endsWith('/api/tags')) return response([]);
+        if (url.endsWith('/api/tags')) return tagsRequest;
         if (url.includes('/api/problems?'))
           return response({
             items: [],
@@ -128,6 +133,11 @@ describe('problem library server filter integration', () => {
     const listRequests = () =>
       requests.filter((url) => url.includes('/api/problems?')).length;
     const beforeSearch = listRequests();
+    await act(async () => {
+      resolveTags(response([]));
+      await tagsRequest;
+    });
+    expect(listRequests()).toBe(beforeSearch);
     fireEvent.change(search, { target: { value: 'graph' } });
     expect(listRequests()).toBe(beforeSearch);
     fireEvent.submit(search.closest('form')!);
