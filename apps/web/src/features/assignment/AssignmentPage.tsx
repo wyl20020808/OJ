@@ -257,7 +257,7 @@ function AssignmentDetail({
       </div>
       <ol className="assignment-problem-list">
         {current.problems.map((problem) => (
-          <li key={problem.problemId}>
+          <li key={problem.publicId}>
             <a
               href={`/problems/${encodeURIComponent(problem.publicId)}`}
               onClick={(event) => {

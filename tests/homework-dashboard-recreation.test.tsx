@@ -33,7 +33,6 @@ const assignment: Assignment = {
   problems: [
     {
       publicId: 'P1067',
-      problemId: 'problem-1',
       title: '字符串匹配',
       displayOrder: 1,
       completed: false,

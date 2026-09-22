@@ -720,7 +720,6 @@ export type TeamJoinRequest = {
 export type AssignmentProblem = {
   publicId: string;
   title: string;
-  problemId: string;
   displayOrder: number;
   completed: boolean;
 };
