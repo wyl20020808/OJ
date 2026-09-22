@@ -114,6 +114,23 @@ table,
 .problem-id {
   font-variant-numeric: tabular-nums lining-nums;
 }
+.online-code-editor-host .online-code-editor.oj-editor-page {
+  font-family: var(--font-ui);
+}
+.online-code-editor-host
+  :is(
+    .editor-toolbar span,
+    .settings-header span,
+    .settings-controls output,
+    .run-field span,
+    .oj-editor-language-mark
+  ) {
+  font-family: var(--font-ui);
+}
+.online-code-editor-host
+  :is(.cm-content, .cm-gutters, textarea, pre, code) {
+  font-family: var(--font-code);
+}
 button {
   border: 1px solid var(--accent);
   border-radius: 6px;

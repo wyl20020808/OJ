@@ -64,6 +64,12 @@ describe('web typography contract', () => {
       /\.testcase-content-field textarea[\s\S]*?font-family:\s*var\(--font-code\)/,
     );
     expect(appCss).toMatch(
+      /\.online-code-editor-host \.online-code-editor\.oj-editor-page[\s\S]*?font-family:\s*var\(--font-ui\)/,
+    );
+    expect(appCss).toMatch(
+      /\.online-code-editor-host[\s\S]*?\.cm-content[\s\S]*?font-family:\s*var\(--font-code\)/,
+    );
+    expect(appCss).toMatch(
       /\.problem-list-modern \.problem-id[\s\S]*?font-family:\s*var\(--font-ui\)/,
     );
   });
