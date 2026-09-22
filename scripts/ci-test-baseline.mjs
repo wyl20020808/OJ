@@ -15,7 +15,15 @@ const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
 const result = spawnSync(
   pnpm,
-  ['exec', 'vitest', 'run', '--reporter=json', `--outputFile=${outputPath}`],
+  [
+    'exec',
+    'vitest',
+    'run',
+    '--reporter=json',
+    `--outputFile=${outputPath}`,
+    '--maxWorkers=1',
+    '--no-file-parallelism',
+  ],
   {
     encoding: 'utf8',
     maxBuffer: 20 * 1024 * 1024,
