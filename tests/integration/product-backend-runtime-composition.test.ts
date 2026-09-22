@@ -273,7 +273,8 @@ describe('product backend central runtime composition', () => {
       (await app.inject('/api/profile/capabilities')).json(),
     ).toMatchObject({
       favorites: { available: false, reason: 'AUTHENTICATION_REQUIRED' },
-      heatmap: {
+      heatmap: { available: true },
+      wrongbook: {
         available: false,
         reason: 'UPSTREAM_BLOCKED_BY_AUTHORITATIVE_SUBMISSION_OUTCOME',
       },
