@@ -12,6 +12,7 @@
     "lint": "eslint \"{apps,packages,tests}/**/*.{ts,tsx}\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:baseline": "node scripts/ci-test-baseline.mjs",
     "test:architecture": "node tests/architecture/check.mjs",
     "test:e2e": "playwright test",
     "runtime:smoke": "node scripts/runtime-smoke.mjs",
@@ -54,7 +55,7 @@
     "build:host-agent:host": "pnpm --filter @ojplatform/judge-host-agent build:host",
     "test:web": "vitest run tests/web.test.tsx",
     "test:api": "vitest run tests/api.test.ts",
-    "ci:check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:architecture && pnpm build",
+    "ci:check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:baseline && pnpm test:architecture && pnpm build",
     "build": "tsc -p tsconfig.build.json",
     "check": "pnpm ci:check"
   },
