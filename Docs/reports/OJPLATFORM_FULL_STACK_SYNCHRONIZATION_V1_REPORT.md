@@ -12,11 +12,13 @@ Qualified feature HEAD before this report: `fbc1e914d4782888f29d2600f4e04b92000b
 
 ```text
 FULL_STACK_SYNCHRONIZATION = PASS
+FRESH_MAIN_INTEGRATION = PASS
 FRONTEND_BACKEND_CONTRACT_ALIGNMENT = PASS
 TRUTHFUL_UNAVAILABLE_STATES = PASS
 AUTOMATED_BROWSER_RUNTIME = PASS
 BASELINE_FAILURE_COMPARISON = PASS (exact identities/signatures unchanged)
-READY_FOR_INTEGRATION = YES
+MERGED_TO_INTEGRATION_CANDIDATE = YES
+READY_FOR_MAIN_FAST_FORWARD = YES
 MANUAL UI ACCEPTANCE = PENDING USER
 ```
 
@@ -184,3 +186,46 @@ Qualified implementation commits before report/status documentation:
 
 Main was not merged or pushed at feature qualification time.
 `D:\OJPlatformPlugins\AlgoQuest` was not accessed or modified.
+
+## Final integration
+
+The integration candidate was created in a fresh worktree from fetched
+`origin/main` `ed192ff411b62337fc5071c3f59cef70d0388f2c`. Feature tip
+`547782e2cb4b591ecc9d7e4900d61bbd57bfc771` was merged with `--no-ff` as
+`c71be34a1a6a11a101c6046a85cedfcdf4d6fa21`; there were no conflicts.
+
+The first candidate full-suite run exposed one timing-dependent extra request in
+the Problem Library test: tag-catalog readiness could reload an unfiltered list
+even though no category filter depended on the catalog. Focused reproduction
+passed, and an unmodified full rerun returned to the exact baseline signature,
+but the redundant request was still corrected rather than dismissed as a flake.
+Integration commit `c05ed7a8d201bfa102c6a5b6c13dd073403e09d9`
+now gates catalog readiness only when a category filter needs tag expansion; the
+test deterministically resolves the catalog and proves that no second list load
+occurs.
+
+Final candidate evidence at product code commit `c05ed7a`:
+
+| Gate | Result |
+| --- | --- |
+| Format, lint, typecheck | PASS |
+| Architecture gate | PASS |
+| Root, API, Web builds | PASS |
+| Full Vitest | 1082 total; 1029 passed; 48 failed; 5 pending |
+| Exact baseline diff | `new=0`; `resolved=0`; `signature changes=0` |
+| Problem Library focused regression | PASS, 4/4 |
+| Pinned editor tests/build | PASS, 56/56; build PASS |
+| Managed runtime start + Doctor | PASS / READY |
+| Explicit-source runtime status | `MIXED SOURCE = False`; worker ONLINE |
+| Installed-Chrome composed journey | PASS, 1/1 in 5.5s |
+| `git diff --check` | PASS |
+
+The first fresh-worktree Web build was attempted before installing the pinned
+submodule's own lockfile and therefore could not resolve CodeMirror packages.
+After `npm ci` in the unchanged pinned submodule, plugin tests/build and the Web
+build passed. This was a worktree setup prerequisite, not a source failure.
+
+The managed runtime was stopped through `scripts/dev-runtime.ps1`, restarted
+with the integration checkout as the explicit source, and verified by Doctor.
+The final browser journey again covered the persisted and explicitly unavailable
+flows listed above, with no page error or unexpected HTTP failure accepted.
