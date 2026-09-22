@@ -16,7 +16,7 @@
 .submission-detail-view .brand {
   flex: 0 0 auto;
   color: #071f67;
-  font-family: Georgia, 'Noto Serif SC', serif;
+  font-family: var(--font-ui);
 }
 
 .submission-detail-view .brand-mark {
@@ -43,7 +43,7 @@
   padding: 0 14px;
   border-radius: 0;
   color: #071f67;
-  font-family: Georgia, 'Noto Serif SC', serif;
+  font-family: var(--font-ui);
   font-size: 15px;
   font-weight: 700;
   white-space: nowrap;
@@ -82,7 +82,7 @@
   border-radius: 50%;
   background: linear-gradient(145deg, #244f92, #85b5e7 58%, #f5d1c5 59%);
   color: #fff;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 16px;
 }
 
@@ -99,7 +99,7 @@
   border: 0;
   background: transparent;
   color: #6a80b4;
-  font-family: Georgia, 'Noto Serif SC', serif;
+  font-family: var(--font-ui);
   font-size: 13px;
 }
 
@@ -111,7 +111,7 @@
   --detail-soft: #f5f8fd;
   min-width: 0;
   color: var(--detail-navy);
-  font-family: Georgia, 'Noto Serif SC', 'Songti SC', SimSun, serif;
+  font-family: var(--font-ui);
 }
 
 .submission-detail-page * {
@@ -173,7 +173,7 @@
 
 .submission-detail-hero small {
   color: #4572c1;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 7px;
   font-weight: 700;
   line-height: 1.8;
@@ -316,7 +316,7 @@
   border-radius: 999px;
   background: #e6fbef;
   color: #0abf6e;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 700;
 }
@@ -534,10 +534,7 @@
   border-radius: 6px;
   background: transparent;
   color: #6680b6;
-  font:
-    600 12px/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 600 12px/1 var(--font-ui);
 }
 
 .submission-tabs button.active {
@@ -551,7 +548,7 @@
   border-radius: 6px;
   background: #fff1f3;
   color: #d9374d;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
 }
 
@@ -579,10 +576,7 @@
 }
 
 .testcase-row strong {
-  font:
-    700 11px/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 700 11px/1 var(--font-ui);
 }
 
 .ordinal-live::before {
@@ -597,10 +591,7 @@
   border: 1.5px solid #8299c8;
   border-radius: 50%;
   color: #8299c8;
-  font:
-    800 13px/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 700 13px/1 var(--font-ui);
 }
 
 .testcase-verdict,
@@ -692,10 +683,7 @@
   border-radius: 7px;
   background: #fff;
   color: #315a9f;
-  font:
-    12px/1.5 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 12px/1.5 var(--font-ui);
   white-space: pre-line;
   transform: translateX(-50%);
   box-shadow: 0 7px 20px rgba(28, 60, 112, 0.16);
@@ -708,7 +696,7 @@
   border-radius: 7px;
   background: #f6f9fd;
   color: #5e78ad;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
 }
 
@@ -760,11 +748,7 @@
   border-radius: 7px;
   background: #0e1d37;
   color: #dceaff;
-  font:
-    12px/1.55 ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
+  font: 12px/1.55 var(--font-code);
   white-space: pre-wrap;
 }
 
@@ -788,7 +772,7 @@
   border-radius: 7px;
   background: #edf4ff;
   color: #1671e8 !important;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-weight: 700;
 }
 
@@ -940,10 +924,7 @@
 .resource-metric > b {
   margin-left: 6px;
   color: #294d9a;
-  font:
-    700 11px/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 700 11px/1 var(--font-ui);
 }
 
 .verdict-headline {
@@ -984,10 +965,7 @@
   border-radius: 50%;
   background: #7589b7;
   color: #fff;
-  font:
-    800 12px/1 ui-sans-serif,
-    system-ui,
-    sans-serif;
+  font: 700 12px/1 var(--font-ui);
 }
 
 .verdict-count.verdict-AC > span {
@@ -1045,11 +1023,7 @@
   border-radius: 6px;
   background: #f8faff;
   color: #446bb0;
-  font:
-    11px/1.45 ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
+  font: 11px/1.45 var(--font-code);
 }
 
 .live-log-viewport p {

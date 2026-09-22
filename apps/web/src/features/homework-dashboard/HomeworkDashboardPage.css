@@ -31,7 +31,7 @@
       transparent 29%
     ),
     #f8fcff;
-  font-family: 'Noto Serif SC', 'Songti SC', SimSun, serif;
+  font-family: var(--font-ui);
   font-size: 16px;
   line-height: 1.35;
 }
@@ -110,7 +110,7 @@
 .homework-course-select__arrow {
   margin-left: auto;
   color: #087df1;
-  font-family: Arial, sans-serif;
+  font-family: var(--font-ui);
   font-size: 26px;
   font-weight: 700;
   line-height: 1;
@@ -195,9 +195,9 @@
   border-radius: 50%;
   background: #9fb6d8;
   color: #fff;
-  font-family: Arial, sans-serif;
+  font-family: var(--font-ui);
   font-size: 8px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .homework-lesson--completed .homework-lesson__status {
@@ -255,9 +255,9 @@
   bottom: 12px;
   color: rgba(255, 255, 255, 0.94);
   content: 'A HEIGHTER\A TOMORROW';
-  font-family: Arial, sans-serif;
+  font-family: var(--font-ui);
   font-size: 7px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.19em;
   line-height: 1.7;
   text-align: right;
@@ -1036,9 +1036,9 @@
   top: -2px;
   left: 18px;
   color: #acd8fa;
-  font-family: Georgia, serif;
+  font-family: var(--font-ui);
   font-size: 66px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
 }
 

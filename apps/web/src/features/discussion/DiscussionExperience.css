@@ -27,7 +27,7 @@
 .blog-category-list a small {
   margin-left: auto;
   color: #8294b2;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .blog-side-error {
@@ -114,7 +114,7 @@
   border-radius: 5px;
   background: #fff9df;
   color: #8b6b14;
-  font-family: Arial, sans-serif;
+  font-family: var(--font-ui);
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -162,7 +162,7 @@
 
 .blog-hot-posts li > b {
   color: #4d70a5;
-  font-family: Georgia, serif;
+  font-family: var(--font-ui);
   text-align: center;
 }
 
