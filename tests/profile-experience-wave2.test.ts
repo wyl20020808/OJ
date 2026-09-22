@@ -56,7 +56,7 @@ describe('Profile Experience Wave 2', () => {
       (await service.profileTeams('u1', 'u2')).map((team) => team.slug),
     ).toEqual(['public-team']);
     expect(
-      (await service.profileTeams('u1', 'u1')).map((team) => team.slug),
+      (await service.profileTeams('u1', 'u1')).map((team) => team.slug).sort(),
     ).toEqual(['private-team', 'public-team']);
   });
 

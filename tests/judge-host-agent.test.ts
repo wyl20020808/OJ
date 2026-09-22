@@ -167,7 +167,7 @@ describe('local judge host agent', () => {
         templateId: 'node-v1',
         displayName: 'Node V1',
         executable: process.execPath,
-        args: ['-e', 'setTimeout(() => {}, 5000)'],
+        args: ['-e', 'setInterval(() => {}, 1000)'],
         maxConcurrentJobs: 1,
         cpuUnits: 1,
         memoryMb: 64,
@@ -185,29 +185,34 @@ describe('local judge host agent', () => {
       templateId: 'node-v1',
       nodeId: 'persisted',
     });
-    const restarted = new LocalJudgeHostAgent(templates, capacity, {
-      statePath,
-    });
+    try {
+      const restarted = new LocalJudgeHostAgent(templates, capacity, {
+        statePath,
+      });
 
-    expect(await restarted.listOwned()).toEqual([]);
-    expect(await restarted.operationsHistory()).toEqual([
-      expect.objectContaining({
-        nodeId: 'persisted',
-        status: 'FAILED',
-        incarnation: started.incarnation,
-      }),
-    ]);
-    await expect(
-      restarted.start({ templateId: 'node-v1', nodeId: 'persisted' }),
-    ).rejects.toThrow('NODE_OWNERSHIP_RECONCILIATION_REQUIRED');
-
-    await owner.stop({
-      nodeId: 'persisted',
-      ...(started.incarnation
-        ? { expectedIncarnation: started.incarnation }
-        : {}),
-    });
-    await rm(directory, { recursive: true, force: true });
+      expect(await restarted.listOwned()).toEqual([]);
+      expect(await restarted.operationsHistory()).toEqual([
+        expect.objectContaining({
+          nodeId: 'persisted',
+          status: 'FAILED',
+          incarnation: started.incarnation,
+        }),
+      ]);
+      await expect(
+        restarted.start({ templateId: 'node-v1', nodeId: 'persisted' }),
+      ).rejects.toThrow('NODE_OWNERSHIP_RECONCILIATION_REQUIRED');
+    } finally {
+      try {
+        await owner.stop({
+          nodeId: 'persisted',
+          ...(started.incarnation
+            ? { expectedIncarnation: started.incarnation }
+            : {}),
+        });
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    }
   });
 
   it('protects the HTTP boundary with a separate credential', async () => {
