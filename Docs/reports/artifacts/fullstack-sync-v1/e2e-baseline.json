@@ -1,0 +1,160 @@
+{
+  "sourceRun": "https://github.com/wyl20020808/OJ/actions/runs/35722963052",
+  "tests": [
+    {
+      "identity": "tests/e2e/blog-comment-ui-repair-v1.spec.ts:10:3 › Blog comment thread remains compact on desktop",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    },
+    {
+      "identity": "tests/e2e/blog-comment-ui-repair-v1.spec.ts:10:3 › Blog comment thread remains compact on tablet",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    },
+    {
+      "identity": "tests/e2e/blog-comment-ui-repair-v1.spec.ts:10:3 › Blog comment thread remains compact on mobile",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    },
+    {
+      "identity": "tests/e2e/blog-full-experience.spec.ts:10:3 › Blog feed remains stable on desktop",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    },
+    {
+      "identity": "tests/e2e/blog-full-experience.spec.ts:10:3 › Blog feed remains stable on tablet",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    },
+    {
+      "identity": "tests/e2e/blog-full-experience.spec.ts:10:3 › Blog feed remains stable on mobile",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    },
+    {
+      "identity": "tests/e2e/blog-full-experience.spec.ts:123:1 › Blog article detail renders real content and comments",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    },
+    {
+      "identity": "tests/e2e/contest-full-experience-real-runtime.spec.ts:9:1 › Contest landing and detail use real API data without responsive overflow",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    },
+    {
+      "identity": "tests/e2e/fullstack-sync-v1-runtime.spec.ts:3:1 › Full-Stack Synchronization V1 uses composed runtime contracts",
+      "status": "passed",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/judge-admin-judge-service-integration.spec.ts:3:1 › Product Backend reads the frozen Judge Admin service boundary",
+      "status": "failed",
+      "signature": "Error: locator.fill: Error: strict mode violation: getByLabel('密码') resolved to 2 elements:"
+    },
+    {
+      "identity": "tests/e2e/judge-admin-product-integration.spec.ts:3:1 › Judge Admin uses the real Product Backend boundary",
+      "status": "failed",
+      "signature": "Error: locator.fill: Error: strict mode violation: getByLabel('密码') resolved to 2 elements:"
+    },
+    {
+      "identity": "tests/e2e/phase1a-real-runtime.spec.ts:35:1 › real runtime registration, session, problem journey, and logout",
+      "status": "failed",
+      "signature": "error: update or delete on table \"problems\" violates foreign key constraint \"contest_problems_problem_id_fkey\" on table \"contest_problems\""
+    },
+    {
+      "identity": "tests/e2e/phase1b-authoring-real-runtime.spec.ts:3:1 › real authoring workflow, revision history, and forbidden access",
+      "status": "failed",
+      "signature": "Test timeout of 30000ms exceeded."
+    },
+    {
+      "identity": "tests/e2e/phase1c-submission-real-runtime.spec.ts:26:1 › real submission intake journey and ownership boundary",
+      "status": "failed",
+      "signature": "error: update or delete on table \"problems\" violates foreign key constraint \"contest_problems_problem_id_fkey\" on table \"contest_problems\""
+    },
+    {
+      "identity": "tests/e2e/phase1d-product-experience-real-runtime.spec.ts:3:1 › real product experience journey across home, account, problems, and logout",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    },
+    {
+      "identity": "tests/e2e/phase1e-r-judge-status-journeys.spec.ts:18:3 › PHASE 1E-R server-backed Judge status journeys › J1, J2, J4, W11, and W12 use real Auth, Problem, Submission, Redis, and synthetic controls",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2a-real-runtime.spec.ts:4:1 › real API, Redis, and Go Worker synthetic journey",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2a-worker-ops-ui.spec.ts:14:3 › PHASE 2A server-backed Worker operations journeys › J2A-1 normal safe-fixture qualification journey",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2a-worker-ops-ui.spec.ts:23:3 › PHASE 2A server-backed Worker operations journeys › J2A-2 retry and requeue journey",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2a-worker-ops-ui.spec.ts:33:3 › PHASE 2A server-backed Worker operations journeys › J2A-3 Worker degraded and recovery journey",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2a-worker-ops-ui.spec.ts:43:3 › PHASE 2A server-backed Worker operations journeys › J2A-4 cancellation journey",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2a-worker-ops-ui.spec.ts:53:3 › PHASE 2A server-backed Worker operations journeys › J2A-5 forbidden diagnostics journey",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2b-sandbox-ops-ui.spec.ts:33:3 › PHASE 2B Sandbox qualification journeys › J2B-1 operator qualification overview",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2b-sandbox-ops-ui.spec.ts:49:3 › PHASE 2B Sandbox qualification journeys › J2B-2 trusted probe journey",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2b-sandbox-ops-ui.spec.ts:66:3 › PHASE 2B Sandbox qualification journeys › J2B-3 failure and degraded journey",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2b-sandbox-ops-ui.spec.ts:85:3 › PHASE 2B Sandbox qualification journeys › J2B-4 cleanup failure journey",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2b-sandbox-ops-ui.spec.ts:100:3 › PHASE 2B Sandbox qualification journeys › J2B-5 authorization boundary",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/phase2b-sandbox-ops-ui.spec.ts:119:3 › PHASE 2B Sandbox qualification journeys › J2B-6 cancellation journey",
+      "status": "skipped",
+      "signature": ""
+    },
+    {
+      "identity": "tests/e2e/platform.spec.ts:3:1 › healthy platform shell and controlled not-found route",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    },
+    {
+      "identity": "tests/e2e/product-lead-integration-smoke.spec.ts:3:1 › product lead integration smoke uses the real product runtime",
+      "status": "failed",
+      "signature": "Error: locator.fill: Error: strict mode violation: getByLabel('密码') resolved to 2 elements:"
+    },
+    {
+      "identity": "tests/e2e/web-ui-polish.spec.ts:3:1 › Guest owner problem actions and responsive editor remain truthful",
+      "status": "failed",
+      "signature": "Error: expect(locator).toBeVisible() failed"
+    }
+  ]
+}

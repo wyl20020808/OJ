@@ -15,6 +15,7 @@
     "test:baseline": "node scripts/ci-test-baseline.mjs",
     "test:architecture": "node tests/architecture/check.mjs",
     "test:e2e": "playwright test",
+    "test:e2e:baseline": "node scripts/ci-e2e-baseline.mjs",
     "runtime:smoke": "node scripts/runtime-smoke.mjs",
     "infra:up": "node scripts/infra.mjs up -d",
     "infra:down": "node scripts/infra.mjs down",
