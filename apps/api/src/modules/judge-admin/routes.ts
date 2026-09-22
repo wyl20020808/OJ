@@ -149,7 +149,14 @@ export async function registerJudgeAdminRoutes(
   };
   app.get('/api/admin/judge/capabilities', async (request: any, reply: any) => {
     const ctx = await o.getAuthContext(request);
-    return reply.send({ canView: Boolean(await o.can(ctx, 'judge.view')) });
+    const [canView, canManage] = await Promise.all([
+      o.can(ctx, 'judge.view'),
+      o.can(ctx, 'judge.manage'),
+    ]);
+    return reply.send({
+      canView: Boolean(canView),
+      canManage: Boolean(canManage),
+    });
   });
   const query = (r: any) => ({
     limit: Math.min(100, Math.max(1, Number(r.query?.limit ?? 25) || 25)),

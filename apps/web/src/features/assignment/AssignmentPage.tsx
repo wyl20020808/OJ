@@ -1,5 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { ApiClient, Assignment } from '../../services/api.js';
+import {
+  ApiError,
+  type ApiClient,
+  type Assignment,
+} from '../../services/api.js';
 import './AssignmentPage.css';
 
 type Navigate = (path: string) => void;
@@ -48,6 +52,7 @@ export function AssignmentPage({
   detailId,
   teamSlug,
   user,
+  authState = user ? 'authenticated' : 'unauthenticated',
   create = false,
 }: {
   api: ApiClient;
@@ -55,6 +60,7 @@ export function AssignmentPage({
   detailId?: string;
   teamSlug?: string;
   user: { id: string } | null;
+  authState?: 'loading' | 'authenticated' | 'unauthenticated' | 'unavailable';
   create?: boolean;
 }) {
   const [items, setItems] = useState<Assignment[]>([]);
@@ -66,6 +72,21 @@ export function AssignmentPage({
     let live = true;
     setLoading(true);
     setError('');
+    if (authState === 'loading')
+      return () => {
+        live = false;
+      };
+    if (!user) {
+      setError(
+        authState === 'unavailable'
+          ? '账户服务暂时不可用'
+          : '请先登录后查看我的作业',
+      );
+      setLoading(false);
+      return () => {
+        live = false;
+      };
+    }
     const request = detailId
       ? api.assignment(detailId).then((value) => {
           if (live) setDetail(value);
@@ -83,19 +104,21 @@ export function AssignmentPage({
             if (live) setItems(value.items);
           });
     void request
-      .catch(
-        () =>
-          live && setError(user ? '作业暂时不可用' : '请先登录后查看我的作业'),
-      )
+      .catch((reason: unknown) => {
+        if (!live) return;
+        setError(
+          reason instanceof ApiError && reason.status === 403
+            ? '当前账号无权查看这项作业'
+            : reason instanceof ApiError && reason.status === 404
+              ? '作业不存在或已被移除'
+              : '作业暂时不可用',
+        );
+      })
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [api, detailId, teamSlug, user]);
-  if (create && teamSlug)
-    return (
-      <CreateAssignment api={api} navigate={navigate} teamSlug={teamSlug} />
-    );
+  }, [api, authState, detailId, teamSlug, user]);
   if (loading)
     return (
       <section className="state">
@@ -106,10 +129,20 @@ export function AssignmentPage({
     return (
       <section className="state">
         <h1>{error}</h1>
-        <button type="button" onClick={() => window.location.reload()}>
-          重试
-        </button>
+        {error === '请先登录后查看我的作业' ? (
+          <button type="button" onClick={() => navigate('/login')}>
+            登录
+          </button>
+        ) : (
+          <button type="button" onClick={() => window.location.reload()}>
+            重试
+          </button>
+        )}
       </section>
+    );
+  if (create && teamSlug)
+    return (
+      <CreateAssignment api={api} navigate={navigate} teamSlug={teamSlug} />
     );
   if (detailId && detail)
     return <AssignmentDetail api={api} item={detail} navigate={navigate} />;
@@ -182,36 +215,48 @@ function AssignmentDetail({
   navigate: Navigate;
 }) {
   const [busy, setBusy] = useState(false);
+  const [current, setCurrent] = useState(item);
+  const [transitionError, setTransitionError] = useState('');
+  useEffect(() => setCurrent(item), [item]);
   const transition = (action: 'publish' | 'close') => {
     setBusy(true);
+    setTransitionError('');
     void (
       action === 'publish'
-        ? api.publishAssignment(item.publicId)
-        : api.closeAssignment(item.publicId)
-    ).finally(() => {
-      setBusy(false);
-      window.location.reload();
-    });
+        ? api.publishAssignment(current.publicId)
+        : api.closeAssignment(current.publicId)
+    )
+      .then(setCurrent)
+      .catch((error: unknown) =>
+        setTransitionError(
+          error instanceof ApiError && error.status === 403
+            ? '当前账号无权执行此操作。'
+            : error instanceof ApiError && error.status === 409
+              ? '作业状态已变化，请刷新后重试。'
+              : '操作失败，服务端未保存任何变更。',
+        ),
+      )
+      .finally(() => setBusy(false));
   };
   return (
     <section className="assignment-page">
       <header className="portal-heading">
         <div>
-          <p className="eyebrow">{item.team.name}</p>
-          <h1>{item.title}</h1>
-          <p>{item.description || '暂无说明'}</p>
+          <p className="eyebrow">{current.team.name}</p>
+          <h1>{current.title}</h1>
+          <p>{current.description || '暂无说明'}</p>
         </div>
-        <span className="assignment-status">{item.status}</span>
+        <span className="assignment-status">{current.status}</span>
       </header>
       <div className="assignment-detail-facts">
-        <span>开始：{dateText(item.startsAt)}</span>
-        <span>截止：{dateText(item.dueAt)}</span>
+        <span>开始：{dateText(current.startsAt)}</span>
+        <span>截止：{dateText(current.dueAt)}</span>
         <strong>
-          {item.completedCount} / {item.problemCount} 已完成
+          {current.completedCount} / {current.problemCount} 已完成
         </strong>
       </div>
       <ol className="assignment-problem-list">
-        {item.problems.map((problem) => (
+        {current.problems.map((problem) => (
           <li key={problem.problemId}>
             <a
               href={`/problems/${encodeURIComponent(problem.publicId)}`}
@@ -226,8 +271,13 @@ function AssignmentDetail({
           </li>
         ))}
       </ol>
+      {transitionError && (
+        <p className="team-error" role="alert">
+          {transitionError}
+        </p>
+      )}
       <div className="assignment-form-actions">
-        {item.capabilities.canPublish && (
+        {current.capabilities.canPublish && (
           <button
             type="button"
             disabled={busy}
@@ -236,7 +286,7 @@ function AssignmentDetail({
             发布作业
           </button>
         )}
-        {item.capabilities.canClose && (
+        {current.capabilities.canClose && (
           <button
             type="button"
             disabled={busy}
@@ -250,8 +300,8 @@ function AssignmentDetail({
           className="secondary"
           onClick={() =>
             navigate(
-              item.capabilities.canEdit
-                ? `/teams/${encodeURIComponent(item.team.slug)}/assignments`
+              current.capabilities.canEdit
+                ? `/teams/${encodeURIComponent(current.team.slug)}/assignments`
                 : '/homework',
             )
           }

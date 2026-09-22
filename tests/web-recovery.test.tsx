@@ -330,6 +330,8 @@ describe('Composed product API client contract', () => {
             return { status: 200, ok: true, json: async () => ({ items: [] }) };
           if (url.includes('/api/contests/c1/problems'))
             return { status: 200, ok: true, json: async () => ({ items: [] }) };
+          if (url.includes('/api/contests/c1/submissions'))
+            return { status: 200, ok: true, json: async () => ({ items: [] }) };
           if (url.includes('/api/contests/c1'))
             return { status: 200, ok: true, json: async () => ({ id: 'c1' }) };
           if (url.includes('/api/friends'))
@@ -347,6 +349,7 @@ describe('Composed product API client contract', () => {
     await api.contests();
     await api.contest('c1');
     await api.contestProblems('c1');
+    await api.contestSubmissions('c1');
     await expect(api.contestStandings('c1')).resolves.toMatchObject({
       available: false,
       reason: 'SCORING_ENGINE_NOT_INTEGRATED',
@@ -362,6 +365,7 @@ describe('Composed product API client contract', () => {
         '/api/contests?limit=20',
         '/api/contests/c1',
         '/api/contests/c1/problems',
+        '/api/contests/c1/submissions?limit=100',
         '/api/contests/c1/standings',
         '/api/friends',
         '/api/friend-requests?direction=incoming',

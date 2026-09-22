@@ -33,8 +33,8 @@ describe('Homework dashboard navbar', () => {
     expect(homeworkLink).toHaveClass('active');
     expect(document.querySelector('.app-navbar')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', {
-        name: '当前需要优先完成（本周作业）',
+      await screen.findByRole('heading', {
+        name: '请先登录后查看我的作业',
       }),
     ).toBeInTheDocument();
   });

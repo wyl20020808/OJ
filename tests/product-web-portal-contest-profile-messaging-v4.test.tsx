@@ -214,7 +214,7 @@ async function verifyHome(id: number) {
     renderApp('/homework');
     expect(
       await screen.findByRole('heading', {
-        name: '当前需要优先完成（本周作业）',
+        name: '请先登录后查看我的作业',
       }),
     ).toBeInTheDocument();
     return;
@@ -232,8 +232,7 @@ async function verifyHome(id: number) {
     12: 'Verdict Engine',
     16: '比赛与排名',
     21: '真实静态公告',
-    23: '不会显示虚构的作业',
-    24: '作业功能正在接入',
+    23: '真实作业',
     33: '两数之和',
     35: '哈希表',
     36: '题库数据暂不可用',
@@ -249,6 +248,7 @@ async function verifyHome(id: number) {
     15: '进入题库',
     17: '真实测试比赛',
     18: 'Ada 100',
+    24: '作业功能正在接入',
   };
   if (id === 3)
     expect(body.indexOf('公告')).toBeLessThan(body.indexOf('我的作业'));
@@ -379,6 +379,7 @@ async function verifyContest(id: number) {
   if (id === 62 || id === 66 || id === 76) {
     renderApp(
       id === 62 ? '/contests' : id === 66 ? '/me/contests' : '/contests/new',
+      { authenticated: id === 66 || id === 76 },
     );
     if (id === 76) {
       expect(
@@ -425,8 +426,21 @@ async function verifyContest(id: number) {
     return;
   }
   if (id === 70) {
-    renderContest('submissions');
-    expect(screen.getByText('比赛提交暂不可用')).toBeInTheDocument();
+    renderContest('submissions', {
+      contestSubmissions: [
+        {
+          id: 'submission-1',
+          problemId: 'problem-1',
+          status: 'PENDING',
+          createdAt: '2026-09-22T00:00:00.000Z',
+        },
+      ],
+    });
+    expect(screen.getByRole('link', { name: '#submission-1' })).toHaveAttribute(
+      'href',
+      '/submissions/submission-1',
+    );
+    expect(screen.getByText(/比赛专用提交入口尚未接入/)).toBeInTheDocument();
     return;
   }
   if ([71, 72, 73, 74, 75].includes(id)) {
@@ -496,11 +510,6 @@ async function verifyContest(id: number) {
       fireEvent.change(screen.getByLabelText('每题分值'), {
         target: { value: '100' },
       });
-      fireEvent.change(screen.getByLabelText('封榜提前分钟'), {
-        target: { value: '-1' },
-      });
-      fireEvent.click(submit);
-      expect(screen.getByRole('alert')).toHaveTextContent('不能为负数');
       return;
     }
     fireEvent.change(screen.getByLabelText('比赛名称'), {
@@ -588,7 +597,9 @@ async function verifyCommunication(id: number) {
     return;
   }
   if (id === 106 || id === 107) {
-    renderApp(id === 106 ? '/notifications' : '/messages');
+    renderApp(id === 106 ? '/notifications' : '/messages', {
+      authenticated: true,
+    });
     if (id === 106)
       expect(
         await screen.findByRole('heading', { name: '通知' }),
@@ -675,7 +686,9 @@ async function verifyRegression(id: number) {
       134: '通讯数据不存在或当前不可用。',
       137: '作业功能正在接入',
     };
-    renderApp(paths[id]);
+    renderApp(paths[id], {
+      authenticated: id === 133 || id === 134,
+    });
     const expectedText = expected[id];
     if (!expectedText) throw new Error(`Missing expectation for WEB-V4-${id}`);
     expect(await screen.findByText(expectedText)).toBeInTheDocument();

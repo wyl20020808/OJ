@@ -14,6 +14,7 @@ import type {
   ContestListItem,
   ContestProblem,
   ContestStanding,
+  ContestSubmission,
   ConversationSummary,
   FriendRequest,
   FriendSummary,
@@ -193,6 +194,7 @@ export function ContestExperience({
   detail,
   problems = [],
   standings = [],
+  contestSubmissions = [],
   standingsUnavailableReason,
   api,
   loading = false,
@@ -206,6 +208,7 @@ export function ContestExperience({
   detail?: ContestDetail;
   problems?: ContestProblem[];
   standings?: ContestStanding[];
+  contestSubmissions?: ContestSubmission[];
   standingsUnavailableReason?: string;
   api?: ApiClient | undefined;
   loading?: boolean;
@@ -232,6 +235,7 @@ export function ContestExperience({
       navigate={navigate}
       problems={problems}
       standings={standings}
+      contestSubmissions={contestSubmissions}
       api={api}
       loading={loading}
       error={error}
@@ -252,6 +256,7 @@ function ContestDetailExperience({
   detail,
   problems,
   standings,
+  contestSubmissions,
   standingsUnavailableReason,
   api,
   loading,
@@ -264,6 +269,7 @@ function ContestDetailExperience({
   detail?: ContestDetail;
   problems: ContestProblem[];
   standings: ContestStanding[];
+  contestSubmissions: ContestSubmission[];
   standingsUnavailableReason?: string;
   api?: ApiClient | undefined;
   loading: boolean;
@@ -444,14 +450,17 @@ function ContestDetailExperience({
             {label}
           </PortalLink>
         ))}
-        <span aria-disabled="true">公告</span>
         {currentDetail?.canManage && (
           <PortalLink to={`${base}/settings`} navigate={navigate}>
             管理
           </PortalLink>
         )}
       </nav>
-      {view === 'standings' ? (
+      {loading ? (
+        <p className="muted" role="status">
+          正在加载比赛数据…
+        </p>
+      ) : error ? null : view === 'standings' ? (
         <Standings
           standings={standings}
           {...(standingsUnavailableReason === undefined
@@ -474,18 +483,33 @@ function ContestDetailExperience({
             ))}
           </ol>
         ) : (
-          <CapabilityNotice
-            title="比赛题目暂不可用"
-            text="题目集合由比赛后端提供。"
-            request="CONTEST-BACKEND-INTEGRATION-REQUEST"
-          />
+          <p className="muted">暂无比赛题目。</p>
         )
       ) : view === 'submissions' ? (
-        <CapabilityNotice
-          title="比赛提交暂不可用"
-          text="比赛范围内的提交查询尚未接入。"
-          request="CONTEST-BACKEND-INTEGRATION-REQUEST"
-        />
+        <section className="social-panel" aria-label="比赛提交">
+          <h2>我的比赛提交</h2>
+          {contestSubmissions.length ? (
+            <ul>
+              {contestSubmissions.map((submission) => (
+                <li key={submission.id}>
+                  <PortalLink
+                    to={`/submissions/${encodeURIComponent(submission.id)}`}
+                    navigate={navigate}
+                  >
+                    #{submission.id}
+                  </PortalLink>{' '}
+                  · {submission.problemId} · {submission.status} ·{' '}
+                  {new Date(submission.createdAt).toLocaleString('zh-CN')}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">暂无比赛提交。</p>
+          )}
+          <p className="muted">
+            比赛专用提交入口尚未接入；此处仅展示后端已绑定的真实提交。
+          </p>
+        </section>
       ) : view === 'settings' ? (
         <ContestSettings
           api={api}
@@ -494,10 +518,6 @@ function ContestDetailExperience({
           {...(contestId === undefined ? {} : { contestId })}
           {...(currentDetail === undefined ? {} : { detail: currentDetail })}
         />
-      ) : loading ? (
-        <p className="muted" role="status">
-          正在加载比赛数据…
-        </p>
       ) : currentDetail ? (
         <div className="social-panel">
           <h2>比赛信息</h2>
@@ -895,8 +915,10 @@ function ContestCreate({
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
   const [busy, setBusy] = useState(false);
   const [registrationOpen, setRegistrationOpen] = useState(false);
+  const [createdContestId, setCreatedContestId] = useState<string>();
   const saveDraft = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (createdContestId) return;
     const data = new FormData(event.currentTarget);
     const title = String(data.get('title') ?? '').trim();
     const startsAt = String(data.get('startsAt') ?? '');
@@ -909,7 +931,6 @@ function ContestCreate({
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
-    const freezeMinutes = String(data.get('freezeMinutes') ?? '').trim();
     if (!title) return setMessage('请输入比赛名称。');
     if (!startsAt || !endsAt || new Date(startsAt) >= new Date(endsAt))
       return setMessage('结束时间必须晚于开始时间。');
@@ -923,8 +944,6 @@ function ContestCreate({
         ))
     )
       return setMessage('每题分值必须与题目一一对应且为正数。');
-    if (freezeMinutes && Number(freezeMinutes) < 0)
-      return setMessage('封榜时间不能为负数。');
     if (!api) return setMessage('比赛服务暂不可用。');
     setBusy(true);
     setMessage('');
@@ -946,16 +965,24 @@ function ContestCreate({
           : {}),
       })
       .then(async (contest) => {
+        setCreatedContestId(contest.id);
         if (problemIds.length) {
-          await api.setContestProblems(
-            contest.id,
-            problemIds.map((problemId, index) => ({
-              problemId,
-              ...(scoreValues[index]
-                ? { score: Number(scoreValues[index]) }
-                : {}),
-            })),
-          );
+          try {
+            await api.setContestProblems(
+              contest.id,
+              problemIds.map((problemId, index) => ({
+                problemId,
+                ...(scoreValues[index]
+                  ? { score: Number(scoreValues[index]) }
+                  : {}),
+              })),
+            );
+          } catch (reason) {
+            setMessage(
+              `比赛已创建，但${contestActionError(reason, '保存题目列表')}请前往比赛管理重试。`,
+            );
+            return;
+          }
         }
         navigate(`/contests/${contest.id}/settings`);
       })
@@ -1002,13 +1029,6 @@ function ContestCreate({
             <input name="endsAt" type="datetime-local" required />
           </label>
           <label>
-            时区
-            <select name="timeZone" defaultValue="Asia/Shanghai">
-              <option>Asia/Shanghai</option>
-              <option>UTC</option>
-            </select>
-          </label>
-          <label>
             可见性
             <select
               name="visibility"
@@ -1036,10 +1056,6 @@ function ContestCreate({
         </label>
         <div className="form-grid">
           <label>
-            封榜提前分钟
-            <input name="freezeMinutes" type="number" min="0" />
-          </label>
-          <label>
             私有比赛密码
             <input
               name="privatePassword"
@@ -1066,9 +1082,17 @@ function ContestCreate({
           </p>
         )}
         <div className="actions">
-          <button type="submit" disabled={busy}>
-            {busy ? '创建中…' : '创建比赛'}
+          <button type="submit" disabled={busy || Boolean(createdContestId)}>
+            {busy ? '创建中…' : createdContestId ? '比赛已创建' : '创建比赛'}
           </button>
+          {createdContestId && (
+            <button
+              type="button"
+              onClick={() => navigate(`/contests/${createdContestId}/settings`)}
+            >
+              前往比赛管理
+            </button>
+          )}
           <button
             type="button"
             className="secondary"

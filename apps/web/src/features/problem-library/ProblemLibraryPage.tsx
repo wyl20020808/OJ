@@ -38,8 +38,6 @@ const DEFAULT_SORT: ProblemListSort = import.meta.env.DEV
   : 'publicNumber';
 const DEFAULT_ORDER: ProblemListOrder = import.meta.env.DEV ? 'desc' : 'asc';
 
-const DEVELOPMENT_FIXTURE_USERNAME = 'ojplatform-problem-library-demo';
-
 type FilterKey = 'q' | 'difficulty' | 'tagId' | 'category' | 'provider';
 function ProblemLink({
   to,
@@ -135,6 +133,7 @@ export function ProblemLibraryPage({
     NonNullable<Problem['tagDetails']>
   >([]);
   const [tagCatalogReady, setTagCatalogReady] = useState(false);
+  const [tagCatalogError, setTagCatalogError] = useState(false);
   const [profileOverview, setProfileOverview] = useState<{
     solvedProblemCount: number;
     submissionCount: number;
@@ -262,13 +261,17 @@ export function ProblemLibraryPage({
   ]);
   useEffect(() => {
     let active = true;
+    setTagCatalogError(false);
     void api
       .tags()
       .then((tags) => {
         if (active) setTagCatalog(Array.isArray(tags) ? tags : []);
       })
       .catch(() => {
-        if (active) setTagCatalog([]);
+        if (active) {
+          setTagCatalog([]);
+          setTagCatalogError(true);
+        }
       })
       .finally(() => {
         if (active) setTagCatalogReady(true);
@@ -279,9 +282,7 @@ export function ProblemLibraryPage({
   }, [api]);
   useEffect(() => {
     let active = true;
-    const profileUsername =
-      user?.username ??
-      (import.meta.env.DEV ? DEVELOPMENT_FIXTURE_USERNAME : null);
+    const profileUsername = user?.username ?? null;
     if (!profileUsername) {
       setProfileOverview(null);
       return () => {
@@ -366,20 +367,8 @@ export function ProblemLibraryPage({
   const selectedCategory = category
     ? problemCategoryOptions.find((option) => option.value === category)
     : undefined;
-  const usingDevelopmentFixtureProfile =
-    import.meta.env.DEV && !user && profileOverview !== null;
-  const usingDevelopmentFixtureData =
-    import.meta.env.DEV &&
-    data.items.some(
-      (problem) =>
-        problem.provenance?.kind === 'DEVELOPMENT_FIXTURE' &&
-        problem.provenance?.scenario ===
-          'PROBLEM_LIBRARY_DATA_SEMANTICS_VISUAL_FIDELITY_V3',
-    );
-  const favoriteCount =
-    profileOverview?.favoriteCount ??
-    (usingDevelopmentFixtureProfile ? 18 : null);
-  const recentViewedCount = usingDevelopmentFixtureProfile ? 36 : null;
+  const favoriteCount = profileOverview?.favoriteCount ?? null;
+  const recentViewedCount = null;
   const personalProblemTotal = libraryTotal ?? data.page.total;
   const practiceCount = profileOverview
     ? Math.max(personalProblemTotal - profileOverview.solvedProblemCount, 0)
@@ -648,6 +637,11 @@ export function ProblemLibraryPage({
                     updateFilter('tagId', ids.at(-1)?.toString() ?? '')
                   }
                 />
+                {tagCatalogError && (
+                  <span className="muted" role="alert">
+                    标签筛选暂时不可用。
+                  </span>
+                )}
               </div>
               <strong className="keyword-label">关键词</strong>
               <label className="keyword-field">
@@ -665,21 +659,9 @@ export function ProblemLibraryPage({
 
             <div className="filter-row filter-extra-row">
               <strong>其他筛选</strong>
-              {['时间限制', '内存限制', '通过率'].map((label) => (
-                <label className="compact-select-label" key={label}>
-                  <span>{label}</span>
-                  <select aria-label={label} disabled>
-                    <option>不限</option>
-                  </select>
-                </label>
-              ))}
-              <label
-                className="only-unpassed"
-                title="当前后端暂未提供个人题目状态筛选"
-              >
-                <input type="checkbox" disabled />
-                只看未通过
-              </label>
+              <span className="muted">
+                时间、内存、通过率及个人通过状态筛选暂不可用。
+              </span>
               <div className="filter-actions">
                 <button type="submit" className="filter-submit">
                   筛选题目
@@ -809,7 +791,6 @@ export function ProblemLibraryPage({
                   查看详情
                 </ProblemLink>
               )}
-              {usingDevelopmentFixtureProfile && <span>本地演示</span>}
             </div>
             <div className="progress-content">
               <div
@@ -853,12 +834,8 @@ export function ProblemLibraryPage({
                       (tagCounts.get(b.id) ?? 0) - (tagCounts.get(a.id) ?? 0),
                   )
                   .slice(0, 14)
-                  .map((tag, index) => {
-                    const actualCount = tagCounts.get(tag.id) ?? 0;
-                    const displayCount =
-                      usingDevelopmentFixtureData && actualCount > 0
-                        ? actualCount * 47 + Math.max(0, 29 - index * 3)
-                        : actualCount;
+                  .map((tag) => {
+                    const displayCount = tagCounts.get(tag.id) ?? 0;
                     return (
                       <button
                         key={tag.id}
@@ -872,7 +849,9 @@ export function ProblemLibraryPage({
                     );
                   })
               ) : (
-                <span>暂无标签</span>
+                <span>
+                  {tagCatalogError ? '标签数据暂时不可用' : '暂无标签'}
+                </span>
               )}
             </div>
           </section>

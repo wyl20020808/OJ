@@ -2,6 +2,7 @@
 import '@testing-library/jest-dom/vitest';
 import { useState } from 'react';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -118,13 +119,13 @@ describe('Product UX Repair Wave 1', () => {
       screen.getByRole('heading', { name: '在团队中，遇见更强的自己' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: '热门团队' }),
+      screen.getByRole('heading', { name: '团队列表' }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: '团队日历' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: '推荐团队' }),
+      screen.getByRole('heading', { name: '可发现团队' }),
     ).toBeInTheDocument();
     expect(screen.getByTitle('训练小组分类将在后续接入')).toHaveAttribute(
       'data-ui-only',
@@ -213,6 +214,44 @@ describe('Product UX Repair Wave 1', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '成员' })).toBeInTheDocument();
     expect(screen.getByText('@owner')).toBeInTheDocument();
+  });
+
+  it('keeps protected team projections in loading and failure states', async () => {
+    let rejectMembers!: (reason: Error) => void;
+    let rejectRequests!: (reason: Error) => void;
+    const api = {
+      team: vi.fn().mockResolvedValue({ ...team, membershipState: 'OWNER' }),
+      teamMembers: vi.fn(
+        () =>
+          new Promise((_, reject) => {
+            rejectMembers = reject;
+          }),
+      ),
+      teamJoinRequests: vi.fn(
+        () =>
+          new Promise((_, reject) => {
+            rejectRequests = reject;
+          }),
+      ),
+    } as unknown as ApiClient;
+
+    render(
+      <TeamPage
+        api={api}
+        slug="alpha-team"
+        user={{ id: 'u1' }}
+        navigate={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText('正在加载成员列表…')).toBeInTheDocument();
+    expect(screen.getByText('正在加载待处理申请…')).toBeInTheDocument();
+    await act(async () => {
+      rejectMembers(new Error('offline'));
+      rejectRequests(new Error('offline'));
+    });
+    expect(await screen.findByText('成员列表暂时不可用')).toBeInTheDocument();
+    expect(screen.getByText('暂时无法加载待处理申请')).toBeInTheDocument();
   });
 
   it('renders public team detail for anonymous viewers without protected member API', async () => {

@@ -1,0 +1,256 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "ed192ff411b62337fc5071c3f59cef70d0388f2c",
+  "command": "pnpm exec vitest run --reporter=json",
+  "summary": {
+    "testFilesTotal": 99,
+    "testFilesPassed": 85,
+    "testFilesFailed": 14,
+    "testsTotal": 1066,
+    "testsPassed": 1013,
+    "testsFailed": 48,
+    "testsPending": 5
+  },
+  "failures": [
+    {
+      "file": "tests/admin-cn-notification-v1.test.tsx",
+      "test": "Admin Chinese and notification popover V1 keeps the visible admin navigation copy in Chinese",
+      "errorSignature": "AssertionError: expected 'import {\\n  Component,\\n  useEffect,\\…' to match /to=\"\\/admin\\/judge\\/nodes\"[\\s\\S…/admin\\"
+    },
+    {
+      "file": "tests/contest-development-fixtures.integration.test.ts",
+      "test": "Contest development fixture against PostgreSQL seeds deterministic relations, preserves non-fixture data, and cleans only its provenance",
+      "errorSignature": "Error: STACK_TRACE_ERROR"
+    },
+    {
+      "file": "tests/foundation.test.ts",
+      "test": "foundation package boundaries exposes draft public contract markers without runtime integration",
+      "errorSignature": "AssertionError: expected '1.0.0' to be '0.1-draft' // Object.is equality"
+    },
+    {
+      "file": "tests/phase2a-worker-ops-ui.test.tsx",
+      "test": "PHASE 2A Worker operations UI matrix W2A-11 manually refreshes detail from the server",
+      "errorSignature": "Error: Found multiple elements with the text: 排队中"
+    },
+    {
+      "file": "tests/phase2a-worker-ops-ui.test.tsx",
+      "test": "PHASE 2A Worker operations UI matrix W2A-13 ignores a late response after a newer refresh",
+      "errorSignature": "Error: Found multiple elements with the text: 排队中"
+    },
+    {
+      "file": "tests/phase2a-worker-ops-ui.test.tsx",
+      "test": "PHASE 2A Worker operations UI matrix W2A-16 clears protected detail after logout",
+      "errorSignature": "Error: Unable to find role=\"link\" and name \"查看评测 phase2a-submission\""
+    },
+    {
+      "file": "tests/phase2a-worker-ops-ui.test.tsx",
+      "test": "PHASE 2A Worker operations UI matrix W2A-17 renders a 401 as sign-in-required without protected content",
+      "errorSignature": "TestingLibraryElementError: Unable to find an accessible element with the role \"link\" and name \"登录\""
+    },
+    {
+      "file": "tests/phase2a-worker-ops-ui.test.tsx",
+      "test": "PHASE 2A Worker operations UI matrix W2A-20 renders a 409 as a state race with refresh",
+      "errorSignature": "Error: Unable to find role=\"heading\" and name \"提交状态已变化\""
+    },
+    {
+      "file": "tests/phase2a-worker-ops-ui.test.tsx",
+      "test": "PHASE 2A Worker operations UI matrix W2A-26 renders source script text inertly in authorized detail",
+      "errorSignature": "Error: Unable to find an element with the text: /SOURCE-MARKER/. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible."
+    },
+    {
+      "file": "tests/phase2a-worker-ops-ui.test.tsx",
+      "test": "PHASE 2A Worker operations UI matrix W2A-37 exposes a keyboard-reachable refresh action",
+      "errorSignature": "Error: Unable to find role=\"button\" and name \"刷新执行状态\""
+    },
+    {
+      "file": "tests/phase2a-worker-ops-ui.test.tsx",
+      "test": "PHASE 2A Worker operations UI matrix W2A-38 keeps focus on a named refresh control",
+      "errorSignature": "Error: Unable to find role=\"button\" and name \"刷新执行状态\""
+    },
+    {
+      "file": "tests/problem-edit-save-500-v1.test.ts",
+      "test": "problem edit save V1 binds published revision INSERT with matching parameter count",
+      "errorSignature": "AssertionError: expected 'INSERT INTO problem_revisions (id,pro…' not to contain '$22'"
+    },
+    {
+      "file": "tests/product-access-evaluation-v1.test.ts",
+      "test": "Product Access & Evaluation V1 projects problem edit capability for guest owners, owners, non-owners, and privileged editors",
+      "errorSignature": "AssertionError: expected { canEdit: true, canDelete: true } to deeply equal { canEdit: true }"
+    },
+    {
+      "file": "tests/product-web-chinese-rich-experience-v3.test.tsx",
+      "test": "Product Web Chinese Rich Experience V3 WEB-V3-05 localized route shell",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-chinese-rich-experience-v3.test.tsx",
+      "test": "Product Web Chinese Rich Experience V3 WEB-V3-08 localized route shell",
+      "errorSignature": "Error: Unable to find role=\"heading\" and name \"请先登录\""
+    },
+    {
+      "file": "tests/product-web-chinese-rich-experience-v3.test.tsx",
+      "test": "Product Web Chinese Rich Experience V3 WEB-V3-14 problem search remains on the problem list",
+      "errorSignature": "TestingLibraryElementError: Unable to find an element with the text: 当前筛选无结果. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible."
+    },
+    {
+      "file": "tests/product-web-chinese-rich-experience-v3.test.tsx",
+      "test": "Product Web Chinese Rich Experience V3 WEB-V3-27 list compact desktop",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-chinese-rich-experience-v3.test.tsx",
+      "test": "Product Web Chinese Rich Experience V3 WEB-V3-28A compact rows expose public IDs and omit source",
+      "errorSignature": "Error: Found multiple elements with the text: P0001"
+    },
+    {
+      "file": "tests/product-web-chinese-rich-experience-v3.test.tsx",
+      "test": "Product Web Chinese Rich Experience V3 WEB-V3-29 search",
+      "errorSignature": "TestingLibraryElementError: Unable to find an element with the text: 当前筛选无结果. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible."
+    },
+    {
+      "file": "tests/product-web-experience.test.tsx",
+      "test": "PRODUCT WEB EXPERIENCE FOUNDATION V1 WEB-PROD-12 unauthenticated history is protected",
+      "errorSignature": "TestingLibraryElementError: Unable to find an accessible element with the role \"heading\" and name \"请先登录\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-012",
+      "errorSignature": "AssertionError: expected 'OJAlgoOJ☰首页题库比赛团队作业博客评测⌕🔔登录注册用代码探索更大…' to contain 'Verdict Engine'"
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-016",
+      "errorSignature": "AssertionError: expected 'OJAlgoOJ☰首页题库比赛团队作业博客评测⌕🔔登录注册用代码探索更大…' to contain '比赛与排名'"
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-019",
+      "errorSignature": "AssertionError: expected 0 to be greater than 4"
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-021",
+      "errorSignature": "AssertionError: expected 'OJAlgoOJ☰首页题库比赛团队作业博客评测⌕🔔登录注册用代码探索更大…' to contain '真实静态公告'"
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-039",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-040",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-041",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-042",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-043",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-044",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-045",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-046",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-047",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-048",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-049",
+      "errorSignature": "Error: Unable to find role=\"navigation\" and name \"面包屑\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-082",
+      "errorSignature": "TestingLibraryElementError: Unable to find an accessible element with the role \"link\" and name \"全部比赛\""
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-087",
+      "errorSignature": "AssertionError: expected '.portal-page,\\n.messages-page {\\n  mi…' to match /\\.profile-avatar[\\s\\S]*border-radius:…/"
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-128",
+      "errorSignature": "Error: Unable to find an element with the text: 作业功能正在接入. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible."
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-135",
+      "errorSignature": "AssertionError: expected 'import {\\n  Component,\\n  useEffect,\\…' to contain '正在加载题库'"
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-137",
+      "errorSignature": "Error: Unable to find an element with the text: 作业功能正在接入. This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible."
+    },
+    {
+      "file": "tests/product-web-portal-contest-profile-messaging-v4.test.tsx",
+      "test": "Product Web Portal Contest Profile Messaging V4 WEB-V4-138",
+      "errorSignature": "AssertionError: expected 'import {\\n  Component,\\n  useEffect,\\…' to contain '题库暂不可用'"
+    },
+    {
+      "file": "tests/product-web-r2.test.tsx",
+      "test": "Web V4 R2 problem library and guest contracts renders authoritative numeric pagination and syncs page URL",
+      "errorSignature": "AssertionError: expected false to be true // Object.is equality"
+    },
+    {
+      "file": "tests/product-web-r2.test.tsx",
+      "test": "Web V4 R2 problem library and guest contracts keeps problem pagination in the list flow and blocks duplicate page loads",
+      "errorSignature": "AssertionError: expected [] to have a length of 1 but got +0"
+    },
+    {
+      "file": "tests/product-web-r3.test.tsx",
+      "test": "Web V4 R3 layout and information architecture contract keeps contest create action in the internal navigation row",
+      "errorSignature": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).toHaveTextContent()\u001b[22m"
+    },
+    {
+      "file": "tests/web-recovery.test.tsx",
+      "test": "PHASE 1E-R Web recovery matrix W14 logout navigation removes protected detail from the DOM",
+      "errorSignature": "Error: Unable to find role=\"link\" and name \"查看评测 s-recovery\""
+    },
+    {
+      "file": "tests/web-ui-polish.test.tsx",
+      "test": "Web UI polish uses the real global evaluation contract for the evaluation list",
+      "errorSignature": "Error: \u001b[2mexpect(\u001b[22m\u001b[31melement\u001b[39m\u001b[2m).toBeInTheDocument()\u001b[22m"
+    },
+    {
+      "file": "tests/web-ui-polish.test.tsx",
+      "test": "Web UI polish navigates from the evaluation row body and keeps filter controls local",
+      "errorSignature": "TestingLibraryElementError: Unable to find an accessible element with the role \"row\""
+    },
+    {
+      "file": "tests/web.test.tsx",
+      "test": "Web platform shell renders submission history and safely displays source as text",
+      "errorSignature": "Error: \u001b[2mexpect(\u001b[22m\u001b[31melement\u001b[39m\u001b[2m).toBeInTheDocument()\u001b[22m"
+    }
+  ]
+}

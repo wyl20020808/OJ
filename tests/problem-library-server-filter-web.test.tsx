@@ -98,7 +98,7 @@ describe('problem library server filter integration', () => {
     expect(window.location.search).toContain('provider=CODEFORCES');
   });
 
-  it('uses the sort selection in the server request and disables unsupported filters', async () => {
+  it('uses the sort selection and labels unsupported filters unavailable', async () => {
     const requests: string[] = [];
     vi.stubGlobal(
       'fetch',
@@ -120,9 +120,9 @@ describe('problem library server filter integration', () => {
     window.history.replaceState({}, '', '/problems');
     render(<App />);
     await screen.findByText('暂无题目');
-    expect(screen.getByLabelText('时间限制')).toBeDisabled();
-    expect(screen.getByLabelText('内存限制')).toBeDisabled();
-    expect(screen.getByLabelText('通过率')).toBeDisabled();
+    expect(
+      screen.getByText('时间、内存、通过率及个人通过状态筛选暂不可用。'),
+    ).toBeInTheDocument();
 
     const search = screen.getByLabelText('关键词');
     const listRequests = () =>
@@ -146,6 +146,37 @@ describe('problem library server filter integration', () => {
       ).toBe(true),
     );
     expect(window.location.search).toContain('sort=title');
+  });
+
+  it('does not present a failed tag request as an empty tag catalog', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/api/auth/me')) return response({}, 401);
+        if (url.endsWith('/ready')) return response({ status: 'ok' });
+        if (url.endsWith('/api/tags'))
+          return response(
+            { code: 'INTERNAL_ERROR', message: 'unavailable' },
+            500,
+          );
+        if (url.includes('/api/problems?'))
+          return response({
+            items: [],
+            page: { total: 0, offset: 0, limit: 15 },
+            facets: { difficulty: {}, sourceType: {}, provider: {}, tags: [] },
+          });
+        return response({}, 404);
+      }),
+    );
+    window.history.replaceState({}, '', '/problems');
+    render(<App />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '标签筛选暂时不可用',
+    );
+    expect(screen.getByText('标签数据暂时不可用')).toBeInTheDocument();
+    expect(screen.queryByText('暂无标签')).not.toBeInTheDocument();
   });
 
   it('searches canonical tags, selects one, updates URL state, and resets page', async () => {

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "ed192ff411b62337fc5071c3f59cef70d0388f2c",
+  "baselineSummary": {
+    "testFilesTotal": 99,
+    "testFilesPassed": 85,
+    "testFilesFailed": 14,
+    "testsTotal": 1066,
+    "testsPassed": 1013,
+    "testsFailed": 48,
+    "testsPending": 5
+  },
+  "currentSummary": {
+    "testFilesTotal": 100,
+    "testFilesPassed": 86,
+    "testFilesFailed": 14,
+    "testsTotal": 1082,
+    "testsPassed": 1029,
+    "testsFailed": 48,
+    "testsPending": 5
+  },
+  "identityComparison": {
+    "existing": 48,
+    "new": 0,
+    "resolved": 0
+  },
+  "signatureChanges": [],
+  "newFailures": [],
+  "resolvedFailures": []
+}

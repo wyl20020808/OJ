@@ -67,6 +67,8 @@ function appFetch() {
     if (url.endsWith('/ready')) return response(503, { status: 'degraded' });
     if (url.endsWith('/api/home'))
       return response(200, { recentProblems: [problem] });
+    if (url.includes('/api/discussion/posts?'))
+      return response(200, { items: [] });
     if (url.includes('/api/problems?'))
       return response(200, {
         items: [problem],
