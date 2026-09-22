@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash, randomUUID } from 'node:crypto';
 import type { AuthContext } from '../submission/model.js';
-import type { JudgeJob, JudgeJobRepository } from '@ojplatform/judge-runtime';
+import type { JudgeJob } from '@ojplatform/judge-runtime';
 import type { CodeRunResult } from './model.js';
 import { CodeRunValidationError, validateCodeRun } from './validation.js';
 
@@ -23,14 +23,12 @@ const error = (
   message: string,
   details?: unknown,
 ) =>
-  reply
-    .status(status)
-    .send({
-      code,
-      message,
-      requestId: request.id,
-      ...(details === undefined ? {} : { details }),
-    });
+  reply.status(status).send({
+    code,
+    message,
+    requestId: request.id,
+    ...(details === undefined ? {} : { details }),
+  });
 export const translateCodeRunStatus = (
   value: string,
 ): CodeRunResult['status'] => {
@@ -159,8 +157,13 @@ export async function registerCodeRunRoutes(
 }
 
 export function codeRunResultFromJob(job: JudgeJob): JudgeResult {
-  const raw = job.rawExecutionResult as Record<string, any> | undefined;
-  const output = (value: unknown) => typeof value === 'string' ? Buffer.from(value, 'utf8').subarray(0, 64 * 1024).toString('utf8') : '';
+  const raw = job.rawExecutionResult;
+  const output = (value: unknown) =>
+    typeof value === 'string'
+      ? Buffer.from(value, 'utf8')
+          .subarray(0, 64 * 1024)
+          .toString('utf8')
+      : '';
   return {
     judgeJobId: job.id,
     status:
@@ -192,9 +195,12 @@ export function codeRunResultFromJob(job: JudgeJob): JudgeResult {
               raw.pipeline_outcome === 'PIPELINE_COMPILE_FAILED'
                 ? output(raw.compile?.stderr) || null
                 : null,
-            exitCode: raw.runtime?.exit_code ?? null,
-            timeMs: raw.runtime?.wall_time_ms ?? null,
-            memoryBytes: raw.runtime?.memory_bytes ?? null,
+            exitCode:
+              (raw.runtime?.exit_code as number | null | undefined) ?? null,
+            timeMs:
+              (raw.runtime?.wall_time_ms as number | null | undefined) ?? null,
+            memoryBytes:
+              (raw.runtime?.memory_bytes as number | null | undefined) ?? null,
           },
         }
       : {}),

@@ -62,7 +62,7 @@ const projectCodeRun = (
 ): JudgeServiceResult['codeRun'] | undefined => {
   if (job.problemId !== '__adhoc_code_run__' || !job.rawExecutionResult)
     return undefined;
-  const raw = job.rawExecutionResult as Record<string, any>;
+  const raw = job.rawExecutionResult;
   const runtime = value(raw.runtime);
   const compile = value(raw.compile);
   const diagnostics = safeDiagnostics(compile?.stderr);
