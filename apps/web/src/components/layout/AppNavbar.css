@@ -24,7 +24,7 @@
   align-items: center;
   gap: 0;
   color: #101f47;
-  font-family: Georgia, 'Times New Roman', 'Noto Serif SC', serif;
+  font-family: var(--font-ui);
 }
 
 .app-navbar__brand-mark {
@@ -36,7 +36,7 @@
   background: var(--ink);
   color: #fff;
   font-size: 0.8rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .app-navbar strong {
@@ -62,7 +62,7 @@
   padding: 21px 13px 19px;
   border-radius: 0;
   color: #1b2b53;
-  font-family: Georgia, 'Times New Roman', 'Noto Serif SC', serif;
+  font-family: var(--font-ui);
   font-size: 15px;
   font-weight: 600;
   line-height: 23px;
@@ -104,7 +104,7 @@
 
 .app-navbar__search span {
   margin-right: 8px;
-  font-family: Arial, sans-serif;
+  font-family: var(--font-ui);
   font-size: 22px;
   font-weight: 700;
   line-height: 1;

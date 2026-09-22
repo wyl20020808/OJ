@@ -96,7 +96,7 @@
 .problem-library-hero p {
   margin: 0 0 3px;
   color: #8291a8;
-  font-family: Georgia, 'Times New Roman', 'Noto Serif SC', 'Songti SC', serif;
+  font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.55;
 }
@@ -104,7 +104,7 @@
 .problem-library-hero h1 {
   margin: 0;
   color: #112243;
-  font-family: Georgia, 'Times New Roman', 'Noto Serif SC', 'Songti SC', serif;
+  font-family: var(--font-ui);
   font-size: 44px;
   font-weight: 700;
   line-height: 1.14;
@@ -115,7 +115,7 @@
   display: inline-block;
   margin-top: 8px;
   color: #6f809b;
-  font-family: Georgia, 'Times New Roman', 'Noto Serif SC', 'Songti SC', serif;
+  font-family: var(--font-ui);
   font-size: 14px;
 }
 
@@ -187,7 +187,7 @@
 .right-card h2 {
   margin: 0 0 10px;
   color: #1f304f;
-  font-family: Georgia, 'Times New Roman', 'Noto Serif SC', 'Songti SC', serif;
+  font-family: var(--font-ui);
   font-size: 16px;
   line-height: 1.45;
 }
@@ -270,9 +270,9 @@
 
 .sidebar-list b {
   color: #7f90aa;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-ui);
   font-weight: 400;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .sidebar-list .problem-library-icon {
@@ -354,7 +354,7 @@
   flex: 0 0 68px;
   width: 68px;
   color: #243654;
-  font-family: Georgia, 'Times New Roman', 'Noto Serif SC', 'Songti SC', serif;
+  font-family: var(--font-ui);
   font-size: 13px;
 }
 
@@ -613,7 +613,7 @@
   justify-content: space-between;
   min-height: 42px;
   color: #64748e;
-  font-family: Georgia, 'Times New Roman', 'Noto Serif SC', 'Songti SC', serif;
+  font-family: var(--font-ui);
 }
 
 .problem-results-heading b {
@@ -693,7 +693,7 @@
 .problem-row {
   min-height: 30px;
   color: #314361;
-  font-family: Georgia, 'Times New Roman', 'Noto Serif SC', 'Songti SC', serif;
+  font-family: var(--font-ui);
   font-size: 12px;
   line-height: 1.25;
   text-decoration: none;
@@ -782,7 +782,7 @@
 
 .problem-id {
   color: #1672df;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .problem-title {
@@ -795,7 +795,7 @@
   border-radius: 10px;
   background: #e8f7ee;
   color: #35a46b;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 10px;
   white-space: nowrap;
 }
@@ -832,7 +832,7 @@
   border-radius: 8px;
   background: #eaf3fd;
   color: #4f7fb7;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -843,7 +843,7 @@
 .problem-submissions {
   color: #50617e;
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .problem-star {
@@ -863,7 +863,7 @@
   border-radius: 9px;
   background: #e9f3ff;
   color: #2f7ede;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 10px;
   white-space: nowrap;
 }
@@ -882,7 +882,7 @@
 .pagination-loading {
   color: #74849a;
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .pagination-controls,
@@ -953,7 +953,7 @@
   border-radius: 50%;
   background: conic-gradient(#3b87ef var(--progress), #e9edf2 0);
   color: #233657;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-ui);
   font-size: 20px;
 }
 
@@ -990,8 +990,8 @@
 .progress-content dd {
   margin: 0;
   color: #2c3f60;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .hot-tag-card {
@@ -1056,7 +1056,7 @@
 .recent-list time {
   flex: 0 0 auto;
   color: #8190a7;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-ui);
 }
 
 .right-quote {
@@ -1067,7 +1067,7 @@
   border-radius: 8px;
   background: #f7f9fb;
   color: #71819a;
-  font-family: Georgia, 'Times New Roman', 'Noto Serif SC', 'Songti SC', serif;
+  font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.85;
 }

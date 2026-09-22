@@ -16,7 +16,7 @@
 .submissions-view .brand {
   flex: 0 0 auto;
   color: #071f67;
-  font-family: Georgia, 'Noto Serif SC', serif;
+  font-family: var(--font-ui);
 }
 
 .submissions-view .brand-mark {
@@ -43,7 +43,7 @@
   padding: 0 14px;
   border-radius: 0;
   color: #071f67;
-  font-family: Georgia, 'Noto Serif SC', serif;
+  font-family: var(--font-ui);
   font-size: 15px;
   font-weight: 700;
   white-space: nowrap;
@@ -86,7 +86,7 @@
   border-radius: 50%;
   background: linear-gradient(145deg, #244f92, #85b5e7 58%, #f5d1c5 59%);
   color: #fff;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 16px;
   text-shadow: 0 1px 2px rgba(0, 28, 82, 0.45);
 }
@@ -104,7 +104,7 @@
   border: 0;
   background: transparent;
   color: #6a80b4;
-  font-family: Georgia, 'Noto Serif SC', serif;
+  font-family: var(--font-ui);
   font-size: 13px;
 }
 
@@ -116,7 +116,7 @@
   --submission-soft: #f4f8fd;
   min-width: 0;
   color: var(--submission-navy);
-  font-family: Georgia, 'Noto Serif SC', 'Songti SC', SimSun, serif;
+  font-family: var(--font-ui);
 }
 
 .submission-page svg {
@@ -181,7 +181,7 @@
 }
 
 .submission-hero__motto b {
-  font-family: 'KaiTi', 'STKaiti', serif;
+  font-family: var(--font-ui);
   font-size: 19px;
   font-weight: 400;
   letter-spacing: 5px;
@@ -192,7 +192,7 @@
   margin-top: 17px;
   padding-top: 7px;
   border-top: 1px solid #a8bbdb;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 7px;
   font-weight: 700;
   letter-spacing: 3px;
@@ -339,7 +339,7 @@
   color: #051d66;
   font-size: 27px;
   line-height: 1.25;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .submission-history-summary-card small {
@@ -664,7 +664,7 @@
   place-items: center;
   border-radius: 50%;
   color: #fff;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 11px;
   line-height: 1;
 }
@@ -856,7 +856,7 @@
   border-radius: 8px;
   background: #eef5ff;
   color: #277ae7;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 11px;
 }
 

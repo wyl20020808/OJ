@@ -12,7 +12,7 @@
 .judge-node-card { display:flex; justify-content:space-between; gap:var(--space-4); align-items:center; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:var(--space-4); }
 .node-main { border:0; background:transparent; color:var(--ink); padding:0; display:grid; text-align:left; gap:.25rem; flex:1; }
 .node-main:hover { background:transparent; transform:none; }
-.node-id { font-weight:800; font-family:ui-monospace,monospace; }
+.node-id { font-weight: 700; font-family: var(--font-code); }
 .node-meta { color:var(--muted); font-size:.85rem; }
 .state { width:max-content; border-radius:999px; padding:.12rem .55rem; font-size:.75rem; font-weight:700; }
 .state-online { background:#e4f5ec; color:var(--success); }.state-busy { background:#fff3d6; color:var(--warning); }.state-draining { background:#e5f1f6; color:var(--accent-dark); }.state-offline,.state-unhealthy { background:#fde9e7; color:var(--danger); }

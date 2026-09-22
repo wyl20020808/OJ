@@ -70,7 +70,7 @@
   background: var(--soft);
   color: var(--muted);
   font-size: 0.76rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 .filter-tabs,
 .section-tabs,
@@ -134,7 +134,7 @@
   background: var(--soft);
   color: var(--muted);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 .contest-list article {
   color: var(--ink);
@@ -666,7 +666,7 @@
 .rail-section-label {
   color: var(--muted);
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 .rail-empty-copy {
   margin: 0;

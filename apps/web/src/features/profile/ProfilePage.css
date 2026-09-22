@@ -37,7 +37,7 @@
   position: absolute;
   right: 1.4rem;
   bottom: 1rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 .profile-identity {
   position: relative;
@@ -200,7 +200,7 @@
   border-radius: 999px;
   background: var(--line);
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 .profile-verdict-AC {
   background: #d8f1df;
@@ -217,7 +217,7 @@
 .profile-fixture-label {
   color: #7b4b03;
   font-size: 0.74rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.04em;
 }
 .profile-demo-control {

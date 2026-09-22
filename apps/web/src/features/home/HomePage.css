@@ -186,7 +186,7 @@
 .app:has(.home-reference) > footer {
   padding-inline: 42px;
   background: #fff;
-  font-family: Georgia, 'Noto Serif SC', serif;
+  font-family: var(--font-ui);
 }
 
 .app:has(.home-reference) .app-navbar__search:focus-within {
