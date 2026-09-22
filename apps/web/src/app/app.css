@@ -131,6 +131,9 @@ table,
   :is(.cm-content, .cm-gutters, textarea, pre, code) {
   font-family: var(--font-code);
 }
+.online-code-editor-host .online-code-editor.oj-editor-page textarea {
+  font-family: var(--font-code);
+}
 button {
   border: 1px solid var(--accent);
   border-radius: 6px;
