@@ -61,7 +61,11 @@ const collect = (suite, ancestors = []) => {
     suite.line === 0 || !suite.title ? ancestors : [...ancestors, suite.title];
   for (const spec of suite.specs ?? []) {
     for (const test of spec.tests ?? []) {
-      const identity = `${spec.file}:${spec.line}:${spec.column} › ${[
+      const reportFile = spec.file.replaceAll('\\', '/');
+      const file = reportFile.startsWith('tests/e2e/')
+        ? reportFile
+        : `tests/e2e/${reportFile}`;
+      const identity = `${file}:${spec.line}:${spec.column} › ${[
         ...titles,
         spec.title,
       ].join(' › ')}`;
