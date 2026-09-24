@@ -413,6 +413,31 @@ const migrations = [
       index('contests_development_provenance_idx'),
     ],
   },
+  {
+    id: '0037_ai_capability_usage',
+    checksum:
+      'd2dae4d54255eae9fd003e6dc1245a47e0c9d400ad41a88091bbb9e22db3ed0b',
+    sideEffects:
+      'Creates the AI capability usage ledger (one logical request row and one provider attempt row per call). Cost and capacity evidence only — no prompt, content or credential columns exist.',
+    evidence: [
+      table('ai_capability_usage_requests'),
+      table('ai_capability_usage_attempts'),
+      index('ai_capability_usage_requests_logical_idx'),
+      index('ai_capability_usage_requests_caller_idx'),
+      index('ai_capability_usage_requests_subject_idx'),
+      index('ai_capability_usage_attempts_logical_idx'),
+      index('ai_capability_usage_attempts_caller_idx'),
+      index('ai_capability_usage_attempts_provider_idx'),
+    ],
+  },
+  {
+    id: '0038_ai_capability_usage_prompt_provenance',
+    checksum:
+      '16136387ac5dcf3a9b0a99ba9846325161c499113f1ea8ff6c93a0beac8421a8',
+    sideEffects:
+      'Adds a prompt provenance label object (an applied flag and a short opaque version string) to the AI usage request rows. Identifiers only — never prompt content.',
+    evidence: [column('ai_capability_usage_requests', 'provenance')],
+  },
 ];
 
 export const productMigrationManifest = migrations.map(

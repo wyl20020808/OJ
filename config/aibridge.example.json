@@ -1,0 +1,56 @@
+{
+  "providers": [
+    {
+      "providerId": "primary-gateway",
+      "preset": "OPENAI_COMPATIBLE_CUSTOM",
+      "enabled": false,
+      "credentialRef": "secret://env/AIBRIDGE_PRIMARY_GATEWAY_API_KEY",
+      "endpoint": { "kind": "CUSTOM", "baseUrl": "https://your-gateway.example.com/v1" },
+      "authScheme": "BEARER",
+      "wireProtocol": "OPENAI_CHAT_COMPLETIONS",
+      "models": [
+        {
+          "alias": "primary.fast.default",
+          "providerId": "primary-gateway",
+          "providerModelId": "your-fast-model",
+          "profiles": ["fast", "balanced"],
+          "features": ["TEXT_GENERATION", "STRUCTURED_OUTPUT"],
+          "contextLimit": 128000,
+          "outputLimit": 8192
+        },
+        {
+          "alias": "primary.reasoning.default",
+          "providerId": "primary-gateway",
+          "providerModelId": "your-reasoning-model",
+          "profiles": ["reasoning"],
+          "features": ["TEXT_GENERATION", "STRUCTURED_OUTPUT", "REASONING"],
+          "contextLimit": 128000,
+          "outputLimit": 8192
+        }
+      ]
+    }
+  ],
+  "routes": [
+    { "profile": "fast", "chain": ["primary.fast.default"] },
+    { "profile": "balanced", "chain": ["primary.fast.default"] },
+    { "profile": "reasoning", "chain": ["primary.reasoning.default"] }
+  ],
+  "governance": {
+    "killSwitch": { "global": false, "providers": [], "capabilities": [] },
+    "rateLimits": [
+      { "dimension": "subject", "limit": 10, "windowMs": 60000 },
+      { "dimension": "callerPlugin", "limit": 60, "windowMs": 60000, "scopeKey": "site.problem" },
+      { "dimension": "callerPlugin", "limit": 30, "windowMs": 60000, "scopeKey": "plugin.algoquest.learning-quests" },
+      { "dimension": "global", "limit": 600, "windowMs": 60000 }
+    ],
+    "quotas": [
+      { "scope": "subject", "meter": "TOKENS", "period": "DAY", "limit": 50000 },
+      { "scope": "callerPlugin", "meter": "REQUESTS", "period": "DAY", "limit": 2000, "scopeKey": "site.problem" },
+      { "scope": "callerPlugin", "meter": "REQUESTS", "period": "DAY", "limit": 500, "scopeKey": "plugin.algoquest.learning-quests" },
+      { "scope": "global", "meter": "ESTIMATED_COST", "period": "MONTH", "limit": 100 }
+    ],
+    "budget": { "maxEstimatedCostPerRequest": 0.5, "maxEstimatedCostPerDay": 10, "currency": "USD" },
+    "idempotency": { "enabled": true, "retentionMs": 900000, "capacity": 10000 },
+    "unknownUsage": "CONSERVATIVE"
+  }
+}

@@ -21,6 +21,14 @@ export default defineConfig({
         replacement: resolve('packages/judge-runtime/src/index.ts'),
       },
       {
+        find: '@ojplatform/plugin-sdk',
+        replacement: resolve('packages/plugin-sdk/src/index.ts'),
+      },
+      {
+        find: '@ojplatform/capability-broker',
+        replacement: resolve('packages/capability-broker/src/index.ts'),
+      },
+      {
         find: /^@ojplatform\/online-code-editor\/(.+)$/,
         replacement: resolve('plugins/OnlineCodeEditor/src') + '/$1',
       },

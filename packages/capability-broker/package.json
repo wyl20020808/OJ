@@ -1,0 +1,11 @@
+{
+  "name": "@ojplatform/capability-broker",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ojplatform/plugin-sdk": "workspace:*"
+  }
+}
