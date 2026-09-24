@@ -15,8 +15,9 @@
 /**
  * True when a granted reference list covers `capability`.
  *
- * A grant matches when it is the bare capability id, or a pinned `capability@major` /
- * `capability@major.x` whose major equals the requested major. Deny by default.
+ * A grant matches when it is the bare capability id, an exact `capability@major.minor` pin, or a
+ * `capability@major` / `capability@major.x` pin whose major equals the requested major. Generic
+ * and specialized capabilities use the same matcher. Deny by default.
  */
 export function isCapabilityGranted(
   granted: readonly string[],
@@ -27,6 +28,10 @@ export function isCapabilityGranted(
     return true;
   }
   if (version !== undefined) {
+    // An exact `capability@major.minor` grant matches only that exact version.
+    if (granted.includes(`${capability}@${version}`)) {
+      return true;
+    }
     const major = version.split('.')[0];
     if (major !== undefined && granted.includes(`${capability}@${major}`)) {
       return true;
