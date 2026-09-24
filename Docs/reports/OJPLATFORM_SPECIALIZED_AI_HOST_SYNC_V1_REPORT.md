@@ -7,7 +7,7 @@ PASS.
 - `IMPLEMENTED` — Host recognizes and dispatches `code.debug.analyze@1.0`, transports consumer
   prompt provenance, and preserves logical capability identity through the existing caller
   identity → permission → broker → governance → AI Bridge adapter path.
-- `TESTED` — new host conformance suite (27 tests) plus extended broker/manifest suites; full
+- `TESTED` — new host conformance suite (29 tests) plus extended broker/manifest suites; full
   repository unit baseline and integration suite re-run.
 - `RUNTIME VERIFIED` — not separately attempted; the host path is exercised in-process against a
   structural fake bridge plugin per the packed-artifact loader contract. Real provider traffic is
@@ -105,7 +105,7 @@ serves. This is a host-side adaptation; AI Bridge was not edited.
 
 | Gate | Result |
 | --- | --- |
-| AI tests | PASS — new suite 27 tests; 5 AI suites 80/80 |
+| AI tests | PASS — new suite 29 tests; 5 AI suites 82/82 |
 | OJ baseline | PASS — 1122 passed / 48 known failures / 0 new (`missing 0, newFailures 0, changedFailureSignatures 0, newPending 0`) |
 | New failures | 0 |
 | OnlineCodeEditor | PASS — manifest regression test and editor-dependent `.tsx` suites load and pass |
@@ -129,12 +129,12 @@ absolute path coupling in production code or configuration.
 | Item | Value |
 | --- | --- |
 | Base SHA | `5f9513fdc897ec2c15d3f8a5955b78ac358275a5` |
-| Feature head | `65b328bb664f8f879d2853163c6c008fe12be0a2` |
-| Merge commit | `4848116230da61ad8606f1ee341199f9999356d4` (`--no-ff`) |
-| Main after | `4848116` |
+| Feature head | `381c905a468d916485138d2b80c6b7a039827bb8` |
+| Merge commit | `4848116230da61ad8606f1ee341199f9999356d4` (grant/provenance) and `fb42e7348f39d4cbc42fa41a628f3bba87b20dd2` (error-vocabulary coverage), both (`--no-ff`) |
+| Main after | `fb42e73` |
 | Push | NO |
 
-Merged tree is identical to the qualified feature tree (`git diff` empty).
+Both `--no-ff` merges preserved the qualified feature tree (`git diff` empty at each merge; the only post-merge changes are documentation commits).
 
 ## NEXT
 

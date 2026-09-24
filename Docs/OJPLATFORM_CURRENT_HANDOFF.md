@@ -21,7 +21,7 @@
 - Docker Phase 0–4: DONE; Docker Phase 6A + 6B-1 … 6B-6: PASS / MERGED.
 - Linux amd64 native Judge + Production Judge: QUALIFIED / MERGED.
 - Phase 7A: PASS / MERGED; Phase 7B: PASS / MERGED / PUBLISHED / PUBLICLY QUALIFIED; Typography V1: PASS / MERGED.
-- Full-Stack Synchronization V1: PASS / MERGED / CI GREEN (`a6b5732`, run `35726474650`); AI Host Integration V1 = PASS / MERGED (`a5fe3d7`, validated source `c3391b5`, migrations `0037–0038` UP_TO_DATE, canonical runtime READY); Specialized AI Host Sync V1 = PASS / MERGED (`4848116`; Host grants + dispatches `code.debug.analyze@1.0` and transports `promptApplied`/`promptVersion`; AI Bridge Stage 7 host qualification PASS; AlgoQuest Real-AI E2E NOT RUN).
+- Full-Stack Synchronization V1: PASS / MERGED / CI GREEN (`a6b5732`, run `35726474650`); AI Host Integration V1 = PASS / MERGED (`a5fe3d7`, validated source `c3391b5`, migrations `0037–0038` UP_TO_DATE, canonical runtime READY); Specialized AI Host Sync V1 = PASS / MERGED (`fb42e73`; Host grants + dispatches `code.debug.analyze@1.0` and transports `promptApplied`/`promptVersion`; AI Bridge Stage 7 host qualification PASS; AlgoQuest Real-AI E2E NOT RUN).
 
 ## GitHub CI (2026-09-22)
 
