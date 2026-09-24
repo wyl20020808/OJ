@@ -12,12 +12,19 @@
  * the expected shape) is reported distinctly, so an operator can tell "not installed" apart from
  * "wrong version installed" — both leave the site fully booted.
  */
-import type { AiBridgeHostModuleLike, AiBridgeSuiteModuleLike } from './types.js';
+import type {
+  AiBridgeHostModuleLike,
+  AiBridgeSuiteModuleLike,
+} from './types.js';
 
 export type AiBridgeModulesLoadResult =
   | { readonly kind: 'ABSENT'; readonly missing: readonly string[] }
   | { readonly kind: 'INVALID'; readonly error: string }
-  | { readonly kind: 'LOADED'; readonly host: AiBridgeHostModuleLike; readonly suite: AiBridgeSuiteModuleLike };
+  | {
+      readonly kind: 'LOADED';
+      readonly host: AiBridgeHostModuleLike;
+      readonly suite: AiBridgeSuiteModuleLike;
+    };
 
 /** The composed specifiers — deliberately not literals (see module doc). */
 const HOST_SPECIFIER = ['@aibridge', 'host'].join('/');
@@ -30,21 +37,26 @@ const isModuleNotFound = (error: unknown, specifier: string): boolean => {
   }
   const code = (error as NodeJS.ErrnoException).code;
   return (
-    (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') && error.message.includes(specifier)
+    (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') &&
+    error.message.includes(specifier)
   );
 };
 
 const isHostModule = (value: unknown): value is AiBridgeHostModuleLike =>
   typeof value === 'object' &&
   value !== null &&
-  typeof (value as { createAiBridgeServerPlugin?: unknown }).createAiBridgeServerPlugin === 'function';
+  typeof (value as { createAiBridgeServerPlugin?: unknown })
+    .createAiBridgeServerPlugin === 'function';
 
 const isSuiteModule = (value: unknown): value is AiBridgeSuiteModuleLike =>
   typeof value === 'object' &&
   value !== null &&
-  typeof (value as { SUITE_ADAPTER_FACTORIES?: unknown }).SUITE_ADAPTER_FACTORIES === 'object' &&
-  (value as { SUITE_ADAPTER_FACTORIES?: unknown }).SUITE_ADAPTER_FACTORIES !== null &&
-  typeof (value as { suiteResolveEndpoint?: unknown }).suiteResolveEndpoint === 'function';
+  typeof (value as { SUITE_ADAPTER_FACTORIES?: unknown })
+    .SUITE_ADAPTER_FACTORIES === 'object' &&
+  (value as { SUITE_ADAPTER_FACTORIES?: unknown }).SUITE_ADAPTER_FACTORIES !==
+    null &&
+  typeof (value as { suiteResolveEndpoint?: unknown }).suiteResolveEndpoint ===
+    'function';
 
 /** For tests: inject module objects and skip resolution entirely. */
 export type AiBridgeModuleOverrides = {
@@ -55,8 +67,15 @@ export type AiBridgeModuleOverrides = {
 export async function loadAiBridgeModules(
   overrides: AiBridgeModuleOverrides = {},
 ): Promise<AiBridgeModulesLoadResult> {
-  if (overrides.hostModule !== undefined && overrides.suiteModule !== undefined) {
-    return { kind: 'LOADED', host: overrides.hostModule, suite: overrides.suiteModule };
+  if (
+    overrides.hostModule !== undefined &&
+    overrides.suiteModule !== undefined
+  ) {
+    return {
+      kind: 'LOADED',
+      host: overrides.hostModule,
+      suite: overrides.suiteModule,
+    };
   }
   const missing: string[] = [];
   let host: unknown;
@@ -89,10 +108,18 @@ export async function loadAiBridgeModules(
     return { kind: 'ABSENT', missing };
   }
   if (!isHostModule(host)) {
-    return { kind: 'INVALID', error: '@aibridge/host is present but is not the expected plugin entry shape' };
+    return {
+      kind: 'INVALID',
+      error:
+        '@aibridge/host is present but is not the expected plugin entry shape',
+    };
   }
   if (!isSuiteModule(suite)) {
-    return { kind: 'INVALID', error: '@aibridge/suite-all is present but is not the expected adapter-table shape' };
+    return {
+      kind: 'INVALID',
+      error:
+        '@aibridge/suite-all is present but is not the expected adapter-table shape',
+    };
   }
   void EXPECTED_SPECIFIERS;
   return { kind: 'LOADED', host, suite };

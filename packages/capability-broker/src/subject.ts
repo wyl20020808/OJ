@@ -49,12 +49,17 @@ function base64url(buffer: Buffer): string {
 }
 
 function hmac(secret: string, domain: string, value: string): string {
-  return base64url(createHmac('sha256', secret).update(`${domain}${value}`).digest());
+  return base64url(
+    createHmac('sha256', secret).update(`${domain}${value}`).digest(),
+  );
 }
 
-export function createSubjectTokenMinter(options: { readonly secret?: string } = {}): SubjectTokenMinter {
+export function createSubjectTokenMinter(
+  options: { readonly secret?: string } = {},
+): SubjectTokenMinter {
   const secret = options.secret ?? randomBytes(32).toString('base64url');
-  const stability: SubjectStability = options.secret === undefined ? 'PROCESS_LOCAL' : 'STABLE';
+  const stability: SubjectStability =
+    options.secret === undefined ? 'PROCESS_LOCAL' : 'STABLE';
   return {
     mintForUser(userId: string): string {
       return `${SUBJECT_TOKEN_USER_PREFIX}${hmac(secret, USER_DOMAIN, userId)}`;
@@ -69,7 +74,8 @@ export function createSubjectTokenMinter(options: { readonly secret?: string } =
 /** True when a value is shaped like one of our subject tokens (loose structural check). */
 export function looksLikeSubjectToken(value: string): boolean {
   return (
-    (value.startsWith(SUBJECT_TOKEN_USER_PREFIX) || value.startsWith(SUBJECT_TOKEN_ANONYMOUS_PREFIX)) &&
+    (value.startsWith(SUBJECT_TOKEN_USER_PREFIX) ||
+      value.startsWith(SUBJECT_TOKEN_ANONYMOUS_PREFIX)) &&
     value.length > 16 &&
     value.length <= 128
   );

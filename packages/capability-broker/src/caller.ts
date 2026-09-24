@@ -45,7 +45,9 @@ export type TrustedCallerContext = {
 
 /** The composed, collision-free trusted caller id (`plugin.<id>` / `site.<id>`). */
 export function callerKey(identity: CallerIdentity): string {
-  return identity.callerType === 'PLUGIN' ? `plugin.${identity.callerId}` : `site.${identity.callerId}`;
+  return identity.callerType === 'PLUGIN'
+    ? `plugin.${identity.callerId}`
+    : `site.${identity.callerId}`;
 }
 
 export function isSiteCallerId(value: string): boolean {

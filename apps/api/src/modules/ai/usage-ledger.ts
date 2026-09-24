@@ -14,12 +14,17 @@ import type {
 
 /** The pg-pool-shaped seam (structural; no driver import). */
 export type SqlQueryLike = {
-  query(text: string, params?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+  query(
+    text: string,
+    params?: readonly unknown[],
+  ): Promise<{ rows: Record<string, unknown>[] }>;
 };
 
 const jsonb = (value: unknown): string => JSON.stringify(value ?? {});
-const text = (value: unknown): string | null => (typeof value === 'string' ? value : null);
-const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+const text = (value: unknown): string | null =>
+  typeof value === 'string' ? value : null;
+const num = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
 const bool = (value: unknown): boolean => value === true;
 
 const ATTEMPT_COLUMNS = [
@@ -83,7 +88,9 @@ const REQUEST_COLUMNS = [
   'provenance',
 ] as const;
 
-const attemptParams = (r: ProviderAttemptUsageRecordLike): readonly unknown[] => [
+const attemptParams = (
+  r: ProviderAttemptUsageRecordLike,
+): readonly unknown[] => [
   text(r['usageRecordId']),
   text(r['logicalRequestId']),
   text(r['attemptId']),
@@ -115,7 +122,9 @@ const attemptParams = (r: ProviderAttemptUsageRecordLike): readonly unknown[] =>
   text(r['pricingVersion']),
 ];
 
-const requestParams = (r: LogicalRequestUsageRecordLike): readonly unknown[] => [
+const requestParams = (
+  r: LogicalRequestUsageRecordLike,
+): readonly unknown[] => [
   text(r['usageRecordId']),
   text(r['logicalRequestId']),
   text(r['requestId']),
@@ -146,12 +155,18 @@ const requestParams = (r: LogicalRequestUsageRecordLike): readonly unknown[] => 
   r['promptApplied'] === undefined && r['promptVersion'] === undefined
     ? null
     : jsonb({
-        ...(r['promptApplied'] === undefined ? {} : { promptApplied: r['promptApplied'] }),
-        ...(r['promptVersion'] === undefined ? {} : { promptVersion: r['promptVersion'] }),
+        ...(r['promptApplied'] === undefined
+          ? {}
+          : { promptApplied: r['promptApplied'] }),
+        ...(r['promptVersion'] === undefined
+          ? {}
+          : { promptVersion: r['promptVersion'] }),
       }),
 ];
 
-const snakeToCamel = (row: Record<string, unknown>): Record<string, unknown> => {
+const snakeToCamel = (
+  row: Record<string, unknown>,
+): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(row)) {
     out[key.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase())] = value;
@@ -160,7 +175,9 @@ const snakeToCamel = (row: Record<string, unknown>): Record<string, unknown> => 
 };
 
 /** Request rows store provenance labels as one `provenance` object; the port shape is flat. */
-const rowToRequest = (row: Record<string, unknown>): LogicalRequestUsageRecordLike => {
+const rowToRequest = (
+  row: Record<string, unknown>,
+): LogicalRequestUsageRecordLike => {
   const flat = snakeToCamel(row);
   const provenance = flat['provenance'];
   delete flat['provenance'];
@@ -170,8 +187,12 @@ const rowToRequest = (row: Record<string, unknown>): LogicalRequestUsageRecordLi
       : {};
   return {
     ...flat,
-    ...(typeof labels['promptApplied'] === 'boolean' ? { promptApplied: labels['promptApplied'] } : {}),
-    ...(typeof labels['promptVersion'] === 'string' ? { promptVersion: labels['promptVersion'] } : {}),
+    ...(typeof labels['promptApplied'] === 'boolean'
+      ? { promptApplied: labels['promptApplied'] }
+      : {}),
+    ...(typeof labels['promptVersion'] === 'string'
+      ? { promptVersion: labels['promptVersion'] }
+      : {}),
   } as unknown as LogicalRequestUsageRecordLike;
 };
 
@@ -182,30 +203,48 @@ const insertSql = (table: string, columns: readonly string[]): string =>
  * The durable usage ledger. Append-only: duplicate record ids are ignored (`ON CONFLICT DO
  * NOTHING`), so a retried append never rewrites history.
  */
-export function createPostgresUsageLedger(sql: SqlQueryLike): UsageLedgerPortLike {
+export function createPostgresUsageLedger(
+  sql: SqlQueryLike,
+): UsageLedgerPortLike {
   return {
     async appendAttempt(record) {
-      await sql.query(insertSql('ai_capability_usage_attempts', ATTEMPT_COLUMNS), attemptParams(record));
+      await sql.query(
+        insertSql('ai_capability_usage_attempts', ATTEMPT_COLUMNS),
+        attemptParams(record),
+      );
     },
     async appendRequest(record) {
-      await sql.query(insertSql('ai_capability_usage_requests', REQUEST_COLUMNS), requestParams(record));
+      await sql.query(
+        insertSql('ai_capability_usage_requests', REQUEST_COLUMNS),
+        requestParams(record),
+      );
     },
     async attempts(logicalRequestId) {
       const rows =
         logicalRequestId === undefined
-          ? (await sql.query('SELECT * FROM ai_capability_usage_attempts ORDER BY started_at_ms, sequence')).rows
+          ? (
+              await sql.query(
+                'SELECT * FROM ai_capability_usage_attempts ORDER BY started_at_ms, sequence',
+              )
+            ).rows
           : (
               await sql.query(
                 'SELECT * FROM ai_capability_usage_attempts WHERE logical_request_id = $1 ORDER BY started_at_ms, sequence',
                 [logicalRequestId],
               )
             ).rows;
-      return rows.map((row) => snakeToCamel(row) as unknown as ProviderAttemptUsageRecordLike);
+      return rows.map(
+        (row) => snakeToCamel(row) as unknown as ProviderAttemptUsageRecordLike,
+      );
     },
     async requests(logicalRequestId) {
       const rows =
         logicalRequestId === undefined
-          ? (await sql.query('SELECT * FROM ai_capability_usage_requests ORDER BY started_at_ms')).rows
+          ? (
+              await sql.query(
+                'SELECT * FROM ai_capability_usage_requests ORDER BY started_at_ms',
+              )
+            ).rows
           : (
               await sql.query(
                 'SELECT * FROM ai_capability_usage_requests WHERE logical_request_id = $1 ORDER BY started_at_ms',

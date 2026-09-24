@@ -1,6 +1,9 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
-import { CapabilityBroker, createSubjectTokenMinter } from '@ojplatform/capability-broker';
+import {
+  CapabilityBroker,
+  createSubjectTokenMinter,
+} from '@ojplatform/capability-broker';
 import {
   createAiBridgeCapabilityProvider,
   AIBRIDGE_REQUEST_CONTRACT_VERSION,
@@ -40,7 +43,10 @@ function makeFakePlugin(script: Partial<AiResultLike> = {}) {
   const reloads: unknown[] = [];
   const plugin: AiBridgePluginLike = {
     id: AI_BRIDGE_PROVIDER_ID,
-    providesCapabilities: ['ai.text.generate@1.x', 'ai.structured.generate@1.x'],
+    providesCapabilities: [
+      'ai.text.generate@1.x',
+      'ai.structured.generate@1.x',
+    ],
     execute: (request, trustedContext) => {
       calls.push({
         request: request as Record<string, unknown>,
@@ -62,16 +68,22 @@ function makeFakePlugin(script: Partial<AiResultLike> = {}) {
       return Promise.resolve({ ok: true });
     },
     diagnostics: () => [],
-    configSnapshot: () => ({ configVersion: 'cfg-1', contentDigest: 'digest-1' }),
+    configSnapshot: () => ({
+      configVersion: 'cfg-1',
+      contentDigest: 'digest-1',
+    }),
     dispose: () => undefined,
   };
   return { plugin, calls, reloads };
 }
 
-function makeHostModule(fake: ReturnType<typeof makeFakePlugin>): AiBridgeHostModuleLike {
+function makeHostModule(
+  fake: ReturnType<typeof makeFakePlugin>,
+): AiBridgeHostModuleLike {
   return {
     AIBRIDGE_PLUGIN_ID: AI_BRIDGE_PROVIDER_ID,
-    createAiBridgeServerPlugin: () => Promise.resolve({ ok: true, value: fake.plugin }),
+    createAiBridgeServerPlugin: () =>
+      Promise.resolve({ ok: true, value: fake.plugin }),
   };
 }
 
@@ -92,7 +104,10 @@ const silentLogger = {
   error: () => undefined,
 };
 
-async function bootModule(env: Record<string, string>, host?: AiBridgeHostModuleLike) {
+async function bootModule(
+  env: Record<string, string>,
+  host?: AiBridgeHostModuleLike,
+) {
   const app = Fastify({ logger: false });
   const broker = new CapabilityBroker({ maxTimeoutMs: 30_000 });
   registerDefaultSiteAiCallers(broker);
@@ -100,7 +115,9 @@ async function bootModule(env: Record<string, string>, host?: AiBridgeHostModule
     broker,
     logger: silentLogger,
     env,
-    ...(host === undefined ? {} : { moduleOverrides: { hostModule: host, suiteModule: fakeSuite } }),
+    ...(host === undefined
+      ? {}
+      : { moduleOverrides: { hostModule: host, suiteModule: fakeSuite } }),
   });
   return { app, broker, handle };
 }
@@ -114,24 +131,33 @@ describe('AI module boot posture (optional infrastructure)', () => {
   });
 
   it('environment kill switch → whole broker DISABLED', async () => {
-    const { broker, handle } = await bootModule({ OJPLATFORM_AI_DISABLED: 'true' });
+    const { broker, handle } = await bootModule({
+      OJPLATFORM_AI_DISABLED: 'true',
+    });
     expect(handle.status()).toEqual({ kind: 'DISABLED_BY_ENV' });
     expect(broker.getCapabilityStatus('ai.text.generate')).toBe('DISABLED');
     const client = broker.forSite('problem');
-    const result = await client?.execute('ai.text.generate', '1.0', { idempotencyKey: 'k', input: {} });
+    const result = await client?.execute('ai.text.generate', '1.0', {
+      idempotencyKey: 'k',
+      input: {},
+    });
     expect(result?.status).toBe('FAILED');
     expect(result?.error?.reason).toBe('KILL_SWITCH_GLOBAL');
   });
 
   it('configuration present but artifacts not installed → ARTIFACTS_ABSENT', async () => {
     // No moduleOverrides: the real loader resolves node_modules, where @aibridge/* is absent.
-    const { broker, handle } = await bootModule({ OJPLATFORM_AI_CONFIG_JSON: VALID_CONFIG });
+    const { broker, handle } = await bootModule({
+      OJPLATFORM_AI_CONFIG_JSON: VALID_CONFIG,
+    });
     expect(handle.status().kind).toBe('ARTIFACTS_ABSENT');
     expect(broker.listProviders()).toEqual([]);
   });
 
   it('invalid configuration JSON → CONFIG_UNREADABLE, site boots', async () => {
-    const { handle } = await bootModule({ OJPLATFORM_AI_CONFIG_JSON: '{not json' });
+    const { handle } = await bootModule({
+      OJPLATFORM_AI_CONFIG_JSON: '{not json',
+    });
     expect(handle.status().kind).toBe('CONFIG_UNREADABLE');
   });
 
@@ -141,10 +167,21 @@ describe('AI module boot posture (optional infrastructure)', () => {
       createAiBridgeServerPlugin: () =>
         Promise.resolve({
           ok: false,
-          failure: { issues: [{ code: 'INVALID_TYPE', path: '$.providers', message: 'must be an array' }] },
+          failure: {
+            issues: [
+              {
+                code: 'INVALID_TYPE',
+                path: '$.providers',
+                message: 'must be an array',
+              },
+            ],
+          },
         }),
     };
-    const { handle } = await bootModule({ OJPLATFORM_AI_CONFIG_JSON: VALID_CONFIG }, rejectingHost);
+    const { handle } = await bootModule(
+      { OJPLATFORM_AI_CONFIG_JSON: VALID_CONFIG },
+      rejectingHost,
+    );
     const status = handle.status();
     expect(status.kind).toBe('CONFIG_REJECTED');
     if (status.kind === 'CONFIG_REJECTED') {
@@ -155,10 +192,17 @@ describe('AI module boot posture (optional infrastructure)', () => {
   it('valid config + artifacts → ACTIVE, provider registered, end-to-end call works', async () => {
     const fake = makeFakePlugin();
     const { broker, handle } = await bootModule(
-      { OJPLATFORM_AI_CONFIG_JSON: VALID_CONFIG, OJPLATFORM_AI_SUBJECT_HMAC_KEY: 'test-operator-secret' },
+      {
+        OJPLATFORM_AI_CONFIG_JSON: VALID_CONFIG,
+        OJPLATFORM_AI_SUBJECT_HMAC_KEY: 'test-operator-secret',
+      },
       makeHostModule(fake),
     );
-    expect(handle.status()).toEqual({ kind: 'ACTIVE', configVersion: 'cfg-1', contentDigest: 'digest-1' });
+    expect(handle.status()).toEqual({
+      kind: 'ACTIVE',
+      configVersion: 'cfg-1',
+      contentDigest: 'digest-1',
+    });
     expect(broker.listProviders()).toEqual([AI_BRIDGE_PROVIDER_ID]);
     expect(broker.getCapabilityStatus('ai.text.generate')).toBe('AVAILABLE');
 
@@ -171,20 +215,28 @@ describe('AI module boot posture (optional infrastructure)', () => {
       subjectToken: token,
     });
     expect(result?.status).toBe('SUCCEEDED');
-    expect(result?.output).toEqual({ text: 'fake answer', finishReason: 'STOP' });
+    expect(result?.output).toEqual({
+      text: 'fake answer',
+      finishReason: 'STOP',
+    });
     expect(result?.usage?.totalTokens).toBe(15);
 
     expect(fake.calls).toHaveLength(1);
     const call = fake.calls[0]!;
     // Envelope: frozen contract version, caller-scoped idempotency, capability + version.
-    expect(call.request['contractVersion']).toBe(AIBRIDGE_REQUEST_CONTRACT_VERSION);
+    expect(call.request['contractVersion']).toBe(
+      AIBRIDGE_REQUEST_CONTRACT_VERSION,
+    );
     expect(call.request['idempotencyKey']).toBe('turn-1');
     expect(call.request['capability']).toBe('ai.text.generate');
     expect(call.request['capabilityVersion']).toBe('1.0');
     expect(typeof call.request['requestId']).toBe('string');
     // Trusted context: broker-composed identity, grants, opaque subject — nothing consumer-shaped.
     expect(call.trusted['callerPluginId']).toBe('site.problem');
-    expect(call.trusted['grantedPermissions']).toEqual(['ai.text.generate@1.x', 'ai.structured.generate@1.x']);
+    expect(call.trusted['grantedPermissions']).toEqual([
+      'ai.text.generate@1.x',
+      'ai.structured.generate@1.x',
+    ]);
     expect(call.trusted['subjectToken']).toBe(token);
   });
 
@@ -206,24 +258,41 @@ describe('AI module boot posture (optional infrastructure)', () => {
       input: {},
     });
     expect(result?.status).toBe('SUCCEEDED');
-    expect(fake.calls[0]?.trusted['callerPluginId']).toBe('plugin.algoquest.learning-quests');
-    expect(fake.calls[0]?.trusted['grantedPermissions']).toEqual(['ai.structured.generate@1.x']);
+    expect(fake.calls[0]?.trusted['callerPluginId']).toBe(
+      'plugin.algoquest.learning-quests',
+    );
+    expect(fake.calls[0]?.trusted['grantedPermissions']).toEqual([
+      'ai.structured.generate@1.x',
+    ]);
     // ...while a capability the plugin never declared is denied before any dispatch.
-    const denied = await plugin?.execute('ai.text.generate', '1.0', { idempotencyKey: 'aq-2', input: {} });
+    const denied = await plugin?.execute('ai.text.generate', '1.0', {
+      idempotencyKey: 'aq-2',
+      input: {},
+    });
     expect(denied?.error?.code).toBe('PERMISSION_DENIED');
     expect(fake.calls).toHaveLength(1);
   });
 
   it('reload delegates atomically to the bridge', async () => {
     const fake = makeFakePlugin();
-    const { handle } = await bootModule({ OJPLATFORM_AI_CONFIG_JSON: VALID_CONFIG }, makeHostModule(fake));
-    await handle.reload({ providers: [], routes: [], governance: { note: 'v2' } });
+    const { handle } = await bootModule(
+      { OJPLATFORM_AI_CONFIG_JSON: VALID_CONFIG },
+      makeHostModule(fake),
+    );
+    await handle.reload({
+      providers: [],
+      routes: [],
+      governance: { note: 'v2' },
+    });
     expect(fake.reloads).toHaveLength(1);
   });
 
   it('close unregisters the provider (capability goes back to UNAVAILABLE)', async () => {
     const fake = makeFakePlugin();
-    const { broker, handle } = await bootModule({ OJPLATFORM_AI_CONFIG_JSON: VALID_CONFIG }, makeHostModule(fake));
+    const { broker, handle } = await bootModule(
+      { OJPLATFORM_AI_CONFIG_JSON: VALID_CONFIG },
+      makeHostModule(fake),
+    );
     expect(broker.getCapabilityStatus('ai.text.generate')).toBe('AVAILABLE');
     handle.close();
     expect(broker.getCapabilityStatus('ai.text.generate')).toBe('UNAVAILABLE');
@@ -234,15 +303,23 @@ describe('AI module boot posture (optional infrastructure)', () => {
 describe('capability provider bridge (unit)', () => {
   it('rejects capability references the manifest dialect cannot express', () => {
     const fake = makeFakePlugin();
-    const bad: AiBridgePluginLike = { ...fake.plugin, providesCapabilities: ['Not.A.Ref'] };
+    const bad: AiBridgePluginLike = {
+      ...fake.plugin,
+      providesCapabilities: ['Not.A.Ref'],
+    };
     expect(() =>
-      createAiBridgeCapabilityProvider(bad, { providerId: AI_BRIDGE_PROVIDER_ID, pluginVersion: 'test' }),
+      createAiBridgeCapabilityProvider(bad, {
+        providerId: AI_BRIDGE_PROVIDER_ID,
+        pluginVersion: 'test',
+      }),
     ).toThrow();
   });
 
   it('bridges AbortSignal into a cancellation token', async () => {
     const fake = makeFakePlugin();
-    let seenCancellation: { cancelled: boolean; onCancel: (cb: () => void) => () => void } | undefined;
+    let seenCancellation:
+      | { cancelled: boolean; onCancel: (cb: () => void) => () => void }
+      | undefined;
     const plugin: AiBridgePluginLike = {
       ...fake.plugin,
       execute: (_request, _trusted, options) => {
@@ -257,14 +334,24 @@ describe('capability provider bridge (unit)', () => {
       },
     };
     const broker = new CapabilityBroker();
-    broker.registerSiteCaller({ siteId: 'problem', capabilities: ['ai.text.generate'] });
+    broker.registerSiteCaller({
+      siteId: 'problem',
+      capabilities: ['ai.text.generate'],
+    });
     broker.registerProvider(
-      createAiBridgeCapabilityProvider(plugin, { providerId: AI_BRIDGE_PROVIDER_ID, pluginVersion: 'test' }),
+      createAiBridgeCapabilityProvider(plugin, {
+        providerId: AI_BRIDGE_PROVIDER_ID,
+        pluginVersion: 'test',
+      }),
     );
     const controller = new AbortController();
     const promise = broker
       .forSite('problem')!
-      .execute('ai.text.generate', '1.0', { idempotencyKey: 'c-1', input: {}, signal: controller.signal });
+      .execute('ai.text.generate', '1.0', {
+        idempotencyKey: 'c-1',
+        input: {},
+        signal: controller.signal,
+      });
     await promise;
     expect(seenCancellation).toBeDefined();
     expect(seenCancellation!.cancelled).toBe(false);
@@ -281,8 +368,12 @@ describe('capability provider bridge (unit)', () => {
 describe('environment secret store', () => {
   it('resolves secret://env/ handles and nothing else', async () => {
     const store = createEnvSecretStore({ AIBRIDGE_RELAY_API_KEY: 'sk-test' });
-    await expect(store.resolve('secret://env/AIBRIDGE_RELAY_API_KEY')).resolves.toBe('sk-test');
-    await expect(store.has('secret://env/AIBRIDGE_RELAY_API_KEY')).resolves.toBe(true);
+    await expect(
+      store.resolve('secret://env/AIBRIDGE_RELAY_API_KEY'),
+    ).resolves.toBe('sk-test');
+    await expect(
+      store.has('secret://env/AIBRIDGE_RELAY_API_KEY'),
+    ).resolves.toBe(true);
     await expect(store.resolve('secret://env/MISSING_KEY')).resolves.toBeNull();
     await expect(store.resolve('https://evil.example/key')).resolves.toBeNull();
     await expect(store.resolve('secret://env/not a name')).resolves.toBeNull();
@@ -298,10 +389,16 @@ describe('site AI client', () => {
   });
 
   it('subject tokens come from the module minter with stable/opaque shape', async () => {
-    const { handle } = await bootModule({ OJPLATFORM_AI_SUBJECT_HMAC_KEY: 'operator-secret' });
+    const { handle } = await bootModule({
+      OJPLATFORM_AI_SUBJECT_HMAC_KEY: 'operator-secret',
+    });
     expect(handle.subjectTokens.stability).toBe('STABLE');
     const token = handle.subjectTokens.mintForUser('user-9');
     expect(token).toMatch(/^ojs1_/);
-    expect(createSubjectTokenMinter({ secret: 'operator-secret' }).mintForUser('user-9')).toBe(token);
+    expect(
+      createSubjectTokenMinter({ secret: 'operator-secret' }).mintForUser(
+        'user-9',
+      ),
+    ).toBe(token);
   });
 });

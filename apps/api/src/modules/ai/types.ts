@@ -37,7 +37,11 @@ export type AiUsageLike = {
   readonly totalTokens?: number;
   readonly cachedTokens?: number;
   readonly reasoningTokens?: number;
-  readonly estimatedCost?: { readonly value: number; readonly currency: string; readonly basis: string };
+  readonly estimatedCost?: {
+    readonly value: number;
+    readonly currency: string;
+    readonly basis: string;
+  };
 };
 
 /** `@aibridge/contracts` `AiResult` (call shape). */
@@ -46,7 +50,9 @@ export type AiResultLike = {
   readonly output?: unknown;
   readonly error?: AiErrorLike;
   readonly usage: AiUsageLike;
-  readonly providerMetadata?: Readonly<Record<string, string | number | boolean>>;
+  readonly providerMetadata?: Readonly<
+    Record<string, string | number | boolean>
+  >;
   readonly latencyMs: number;
   readonly requestId: string;
   readonly warnings?: readonly { readonly code: string }[];
@@ -85,9 +91,14 @@ export type AiBridgePluginLike = {
   ): Promise<AiResultLike>;
   listCapabilities(): readonly CapabilityDescriptorLike[];
   status(): AiBridgeStatusLike;
-  reload(candidate: unknown): Promise<{ readonly ok: boolean; readonly failure?: unknown }>;
+  reload(
+    candidate: unknown,
+  ): Promise<{ readonly ok: boolean; readonly failure?: unknown }>;
   diagnostics(): readonly unknown[];
-  configSnapshot(): { readonly configVersion: string; readonly contentDigest: string };
+  configSnapshot(): {
+    readonly configVersion: string;
+    readonly contentDigest: string;
+  };
   dispose(): void;
 };
 
@@ -109,7 +120,10 @@ export type AiBridgeHostModuleLike = {
       readonly metrics?: MetricsSinkLike;
       readonly operatorLog?: OperatorLogSinkLike;
     };
-  }): Promise<{ readonly ok: true; readonly value: AiBridgePluginLike } | { readonly ok: false; readonly failure: unknown }>;
+  }): Promise<
+    | { readonly ok: true; readonly value: AiBridgePluginLike }
+    | { readonly ok: false; readonly failure: unknown }
+  >;
 };
 
 /** `@aibridge/suite-all` module (call shape). */
@@ -143,7 +157,12 @@ export type IdempotencyStorePortLike = {
     readonly kind: 'PROCEED' | 'JOIN' | 'REPLAY' | 'CONFLICT';
     readonly record: IdempotencyRecordLike;
   }>;
-  complete(identity: string, status: 'SUCCEEDED' | 'FAILED_FINAL', result: unknown, nowMs: number): Promise<void>;
+  complete(
+    identity: string,
+    status: 'SUCCEEDED' | 'FAILED_FINAL',
+    result: unknown,
+    nowMs: number,
+  ): Promise<void>;
   get(identity: string): Promise<IdempotencyRecordLike | null>;
 };
 
@@ -159,14 +178,20 @@ export type RateLimitStorePortLike = {
 
 /** `@aibridge/governance` `QuotaStorePort` (call shape). Reserve/settle/release must be atomic. */
 export type QuotaStorePortLike = {
-  reserve(bucket: string, amount: number, limit: number): Promise<string | null>;
+  reserve(
+    bucket: string,
+    amount: number,
+    limit: number,
+  ): Promise<string | null>;
   settle(bucket: string, reservationId: string, actual: number): Promise<void>;
   release(bucket: string, reservationId: string): Promise<void>;
   consumed(bucket: string): Promise<number>;
 };
 
 /** `@aibridge/governance` usage record shapes (call shape; appended verbatim to the ledger). */
-export type ProviderAttemptUsageRecordLike = Readonly<Record<string, unknown>> & {
+export type ProviderAttemptUsageRecordLike = Readonly<
+  Record<string, unknown>
+> & {
   readonly usageRecordId: string;
   readonly logicalRequestId: string;
   readonly attemptId: string;
@@ -174,7 +199,9 @@ export type ProviderAttemptUsageRecordLike = Readonly<Record<string, unknown>> &
   readonly capability: string;
 };
 
-export type LogicalRequestUsageRecordLike = Readonly<Record<string, unknown>> & {
+export type LogicalRequestUsageRecordLike = Readonly<
+  Record<string, unknown>
+> & {
   readonly usageRecordId: string;
   readonly logicalRequestId: string;
   readonly requestId: string;
@@ -186,8 +213,12 @@ export type LogicalRequestUsageRecordLike = Readonly<Record<string, unknown>> & 
 export type UsageLedgerPortLike = {
   appendAttempt(record: ProviderAttemptUsageRecordLike): Promise<void>;
   appendRequest(record: LogicalRequestUsageRecordLike): Promise<void>;
-  attempts(logicalRequestId?: string): Promise<readonly ProviderAttemptUsageRecordLike[]>;
-  requests(logicalRequestId?: string): Promise<readonly LogicalRequestUsageRecordLike[]>;
+  attempts(
+    logicalRequestId?: string,
+  ): Promise<readonly ProviderAttemptUsageRecordLike[]>;
+  requests(
+    logicalRequestId?: string,
+  ): Promise<readonly LogicalRequestUsageRecordLike[]>;
 };
 
 /* ── Observability sinks (call shapes; events are already normalized, never raw payloads) ── */
@@ -197,7 +228,11 @@ export type OperationalEventSinkLike = {
 };
 
 export type MetricsSinkLike = {
-  observe(metric: string, value: number, labels?: Readonly<Record<string, string>>): void;
+  observe(
+    metric: string,
+    value: number,
+    labels?: Readonly<Record<string, string>>,
+  ): void;
 };
 
 export type OperatorLogSinkLike = {

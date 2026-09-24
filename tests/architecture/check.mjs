@@ -66,22 +66,34 @@ const STATIC_AIBRIDGE_IMPORT =
   /(?:import|export)\s[^'"]*from\s*['"]@aibridge\/|require\(\s*['"]@aibridge\/|import\(\s*['"]@aibridge\//;
 const AI_MUTATING_ROUTE = /\.(post|put|patch|delete)\(\s*['"]\/api\/ai[/'"]/;
 
-const sourceRoots = [join(root, 'apps'), join(root, 'packages'), join(root, 'tests')];
+const sourceRoots = [
+  join(root, 'apps'),
+  join(root, 'packages'),
+  join(root, 'tests'),
+];
 const violations = [];
 for (const sourceRoot of sourceRoots) {
   for (const file of await collect(sourceRoot)) {
-    if (file.includes('node_modules') || file.includes(join('tests', 'architecture'))) continue;
+    if (
+      file.includes('node_modules') ||
+      file.includes(join('tests', 'architecture'))
+    )
+      continue;
     const source = await readFile(file, 'utf8');
     if (STATIC_AIBRIDGE_IMPORT.test(source)) {
       violations.push(`static @aibridge/* dependency: ${relative(root, file)}`);
     }
     if (AI_MUTATING_ROUTE.test(source)) {
-      violations.push(`AI mutating route (possible prompt proxy): ${relative(root, file)}`);
+      violations.push(
+        `AI mutating route (possible prompt proxy): ${relative(root, file)}`,
+      );
     }
   }
 }
 if (violations.length > 0) {
-  throw new Error(`Stage 6 architecture gate violations:\n  ${violations.join('\n  ')}`);
+  throw new Error(
+    `Stage 6 architecture gate violations:\n  ${violations.join('\n  ')}`,
+  );
 }
 console.log(
   'Stage 6 gate PASS: no static @aibridge/* dependency; no mutating /api/ai route.',

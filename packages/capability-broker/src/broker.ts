@@ -22,11 +22,19 @@
  * What the broker deliberately does **not** own: business logic, prompts, provider configuration,
  * secrets, persistence. Capability providers bring their own; the host wires them.
  */
-import { parsePluginManifest, type PluginManifest } from '@ojplatform/plugin-sdk';
-import { callerKey, isSiteCallerId, type TrustedCallerContext } from './caller.js';
+import {
+  parsePluginManifest,
+  type PluginManifest,
+} from '@ojplatform/plugin-sdk';
+import {
+  callerKey,
+  isSiteCallerId,
+  type TrustedCallerContext,
+} from './caller.js';
 import { isCapabilityGranted } from './permission.js';
 
-export type CapabilityAvailability = 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'DISABLED';
+export type CapabilityAvailability =
+  'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'DISABLED';
 
 export type CapabilityDescriptor = {
   readonly id: string;
@@ -65,7 +73,11 @@ export type CapabilityUsage = {
   readonly inputTokens?: number;
   readonly outputTokens?: number;
   readonly totalTokens?: number;
-  readonly estimatedCost?: { readonly value: number; readonly currency: string; readonly basis: string };
+  readonly estimatedCost?: {
+    readonly value: number;
+    readonly currency: string;
+    readonly basis: string;
+  };
 };
 
 export type CapabilityResult<TOutput = unknown> = {
@@ -74,7 +86,9 @@ export type CapabilityResult<TOutput = unknown> = {
   readonly error?: CapabilityError;
   readonly usage?: CapabilityUsage;
   readonly warnings?: readonly { readonly code: string }[];
-  readonly providerMetadata?: Readonly<Record<string, string | number | boolean>>;
+  readonly providerMetadata?: Readonly<
+    Record<string, string | number | boolean>
+  >;
   readonly latencyMs?: number;
   readonly requestId?: string;
 };
@@ -85,7 +99,10 @@ export type CapabilityInvocation = {
   readonly input: unknown;
   readonly profile?: string;
   readonly outputSchema?: unknown;
-  readonly timeoutBudget?: { readonly totalMs?: number; readonly providerMs?: number };
+  readonly timeoutBudget?: {
+    readonly totalMs?: number;
+    readonly providerMs?: number;
+  };
   /** Host cancellation; providers translate it into their own outbound abort. */
   readonly signal?: AbortSignal;
   readonly metadata?: {
@@ -97,14 +114,20 @@ export type CapabilityInvocation = {
 };
 
 /** A trusted caller context with its composed key (`plugin.<id>` / `site.<id>`). */
-export type BoundCallerContext = TrustedCallerContext & { readonly callerKey: string };
+export type BoundCallerContext = TrustedCallerContext & {
+  readonly callerKey: string;
+};
 
 export type CapabilityProvider = {
   readonly providerId: string;
   /** The provider's canonical manifest (`providesCapabilities` must cover what it registers). */
   readonly manifest: PluginManifest;
   /** Provider-side availability, before the host kill switch is applied. */
-  listCapabilities(): readonly { readonly id: string; readonly version: string; readonly status: CapabilityAvailability }[];
+  listCapabilities(): readonly {
+    readonly id: string;
+    readonly version: string;
+    readonly status: CapabilityAvailability;
+  }[];
   execute(
     capability: string,
     version: string,
@@ -135,7 +158,11 @@ export type CapabilityClient = {
   readonly permissions: readonly string[];
   capabilityStatus(id: string): CapabilityAvailability;
   listCapabilities(): readonly CapabilityDescriptor[];
-  execute(capability: string, version: string, invocation: CapabilityInvocation): Promise<CapabilityResult>;
+  execute(
+    capability: string,
+    version: string,
+    invocation: CapabilityInvocation,
+  ): Promise<CapabilityResult>;
   /** A derived client acting on behalf of one opaque subject (per-subject governance). */
   withSubject(subjectToken: string): CapabilityClient;
 };
@@ -145,9 +172,17 @@ export type CapabilityBrokerOptions = {
   readonly maxTimeoutMs?: number;
 };
 
-const EMPTY_SWITCH: HostKillSwitchState = { global: false, providers: [], capabilities: [] };
+const EMPTY_SWITCH: HostKillSwitchState = {
+  global: false,
+  providers: [],
+  capabilities: [],
+};
 
-function denial(message: string, reason: string, code: CapabilityErrorCode = 'PERMISSION_DENIED'): CapabilityResult<never> {
+function denial(
+  message: string,
+  reason: string,
+  code: CapabilityErrorCode = 'PERMISSION_DENIED',
+): CapabilityResult<never> {
   return {
     status: 'FAILED',
     error: { code, message, retryable: false, stage: 'PERMISSION', reason },
@@ -157,7 +192,13 @@ function denial(message: string, reason: string, code: CapabilityErrorCode = 'PE
 function unavailable(message: string, reason: string): CapabilityResult<never> {
   return {
     status: 'FAILED',
-    error: { code: 'UNAVAILABLE', message, retryable: false, stage: 'ROUTING', reason },
+    error: {
+      code: 'UNAVAILABLE',
+      message,
+      retryable: false,
+      stage: 'ROUTING',
+      reason,
+    },
   };
 }
 
@@ -181,7 +222,9 @@ export class CapabilityBroker {
   /** Register a capability provider. Duplicate capability ids are rejected, not merged. */
   registerProvider(provider: CapabilityProvider): void {
     if (this.#providers.has(provider.providerId)) {
-      throw new Error(`a capability provider is already registered as "${provider.providerId}"`);
+      throw new Error(
+        `a capability provider is already registered as "${provider.providerId}"`,
+      );
     }
     const declared = provider.manifest.providesCapabilities;
     const listed = provider.listCapabilities();
@@ -226,7 +269,9 @@ export class CapabilityBroker {
       throw new Error(`invalid site caller id "${registration.siteId}"`);
     }
     if (this.#siteCallers.has(registration.siteId)) {
-      throw new Error(`a site caller is already registered as "${registration.siteId}"`);
+      throw new Error(
+        `a site caller is already registered as "${registration.siteId}"`,
+      );
     }
     this.#siteCallers.set(registration.siteId, registration);
   }
@@ -257,7 +302,9 @@ export class CapabilityBroker {
     if (manifest === null) {
       return null;
     }
-    return this.#makeClient('PLUGIN', manifest.id, [...manifest.consumesCapabilities]);
+    return this.#makeClient('PLUGIN', manifest.id, [
+      ...manifest.consumesCapabilities,
+    ]);
   }
 
   /** The host kill switch. Applied on top of provider-side status, everywhere. */
@@ -270,7 +317,11 @@ export class CapabilityBroker {
   }
 
   getKillSwitch(): HostKillSwitchState {
-    return { ...this.#killSwitch, providers: [...this.#killSwitch.providers], capabilities: [...this.#killSwitch.capabilities] };
+    return {
+      ...this.#killSwitch,
+      providers: [...this.#killSwitch.providers],
+      capabilities: [...this.#killSwitch.capabilities],
+    };
   }
 
   /** Governance-resolved status of one capability. `DISABLED` (switched off) beats everything. */
@@ -288,7 +339,9 @@ export class CapabilityBroker {
     if (this.#killSwitch.providers.includes(registration.provider.providerId)) {
       return 'DISABLED';
     }
-    const listed = registration.provider.listCapabilities().find((entry) => entry.id === id);
+    const listed = registration.provider
+      .listCapabilities()
+      .find((entry) => entry.id === id);
     if (listed === undefined) {
       return 'UNAVAILABLE';
     }
@@ -311,13 +364,18 @@ export class CapabilityBroker {
   }
 
   /** Resolve a capability reference to its provider and declared version. */
-  resolveCapability(id: string): { readonly provider: CapabilityProvider; readonly version: string } | null {
+  resolveCapability(id: string): {
+    readonly provider: CapabilityProvider;
+    readonly version: string;
+  } | null {
     const registration = this.#findByCapability(id);
     if (registration === null) {
       return null;
     }
     const version = registration.capabilities.get(id);
-    return version === undefined ? null : { provider: registration.provider, version };
+    return version === undefined
+      ? null
+      : { provider: registration.provider, version };
   }
 
   dispose(): void {
@@ -337,9 +395,13 @@ export class CapabilityBroker {
     return null;
   }
 
-  #makeClient(callerType: 'PLUGIN' | 'SITE', callerId: string, permissions: readonly string[], subjectToken?: string): CapabilityClient {
+  #makeClient(
+    callerType: 'PLUGIN' | 'SITE',
+    callerId: string,
+    permissions: readonly string[],
+    subjectToken?: string,
+  ): CapabilityClient {
     const key = callerKey({ callerType, callerId });
-    const broker = this;
     const context = (): BoundCallerContext => ({
       callerType,
       callerId,
@@ -352,15 +414,18 @@ export class CapabilityBroker {
       callerType,
       callerId,
       permissions: [...permissions],
-      capabilityStatus: (id: string) => broker.getCapabilityStatus(id),
-      listCapabilities: () => broker.listAvailableCapabilities(),
-      execute: (capability: string, version: string, invocation: CapabilityInvocation) =>
-        broker.#execute(context(), capability, version, invocation),
+      capabilityStatus: (id: string) => this.getCapabilityStatus(id),
+      listCapabilities: () => this.listAvailableCapabilities(),
+      execute: (
+        capability: string,
+        version: string,
+        invocation: CapabilityInvocation,
+      ) => this.#execute(context(), capability, version, invocation),
       withSubject: (token: string) => {
         if (token.length === 0) {
           throw new Error('subject token must be a non-empty opaque token');
         }
-        return broker.#makeClient(callerType, callerId, permissions, token);
+        return this.#makeClient(callerType, callerId, permissions, token);
       },
     };
   }
@@ -372,20 +437,35 @@ export class CapabilityBroker {
     invocation: CapabilityInvocation,
   ): Promise<CapabilityResult> {
     if (this.#disposed) {
-      return unavailable('This capability broker has been disposed.', 'BROKER_DISPOSED');
+      return unavailable(
+        'This capability broker has been disposed.',
+        'BROKER_DISPOSED',
+      );
     }
     if (this.#killSwitch.global) {
-      return unavailable('Capabilities are disabled by the operator for this deployment.', 'KILL_SWITCH_GLOBAL');
+      return unavailable(
+        'Capabilities are disabled by the operator for this deployment.',
+        'KILL_SWITCH_GLOBAL',
+      );
     }
     if (this.#killSwitch.capabilities.includes(capability)) {
-      return unavailable('This capability is switched off by the operator.', 'KILL_SWITCH_CAPABILITY');
+      return unavailable(
+        'This capability is switched off by the operator.',
+        'KILL_SWITCH_CAPABILITY',
+      );
     }
     const registration = this.#findByCapability(capability);
     if (registration === null) {
-      return unavailable(`No provider offers the capability "${capability}".`, 'CAPABILITY_UNKNOWN');
+      return unavailable(
+        `No provider offers the capability "${capability}".`,
+        'CAPABILITY_UNKNOWN',
+      );
     }
     if (this.#killSwitch.providers.includes(registration.provider.providerId)) {
-      return unavailable('Every provider that could serve this capability is switched off.', 'KILL_SWITCH_PROVIDER');
+      return unavailable(
+        'Every provider that could serve this capability is switched off.',
+        'KILL_SWITCH_PROVIDER',
+      );
     }
     if (!isCapabilityGranted(caller.permissions, capability, version)) {
       return denial(
@@ -404,8 +484,18 @@ export class CapabilityBroker {
       return invocation;
     }
     const budget = invocation.timeoutBudget;
-    const total = budget.totalMs === undefined ? max : Math.min(budget.totalMs, max);
-    const provider = budget.providerMs === undefined ? undefined : Math.min(budget.providerMs, total);
-    return { ...invocation, timeoutBudget: { totalMs: total, ...(provider === undefined ? {} : { providerMs: provider }) } };
+    const total =
+      budget.totalMs === undefined ? max : Math.min(budget.totalMs, max);
+    const provider =
+      budget.providerMs === undefined
+        ? undefined
+        : Math.min(budget.providerMs, total);
+    return {
+      ...invocation,
+      timeoutBudget: {
+        totalMs: total,
+        ...(provider === undefined ? {} : { providerMs: provider }),
+      },
+    };
   }
 }

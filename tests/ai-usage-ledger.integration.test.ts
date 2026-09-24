@@ -14,14 +14,22 @@ import { createDatabase } from '../packages/database/src/index.js';
  */
 
 const databaseUrl =
-  process.env.DATABASE_URL ?? 'postgres://ojplatform:ojplatform_dev@127.0.0.1:55432/ojplatform';
+  process.env.DATABASE_URL ??
+  'postgres://ojplatform:ojplatform_dev@127.0.0.1:55432/ojplatform';
 const pool = createDatabase({ url: databaseUrl }).pool;
 const run = randomUUID().slice(0, 8);
 
 beforeAll(async () => {
-  const applied = await pool.query("SELECT to_regclass('public.ai_capability_usage_requests') AS reg");
+  const applied = await pool.query(
+    "SELECT to_regclass('public.ai_capability_usage_requests') AS reg",
+  );
   if (applied.rows[0]?.['reg'] === null) {
-    await pool.query(await readFile('packages/database/migrations/0037_ai_capability_usage.sql', 'utf8'));
+    await pool.query(
+      await readFile(
+        'packages/database/migrations/0037_ai_capability_usage.sql',
+        'utf8',
+      ),
+    );
   }
 });
 
@@ -91,7 +99,11 @@ describe('Postgres usage ledger', () => {
     const requests = await ledger.requests(`lr-${run}-one`);
     expect(requests).toHaveLength(1);
     expect(requests[0]?.['callerPluginId']).toBe('site.problem');
-    expect(requests[0]?.['totalUsage']).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
+    expect(requests[0]?.['totalUsage']).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+    });
     expect(requests[0]?.['idempotencyOutcome']).toBe('EXECUTED');
     // Prompt provenance labels round-trip as flat port fields (stored as one `provenance` object).
     expect(requests[0]?.['promptApplied']).toBe(true);
@@ -119,8 +131,13 @@ describe('Postgres usage ledger', () => {
     const pluginCaller = `plugin.attribution-${run}`;
     await ledger.appendRequest(requestRecord('attr-a', siteCaller));
     await ledger.appendRequest(requestRecord('attr-b', siteCaller));
-    await ledger.appendRequest({ ...requestRecord('attr-c', pluginCaller), status: 'FAILED' });
-    const summary = await summarizeUsageByCaller(pool, { sinceMs: 1_600_000_000_000 });
+    await ledger.appendRequest({
+      ...requestRecord('attr-c', pluginCaller),
+      status: 'FAILED',
+    });
+    const summary = await summarizeUsageByCaller(pool, {
+      sinceMs: 1_600_000_000_000,
+    });
     const site = summary.find((row) => row.callerPluginId === siteCaller);
     const plugin = summary.find((row) => row.callerPluginId === pluginCaller);
     expect(site).toBeDefined();
@@ -139,8 +156,20 @@ describe('Postgres usage ledger', () => {
         WHERE table_name IN ('ai_capability_usage_requests', 'ai_capability_usage_attempts')`,
     );
     const columns = rows.map((row) => String(row['column_name']));
-    for (const forbidden of ['prompt', 'output', 'input', 'content', 'response', 'messages', 'secret', 'credential', 'token']) {
-      expect(columns.filter((column) => column.includes(forbidden))).toEqual([]);
+    for (const forbidden of [
+      'prompt',
+      'output',
+      'input',
+      'content',
+      'response',
+      'messages',
+      'secret',
+      'credential',
+      'token',
+    ]) {
+      expect(columns.filter((column) => column.includes(forbidden))).toEqual(
+        [],
+      );
     }
   });
 });

@@ -24,7 +24,9 @@ export function createEnvSecretStore(
         return Promise.resolve(null);
       }
       const value = env[name];
-      return Promise.resolve(typeof value === 'string' && value.length > 0 ? value : null);
+      return Promise.resolve(
+        typeof value === 'string' && value.length > 0 ? value : null,
+      );
     },
     has(handle: string): Promise<boolean> {
       return this.resolve(handle).then((value) => value !== null);

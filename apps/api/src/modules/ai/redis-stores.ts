@@ -31,12 +31,17 @@ const QUOTA_BUCKET_TTL_MS = 35 * 24 * 60 * 60_000;
 
 /** The ioredis-shaped seam these stores use (structural; no driver import). */
 export type RedisEvalLike = {
-  eval(script: string, numKeys: number, ...args: readonly (string | number)[]): Promise<unknown>;
+  eval(
+    script: string,
+    numKeys: number,
+    ...args: readonly (string | number)[]
+  ): Promise<unknown>;
   hgetall(key: string): Promise<Record<string, string>>;
   pttl(key: string): Promise<number>;
 };
 
-const digest = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex');
+const digest = (value: string): string =>
+  createHash('sha256').update(value, 'utf8').digest('hex');
 
 /* ── Rate limiting: exact sliding window ────────────────────────────────────────────────── */
 
@@ -57,16 +62,26 @@ return {1, 0}
 `;
 
 /** Sliding-window rate-limit store, atomically maintained inside Redis. */
-export function createRedisRateLimitStore(redis: RedisEvalLike): RateLimitStorePortLike {
+export function createRedisRateLimitStore(
+  redis: RedisEvalLike,
+): RateLimitStorePortLike {
   return {
     async tryConsume(bucket, atMs, limit, windowMs) {
       const key = `${AI_REDIS_NAMESPACE}rate:${digest(bucket)}`;
       const member = `${atMs}:${randomUUID()}`;
-      const result = (await redis.eval(RATE_CONSUME_LUA, 1, key, atMs, windowMs, limit, member)) as readonly [
-        number,
-        number,
-      ];
-      return { allowed: result[0] === 1, retryAfterMs: Math.max(0, Math.trunc(result[1])) };
+      const result = (await redis.eval(
+        RATE_CONSUME_LUA,
+        1,
+        key,
+        atMs,
+        windowMs,
+        limit,
+        member,
+      )) as readonly [number, number];
+      return {
+        allowed: result[0] === 1,
+        retryAfterMs: Math.max(0, Math.trunc(result[1])),
+      };
     },
   };
 }
@@ -115,8 +130,11 @@ return tostring(total)
 `;
 
 /** Reserve/settle/release quota accounting, atomically maintained inside Redis. */
-export function createRedisQuotaStore(redis: RedisEvalLike): QuotaStorePortLike {
-  const keyFor = (bucket: string): string => `${AI_REDIS_NAMESPACE}quota:${digest(bucket)}`;
+export function createRedisQuotaStore(
+  redis: RedisEvalLike,
+): QuotaStorePortLike {
+  const keyFor = (bucket: string): string =>
+    `${AI_REDIS_NAMESPACE}quota:${digest(bucket)}`;
   return {
     async reserve(bucket, amount, limit) {
       const reservationId = `qr-${randomUUID()}`;
@@ -132,7 +150,14 @@ export function createRedisQuotaStore(redis: RedisEvalLike): QuotaStorePortLike 
       return typeof result === 'string' && result.length > 0 ? result : null;
     },
     async settle(bucket, reservationId, actual) {
-      await redis.eval(QUOTA_SETTLE_LUA, 1, keyFor(bucket), reservationId, actual, QUOTA_BUCKET_TTL_MS);
+      await redis.eval(
+        QUOTA_SETTLE_LUA,
+        1,
+        keyFor(bucket),
+        reservationId,
+        actual,
+        QUOTA_BUCKET_TTL_MS,
+      );
     },
     async release(bucket, reservationId) {
       await redis.eval(QUOTA_RELEASE_LUA, 1, keyFor(bucket), reservationId);
@@ -190,10 +215,16 @@ export function createRedisIdempotencyStore(
   encryptionKey: Buffer,
   options: RedisIdempotencyStoreOptions = {},
 ): IdempotencyStorePortLike {
-  const retentionMs = Math.max(1, options.retentionMs ?? IDEMPOTENCY_RETENTION_MS);
-  const keyFor = (identity: string): string => `${AI_REDIS_NAMESPACE}idem:${digest(identity)}`;
+  const retentionMs = Math.max(
+    1,
+    options.retentionMs ?? IDEMPOTENCY_RETENTION_MS,
+  );
+  const keyFor = (identity: string): string =>
+    `${AI_REDIS_NAMESPACE}idem:${digest(identity)}`;
 
-  const readRecord = (payload: string | false | undefined): IdempotencyRecordLike | null => {
+  const readRecord = (
+    payload: string | false | undefined,
+  ): IdempotencyRecordLike | null => {
     if (typeof payload !== 'string' || payload.length === 0) {
       return null;
     }
@@ -211,8 +242,14 @@ export function createRedisIdempotencyStore(
   return {
     async claim(record) {
       const nowMs = Date.now();
-      const ttlMs = Math.max(1, Math.min(record.expiresAtMs, nowMs + retentionMs) - nowMs);
-      const stored: IdempotencyRecordLike = { ...record, expiresAtMs: nowMs + ttlMs };
+      const ttlMs = Math.max(
+        1,
+        Math.min(record.expiresAtMs, nowMs + retentionMs) - nowMs,
+      );
+      const stored: IdempotencyRecordLike = {
+        ...record,
+        expiresAtMs: nowMs + ttlMs,
+      };
       const payload = encryptPayload(encryptionKey, JSON.stringify(stored));
       const result = (await redis.eval(
         IDEM_CLAIM_LUA,
@@ -246,7 +283,14 @@ export function createRedisIdempotencyStore(
       };
       const payload = encryptPayload(encryptionKey, JSON.stringify(updated));
       const ttlMs = Math.max(1, updated.expiresAtMs - nowMs);
-      await redis.eval(IDEM_COMPLETE_LUA, 1, keyFor(identity), status, payload, ttlMs);
+      await redis.eval(
+        IDEM_COMPLETE_LUA,
+        1,
+        keyFor(identity),
+        status,
+        payload,
+        ttlMs,
+      );
     },
     async get(identity) {
       const key = keyFor(identity);

@@ -23,8 +23,17 @@ import { readFileSync, watch, type FSWatcher } from 'node:fs';
 
 export type AiConfigLoadResult =
   | { readonly kind: 'ABSENT' }
-  | { readonly kind: 'INVALID'; readonly error: string; readonly source: string }
-  | { readonly kind: 'LOADED'; readonly document: unknown; readonly source: string; readonly filePath?: string };
+  | {
+      readonly kind: 'INVALID';
+      readonly error: string;
+      readonly source: string;
+    }
+  | {
+      readonly kind: 'LOADED';
+      readonly document: unknown;
+      readonly source: string;
+      readonly filePath?: string;
+    };
 
 export const AI_CONFIG_JSON_ENV = 'OJPLATFORM_AI_CONFIG_JSON';
 export const AI_CONFIG_FILE_ENV = 'OJPLATFORM_AI_CONFIG_FILE';
@@ -109,7 +118,9 @@ export function watchAiConfigFile(options: {
     }
     const parsed = parseDocument(raw, `file:${options.filePath}`);
     if (parsed.kind !== 'LOADED') {
-      options.onParseFailure?.(parsed.kind === 'INVALID' ? parsed.error : 'configuration disappeared');
+      options.onParseFailure?.(
+        parsed.kind === 'INVALID' ? parsed.error : 'configuration disappeared',
+      );
       return;
     }
     void Promise.resolve(options.applyCandidate(parsed.document)).catch(() => {

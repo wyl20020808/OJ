@@ -30,7 +30,8 @@ export type PluginContribution = {
  */
 export type CapabilityRef = string;
 
-const CAPABILITY_REF_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*){1,5}(?:@[1-9][0-9]*(?:\.x)?)?$/;
+const CAPABILITY_REF_PATTERN =
+  /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*){1,5}(?:@[1-9][0-9]*(?:\.x)?)?$/;
 
 export function isCapabilityRef(value: unknown): value is CapabilityRef {
   return typeof value === 'string' && CAPABILITY_REF_PATTERN.test(value);
@@ -141,7 +142,9 @@ export function parsePluginManifest(value: unknown): PluginManifest | null {
   const slots =
     c === undefined
       ? []
-      : isRecord(c) && Array.isArray(c.slots) && c.slots.every((slot) => typeof slot === 'string')
+      : isRecord(c) &&
+          Array.isArray(c.slots) &&
+          c.slots.every((slot) => typeof slot === 'string')
         ? [...c.slots]
         : null;
   if (slots === null) return null;

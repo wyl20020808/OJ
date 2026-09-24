@@ -19,11 +19,16 @@ export type AiAuthContext = {
 
 export type AiRoutesDeps = {
   readonly aiModule: AiModuleHandle;
-  readonly getAuthContext: (request: FastifyRequest) => Promise<AiAuthContext | undefined>;
+  readonly getAuthContext: (
+    request: FastifyRequest,
+  ) => Promise<AiAuthContext | undefined>;
   readonly operatorUserIds?: ReadonlySet<string>;
 };
 
-export function registerAiRoutes(app: FastifyInstance, deps: AiRoutesDeps): void {
+export function registerAiRoutes(
+  app: FastifyInstance,
+  deps: AiRoutesDeps,
+): void {
   app.get('/api/ai/capabilities', async (request, reply) => {
     const auth = await deps.getAuthContext(request);
     if (auth === undefined) {

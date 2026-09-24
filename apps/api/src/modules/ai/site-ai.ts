@@ -29,7 +29,10 @@ export type SiteAiCall = {
   readonly subjectToken?: string;
   readonly profile?: string;
   readonly outputSchema?: unknown;
-  readonly timeoutBudget?: { readonly totalMs?: number; readonly providerMs?: number };
+  readonly timeoutBudget?: {
+    readonly totalMs?: number;
+    readonly providerMs?: number;
+  };
   readonly signal?: AbortSignal;
   readonly metadata?: CapabilityInvocation['metadata'];
 };
@@ -45,19 +48,32 @@ export type SiteAiClient = {
 };
 
 /** Mint the site-core client for a registered site caller, or `null` when unregistered. */
-export function createSiteAiClient(broker: CapabilityBroker, siteId: string): SiteAiClient | null {
+export function createSiteAiClient(
+  broker: CapabilityBroker,
+  siteId: string,
+): SiteAiClient | null {
   const base = broker.forSite(siteId);
   if (base === null) {
     return null;
   }
-  const invoke = (capability: string, call: SiteAiCall): Promise<CapabilityResult> => {
-    const client = call.subjectToken === undefined ? base : base.withSubject(call.subjectToken);
+  const invoke = (
+    capability: string,
+    call: SiteAiCall,
+  ): Promise<CapabilityResult> => {
+    const client =
+      call.subjectToken === undefined
+        ? base
+        : base.withSubject(call.subjectToken);
     return client.execute(capability, AI_CAPABILITY_V1, {
       idempotencyKey: call.idempotencyKey,
       input: call.input,
       ...(call.profile === undefined ? {} : { profile: call.profile }),
-      ...(call.outputSchema === undefined ? {} : { outputSchema: call.outputSchema }),
-      ...(call.timeoutBudget === undefined ? {} : { timeoutBudget: call.timeoutBudget }),
+      ...(call.outputSchema === undefined
+        ? {}
+        : { outputSchema: call.outputSchema }),
+      ...(call.timeoutBudget === undefined
+        ? {}
+        : { timeoutBudget: call.timeoutBudget }),
       ...(call.signal === undefined ? {} : { signal: call.signal }),
       ...(call.metadata === undefined ? {} : { metadata: call.metadata }),
     });

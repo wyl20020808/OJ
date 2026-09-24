@@ -18,11 +18,16 @@ import type { IdempotencyRecordLike } from '../apps/api/src/modules/ai/types.js'
  */
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:56379';
-const redis = new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: 1, retryStrategy: () => null });
+const redis = new Redis(redisUrl, {
+  lazyConnect: true,
+  maxRetriesPerRequest: 1,
+  retryStrategy: () => null,
+});
 const run = randomUUID().slice(0, 8);
 const encryptionKey = deriveStoreEncryptionKey(`test-operator-secret-${run}`);
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 beforeAll(async () => {
   await redis.connect();
@@ -90,7 +95,10 @@ describe('Redis quota store (reserve/settle/release, durable)', () => {
 });
 
 describe('Redis idempotency replay cache (atomic claim, encrypted payloads)', () => {
-  const record = (fingerprint: string, suffix: string): IdempotencyRecordLike => ({
+  const record = (
+    fingerprint: string,
+    suffix: string,
+  ): IdempotencyRecordLike => ({
     identity: `site.problem|ai.text.generate|1.0|test-${run}-${suffix}`,
     fingerprint,
     status: 'IN_FLIGHT',
@@ -102,7 +110,9 @@ describe('Redis idempotency replay cache (atomic claim, encrypted payloads)', ()
   it('exactly one PROCEED under concurrent duplicate claims', async () => {
     const store = createRedisIdempotencyStore(redis, encryptionKey);
     const candidate = record('fp-one', 'concurrent');
-    const claims = await Promise.all(Array.from({ length: 6 }, () => store.claim(candidate)));
+    const claims = await Promise.all(
+      Array.from({ length: 6 }, () => store.claim(candidate)),
+    );
     expect(claims.filter((claim) => claim.kind === 'PROCEED')).toHaveLength(1);
     expect(claims.filter((claim) => claim.kind === 'JOIN')).toHaveLength(5);
   });
@@ -112,10 +122,17 @@ describe('Redis idempotency replay cache (atomic claim, encrypted payloads)', ()
     const candidate = record('fp-two', 'replay');
     const first = await store.claim(candidate);
     expect(first.kind).toBe('PROCEED');
-    await store.complete(candidate.identity, 'SUCCEEDED', { status: 'SUCCEEDED', marker: `result-${run}` }, Date.now());
+    await store.complete(
+      candidate.identity,
+      'SUCCEEDED',
+      { status: 'SUCCEEDED', marker: `result-${run}` },
+      Date.now(),
+    );
     const replay = await store.claim(candidate);
     expect(replay.kind).toBe('REPLAY');
-    expect((replay.record.result as { marker: string }).marker).toBe(`result-${run}`);
+    expect((replay.record.result as { marker: string }).marker).toBe(
+      `result-${run}`,
+    );
     const conflict = await store.claim(record('fp-different', 'replay'));
     expect(conflict.kind).toBe('CONFLICT');
     const fetched = await store.get(candidate.identity);
@@ -126,7 +143,12 @@ describe('Redis idempotency replay cache (atomic claim, encrypted payloads)', ()
     const store = createRedisIdempotencyStore(redis, encryptionKey);
     const candidate = record('fp-three', 'encrypted');
     await store.claim(candidate);
-    await store.complete(candidate.identity, 'SUCCEEDED', { secretContent: `plaintext-marker-${run}` }, Date.now());
+    await store.complete(
+      candidate.identity,
+      'SUCCEEDED',
+      { secretContent: `plaintext-marker-${run}` },
+      Date.now(),
+    );
     const keys = await redis.keys(`oj:aibridge:v1:idem:*`);
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) {

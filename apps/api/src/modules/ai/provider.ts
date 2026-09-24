@@ -18,7 +18,10 @@
  *    broker exposes.
  */
 import { randomUUID } from 'node:crypto';
-import { parsePluginManifest, type PluginManifest } from '@ojplatform/plugin-sdk';
+import {
+  parsePluginManifest,
+  type PluginManifest,
+} from '@ojplatform/plugin-sdk';
 import type {
   BoundCallerContext,
   CapabilityInvocation,
@@ -83,7 +86,12 @@ export function createAiBridgeCapabilityProvider(
         version: descriptor.version,
         status: descriptor.status,
       })),
-    execute: (capability, version, invocation: CapabilityInvocation, caller: BoundCallerContext): Promise<CapabilityResult> => {
+    execute: (
+      capability,
+      version,
+      invocation: CapabilityInvocation,
+      caller: BoundCallerContext,
+    ): Promise<CapabilityResult> => {
       const envelope = {
         contractVersion: AIBRIDGE_REQUEST_CONTRACT_VERSION,
         requestId: randomUUID(),
@@ -92,12 +100,16 @@ export function createAiBridgeCapabilityProvider(
         capabilityVersion: version,
         profile: invocation.profile ?? 'balanced',
         input: invocation.input,
-        ...(invocation.outputSchema === undefined ? {} : { outputSchema: invocation.outputSchema }),
+        ...(invocation.outputSchema === undefined
+          ? {}
+          : { outputSchema: invocation.outputSchema }),
         ...(invocation.timeoutBudget === undefined
           ? {}
           : {
               timeoutBudget: {
-                ...(invocation.timeoutBudget.totalMs === undefined ? {} : { totalMs: invocation.timeoutBudget.totalMs }),
+                ...(invocation.timeoutBudget.totalMs === undefined
+                  ? {}
+                  : { totalMs: invocation.timeoutBudget.totalMs }),
                 ...(invocation.timeoutBudget.providerMs === undefined
                   ? {}
                   : { providerMs: invocation.timeoutBudget.providerMs }),
@@ -107,9 +119,15 @@ export function createAiBridgeCapabilityProvider(
           ? {}
           : {
               metadata: {
-                ...(invocation.metadata.locale === undefined ? {} : { locale: invocation.metadata.locale }),
-                ...(invocation.metadata.traceId === undefined ? {} : { traceId: invocation.metadata.traceId }),
-                ...(invocation.metadata.surface === undefined ? {} : { surface: invocation.metadata.surface }),
+                ...(invocation.metadata.locale === undefined
+                  ? {}
+                  : { locale: invocation.metadata.locale }),
+                ...(invocation.metadata.traceId === undefined
+                  ? {}
+                  : { traceId: invocation.metadata.traceId }),
+                ...(invocation.metadata.surface === undefined
+                  ? {}
+                  : { surface: invocation.metadata.surface }),
                 ...(invocation.metadata.correlationId === undefined
                   ? {}
                   : { correlationId: invocation.metadata.correlationId }),
@@ -119,41 +137,71 @@ export function createAiBridgeCapabilityProvider(
       const trustedContext = {
         callerPluginId: caller.callerKey,
         grantedPermissions: [...caller.permissions],
-        ...(caller.subjectToken === undefined ? {} : { subjectToken: caller.subjectToken }),
+        ...(caller.subjectToken === undefined
+          ? {}
+          : { subjectToken: caller.subjectToken }),
         ...(invocation.metadata?.correlationId === undefined
           ? {}
           : { hostRequestId: invocation.metadata.correlationId }),
-        ...(invocation.metadata?.traceId === undefined ? {} : { traceId: invocation.metadata.traceId }),
+        ...(invocation.metadata?.traceId === undefined
+          ? {}
+          : { traceId: invocation.metadata.traceId }),
       };
       const executeOptions =
-        invocation.signal === undefined ? undefined : { cancellation: abortToCancellation(invocation.signal) };
-      return plugin.execute(envelope, trustedContext, executeOptions).then((result) => ({
-        status: result.status,
-        ...(result.output === undefined ? {} : { output: result.output }),
-        ...(result.error === undefined
-          ? {}
-          : {
-              error: {
-                code: result.error.code as NonNullable<CapabilityResult['error']>['code'],
-                message: result.error.message,
-                retryable: result.error.retryable,
-                ...(result.error.retryAfterMs === undefined ? {} : { retryAfterMs: result.error.retryAfterMs }),
-                ...(result.error.stage === undefined ? {} : { stage: result.error.stage }),
-                ...(result.error.reason === undefined ? {} : { reason: result.error.reason }),
-                ...(result.error.details === undefined ? {} : { details: result.error.details }),
-              },
-            }),
-        usage: {
-          ...(result.usage.inputTokens === undefined ? {} : { inputTokens: result.usage.inputTokens }),
-          ...(result.usage.outputTokens === undefined ? {} : { outputTokens: result.usage.outputTokens }),
-          ...(result.usage.totalTokens === undefined ? {} : { totalTokens: result.usage.totalTokens }),
-          ...(result.usage.estimatedCost === undefined ? {} : { estimatedCost: result.usage.estimatedCost }),
-        },
-        ...(result.warnings === undefined ? {} : { warnings: result.warnings }),
-        ...(result.providerMetadata === undefined ? {} : { providerMetadata: result.providerMetadata }),
-        latencyMs: result.latencyMs,
-        requestId: result.requestId,
-      }));
+        invocation.signal === undefined
+          ? undefined
+          : { cancellation: abortToCancellation(invocation.signal) };
+      return plugin
+        .execute(envelope, trustedContext, executeOptions)
+        .then((result) => ({
+          status: result.status,
+          ...(result.output === undefined ? {} : { output: result.output }),
+          ...(result.error === undefined
+            ? {}
+            : {
+                error: {
+                  code: result.error.code as NonNullable<
+                    CapabilityResult['error']
+                  >['code'],
+                  message: result.error.message,
+                  retryable: result.error.retryable,
+                  ...(result.error.retryAfterMs === undefined
+                    ? {}
+                    : { retryAfterMs: result.error.retryAfterMs }),
+                  ...(result.error.stage === undefined
+                    ? {}
+                    : { stage: result.error.stage }),
+                  ...(result.error.reason === undefined
+                    ? {}
+                    : { reason: result.error.reason }),
+                  ...(result.error.details === undefined
+                    ? {}
+                    : { details: result.error.details }),
+                },
+              }),
+          usage: {
+            ...(result.usage.inputTokens === undefined
+              ? {}
+              : { inputTokens: result.usage.inputTokens }),
+            ...(result.usage.outputTokens === undefined
+              ? {}
+              : { outputTokens: result.usage.outputTokens }),
+            ...(result.usage.totalTokens === undefined
+              ? {}
+              : { totalTokens: result.usage.totalTokens }),
+            ...(result.usage.estimatedCost === undefined
+              ? {}
+              : { estimatedCost: result.usage.estimatedCost }),
+          },
+          ...(result.warnings === undefined
+            ? {}
+            : { warnings: result.warnings }),
+          ...(result.providerMetadata === undefined
+            ? {}
+            : { providerMetadata: result.providerMetadata }),
+          latencyMs: result.latencyMs,
+          requestId: result.requestId,
+        }));
     },
     dispose: () => plugin.dispose(),
   };

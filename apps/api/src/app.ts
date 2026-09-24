@@ -300,7 +300,9 @@ export async function buildApp(options: AppOptions = {}) {
   // branches capture their infra/auth seams here (in-memory boots leave them null).
   let aiInfraRedis: RedisEvalLike | null = null;
   let aiInfraDb: SqlQueryLike | null = null;
-  let getAiAuthContext: ((request: FastifyRequest) => Promise<AiAuthContext | undefined>) | undefined;
+  let getAiAuthContext:
+    | ((request: FastifyRequest) => Promise<AiAuthContext | undefined>)
+    | undefined;
   if (options.withInfrastructure) {
     const qualificationMode =
       process.env.OJPLATFORM_PHASE1E_QUALIFICATION === 'true';

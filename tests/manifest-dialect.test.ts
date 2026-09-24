@@ -38,14 +38,20 @@ describe('canonical manifest parsing (Stage 6)', () => {
   it('accepts the canonical server-capability dialect', () => {
     const manifest = parsePluginManifest(serverManifest);
     expect(manifest?.id).toBe('ai.bridge');
-    expect(manifest?.providesCapabilities).toEqual(['ai.text.generate@1.x', 'ai.structured.generate@1.x']);
+    expect(manifest?.providesCapabilities).toEqual([
+      'ai.text.generate@1.x',
+      'ai.structured.generate@1.x',
+    ]);
     expect(manifest?.consumesCapabilities).toEqual([]);
     expect(manifest?.contributes.slots).toEqual([]);
     expect(manifest?.entry).toBe('@aibridge/host');
   });
 
   it('defaults omitted contributes to an empty slot list', () => {
-    const { contributes: _omitted, ...withoutContributes } = serverManifest;
+    const withoutContributes: Record<string, unknown> = {
+      ...serverManifest,
+    };
+    delete withoutContributes.contributes;
     const manifest = parsePluginManifest(withoutContributes);
     expect(manifest?.contributes.slots).toEqual([]);
   });
@@ -58,14 +64,27 @@ describe('canonical manifest parsing (Stage 6)', () => {
   });
 
   it('still rejects a present-but-malformed contributes', () => {
-    expect(parsePluginManifest({ ...browserManifest, contributes: {} })).toBeNull();
-    expect(parsePluginManifest({ ...browserManifest, contributes: { slots: 'nope' } })).toBeNull();
-    expect(parsePluginManifest({ ...browserManifest, contributes: { slots: [42] } })).toBeNull();
+    expect(
+      parsePluginManifest({ ...browserManifest, contributes: {} }),
+    ).toBeNull();
+    expect(
+      parsePluginManifest({
+        ...browserManifest,
+        contributes: { slots: 'nope' },
+      }),
+    ).toBeNull();
+    expect(
+      parsePluginManifest({ ...browserManifest, contributes: { slots: [42] } }),
+    ).toBeNull();
   });
 
   it('still rejects an unsupported apiVersion', () => {
-    expect(parsePluginManifest({ ...serverManifest, apiVersion: '2' })).toBeNull();
-    expect(parsePluginManifest({ ...serverManifest, apiVersion: 0 })).toBeNull();
+    expect(
+      parsePluginManifest({ ...serverManifest, apiVersion: '2' }),
+    ).toBeNull();
+    expect(
+      parsePluginManifest({ ...serverManifest, apiVersion: 0 }),
+    ).toBeNull();
   });
 
   it('accepts the legacy pluginApiVersion alias and normalizes it', () => {
@@ -79,7 +98,9 @@ describe('canonical manifest parsing (Stage 6)', () => {
     };
     const manifest = parsePluginManifest(legacy);
     expect(manifest?.apiVersion).toBe(1);
-    expect(manifest?.consumesCapabilities).toEqual(['ai.structured.generate@1.x']);
+    expect(manifest?.consumesCapabilities).toEqual([
+      'ai.structured.generate@1.x',
+    ]);
     expect(manifest?.providesCapabilities).toEqual([]);
     expect(manifest?.entry).toBeNull();
   });
@@ -89,15 +110,38 @@ describe('canonical manifest parsing (Stage 6)', () => {
       parsePluginManifest({ ...serverManifest, pluginApiVersion: 2 }),
     ).toBeNull();
     // Agreeing values are accepted (harmless duplicate declaration).
-    const agreeing = parsePluginManifest({ ...serverManifest, pluginApiVersion: 1 });
+    const agreeing = parsePluginManifest({
+      ...serverManifest,
+      pluginApiVersion: 1,
+    });
     expect(agreeing?.apiVersion).toBe(1);
   });
 
   it('rejects malformed capability references', () => {
-    expect(parsePluginManifest({ ...serverManifest, providesCapabilities: ['AI.Text.Generate'] })).toBeNull();
-    expect(parsePluginManifest({ ...serverManifest, providesCapabilities: ['ai.text.generate@0.x'] })).toBeNull();
-    expect(parsePluginManifest({ ...serverManifest, providesCapabilities: 'ai.text.generate' })).toBeNull();
-    expect(parsePluginManifest({ ...serverManifest, consumesCapabilities: ['openai.*'] })).toBeNull();
+    expect(
+      parsePluginManifest({
+        ...serverManifest,
+        providesCapabilities: ['AI.Text.Generate'],
+      }),
+    ).toBeNull();
+    expect(
+      parsePluginManifest({
+        ...serverManifest,
+        providesCapabilities: ['ai.text.generate@0.x'],
+      }),
+    ).toBeNull();
+    expect(
+      parsePluginManifest({
+        ...serverManifest,
+        providesCapabilities: 'ai.text.generate',
+      }),
+    ).toBeNull();
+    expect(
+      parsePluginManifest({
+        ...serverManifest,
+        consumesCapabilities: ['openai.*'],
+      }),
+    ).toBeNull();
   });
 });
 
@@ -118,7 +162,10 @@ describe('capability references', () => {
 describe('OnlineCodeEditor regression', () => {
   it('the checked-in OnlineCodeEditor manifest parses identically to the V1 shape', () => {
     const document = JSON.parse(
-      readFileSync(resolve('plugins/OnlineCodeEditor/plugin.manifest.json'), 'utf8'),
+      readFileSync(
+        resolve('plugins/OnlineCodeEditor/plugin.manifest.json'),
+        'utf8',
+      ),
     ) as Record<string, unknown>;
     const manifest = parsePluginManifest(document);
     expect(manifest?.id).toBe('ojplatform.online-code-editor');

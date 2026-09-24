@@ -17,17 +17,38 @@ const roots = ['apps/web/src', 'plugins/OnlineCodeEditor/src'];
 /** (pattern, why) — every entry maps to one stage requirement. */
 const FORBIDDEN: readonly (readonly [RegExp, string])[] = [
   [/@aibridge\b/, 'the browser must never reference AI Bridge modules'],
-  [/secret:\/\//, 'credential handles are server-side configuration, never client code'],
-  [/OJPLATFORM_AI_SUBJECT_HMAC_KEY/, 'the subject HMAC key is server-side only'],
+  [
+    /secret:\/\//,
+    'credential handles are server-side configuration, never client code',
+  ],
+  [
+    /OJPLATFORM_AI_SUBJECT_HMAC_KEY/,
+    'the subject HMAC key is server-side only',
+  ],
   [/OJPLATFORM_AI_CONFIG/, 'AI configuration is server-side only'],
-  [/\bAIBRIDGE_[A-Z0-9_]+\b/, 'AI Bridge credential env names are server-side only'],
-  [/\b(?:OPENAI|DEEPSEEK|XIAOMI)[A-Z0-9_]*_API_KEY\b/, 'provider API keys never reach the browser'],
+  [
+    /\bAIBRIDGE_[A-Z0-9_]+\b/,
+    'AI Bridge credential env names are server-side only',
+  ],
+  [
+    /\b(?:OPENAI|DEEPSEEK|XIAOMI)[A-Z0-9_]*_API_KEY\b/,
+    'provider API keys never reach the browser',
+  ],
   [/api\.openai\.com/, 'provider base URLs never reach the browser'],
   [/api\.deepseek\.com/, 'provider base URLs never reach the browser'],
   [/token-plan\.[a-z]*\.xiaomi/, 'provider base URLs never reach the browser'],
 ];
 
-const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.css', '.html', '.json', '.vue']);
+const SOURCE_EXTENSIONS = new Set([
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.css',
+  '.html',
+  '.json',
+  '.vue',
+]);
 
 function collectSources(directory: string): string[] {
   const files: string[] = [];
@@ -55,7 +76,9 @@ describe('browser-side AI secret scan', () => {
         for (const [pattern, why] of FORBIDDEN) {
           const match = pattern.exec(source);
           if (match !== null) {
-            violations.push(`${relative(resolve('.'), file)}: ${match[0]} (${why})`);
+            violations.push(
+              `${relative(resolve('.'), file)}: ${match[0]} (${why})`,
+            );
           }
         }
       }

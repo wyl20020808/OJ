@@ -19,7 +19,9 @@
       "@ojplatform/core": ["packages/core/src/index.ts"],
       "@ojplatform/judge-protocol": ["packages/judge-protocol/src/index.ts"],
       "@ojplatform/plugin-sdk": ["packages/plugin-sdk/src/index.ts"],
-      "@ojplatform/capability-broker": ["packages/capability-broker/src/index.ts"],
+      "@ojplatform/capability-broker": [
+        "packages/capability-broker/src/index.ts"
+      ],
       "@ojplatform/test-utils": ["packages/test-utils/src/index.ts"],
       "@ojplatform/api": ["apps/api/src/index.ts"],
       "@ojplatform/database": ["packages/database/src/index.ts"],

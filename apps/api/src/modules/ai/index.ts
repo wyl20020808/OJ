@@ -23,8 +23,16 @@
  * boots fall back to the bridge's own in-memory stores — devhonest, never "production-quiet".
  */
 import type { FastifyInstance } from 'fastify';
-import { createSubjectTokenMinter, type CapabilityBroker } from '@ojplatform/capability-broker';
-import { isAiDisabledByEnv, loadAiConfig, watchAiConfigFile, type AiConfigReloader } from './config.js';
+import {
+  createSubjectTokenMinter,
+  type CapabilityBroker,
+} from '@ojplatform/capability-broker';
+import {
+  isAiDisabledByEnv,
+  loadAiConfig,
+  watchAiConfigFile,
+  type AiConfigReloader,
+} from './config.js';
 import { loadAiBridgeModules, type AiBridgeModuleOverrides } from './loader.js';
 import { createAiBridgeCapabilityProvider } from './provider.js';
 import {
@@ -36,7 +44,10 @@ import {
 import { createEnvSecretStore } from './secrets.js';
 import { createSiteAiClient, type SiteAiClient } from './site-ai.js';
 import { deriveStoreEncryptionKey } from './store-crypto.js';
-import { createPostgresUsageLedger, type SqlQueryLike } from './usage-ledger.js';
+import {
+  createPostgresUsageLedger,
+  type SqlQueryLike,
+} from './usage-ledger.js';
 import type { AiBridgePluginLike } from './types.js';
 
 export const AI_BRIDGE_PROVIDER_ID = 'ai.bridge';
@@ -49,7 +60,11 @@ export type AiModuleStatus =
   | { readonly kind: 'ARTIFACTS_ABSENT'; readonly missing: readonly string[] }
   | { readonly kind: 'ARTIFACTS_INVALID'; readonly error: string }
   | { readonly kind: 'CONFIG_REJECTED'; readonly error: string }
-  | { readonly kind: 'ACTIVE'; readonly configVersion: string; readonly contentDigest: string };
+  | {
+      readonly kind: 'ACTIVE';
+      readonly configVersion: string;
+      readonly contentDigest: string;
+    };
 
 export type AiModuleLogger = {
   info(obj: Readonly<Record<string, unknown>>, msg: string): void;
@@ -90,13 +105,19 @@ const describeFailure = (failure: unknown): string => {
   }
   const issues = (failure as { issues?: unknown }).issues;
   if (Array.isArray(issues) && issues.length > 0) {
-    const first = issues[0] as { code?: unknown; path?: unknown; message?: unknown };
+    const first = issues[0] as {
+      code?: unknown;
+      path?: unknown;
+      message?: unknown;
+    };
     return `configuration rejected: ${String(first.code ?? 'INVALID')} at ${String(first.path ?? '$')} (${String(
       first.message ?? 'invalid',
     )})`;
   }
   const message = (failure as { message?: unknown }).message;
-  return typeof message === 'string' ? message : 'the bridge rejected the configuration';
+  return typeof message === 'string'
+    ? message
+    : 'the bridge rejected the configuration';
 };
 
 /**
@@ -106,17 +127,38 @@ const describeFailure = (failure: unknown): string => {
  */
 export function registerDefaultSiteAiCallers(broker: CapabilityBroker): void {
   const aiV1 = ['ai.text.generate@1.x', 'ai.structured.generate@1.x'] as const;
-  broker.registerSiteCaller({ siteId: 'problem', capabilities: aiV1, description: 'problem module identity' });
-  broker.registerSiteCaller({ siteId: 'submission', capabilities: aiV1, description: 'submission module identity' });
-  broker.registerSiteCaller({ siteId: 'content', capabilities: aiV1, description: 'content module identity' });
-  broker.registerSiteCaller({ siteId: 'admin', capabilities: [], description: 'operator identity, no AI grants' });
+  broker.registerSiteCaller({
+    siteId: 'problem',
+    capabilities: aiV1,
+    description: 'problem module identity',
+  });
+  broker.registerSiteCaller({
+    siteId: 'submission',
+    capabilities: aiV1,
+    description: 'submission module identity',
+  });
+  broker.registerSiteCaller({
+    siteId: 'content',
+    capabilities: aiV1,
+    description: 'content module identity',
+  });
+  broker.registerSiteCaller({
+    siteId: 'admin',
+    capabilities: [],
+    description: 'operator identity, no AI grants',
+  });
 }
 
-export async function registerAiModule(app: FastifyInstance, deps: AiModuleDeps): Promise<AiModuleHandle> {
+export async function registerAiModule(
+  app: FastifyInstance,
+  deps: AiModuleDeps,
+): Promise<AiModuleHandle> {
   const env = deps.env ?? process.env;
   const logger = deps.logger;
   const subjectTokens = createSubjectTokenMinter({
-    ...(env[AI_SUBJECT_HMAC_KEY_ENV] === undefined ? {} : { secret: env[AI_SUBJECT_HMAC_KEY_ENV] }),
+    ...(env[AI_SUBJECT_HMAC_KEY_ENV] === undefined
+      ? {}
+      : { secret: env[AI_SUBJECT_HMAC_KEY_ENV] }),
   });
 
   let status: AiModuleStatus = { kind: 'NO_CONFIG' };
@@ -125,17 +167,30 @@ export async function registerAiModule(app: FastifyInstance, deps: AiModuleDeps)
   let closed = false;
 
   if (isAiDisabledByEnv(env)) {
-    deps.broker.setKillSwitch({ global: true, providers: [], capabilities: [] });
+    deps.broker.setKillSwitch({
+      global: true,
+      providers: [],
+      capabilities: [],
+    });
     status = { kind: 'DISABLED_BY_ENV' };
-    logger.warn({ module: 'ai' }, 'AI capability disabled by operator environment kill switch');
+    logger.warn(
+      { module: 'ai' },
+      'AI capability disabled by operator environment kill switch',
+    );
   } else {
     const config = loadAiConfig(env);
     if (config.kind === 'ABSENT') {
       status = { kind: 'NO_CONFIG' };
-      logger.info({ module: 'ai' }, 'no AI configuration; AI capabilities unavailable, site boots normally');
+      logger.info(
+        { module: 'ai' },
+        'no AI configuration; AI capabilities unavailable, site boots normally',
+      );
     } else if (config.kind === 'INVALID') {
       status = { kind: 'CONFIG_UNREADABLE', error: config.error };
-      logger.warn({ module: 'ai', source: config.source }, `AI configuration unreadable: ${config.error}`);
+      logger.warn(
+        { module: 'ai', source: config.source },
+        `AI configuration unreadable: ${config.error}`,
+      );
     } else {
       const modules = await loadAiBridgeModules(deps.moduleOverrides ?? {});
       if (modules.kind === 'ABSENT') {
@@ -153,27 +208,47 @@ export async function registerAiModule(app: FastifyInstance, deps: AiModuleDeps)
         const secret = env[AI_SUBJECT_HMAC_KEY_ENV];
         const stores = {
           ...(redis !== null && typeof secret === 'string' && secret.length > 0
-            ? { idempotency: createRedisIdempotencyStore(redis, deriveStoreEncryptionKey(secret)) }
+            ? {
+                idempotency: createRedisIdempotencyStore(
+                  redis,
+                  deriveStoreEncryptionKey(secret),
+                ),
+              }
             : {}),
-          ...(redis !== null ? { rateLimit: createRedisRateLimitStore(redis) } : {}),
+          ...(redis !== null
+            ? { rateLimit: createRedisRateLimitStore(redis) }
+            : {}),
           ...(redis !== null ? { quota: createRedisQuotaStore(redis) } : {}),
-          ...(db !== null ? { usageLedger: createPostgresUsageLedger(db) } : {}),
-          events: { emit: (event: Readonly<Record<string, unknown>>) => logger.info({ module: 'ai', event }, 'ai event') },
+          ...(db !== null
+            ? { usageLedger: createPostgresUsageLedger(db) }
+            : {}),
+          events: {
+            emit: (event: Readonly<Record<string, unknown>>) =>
+              logger.info({ module: 'ai', event }, 'ai event'),
+          },
           operatorLog: {
-            log: (entry: Readonly<Record<string, unknown>>) => logger.warn({ module: 'ai', entry }, 'ai operator log'),
+            log: (entry: Readonly<Record<string, unknown>>) =>
+              logger.warn({ module: 'ai', entry }, 'ai operator log'),
           },
         };
         const created = await modules.host.createAiBridgeServerPlugin({
           config: config.document,
           adapterFactories: modules.suite.SUITE_ADAPTER_FACTORIES,
-          resolveEndpoint: (provider) => modules.suite.suiteResolveEndpoint(provider),
+          resolveEndpoint: (provider) =>
+            modules.suite.suiteResolveEndpoint(provider),
           secrets: createEnvSecretStore(env),
           // No pluginVersion override: the packed artifact reports its own version.
           stores,
         });
         if (!created.ok) {
-          status = { kind: 'CONFIG_REJECTED', error: describeFailure(created.failure) };
-          logger.warn({ module: 'ai' }, `AI Bridge rejected the configuration: ${status.error}`);
+          status = {
+            kind: 'CONFIG_REJECTED',
+            error: describeFailure(created.failure),
+          };
+          logger.warn(
+            { module: 'ai' },
+            `AI Bridge rejected the configuration: ${status.error}`,
+          );
         } else {
           plugin = created.value;
           const provider = createAiBridgeCapabilityProvider(plugin, {
@@ -182,7 +257,11 @@ export async function registerAiModule(app: FastifyInstance, deps: AiModuleDeps)
           });
           deps.broker.registerProvider(provider);
           const snapshot = plugin.configSnapshot();
-          status = { kind: 'ACTIVE', configVersion: snapshot.configVersion, contentDigest: snapshot.contentDigest };
+          status = {
+            kind: 'ACTIVE',
+            configVersion: snapshot.configVersion,
+            contentDigest: snapshot.contentDigest,
+          };
           logger.info(
             { module: 'ai', configVersion: snapshot.configVersion },
             'AI Bridge active: capability provider registered with the site broker',
@@ -195,8 +274,15 @@ export async function registerAiModule(app: FastifyInstance, deps: AiModuleDeps)
                 const result = await active.reload(document);
                 if (result.ok) {
                   const next = active.configSnapshot();
-                  status = { kind: 'ACTIVE', configVersion: next.configVersion, contentDigest: next.contentDigest };
-                  logger.info({ module: 'ai', configVersion: next.configVersion }, 'AI configuration reloaded');
+                  status = {
+                    kind: 'ACTIVE',
+                    configVersion: next.configVersion,
+                    contentDigest: next.contentDigest,
+                  };
+                  logger.info(
+                    { module: 'ai', configVersion: next.configVersion },
+                    'AI configuration reloaded',
+                  );
                 } else {
                   logger.warn(
                     { module: 'ai', failure: describeFailure(result.failure) },
@@ -205,7 +291,10 @@ export async function registerAiModule(app: FastifyInstance, deps: AiModuleDeps)
                 }
               },
               onParseFailure: (error) =>
-                logger.warn({ module: 'ai', error }, 'AI configuration file changed but is unreadable; keeping active'),
+                logger.warn(
+                  { module: 'ai', error },
+                  'AI configuration file changed but is unreadable; keeping active',
+                ),
             });
           }
         }
@@ -225,7 +314,11 @@ export async function registerAiModule(app: FastifyInstance, deps: AiModuleDeps)
       const result = await plugin.reload(document);
       if (result.ok) {
         const next = plugin.configSnapshot();
-        status = { kind: 'ACTIVE', configVersion: next.configVersion, contentDigest: next.contentDigest };
+        status = {
+          kind: 'ACTIVE',
+          configVersion: next.configVersion,
+          contentDigest: next.contentDigest,
+        };
         return true;
       }
       return false;
