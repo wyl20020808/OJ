@@ -21,13 +21,40 @@ export type PluginContribution = {
   readonly slot: string;
   readonly render: (context: unknown) => unknown;
 };
+
+/**
+ * A capability reference in a manifest: `id`, `id@major` or `id@major.x`.
+ *
+ * Capability ids are host-neutral dotted names (`ai.text.generate`); the optional suffix pins a
+ * major. Provider models, credentials and prompts are never manifest material.
+ */
+export type CapabilityRef = string;
+
+const CAPABILITY_REF_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*){1,5}(?:@[1-9][0-9]*(?:\.x)?)?$/;
+
+export function isCapabilityRef(value: unknown): value is CapabilityRef {
+  return typeof value === 'string' && CAPABILITY_REF_PATTERN.test(value);
+}
+
+/**
+ * The bare capability id of a reference (`ai.text.generate@1.x` → `ai.text.generate`).
+ */
+export function capabilityRefId(ref: CapabilityRef): string {
+  const separator = ref.indexOf('@');
+  return separator === -1 ? ref : ref.slice(0, separator);
+}
+
 export type PluginManifest = {
   readonly id: string;
   readonly name: string;
   readonly version: string;
   readonly apiVersion: string | number;
-  readonly entry: string;
+  readonly entry: string | null;
   readonly contributes: { readonly slots: readonly string[] };
+  /** Capabilities this plugin provides to the host (server-side capability providers). */
+  readonly providesCapabilities: readonly CapabilityRef[];
+  /** Capabilities this plugin consumes. The host grants exactly these, deny-by-default. */
+  readonly consumesCapabilities: readonly CapabilityRef[];
 };
 export type OJPlatformPlugin = {
   readonly id: string;
@@ -46,9 +73,60 @@ export type RegisteredPlugin = {
 export const pluginSdkVersion = '1.0.0';
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
+
+function parseCapabilityRefs(
+  value: unknown,
+  issues: string[],
+): CapabilityRef[] | null {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    issues.push('capabilities must be an array of capability references');
+    return null;
+  }
+  const refs: CapabilityRef[] = [];
+  for (const entry of value) {
+    if (!isCapabilityRef(entry)) {
+      issues.push(`invalid capability reference: ${String(entry)}`);
+      return null;
+    }
+    refs.push(entry);
+  }
+  return refs;
+}
+
+/**
+ * Parse a plugin manifest in the canonical host plugin dialect.
+ *
+ * Canonical fields: `id`, `name`, `version`, `apiVersion`, `entry`, `contributes.slots`,
+ * `providesCapabilities`, `consumesCapabilities`.
+ *
+ * Compatibility (documented, deliberate):
+ *  - `pluginApiVersion` is accepted as a legacy alias of `apiVersion` and normalized. Exactly one
+ *    of the two may be present; both present with different values is rejected.
+ *  - `contributes` may be omitted entirely (a server-capability plugin has no browser slot). When
+ *    present it must still carry a `slots` array of strings.
+ *  - `entry` may be null or absent when the manifest declares no slots; a slot-contributing
+ *    plugin still requires a non-empty entry.
+ *
+ * Unknown fields are ignored, as in V1 — capability data is additive and never breaks an older
+ * parser.
+ */
 export function parsePluginManifest(value: unknown): PluginManifest | null {
   if (!isRecord(value)) return null;
   const c = value.contributes;
+  const apiVersion =
+    value.apiVersion !== undefined && value.pluginApiVersion === undefined
+      ? value.apiVersion
+      : value.apiVersion === undefined && value.pluginApiVersion !== undefined
+        ? value.pluginApiVersion
+        : value.apiVersion !== undefined &&
+            value.pluginApiVersion !== undefined &&
+            String(value.apiVersion) === String(value.pluginApiVersion)
+          ? value.apiVersion
+          : undefined;
+  const issues: string[] = [];
   if (
     typeof value.id !== 'string' ||
     !value.id ||
@@ -56,23 +134,37 @@ export function parsePluginManifest(value: unknown): PluginManifest | null {
     !value.name ||
     typeof value.version !== 'string' ||
     !value.version ||
-    (typeof value.apiVersion !== 'string' &&
-      typeof value.apiVersion !== 'number') ||
-    String(value.apiVersion) !== String(PLUGIN_API_VERSION) ||
-    typeof value.entry !== 'string' ||
-    !value.entry ||
-    !isRecord(c) ||
-    !Array.isArray(c.slots) ||
-    !c.slots.every((slot) => typeof slot === 'string')
+    (typeof apiVersion !== 'string' && typeof apiVersion !== 'number') ||
+    String(apiVersion) !== String(PLUGIN_API_VERSION)
   )
     return null;
+  const slots =
+    c === undefined
+      ? []
+      : isRecord(c) && Array.isArray(c.slots) && c.slots.every((slot) => typeof slot === 'string')
+        ? [...c.slots]
+        : null;
+  if (slots === null) return null;
+  const entry = value.entry;
+  const entryValid =
+    entry === undefined || entry === null
+      ? slots.length === 0
+      : typeof entry === 'string' && entry.length > 0;
+  if (!entryValid) {
+    return null;
+  }
+  const provides = parseCapabilityRefs(value.providesCapabilities, issues);
+  const consumes = parseCapabilityRefs(value.consumesCapabilities, issues);
+  if (provides === null || consumes === null) return null;
   return {
     id: value.id,
     name: value.name,
     version: value.version,
-    apiVersion: value.apiVersion,
-    entry: value.entry,
-    contributes: { slots: [...c.slots] },
+    apiVersion,
+    entry: typeof entry === 'string' && entry.length > 0 ? entry : null,
+    contributes: { slots },
+    providesCapabilities: provides,
+    consumesCapabilities: consumes,
   };
 }
 const isPlugin = (value: unknown): value is OJPlatformPlugin =>
