@@ -12,6 +12,10 @@
  *    contract version, host-minted request id, caller-scoped idempotency key, clamped timeout
  *    budget, closed metadata keys. `input` passes through verbatim — the capability owns its
  *    schema, the bridge validates it.
+ *  - **Prompt provenance transport.** Consumer-owned `promptApplied` / `promptVersion` are
+ *    validated as a pair at this boundary (rejected, never normalized) and forwarded verbatim.
+ *    The Host never interprets, rewrites or mints a prompt version: it is safe execution
+ *    metadata, not caller identity and not request identity.
  *  - **Cancellation.** A host `AbortSignal` becomes a bridge `CancellationToken`.
  *  - **Result projection.** The bridge result passes through verbatim (output, usage, the
  *    closed error vocabulary, provider metadata) — it is already the safe, normalized shape the
@@ -34,8 +38,39 @@ import type { AiBridgePluginLike, CancellationTokenLike } from './types.js';
  * The frozen AI Bridge consumer-request contract version (`AIBRIDGE_CONTRACT_VERSION` at the
  * pinned artifact). Drift fails closed (`CONTRACT_VERSION_UNSUPPORTED` on every call) and the
  * packed-artifact qualification suite asserts this value against the loaded module.
+ *
+ * `1.2` is the additive request version that introduced consumer prompt provenance
+ * (`promptApplied` / `promptVersion`); it is unchanged for every generic capability.
  */
-export const AIBRIDGE_REQUEST_CONTRACT_VERSION = '1.1';
+export const AIBRIDGE_REQUEST_CONTRACT_VERSION = '1.2';
+
+/**
+ * The consumer prompt-version dialect, mirrored from the AI Bridge request contract. The Host
+ * only checks transport shape (no control characters, bounded length) — the value itself stays
+ * an opaque consumer label the Host never interprets.
+ */
+export const PROMPT_VERSION_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
+
+/** The transport-shape invariant of consumer prompt provenance, or `null` when it holds. */
+export function validatePromptProvenance(
+  provenance: CapabilityInvocation['provenance'],
+): string | null {
+  if (provenance === undefined) {
+    return null;
+  }
+  if (provenance.promptApplied === true) {
+    return typeof provenance.promptVersion === 'string' &&
+      PROMPT_VERSION_PATTERN.test(provenance.promptVersion)
+      ? null
+      : 'promptApplied:true requires a valid promptVersion';
+  }
+  if (provenance.promptApplied === false) {
+    return provenance.promptVersion === undefined
+      ? null
+      : 'promptApplied:false forbids promptVersion';
+  }
+  return 'promptApplied must be a boolean when prompt provenance is supplied';
+}
 
 const abortToCancellation = (signal: AbortSignal): CancellationTokenLike => ({
   get cancelled() {
@@ -63,17 +98,35 @@ export function createAiBridgeCapabilityProvider(
   plugin: AiBridgePluginLike,
   options: AiBridgeCapabilityProviderOptions,
 ): CapabilityProvider {
+  // The bridge's own manifest declares the capabilities it is the canonical provider of (the
+  // generic primitives). Specialized capabilities (e.g. `code.debug.analyze@1.0`) are listed by
+  // its capability directory instead. The Host adapter is the registration unit, so it declares
+  // everything it can serve — keeping the broker's "manifest covers what it registers" guard
+  // meaningful without editing another repository's manifest.
+  const declared: string[] = [...plugin.providesCapabilities];
+  for (const descriptor of plugin.listCapabilities()) {
+    const covered = declared.some(
+      (ref) => ref === descriptor.id || ref.startsWith(`${descriptor.id}@`),
+    );
+    if (!covered) {
+      const major = descriptor.version.split('.')[0];
+      declared.push(
+        major === undefined ? descriptor.id : `${descriptor.id}@${major}.x`,
+      );
+    }
+  }
+
   const manifest = parsePluginManifest({
     id: options.providerId,
     name: 'AI Bridge',
     version: options.pluginVersion,
     apiVersion: 1,
-    providesCapabilities: [...plugin.providesCapabilities],
+    providesCapabilities: declared,
     consumesCapabilities: [],
   });
   if (manifest === null) {
     throw new Error(
-      `AI Bridge reports capability references the manifest dialect rejects: ${plugin.providesCapabilities.join(', ')}`,
+      `AI Bridge reports capability references the manifest dialect rejects: ${declared.join(', ')}`,
     );
   }
 
@@ -85,6 +138,10 @@ export function createAiBridgeCapabilityProvider(
         id: descriptor.id,
         version: descriptor.version,
         status: descriptor.status,
+        ...(descriptor.kind === undefined ? {} : { kind: descriptor.kind }),
+        ...(descriptor.readiness === undefined
+          ? {}
+          : { readiness: descriptor.readiness }),
       })),
     execute: (
       capability,
@@ -92,6 +149,20 @@ export function createAiBridgeCapabilityProvider(
       invocation: CapabilityInvocation,
       caller: BoundCallerContext,
     ): Promise<CapabilityResult> => {
+      const provenanceError = validatePromptProvenance(invocation.provenance);
+      if (provenanceError !== null) {
+        // Fail closed at the Host boundary: an invalid provenance pair never reaches the bridge.
+        return Promise.resolve({
+          status: 'FAILED',
+          error: {
+            code: 'INVALID_REQUEST',
+            message: provenanceError,
+            retryable: false,
+            stage: 'REQUEST',
+            reason: 'INVALID_PROMPT_PROVENANCE',
+          },
+        });
+      }
       const envelope = {
         contractVersion: AIBRIDGE_REQUEST_CONTRACT_VERSION,
         requestId: randomUUID(),
@@ -100,6 +171,14 @@ export function createAiBridgeCapabilityProvider(
         capabilityVersion: version,
         profile: invocation.profile ?? 'balanced',
         input: invocation.input,
+        ...(invocation.provenance === undefined
+          ? {}
+          : {
+              promptApplied: invocation.provenance.promptApplied === true,
+              ...(invocation.provenance.promptVersion === undefined
+                ? {}
+                : { promptVersion: invocation.provenance.promptVersion }),
+            }),
         ...(invocation.outputSchema === undefined
           ? {}
           : { outputSchema: invocation.outputSchema }),

@@ -63,6 +63,11 @@ export type CapabilityDescriptorLike = {
   readonly id: string;
   readonly version: string;
   readonly status: 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'DISABLED';
+  /** Maturity, independent of `status` (availability). Specialized capabilities exist here. */
+  readonly kind?: 'GENERIC' | 'SPECIALIZED';
+  readonly readiness?: 'STABLE' | 'EXPERIMENTAL' | 'RESERVED';
+  readonly instructionMode?: string;
+  readonly requiredPrimitive?: string;
 };
 
 /** `@aibridge/contracts` `TrustedDispatchContext` (call shape). */

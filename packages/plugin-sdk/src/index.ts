@@ -23,15 +23,18 @@ export type PluginContribution = {
 };
 
 /**
- * A capability reference in a manifest: `id`, `id@major` or `id@major.x`.
+ * A capability reference in a manifest: `id`, `id@major`, `id@major.x` or `id@major.minor`.
  *
  * Capability ids are host-neutral dotted names (`ai.text.generate`); the optional suffix pins a
- * major. Provider models, credentials and prompts are never manifest material.
+ * major (`@1`), a major wildcard (`@1.x`) or an exact major.minor (`@1.0`). Specialized
+ * capabilities (`code.debug.analyze@1.0`) are declared in exactly this dialect — there is no
+ * second permission system for them. Provider models, credentials and prompts are never manifest
+ * material.
  */
 export type CapabilityRef = string;
 
 const CAPABILITY_REF_PATTERN =
-  /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*){1,5}(?:@[1-9][0-9]*(?:\.x)?)?$/;
+  /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*){1,5}(?:@[1-9][0-9]*(?:\.(?:x|[0-9]+))?)?$/;
 
 export function isCapabilityRef(value: unknown): value is CapabilityRef {
   return typeof value === 'string' && CAPABILITY_REF_PATTERN.test(value);

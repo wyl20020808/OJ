@@ -36,11 +36,21 @@ import { isCapabilityGranted } from './permission.js';
 export type CapabilityAvailability =
   'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE' | 'DISABLED';
 
+/** Capability maturity: a specialized capability is a first-class capability, not a wrapper. */
+export type CapabilityKind = 'GENERIC' | 'SPECIALIZED';
+
+/** Descriptor maturity, deliberately independent of runtime availability (`status`). */
+export type CapabilityReadiness = 'STABLE' | 'EXPERIMENTAL' | 'RESERVED';
+
 export type CapabilityDescriptor = {
   readonly id: string;
   readonly version: string;
   readonly status: CapabilityAvailability;
   readonly providerId: string;
+  /** `GENERIC` unless the provider declares a specialized capability. */
+  readonly kind?: CapabilityKind;
+  /** Descriptor maturity — never conflated with `status` (availability). */
+  readonly readiness?: CapabilityReadiness;
 };
 
 /** The closed error vocabulary a capability result may carry (call-shape mirror of AI Bridge's). */
@@ -103,6 +113,17 @@ export type CapabilityInvocation = {
     readonly totalMs?: number;
     readonly providerMs?: number;
   };
+  /**
+   * Opaque consumer-provided prompt provenance. Safe execution metadata only: the Host
+   * transports it verbatim and never interprets, rewrites or mints it. It is NOT caller identity
+   * — identity stays host-bound — and it is NOT request identity (idempotency).
+   */
+  readonly provenance?: {
+    /** When true, `promptVersion` is required; when false, it is forbidden. */
+    readonly promptApplied?: boolean;
+    /** Consumer-owned opaque label, e.g. `debug.analysis.v1`. */
+    readonly promptVersion?: string;
+  };
   /** Host cancellation; providers translate it into their own outbound abort. */
   readonly signal?: AbortSignal;
   readonly metadata?: {
@@ -127,6 +148,8 @@ export type CapabilityProvider = {
     readonly id: string;
     readonly version: string;
     readonly status: CapabilityAvailability;
+    readonly kind?: CapabilityKind;
+    readonly readiness?: CapabilityReadiness;
   }[];
   execute(
     capability: string,
@@ -357,6 +380,10 @@ export class CapabilityBroker {
           version: entry.version,
           status: this.getCapabilityStatus(entry.id),
           providerId,
+          ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          ...(entry.readiness === undefined
+            ? {}
+            : { readiness: entry.readiness }),
         });
       }
     }
