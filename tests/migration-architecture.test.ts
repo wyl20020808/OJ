@@ -37,7 +37,7 @@ describe('migration architecture', () => {
       manifest: judgeMigrationManifest,
     });
 
-    expect(product).toHaveLength(40);
+    expect(product).toHaveLength(41);
     expect(judge).toHaveLength(4);
     expect(product.map(({ id }: { id: string }) => id)).toContain(
       '0020_judge_artifacts',

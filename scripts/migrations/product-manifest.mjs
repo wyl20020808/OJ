@@ -430,6 +430,14 @@ const migrations = [
       index('ai_capability_usage_attempts_provider_idx'),
     ],
   },
+  {
+    id: '0038_ai_capability_usage_prompt_provenance',
+    checksum:
+      '16136387ac5dcf3a9b0a99ba9846325161c499113f1ea8ff6c93a0beac8421a8',
+    sideEffects:
+      'Adds a prompt provenance label object (an applied flag and a short opaque version string) to the AI usage request rows. Identifiers only — never prompt content.',
+    evidence: [column('ai_capability_usage_requests', 'provenance')],
+  },
 ];
 
 export const productMigrationManifest = migrations.map(

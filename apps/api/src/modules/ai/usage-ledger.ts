@@ -80,6 +80,7 @@ const REQUEST_COLUMNS = [
   'total_usage_complete',
   'total_cost',
   'idempotency_outcome',
+  'provenance',
 ] as const;
 
 const attemptParams = (r: ProviderAttemptUsageRecordLike): readonly unknown[] => [
@@ -140,6 +141,14 @@ const requestParams = (r: LogicalRequestUsageRecordLike): readonly unknown[] => 
   bool(r['totalUsageComplete']),
   jsonb(r['totalCost']),
   text(r['idempotencyOutcome']),
+  // Opaque prompt provenance labels only ({promptApplied, promptVersion}); the adapter never
+  // writes prompt content anywhere, and this object holds nothing else by construction.
+  r['promptApplied'] === undefined && r['promptVersion'] === undefined
+    ? null
+    : jsonb({
+        ...(r['promptApplied'] === undefined ? {} : { promptApplied: r['promptApplied'] }),
+        ...(r['promptVersion'] === undefined ? {} : { promptVersion: r['promptVersion'] }),
+      }),
 ];
 
 const snakeToCamel = (row: Record<string, unknown>): Record<string, unknown> => {
@@ -148,6 +157,22 @@ const snakeToCamel = (row: Record<string, unknown>): Record<string, unknown> => 
     out[key.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase())] = value;
   }
   return out;
+};
+
+/** Request rows store provenance labels as one `provenance` object; the port shape is flat. */
+const rowToRequest = (row: Record<string, unknown>): LogicalRequestUsageRecordLike => {
+  const flat = snakeToCamel(row);
+  const provenance = flat['provenance'];
+  delete flat['provenance'];
+  const labels =
+    typeof provenance === 'object' && provenance !== null
+      ? (provenance as Record<string, unknown>)
+      : {};
+  return {
+    ...flat,
+    ...(typeof labels['promptApplied'] === 'boolean' ? { promptApplied: labels['promptApplied'] } : {}),
+    ...(typeof labels['promptVersion'] === 'string' ? { promptVersion: labels['promptVersion'] } : {}),
+  } as unknown as LogicalRequestUsageRecordLike;
 };
 
 const insertSql = (table: string, columns: readonly string[]): string =>
@@ -187,7 +212,7 @@ export function createPostgresUsageLedger(sql: SqlQueryLike): UsageLedgerPortLik
                 [logicalRequestId],
               )
             ).rows;
-      return rows.map((row) => snakeToCamel(row) as unknown as LogicalRequestUsageRecordLike);
+      return rows.map((row) => rowToRequest(row));
     },
   };
 }

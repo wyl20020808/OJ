@@ -53,6 +53,8 @@ const requestRecord = (suffix: string, caller = 'site.problem') => ({
   totalUsageComplete: true,
   totalCost: { value: 0.0001, currency: 'USD', basis: 'ESTIMATED' },
   idempotencyOutcome: 'EXECUTED',
+  promptApplied: true,
+  promptVersion: `encouragement-${run}`,
 });
 
 const attemptRecord = (suffix: string, caller = 'site.problem') => ({
@@ -91,6 +93,9 @@ describe('Postgres usage ledger', () => {
     expect(requests[0]?.['callerPluginId']).toBe('site.problem');
     expect(requests[0]?.['totalUsage']).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
     expect(requests[0]?.['idempotencyOutcome']).toBe('EXECUTED');
+    // Prompt provenance labels round-trip as flat port fields (stored as one `provenance` object).
+    expect(requests[0]?.['promptApplied']).toBe(true);
+    expect(requests[0]?.['promptVersion']).toBe(`encouragement-${run}`);
     const attempts = await ledger.attempts(`lr-${run}-one`);
     expect(attempts).toHaveLength(1);
     expect(attempts[0]?.['providerId']).toBe('relay');
