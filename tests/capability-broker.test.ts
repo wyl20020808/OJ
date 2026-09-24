@@ -4,6 +4,7 @@ import {
   createSubjectTokenMinter,
   callerKey,
   isCapabilityGranted,
+  type CapabilityInvocation,
   type CapabilityProvider,
   type CapabilityResult,
 } from '@ojplatform/capability-broker';
@@ -371,5 +372,124 @@ describe('opaque subject tokens', () => {
       'user-1',
     );
     expect(one).not.toBe(two);
+  });
+});
+
+describe('specialized capabilities and prompt provenance', () => {
+  it('preserves kind and readiness in discovery without conflating them with availability', () => {
+    const broker = new CapabilityBroker();
+    const manifest = parsePluginManifest({
+      ...fakeAiManifest,
+      providesCapabilities: [
+        'ai.text.generate@1.x',
+        'ai.structured.generate@1.x',
+        'code.debug.analyze@1.x',
+      ],
+    })!;
+    const provider: CapabilityProvider = {
+      providerId: 'ai.bridge',
+      manifest,
+      listCapabilities: () => [
+        {
+          id: 'code.debug.analyze',
+          version: '1.0',
+          status: 'AVAILABLE',
+          kind: 'SPECIALIZED',
+          readiness: 'STABLE',
+        },
+      ],
+      execute: async () => ({
+        status: 'SUCCEEDED',
+        output: {},
+        requestId: 'r',
+      }),
+    };
+    broker.registerProvider(provider);
+    const descriptor = broker
+      .listAvailableCapabilities()
+      .find((entry) => entry.id === 'code.debug.analyze');
+    expect(descriptor?.kind).toBe('SPECIALIZED');
+    expect(descriptor?.readiness).toBe('STABLE');
+    expect(descriptor?.status).toBe('AVAILABLE');
+
+    broker.setKillSwitch({
+      global: false,
+      providers: [],
+      capabilities: ['code.debug.analyze'],
+    });
+    // Availability changes; maturity does not.
+    const listed = broker
+      .listAvailableCapabilities()
+      .find((entry) => entry.id === 'code.debug.analyze');
+    expect(listed?.status).toBe('DISABLED');
+    expect(listed?.readiness).toBe('STABLE');
+  });
+
+  it('matches a specialized grant across bare, @major and @major.minor pins', () => {
+    expect(
+      isCapabilityGranted(['code.debug.analyze'], 'code.debug.analyze', '1.0'),
+    ).toBe(true);
+    expect(
+      isCapabilityGranted(
+        ['code.debug.analyze@1.x'],
+        'code.debug.analyze',
+        '1.0',
+      ),
+    ).toBe(true);
+    expect(
+      isCapabilityGranted(
+        ['code.debug.analyze@1.0'],
+        'code.debug.analyze',
+        '1.0',
+      ),
+    ).toBe(true);
+    expect(
+      isCapabilityGranted(
+        ['code.debug.analyze@1.0'],
+        'code.debug.analyze',
+        '1.1',
+      ),
+    ).toBe(false);
+    expect(
+      isCapabilityGranted(
+        ['code.debug.analyze@2'],
+        'code.debug.analyze',
+        '1.0',
+      ),
+    ).toBe(false);
+  });
+
+  it('transports opaque provenance to the provider verbatim', async () => {
+    const seen: Array<CapabilityInvocation['provenance']> = [];
+    const broker = new CapabilityBroker();
+    const manifest = parsePluginManifest({
+      ...fakeAiManifest,
+      providesCapabilities: ['code.debug.analyze@1.x'],
+    })!;
+    const provider: CapabilityProvider = {
+      providerId: 'ai.bridge',
+      manifest,
+      listCapabilities: () => [
+        { id: 'code.debug.analyze', version: '1.0', status: 'AVAILABLE' },
+      ],
+      execute: async (_capability, _version, invocation) => {
+        seen.push(invocation.provenance);
+        return { status: 'SUCCEEDED', output: {}, requestId: 'r' };
+      },
+    };
+    broker.registerProvider(provider);
+    broker.registerSiteCaller({
+      siteId: 'debug-coach',
+      capabilities: ['code.debug.analyze@1.0'],
+    });
+    await broker.forSite('debug-coach')!.execute('code.debug.analyze', '1.0', {
+      idempotencyKey: 'consumer:debug:turn-18',
+      input: {},
+      provenance: { promptApplied: true, promptVersion: 'debug.analysis.v1' },
+    });
+    expect(seen[0]).toEqual({
+      promptApplied: true,
+      promptVersion: 'debug.analysis.v1',
+    });
   });
 });

@@ -117,6 +117,27 @@ describe('canonical manifest parsing (Stage 6)', () => {
     expect(agreeing?.apiVersion).toBe(1);
   });
 
+  it('accepts specialized capability references in both directions', () => {
+    const provider = parsePluginManifest({
+      ...serverManifest,
+      providesCapabilities: ['code.debug.analyze@1.x'],
+      consumesCapabilities: [],
+    });
+    expect(provider?.providesCapabilities).toEqual(['code.debug.analyze@1.x']);
+    const consumer = parsePluginManifest({
+      id: 'algoquest.learning-quests',
+      name: 'Learning Quests',
+      version: '1.0.0',
+      apiVersion: 1,
+      providesCapabilities: [],
+      consumesCapabilities: ['code.debug.analyze@1.0'],
+    });
+    expect(consumer?.consumesCapabilities).toEqual(['code.debug.analyze@1.0']);
+    expect(capabilityRefId('code.debug.analyze@1.0')).toBe(
+      'code.debug.analyze',
+    );
+  });
+
   it('rejects malformed capability references', () => {
     expect(
       parsePluginManifest({
@@ -151,6 +172,12 @@ describe('capability references', () => {
     expect(isCapabilityRef('ai.structured.generate@1')).toBe(true);
     expect(isCapabilityRef('ai.structured.generate@1.x')).toBe(true);
     expect(isCapabilityRef('education.idea.evaluate@1')).toBe(true);
+    expect(isCapabilityRef('code.debug.analyze')).toBe(true);
+    expect(isCapabilityRef('code.debug.analyze@1')).toBe(true);
+    expect(isCapabilityRef('code.debug.analyze@1.x')).toBe(true);
+    expect(isCapabilityRef('code.debug.analyze@1.0')).toBe(true);
+    expect(isCapabilityRef('ai.text.generate@1.0')).toBe(true);
+    expect(isCapabilityRef('code.debug.analyze@1.0.0')).toBe(false);
     expect(isCapabilityRef('Not.A.Ref')).toBe(false);
     expect(isCapabilityRef('a..b')).toBe(false);
     expect(isCapabilityRef('a')).toBe(false);
