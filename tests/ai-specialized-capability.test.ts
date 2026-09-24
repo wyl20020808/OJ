@@ -78,6 +78,9 @@ const requestTrustInvalid = loadFixture(
 const schemaMismatch = loadFixture(
   'ai.structured.generate.response.schema-mismatch.json',
 );
+const balanceExhausted = loadFixture(
+  'ai.text.generate.response.balance-exhausted.json',
+);
 
 const requestOkInput = requestOk.document['input'] as Record<string, unknown>;
 
@@ -642,6 +645,49 @@ describe('specialized failure mapping, cancellation and attribution', () => {
     expect(result.error?.reason).toBe('OUTPUT_REPAIR_EXHAUSTED');
     expect(result.error?.stage).toBe('VALIDATION');
     expect(result.warnings?.[0]?.code).toBe('OUTPUT_REPAIRED');
+  });
+
+  it('preserves every closed error code a specialized call may return', async () => {
+    // The host must never collapse a governance/validation failure into a generic INTERNAL/500.
+    const codes = [
+      'SCHEMA_MISMATCH',
+      'INVALID_RESPONSE',
+      'CONTENT_BLOCKED',
+      'RATE_LIMITED',
+    ] as const;
+    for (const code of codes) {
+      const fake = makeSpecializedPlugin({
+        specialized: {
+          status: 'FAILED',
+          output: undefined,
+          error: { code, message: 'normalized', retryable: false } as never,
+        },
+      });
+      const { broker } = await bootWithPlugin(fake.plugin);
+      const result = await broker
+        .forSite('debug-coach')!
+        .execute(SPECIALIZED, SPECIALIZED_V1, callArgs());
+      expect(result.status).toBe('FAILED');
+      expect(result.error?.code).toBe(code);
+    }
+  });
+
+  it('passes an operator-facing provider failure through untouched', async () => {
+    const fake = makeSpecializedPlugin({
+      specialized: {
+        status: 'FAILED',
+        output: undefined,
+        error: balanceExhausted.document['error'] as never,
+      },
+    });
+    const { broker } = await bootWithPlugin(fake.plugin);
+    const result = await broker
+      .forSite('debug-coach')!
+      .execute(SPECIALIZED, SPECIALIZED_V1, callArgs());
+    expect(result.error?.code).toBe('PROVIDER_ERROR');
+    expect(result.error?.reason).toBe('PROVIDER_BALANCE_EXHAUSTED');
+    expect(result.error?.retryable).toBe(false);
+    expect(result.error?.stage).toBe('PROVIDER');
   });
 
   it('propagates host cancellation into the bridge execute options', async () => {
