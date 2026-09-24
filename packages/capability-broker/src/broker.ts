@@ -352,7 +352,7 @@ export class CapabilityBroker {
       callerType,
       callerId,
       permissions: [...permissions],
-      capabilityStatus: (id: string, version?: string) => broker.getCapabilityStatus(id, version),
+      capabilityStatus: (id: string) => broker.getCapabilityStatus(id),
       listCapabilities: () => broker.listAvailableCapabilities(),
       execute: (capability: string, version: string, invocation: CapabilityInvocation) =>
         broker.#execute(context(), capability, version, invocation),

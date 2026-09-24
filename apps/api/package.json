@@ -12,6 +12,8 @@
     "@fastify/type-provider-typebox": "^6.1.0",
     "@aws-sdk/client-s3": "^3.1117.0",
     "@ojplatform/contracts": "workspace:*",
+    "@ojplatform/capability-broker": "workspace:*",
+    "@ojplatform/plugin-sdk": "workspace:*",
     "@ojplatform/database": "workspace:*",
     "@ojplatform/cache": "workspace:*",
     "@ojplatform/storage": "workspace:*",

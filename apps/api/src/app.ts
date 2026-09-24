@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import type { IncomingMessage } from 'node:http';
@@ -40,6 +40,14 @@ import {
 } from './modules/judge/index.js';
 import { registerWorkerControlRoutes } from './modules/judge/worker-control.js';
 import { createJudgeServiceCancellationPlane } from './modules/judge/judge-service-cancellation.js';
+import { CapabilityBroker } from '@ojplatform/capability-broker';
+import {
+  registerAiModule,
+  registerDefaultSiteAiCallers,
+  type RedisEvalLike,
+  type SqlQueryLike,
+} from './modules/ai/index.js';
+import { registerAiRoutes, type AiAuthContext } from './modules/ai/routes.js';
 import {
   JudgeAdminAdapterClient,
   MemoryJudgeAdminAuditRepository,
@@ -288,11 +296,18 @@ export async function buildApp(options: AppOptions = {}) {
   );
 
   let owned: Owned | undefined;
+  // Stage 6: the site-wide AI capability broker is wired in the common section below; the
+  // branches capture their infra/auth seams here (in-memory boots leave them null).
+  let aiInfraRedis: RedisEvalLike | null = null;
+  let aiInfraDb: SqlQueryLike | null = null;
+  let getAiAuthContext: ((request: FastifyRequest) => Promise<AiAuthContext | undefined>) | undefined;
   if (options.withInfrastructure) {
     const qualificationMode =
       process.env.OJPLATFORM_PHASE1E_QUALIFICATION === 'true';
     const database = createDatabase({ url: config.databaseUrl });
     const cache = createCache({ url: config.redisUrl });
+    aiInfraDb = database.pool;
+    aiInfraRedis = cache;
     const evaluationEventSubscriber = cache.duplicate();
     await evaluationEventSubscriber.connect();
     const evaluationEventHub = new RedisEvaluationEventHub(
@@ -356,6 +371,8 @@ export async function buildApp(options: AppOptions = {}) {
       canViewAnySubmission: (userId) =>
         hasSubmissionPermissions(userId, ['submission:view:any']),
     });
+    getAiAuthContext = async (request) =>
+      (await auth.getAuthContext(request)) ?? undefined;
     const judgeAdminUrl =
       process.env.JUDGE_SERVICE_ADMIN_URL ?? process.env.JUDGE_SERVICE_URL;
     const judgeAdminToken =
@@ -1154,6 +1171,8 @@ export async function buildApp(options: AppOptions = {}) {
       canViewAnySubmission: (userId) =>
         hasSubmissionPermissions(userId, ['submission:view:any']),
     });
+    getAiAuthContext = async (request) =>
+      (await auth.getAuthContext(request)) ?? undefined;
     const adminAdapter =
       options.judgeAdminAdapter ??
       new JudgeAdminAdapterClient('http://127.0.0.1:0', 'unconfigured');
@@ -1599,6 +1618,24 @@ export async function buildApp(options: AppOptions = {}) {
     });
     app.addHook('onClose', async () => sandboxRuntime.close());
   }
+  // ── Stage 6: site-wide AI capability broker ──────────────────────────────────────────────
+  // AI is optional infrastructure: without configuration or packed artifacts the broker simply
+  // has no AI provider registered and every AI capability reports UNAVAILABLE — the site boots
+  // and serves everything else normally (see modules/ai/index.ts).
+  const capabilityBroker = new CapabilityBroker({ maxTimeoutMs: 30_000 });
+  registerDefaultSiteAiCallers(capabilityBroker);
+  const aiModule = await registerAiModule(app, {
+    broker: capabilityBroker,
+    logger: app.log,
+    redis: aiInfraRedis,
+    db: aiInfraDb,
+  });
+  registerAiRoutes(app, {
+    aiModule,
+    getAuthContext: async (request) =>
+      getAiAuthContext === undefined ? undefined : getAiAuthContext(request),
+    operatorUserIds: configuredOperatorUserIds,
+  });
   app.get(
     '/health',
     { schema: { response: { 200: HealthResponse } } },

@@ -413,6 +413,23 @@ const migrations = [
       index('contests_development_provenance_idx'),
     ],
   },
+  {
+    id: '0037_ai_capability_usage',
+    checksum:
+      'd2dae4d54255eae9fd003e6dc1245a47e0c9d400ad41a88091bbb9e22db3ed0b',
+    sideEffects:
+      'Creates the AI capability usage ledger (one logical request row and one provider attempt row per call). Cost and capacity evidence only — no prompt, content or credential columns exist.',
+    evidence: [
+      table('ai_capability_usage_requests'),
+      table('ai_capability_usage_attempts'),
+      index('ai_capability_usage_requests_logical_idx'),
+      index('ai_capability_usage_requests_caller_idx'),
+      index('ai_capability_usage_requests_subject_idx'),
+      index('ai_capability_usage_attempts_logical_idx'),
+      index('ai_capability_usage_attempts_caller_idx'),
+      index('ai_capability_usage_attempts_provider_idx'),
+    ],
+  },
 ];
 
 export const productMigrationManifest = migrations.map(
